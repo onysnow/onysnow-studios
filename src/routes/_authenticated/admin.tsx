@@ -51,8 +51,8 @@ function AdminLayout() {
         <div className="max-w-md">
           <h1 className="font-display text-4xl">Not authorised</h1>
           <p className="mt-4 text-sm text-muted-foreground">
-            This account is signed in but has not been granted studio access. An existing administrator
-            can add it under Settings → Studio access.
+            This account is signed in but has not been granted studio access. Only accounts explicitly
+            granted access can manage the site.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">{data?.user?.email}</p>
           <Button variant="outline" className="mt-8" onClick={signOut}>Sign out</Button>
