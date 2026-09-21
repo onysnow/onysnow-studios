@@ -47,7 +47,8 @@ function SettingsPage() {
     return (<><AdminHeading title="Settings" /><div className="space-y-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div></>);
   }
 
-  const rows = settings.data ?? [];
+  // Custom CSS has its own editor under Advanced.
+  const rows = (settings.data ?? []).filter((s) => s.kind !== "css");
   const dirty = Object.keys(drafts).length > 0;
 
   return (
@@ -81,7 +82,7 @@ function SettingsPage() {
                   />
                   <span className="w-16 font-mono text-sm text-muted-foreground">{Number(value || 1).toFixed(2)}×</span>
                 </div>
-              ) : row.kind === "long" ? (
+              ) : row.kind === "longtext" ? (
                 <Textarea id={`setting-${row.key}`} rows={3} value={value} onChange={(e) => set(e.target.value)} />
               ) : (
                 <Input
