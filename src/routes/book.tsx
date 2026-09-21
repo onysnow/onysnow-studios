@@ -1,0 +1,5 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { BookingEmbed } from "@/components/site/BookingEmbed";
+import { PageIntro } from "@/components/site/PageIntro";
+export const Route=createFileRoute("/book")({head:()=>({meta:[{title:"Book a Session — OnySnow Studios"},{name:"description",content:"Start planning your photography session with OnySnow Studios."},{property:"og:title",content:"Book a Session — OnySnow Studios"},{property:"og:description",content:"Tell us what you are imagining and start planning your shoot."},{property:"og:type",content:"website"},{name:"twitter:card",content:"summary_large_image"}]}),component:Book});
+function Book(){return <><PageIntro eyebrow="Book a session" title="Let’s begin with your story." body="Choose your experience, share what you’re imagining, and we’ll shape the details together."/><section className="px-5 pb-28 sm:px-8 lg:px-12"><div className="mx-auto max-w-4xl">{/* BOOKING INTEGRATION PLACEHOLDER — replace with scheduling and payment embed in phase two. */}<BookingEmbed/></div></section></>}
