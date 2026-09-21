@@ -7,7 +7,7 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
 
-function NotFoundComponent() { return <main className="grid min-h-screen place-items-center px-5 text-center"><div><p className="eyebrow">404</p><h1 className="mt-4 font-display text-6xl">This frame is missing.</h1><Link to="/" className="mt-8 inline-block text-primary">Return home</Link></div></main>; }
+function NotFoundComponent() { return <main className="grid min-h-screen place-items-center px-5 text-center"><div><p className="eyebrow">404</p><h1 className="mt-4 font-display text-4xl">This frame is missing.</h1><Link to="/" className="mt-8 inline-block text-primary">Return home</Link></div></main>; }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -16,7 +16,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600&display=swap" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=Manrope:wght@400;500;600&display=swap" },
       { rel: "icon", href: "/favicon.ico" },
     ],
   }),

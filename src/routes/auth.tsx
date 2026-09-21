@@ -66,8 +66,8 @@ function AuthPage() {
   return (
     <main className="grid min-h-screen place-items-center px-5 py-20">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-3"><Camera className="size-6 text-primary" /><p className="font-display text-3xl">OnySnow Studios</p></div>
-        <h1 className="mt-6 font-display text-5xl leading-none">Studio sign in</h1>
+        <div className="flex items-center gap-3"><Camera className="size-6 text-primary" /><p className="font-display text-xl">OnySnow Studios</p></div>
+        <h1 className="mt-6 font-display text-3xl leading-none">Studio sign in</h1>
         <p className="mt-3 text-sm text-muted-foreground">Private access for managing the website.</p>
 
         <Button variant="outline" size="lg" className="mt-8 w-full" onClick={google}>Continue with Google</Button>

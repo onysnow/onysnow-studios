@@ -159,7 +159,7 @@ function JsonEditor() {
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle className="font-display text-2xl">Confirm these changes</DialogTitle>
+            <DialogTitle className="font-display text-lg">Confirm these changes</DialogTitle>
             <DialogDescription>Red lines are replaced, green lines are what will be saved.</DialogDescription>
           </DialogHeader>
           <div className="max-h-80 overflow-auto rounded-md border border-border bg-card p-3 font-mono text-xs">

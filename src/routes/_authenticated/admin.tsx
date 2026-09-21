@@ -49,7 +49,7 @@ function AdminLayout() {
     return (
       <main className="grid min-h-screen place-items-center px-5 text-center">
         <div className="max-w-md">
-          <h1 className="font-display text-4xl">Not authorised</h1>
+          <h1 className="font-display text-2xl">Not authorised</h1>
           <p className="mt-4 text-sm text-muted-foreground">
             This account is signed in but has not been granted studio access. Only accounts explicitly
             granted access can manage the site.

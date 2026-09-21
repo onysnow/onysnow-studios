@@ -34,7 +34,7 @@ function Dashboard() {
               <CardContent className="flex items-center gap-4 pt-6">
                 <s.icon className="size-5 text-primary" />
                 <div>
-                  <p className="font-display text-3xl leading-none">{s.value ?? <Skeleton className="inline-block h-7 w-10" />}</p>
+                  <p className="font-display text-xl leading-none">{s.value ?? <Skeleton className="inline-block h-7 w-10" />}</p>
                   <p className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{s.label}</p>
                 </div>
               </CardContent>
@@ -45,7 +45,7 @@ function Dashboard() {
 
       <Card className="mt-8">
         <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="font-display text-2xl">Recent inquiries</CardTitle>
+          <CardTitle className="font-display text-lg">Recent inquiries</CardTitle>
           <Button asChild variant="ghost" size="sm"><Link to="/admin/inquiries">All inquiries <ArrowRight /></Link></Button>
         </CardHeader>
         <CardContent className="space-y-3">

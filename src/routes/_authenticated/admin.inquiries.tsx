@@ -81,7 +81,7 @@ function InquiriesPage() {
       <Dialog open={Boolean(open)} onOpenChange={(v) => !v && setOpen(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-display text-2xl">{open?.name}</DialogTitle>
+            <DialogTitle className="font-display text-lg">{open?.name}</DialogTitle>
             <DialogDescription>{open?.email} · {open?.kind}</DialogDescription>
           </DialogHeader>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{open?.message}</p>
