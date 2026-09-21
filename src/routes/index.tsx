@@ -4,7 +4,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Img } from "@/components/site/Img";
 import { Reveal } from "@/components/site/Reveal";
-import { categories, portfolioImages } from "@/data/portfolio";
+import { categories, getImage } from "@/data/portfolio";
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [
@@ -22,7 +22,7 @@ function HomePage() {
   const heroY = useTransform(scrollYProgress, [0, .22], [0, 90]);
   return <>
     <section className="relative min-h-[92svh] overflow-hidden">
-      <motion.div className="absolute inset-0" style={{ y: heroY }}><Img image={portfolioImages[0]} eager className="h-[105svh] w-full" imgClassName="scale-105 object-[72%_center] sm:object-center" sizes="100vw" /></motion.div>
+      <motion.div className="absolute inset-0" style={{ y: heroY }}><Img image={getImage(0)} eager className="h-[105svh] w-full" imgClassName="scale-105 object-[72%_center] sm:object-center" sizes="100vw" /></motion.div>
       <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-background/25" />
       <div className="image-vignette absolute inset-0" />
       <div className="relative mx-auto flex min-h-[92svh] max-w-screen-2xl flex-col justify-end px-5 pb-14 sm:px-8 lg:px-12 lg:pb-20">

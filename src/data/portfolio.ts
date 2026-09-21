@@ -86,3 +86,7 @@ export const categories = categorySlugs.map((slug) => ({
 export function getCategory(slug: string) {
   return categories.find((category) => category.slug === slug);
 }
+
+export function getImage(index: number) {
+  return portfolioImages[index] ?? portfolioImages[0];
+}
