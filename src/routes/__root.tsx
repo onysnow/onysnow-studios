@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HeadContent, Link, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import { HeadContent, Link, Outlet, Scripts, createRootRouteWithContext, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
+import { CustomCss } from "@/components/site/CustomCss";
 
 function NotFoundComponent() { return <main className="grid min-h-screen place-items-center px-5 text-center"><div><p className="eyebrow">404</p><h1 className="mt-4 font-display text-6xl">This frame is missing.</h1><Link to="/" className="mt-8 inline-block text-primary">Return home</Link></div></main>; }
 
@@ -25,4 +26,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) { return <html lang="en"><head><HeadContent /></head><body>{children}<Scripts /></body></html>; }
-function RootComponent() { const { queryClient } = Route.useRouteContext(); return <QueryClientProvider client={queryClient}><a href="#main-content" className="fixed left-4 top-3 z-50 -translate-y-20 bg-primary px-4 py-2 text-primary-foreground focus:translate-y-0">Skip to content</a><SiteHeader /><main id="main-content"><Outlet /></main><SiteFooter /><Toaster position="bottom-right" /></QueryClientProvider>; }
+function RootComponent() {
+  const { queryClient } = Route.useRouteContext();
+  const { location } = useRouterState({ select: (s) => ({ location: s.location }) });
+  const isAdmin = location.pathname.startsWith("/admin") || location.pathname.startsWith("/auth");
+  return (
+    <QueryClientProvider client={queryClient}>
+      {isAdmin ? <Outlet /> : <>
+        <a href="#main-content" className="fixed left-4 top-3 z-50 -translate-y-20 bg-primary px-4 py-2 text-primary-foreground focus:translate-y-0">Skip to content</a>
+        <SiteHeader /><main id="main-content"><Outlet /></main><SiteFooter />
+      </>}
+      <Toaster position="bottom-right" />
+      <CustomCss />
+    </QueryClientProvider>
+  );
+}
