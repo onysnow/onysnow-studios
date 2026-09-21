@@ -59,7 +59,7 @@ function PagesPage() {
   return (
     <>
       <AdminHeading title="Page copy" description="Every piece of writing on the website. Longer sections use the formatted editor." />
-      <Tabs defaultValue={slugs[0]}>
+      <Tabs defaultValue={slugs[0] ?? "home"}>
         <TabsList className="flex-wrap">
           {slugs.map((slug) => <TabsTrigger key={slug} value={slug}>{LABELS[slug] ?? slug}</TabsTrigger>)}
         </TabsList>
