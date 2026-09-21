@@ -88,5 +88,7 @@ export function getCategory(slug: string) {
 }
 
 export function getImage(index: number) {
-  return portfolioImages[index] ?? portfolioImages[0];
+  const image = portfolioImages[index] ?? portfolioImages[0];
+  if (!image) throw new Error("Portfolio image manifest is empty");
+  return image;
 }
