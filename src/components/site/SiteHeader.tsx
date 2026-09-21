@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { settingsQuery } from "@/lib/content";
 
 const links = [
   { to: "/portfolio", label: "Portfolio" },
@@ -11,6 +13,11 @@ const links = [
 ] as const;
 
 export function SiteHeader() {
+  const { data } = useQuery(settingsQuery);
+  const name = data?.["studio_name"] || "OnySnow Studios";
+  const words = name.split(" ");
+  const lead = words.slice(0, -1).join(" ") || name;
+  const tail = words.length > 1 ? words[words.length - 1] : "";
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-border/40 bg-background/75 backdrop-blur-xl">
       <div className="mx-auto grid h-18 max-w-screen-2xl grid-cols-[minmax(0,1fr)_auto] items-center px-5 sm:px-8 lg:px-12">
