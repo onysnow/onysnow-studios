@@ -1,4 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { PageIntro } from "@/components/site/PageIntro";
+import { RichText } from "@/components/site/RichText";
+import { copy, pageCopyQuery } from "@/lib/content";
+
 export const Route=createFileRoute("/terms")({head:()=>({meta:[{title:"Terms — OnySnow Studios"},{name:"description",content:"Website terms for OnySnow Studios."},{property:"og:title",content:"Terms — OnySnow Studios"},{property:"og:description",content:"Terms for using the OnySnow Studios website."},{property:"og:type",content:"website"},{name:"twitter:card",content:"summary"}]}),component:Terms});
-function Terms(){return <><PageIntro eyebrow="Legal" title="Terms" body="The basic terms for using this website."/><article className="mx-auto max-w-3xl px-5 pb-28 leading-8 text-muted-foreground sm:px-8"><p>The imagery and copy currently shown are temporary presentation materials. Final photography, pricing, booking terms, usage licenses, cancellation policies, and delivery commitments will be confirmed before the studio accepts bookings through this site.</p><h2 className="mt-10 font-display text-3xl text-foreground">Copyright</h2><p className="mt-3">Unless otherwise stated, final photographs and site content belong to OnySnow Studios and may not be reproduced without permission.</p><h2 className="mt-10 font-display text-3xl text-foreground">Bookings</h2><p className="mt-3">A booking is not confirmed until both parties agree to the final service terms and any required payment is received.</p></article></>}
+
+function Terms(){
+  const { data: text, isPending } = useQuery(pageCopyQuery("terms"));
+  return <><PageIntro loading={isPending} eyebrow="Legal" title={copy(text,"intro_title","Terms")} body={copy(text,"intro_body","")}/><article className="mx-auto max-w-3xl px-5 pb-28 sm:px-8"><RichText html={copy(text,"body","")} className="leading-8 text-muted-foreground"/></article></>;
+}

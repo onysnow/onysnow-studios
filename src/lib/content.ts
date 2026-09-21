@@ -76,8 +76,9 @@ export type Inquiry = {
 
 const STALE = 60_000;
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 async function rows<T>(table: string, build: (q: any) => any): Promise<T[]> {
-  const { data, error } = await build(supabase.from(table).select("*"));
+  const { data, error } = await build((supabase as any).from(table).select("*"));
   if (error) throw error;
   return (data ?? []) as T[];
 }
