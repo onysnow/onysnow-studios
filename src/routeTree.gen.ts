@@ -22,6 +22,8 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as PortfolioIndexRouteImport } from './routes/portfolio.index'
 import { Route as PortfolioCategoryRouteImport } from './routes/portfolio.$category'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin.index'
+import { Route as AuthenticatedAdminPhotosRouteImport } from './routes/_authenticated/admin.photos'
 import { Route as ApiPublicPhotoSplatRouteImport } from './routes/api/public/photo.$'
 
 const IndexRoute = IndexRouteImport.update({
@@ -88,6 +90,17 @@ const PortfolioCategoryRoute = PortfolioCategoryRouteImport.update({
   path: '/$category',
   getParentRoute: () => PortfolioRoute,
 } as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminPhotosRoute =
+  AuthenticatedAdminPhotosRouteImport.update({
+    id: '/photos',
+    path: '/photos',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const ApiPublicPhotoSplatRoute = ApiPublicPhotoSplatRouteImport.update({
   id: '/api/public/photo/$',
   path: '/api/public/photo/$',
@@ -104,9 +117,11 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
-  '/admin': typeof AuthenticatedAdminRoute
+  '/admin': typeof AuthenticatedAdminRouteWithChildren
   '/portfolio/$category': typeof PortfolioCategoryRoute
   '/portfolio/': typeof PortfolioIndexRoute
+  '/admin/photos': typeof AuthenticatedAdminPhotosRoute
+  '/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/photo/$': typeof ApiPublicPhotoSplatRoute
 }
 export interface FileRoutesByTo {
@@ -118,9 +133,10 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
-  '/admin': typeof AuthenticatedAdminRoute
   '/portfolio/$category': typeof PortfolioCategoryRoute
   '/portfolio': typeof PortfolioIndexRoute
+  '/admin/photos': typeof AuthenticatedAdminPhotosRoute
+  '/admin': typeof AuthenticatedAdminIndexRoute
   '/api/public/photo/$': typeof ApiPublicPhotoSplatRoute
 }
 export interface FileRoutesById {
@@ -135,9 +151,11 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
-  '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteWithChildren
   '/portfolio/$category': typeof PortfolioCategoryRoute
   '/portfolio/': typeof PortfolioIndexRoute
+  '/_authenticated/admin/photos': typeof AuthenticatedAdminPhotosRoute
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/api/public/photo/$': typeof ApiPublicPhotoSplatRoute
 }
 export interface FileRouteTypes {
@@ -155,6 +173,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/portfolio/$category'
     | '/portfolio/'
+    | '/admin/photos'
+    | '/admin/'
     | '/api/public/photo/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -166,9 +186,10 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/services'
     | '/terms'
-    | '/admin'
     | '/portfolio/$category'
     | '/portfolio'
+    | '/admin/photos'
+    | '/admin'
     | '/api/public/photo/$'
   id:
     | '__root__'
@@ -185,6 +206,8 @@ export interface FileRouteTypes {
     | '/_authenticated/admin'
     | '/portfolio/$category'
     | '/portfolio/'
+    | '/_authenticated/admin/photos'
+    | '/_authenticated/admin/'
     | '/api/public/photo/$'
   fileRoutesById: FileRoutesById
 }
@@ -295,6 +318,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortfolioCategoryRouteImport
       parentRoute: typeof PortfolioRoute
     }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/photos': {
+      id: '/_authenticated/admin/photos'
+      path: '/photos'
+      fullPath: '/admin/photos'
+      preLoaderRoute: typeof AuthenticatedAdminPhotosRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/api/public/photo/$': {
       id: '/api/public/photo/$'
       path: '/api/public/photo/$'
@@ -305,12 +342,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedAdminRouteChildren {
+  AuthenticatedAdminPhotosRoute: typeof AuthenticatedAdminPhotosRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+}
+
+const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
+  AuthenticatedAdminPhotosRoute: AuthenticatedAdminPhotosRoute,
+  AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+}
+
+const AuthenticatedAdminRouteWithChildren =
+  AuthenticatedAdminRoute._addFileChildren(AuthenticatedAdminRouteChildren)
+
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =
