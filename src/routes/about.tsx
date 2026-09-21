@@ -1,8 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Img } from "@/components/site/Img";
 import { PageIntro } from "@/components/site/PageIntro";
 import { Reveal } from "@/components/site/Reveal";
-import { getImage } from "@/data/portfolio";
+import { RichText } from "@/components/site/RichText";
+import { copy, pageCopyQuery, photosQuery } from "@/lib/content";
+
 export const Route=createFileRoute("/about")({head:()=>({meta:[{title:"About Ony Shannon — OnySnow Studios"},{name:"description",content:"Meet Ony Shannon and learn about his candid-first, cinematic approach to photography."},{property:"og:title",content:"About Ony Shannon — OnySnow Studios"},{property:"og:description",content:"The story and approach behind OnySnow Studios."},{property:"og:type",content:"profile"},{name:"twitter:card",content:"summary_large_image"}]}),component:About});
-function About(){return <><PageIntro eyebrow="About Ony" title="I photograph people as they are—not as they’re told to be." body="For me, the best photograph begins before the shutter: with trust, attention, and enough room for something real to happen."/><section className="px-5 pb-28 sm:px-8 lg:px-12"><div className="mx-auto grid max-w-screen-2xl gap-14 lg:grid-cols-2 lg:items-center"><Reveal><Img image={getImage(2)} className="aspect-[4/5]"/></Reveal><Reveal className="lg:px-10">{/* PLACEHOLDER COPY — Ony should rewrite this story in his own words before launch. */}<p className="eyebrow">My story</p><h2 className="mt-5 font-display text-5xl">The camera taught me to notice.</h2><div className="mt-7 space-y-5 leading-8 text-muted-foreground"><p>I started by photographing the small things: a look across a room, color reflected in wet pavement, the instant somebody forgot they were being watched. Those frames felt alive. I’ve been chasing that feeling ever since.</p><p>Today, I bring that attention to celebrations, portraits, imagined worlds, and everyday streets. I care about craft—light, composition, color—but technique should serve the feeling, never interrupt it.</p></div></Reveal></div></section><section className="border-y border-border px-5 py-24 sm:px-8 lg:px-12"><Reveal className="mx-auto max-w-5xl text-center">{/* PLACEHOLDER COPY — Ony should personalize this process. */}<p className="eyebrow">The process</p><h2 className="mt-5 font-display text-6xl">Listen. Observe. Make space. Deliver with care.</h2><p className="mx-auto mt-7 max-w-2xl leading-8 text-muted-foreground">We begin with what matters to you. On the day, I offer clear direction when you need it and step back when the moment needs room. Every final frame is selected and graded by hand.</p><Button asChild variant="cinematic" size="lg" className="mt-9"><Link to="/book">Work with me</Link></Button></Reveal></section></>}
+
+function About(){
+  const { data: text, isPending } = useQuery(pageCopyQuery("about"));
+  const { data: photos } = useQuery(photosQuery);
+  const portrait = photos?.find((p) => p.height > p.width) ?? photos?.[0];
+  return <>
+    <PageIntro loading={isPending} eyebrow={copy(text,"intro_eyebrow","About Ony")} title={copy(text,"intro_title","I photograph people as they are—not as they’re told to be.")} body={copy(text,"intro_body","")}/>
+    <section className="px-5 pb-28 sm:px-8 lg:px-12"><div className="mx-auto grid max-w-screen-2xl gap-14 lg:grid-cols-2 lg:items-center"><Reveal><Img image={portrait} className="aspect-[4/5]"/></Reveal><Reveal className="lg:px-10"><p className="eyebrow">{copy(text,"story_eyebrow","My story")}</p><h2 className="mt-5 font-display text-5xl">{copy(text,"story_title","The camera taught me to notice.")}</h2><RichText html={copy(text,"story_body","")} className="mt-7 space-y-5 leading-8 text-muted-foreground"/></Reveal></div></section>
+    <section className="border-y border-border px-5 py-24 sm:px-8 lg:px-12"><Reveal className="mx-auto max-w-5xl text-center"><p className="eyebrow">{copy(text,"process_eyebrow","The process")}</p><h2 className="mt-5 font-display text-6xl">{copy(text,"process_title","Listen. Observe. Make space. Deliver with care.")}</h2><p className="mx-auto mt-7 max-w-2xl leading-8 text-muted-foreground">{copy(text,"process_body","")}</p><Button asChild variant="cinematic" size="lg" className="mt-9"><Link to="/book">Work with me</Link></Button></Reveal></section>
+  </>;
+}
