@@ -1,0 +1,7 @@
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+import { Gallery } from "@/components/site/Gallery";
+import { PageIntro } from "@/components/site/PageIntro";
+import { getCategory, portfolioImages } from "@/data/portfolio";
+export const Route=createFileRoute("/portfolio/$category")({loader:({params})=>{const category=getCategory(params.category);if(!category)throw notFound();return category;},head:({loaderData})=>{const name=loaderData?.label??"Collection";return{meta:[{title:`${name} Photography — OnySnow Studios`},{name:"description",content:loaderData?.intro??"A photography collection by OnySnow Studios."},{property:"og:title",content:`${name} Photography — OnySnow Studios`},{property:"og:description",content:loaderData?.intro??"A photography collection by OnySnow Studios."},{property:"og:type",content:"website"},{name:"twitter:card",content:"summary_large_image"}]};},component:CategoryPage});
+function CategoryPage(){const category=Route.useLoaderData();const images=portfolioImages.filter((image)=>image.category===category.slug);return <><PageIntro eyebrow="Portfolio collection" title={category.label} body={category.intro}/><section className="px-5 pb-28 sm:px-8 lg:px-12"><div className="mx-auto max-w-screen-2xl"><Link to="/portfolio" className="mb-10 inline-flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground"><ArrowLeft className="size-4"/>All collections</Link><Gallery images={images}/></div></section></>}
