@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { watchCircleGesture } from "@/lib/circle-gesture";
+import { watchShutterCharge } from "@/lib/shutter-charge";
 import { fireShutter } from "./ShutterFlash";
 
 /**
@@ -118,45 +118,62 @@ export function CustomCursor() {
     document.addEventListener("pointerenter", onEnter);
 
     /*
-     * Circling winds the iris shut, and completing a turn fires the shutter.
+     * Winding the shutter.
      *
-     * Progress drives the blades through a custom property rather than React
-     * state: this updates on every pointer move, and re-rendering the cursor
-     * at that rate to change one number would be absurd.
+     * Moving the pointer hard in one place charges it; the ring brightens as it
+     * fills and fades back the moment you stop, so the charge has to be held
+     * rather than merely reached. At full it arms, and a click fires — the
+     * flash never goes off on its own.
      */
-    const stopGesture = watchCircleGesture({
-      onProgress: (p) => {
-        /*
-         * Two separate signals, deliberately.
-         *
-         * `--wind` is the raw turn and drives the ring's glow, which starts
-         * almost immediately and brightens the whole way round. That glow is
-         * the discovery mechanism: it tells someone who has started circling
-         * by accident that circling *does* something, without the page having
-         * to announce it. Eased so a stray bit of rotation is a faint shimmer
-         * rather than a flare.
-         *
-         * `--iris` is gated to the back half and closes the blades. By then
-         * the gesture is unambiguous and this reads as "about to fire".
-         */
-        el.style.setProperty("--wind", (p * p).toFixed(3));
-        const shown = Math.max(0, (p - 0.5) / 0.5);
-        el.style.setProperty("--iris", shown.toFixed(3));
-        const winding = p > 0.12;
-        if (el.hasAttribute("data-winding") !== winding) {
-          el.toggleAttribute("data-winding", winding);
-        }
-      },
-      onComplete: () => {
-        el.style.setProperty("--iris", "0");
-        el.style.setProperty("--wind", "0");
-        el.removeAttribute("data-winding");
-        fireShutter({ x: targetX, y: targetY });
+    const charger = watchShutterCharge({
+      onCharge: (charge, armed) => {
+        el.style.setProperty("--wind", charge.toFixed(2));
+        // Blades close over the back half, once it's clearly deliberate.
+        el.style.setProperty("--iris", Math.max(0, (charge - 0.5) / 0.5).toFixed(2));
+        el.toggleAttribute("data-winding", charge > 0.06);
+        el.toggleAttribute("data-armed", armed);
       },
     });
 
+    const onClick = (event: MouseEvent) => {
+      if (!charger.isArmed()) return;
+      /*
+       * The shutter only fires at a photograph.
+       *
+       * Firing into empty page does nothing at all — not even spending the
+       * charge — so the discovery is "I'm armed, but not here", which points
+       * at what to try next. Consuming the charge on a miss would just be
+       * punishing.
+       */
+      /*
+       * Resolved fresh from the pointer position rather than read off the last
+       * pointermove. Content moves under a stationary cursor — a carousel
+       * advancing, the page scrolling — and the cached target goes stale, so
+       * clicking a photograph could be judged against whatever happened to be
+       * there a moment earlier.
+       */
+      const under = document.elementFromPoint(targetX, targetY);
+      if (!under?.closest("img, picture, video, .gallery-frame")) return;
+      /*
+       * Swallow the click.
+       *
+       * Photographs are wrapped in links, so without this the shutter fires
+       * and the page immediately navigates away from it. Arming is deliberate
+       * and unmistakable — the aperture is closed and pulsing — so a click in
+       * that state means "take the photograph", not "follow this link".
+       */
+      event.preventDefault();
+      event.stopPropagation();
+
+      charger.spend();
+      fireShutter({ x: targetX, y: targetY });
+    };
+    // Capture phase so the shutter still fires when the click lands on a link.
+    window.addEventListener("click", onClick, true);
+
     return () => {
-      stopGesture();
+      charger.stop();
+      window.removeEventListener("click", onClick, true);
       cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerleave", onLeave);
