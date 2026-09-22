@@ -43,9 +43,12 @@ uniform vec2  uViewport;          // device pixels
 uniform float uScale;             // device pixels per CSS pixel
 uniform vec2  uLight;             // CSS pixels, viewport-relative
 uniform float uCharge;            // 0 to 1
+uniform float uTime;              // seconds
 uniform vec4  uRects[MAX_RECTS];  // x, y, w, h in CSS pixels
 uniform float uRadii[MAX_RECTS];  // corner radius in CSS pixels
 uniform float uTilts[MAX_RECTS];  // -1 looking up at it, 1 looking down at it
+uniform sampler2D uSurface;       // R specks and scratches, G smears, B wear
+uniform float uHasSurface;        // 0 until the map has loaded
 uniform vec3  uWarm;
 uniform vec3  uCool;
 
@@ -89,15 +92,14 @@ float fbm(vec2 p) {
 }
 
 /*
- * The pane's surface, as a roughness map.
+ * The pane's surface, generated.
  *
- * Two populations, because they scatter differently. Grease is broad, soft and
- * low — a haze that lifts wherever light rakes it. Scratches are thin, sharp
- * and directional, and they are what actually catch a point source. Both are
- * generated rather than loaded: a texture would be a request, an asset to
- * manage, and — for anything with the right grain — a licence.
+ * The fallback, used until the photographed map has loaded. Two populations,
+ * because they scatter differently: grease is broad, soft and low, a haze that
+ * lifts wherever light rakes it; scratches are thin, sharp and directional,
+ * and they are what actually catch a point source.
  */
-float roughness(vec2 uv) {
+vec2 proceduralSurface(vec2 uv) {
   // Greasy blotches and general grime.
   float grime = fbm(uv * 2.4) * 0.55 + fbm(uv * 7.0) * 0.25;
 
@@ -112,7 +114,40 @@ float roughness(vec2 uv) {
   float ridgeB = 1.0 - abs(noise(b) * 2.0 - 1.0);
   float scratches = pow(ridgeA, 42.0) * 0.8 + pow(ridgeB, 58.0) * 0.55;
 
-  return grime * 0.5 + scratches;
+  /*
+   * Scratches cluster. A pane has patches that have been wiped and patches
+   * that have been leaned on, and the giveaway that a texture was generated
+   * rather than observed is that its density is the same everywhere. A slow
+   * mask over the top gives it clean regions and dirty ones.
+   */
+  float wear = smoothstep(0.32, 0.78, fbm(uv * 0.55 + 13.0));
+
+  return vec2(scratches * (0.22 + 1.1 * wear), grime * 0.5);
+}
+
+/*
+ * The pane's surface, photographed.
+ *
+ * Generated noise has a statistical evenness that real dirt does not: every
+ * region equally dusty, every scratch the same length, no history. This is a
+ * high-passed composite of photographs of actual glass, so the lighting it was
+ * shot under is gone and only the marks remain — which is the only part that
+ * transfers to a different light.
+ *
+ *   R  specks, grit and hairline scratches. Sharp; they glint.
+ *   G  greasy wipes and finger smears. Broad; they haze.
+ *   B  where the pane has been handled at all, very low frequency.
+ *
+ * Returned as (glint, haze): the two scatter differently and the light has to
+ * be able to treat them differently.
+ */
+vec2 surface(vec2 uv) {
+  vec2 generated = proceduralSurface(uv);
+  vec3 map = texture2D(uSurface, uv * 0.42).rgb;
+  // Handled areas carry more of everything; untouched glass stays clean.
+  float handled = 0.35 + 0.95 * map.b;
+  vec2 photographed = vec2(map.r * 2.6 * handled, map.g * 0.85 * handled);
+  return mix(generated, photographed, uHasSurface);
 }
 
 void main() {
@@ -137,6 +172,14 @@ void main() {
    */
   float reach = direct + spill * 0.11;
   float ambient = direct + spill * 0.14;
+
+  /*
+   * Veiling glare: the wide, low wash a real lens throws across the whole
+   * frame from a bright source, out of scattering in the elements themselves.
+   * It has no sharp structure at all, which is why nothing that models only
+   * the bloom ever looks photographed.
+   */
+  float veil = exp(-dl / 480.0) * 0.035;
 
   /*
    * The two reflected images of the source. Both sit slightly below the light:
@@ -202,7 +245,14 @@ void main() {
     float filament = exp(-ad / 2.4);
     float flare = exp(-ad / 13.0);
     float haze = exp(-ad / 44.0);
-    rim += vec3(filament * 24.0 + flare * 3.2 + haze * 0.22) * reach;
+    /*
+     * A real arris is not evenly bright along its length. Coating, polish and
+     * dirt vary, so the highlight travelling it breaks into patches — and a
+     * perfectly even line of light is the single clearest sign that an edge
+     * was drawn rather than photographed.
+     */
+    float arrisWear = 0.62 + 0.62 * fbm(frag * 0.028 + 7.3);
+    rim += vec3(filament * 24.0 * arrisWear + flare * 3.2 + haze * 0.22) * reach;
 
     /*
      * ---- the side faces ----
@@ -244,7 +294,13 @@ void main() {
      * it is a property of the glass.
      */
     float along = (frag.x - rect.x) / max(rect.z, 1.0);
-    vec3 dichroic = spectrum(along * 0.85 + 0.55);
+    /*
+     * Muted well back toward white and broken up along its length. Dispersion
+     * off a polished edge is a tint over a bright band, not a saturated
+     * rainbow — a clean spectral sweep is poster art.
+     */
+    vec3 dichroic = mix(vec3(1.0), spectrum(along * 0.85 + 0.55), 0.42)
+                  * (0.74 + 0.5 * fbm(vec2(along * 14.0, 2.1)));
 
     float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
     float farArris = (farTop * topOpen + farBot * botOpen) * withinX;
@@ -254,7 +310,7 @@ void main() {
     rim += vec3(farArris) * 15.0 * reach;
 
     // ---- light scattered into the body of the pane ----
-    face += vec3(inside * direct * 0.9);
+    face += vec3(inside * (direct * 0.9 + veil));
 
     /*
      * ---- the material ----
@@ -265,9 +321,22 @@ void main() {
      * shape painted under one. Anchored to the panel so it travels with it
      * rather than swimming as the page scrolls.
      */
-    vec2 uv = (frag - rect.xy) / 130.0;
-    float rough = roughness(uv);
-    face += vec3(rough * inside * ambient * 3.2);
+    vec2 uv = (frag - rect.xy) / 340.0;
+    vec2 surf = surface(uv);
+    float glint = surf.x;
+    float smear = surf.y;
+    /*
+     * Grease hazes broadly; grit and scratches glint. Separating them is what
+     * stops the whole surface lifting as one flat sheet of dirt.
+     */
+    /*
+     * Raking light only. Scratches are revealed by a light falling across
+     * them, and glass a metre from the source shows none of its history — a
+     * pane grained evenly from end to end is a texture laid over it, not a
+     * surface being lit.
+     */
+    float rake = direct + spill * 0.035;
+    face += vec3(inside * rake * (smear * 0.6 + glint * 6.4));
 
     /*
      * ---- the reflection ----
@@ -281,7 +350,7 @@ void main() {
     float fresnel = 0.3 + 0.7 * pow(1.0 - depth, 4.0);
     // Scratches are polished facets: they take the reflection too, brighter
     // than the surface around them.
-    mirror += inside * image * fresnel * (13.0 + rough * 10.0);
+    mirror += inside * image * fresnel * (13.0 + glint * 14.0);
   }
 
   /*
@@ -300,6 +369,23 @@ void main() {
   // toward white, so colour survives only where the light has fallen off.
   colour = colour / (1.0 + colour);
   colour = pow(colour, vec3(1.0 / 2.2));
+
+  /*
+   * Grain, last of all, after the tonemap — where a sensor's noise lands.
+   *
+   * This is the largest single difference between a render and a photograph.
+   * Analytic falloffs are perfectly smooth, and perfectly smooth gradients
+   * both band on an 8-bit display and read as vector art. Weighted to the
+   * mid-tones, because noise is swamped in a highlight and clipped in true
+   * black, exactly as it is on a sensor.
+   */
+  float l = max(max(colour.r, colour.g), colour.b);
+  float mids = 4.0 * l * (1.0 - l);
+  float g1 = hash(gl_FragCoord.xy + floor(uTime * 24.0) * 37.13);
+  float g2 = hash(gl_FragCoord.yx * 1.7 + floor(uTime * 24.0) * 11.7);
+  // Chroma noise as well as luma: a sensor's colour channels are independent.
+  colour += (vec3(g1, g2, g1 * 0.5 + g2 * 0.5) - 0.5) * 0.14 * mids;
+  colour = max(colour, vec3(0.0));
 
   float alpha = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
   gl_FragColor = vec4(colour, alpha);

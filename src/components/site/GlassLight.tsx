@@ -89,6 +89,8 @@ export function GlassLight({
     const uRects = gl.getUniformLocation(program, "uRects");
     const uRadii = gl.getUniformLocation(program, "uRadii");
     const uTilts = gl.getUniformLocation(program, "uTilts");
+    const uTime = gl.getUniformLocation(program, "uTime");
+    const uHasSurface = gl.getUniformLocation(program, "uHasSurface");
 
     // The same amber and teal as the cursor, in linear light — the shader
     // works in linear and only returns to display space at the very end.
@@ -105,6 +107,38 @@ export function GlassLight({
       toLinear(0.78),
       toLinear(0.82),
     );
+
+    /*
+     * The photographed surface map, fetched lazily.
+     *
+     * Not blocking: the shader falls back to a generated surface until this
+     * arrives, so the effect is never missing while a 200KB image is in
+     * flight, and it never loads at all for anyone who never winds the
+     * shutter.
+     */
+    gl.uniform1i(gl.getUniformLocation(program, "uSurface"), 0);
+    gl.uniform1f(uHasSurface, 0);
+    const surface = gl.createTexture();
+    let surfaceRequested = false;
+    const requestSurface = () => {
+      if (surfaceRequested) return;
+      surfaceRequested = true;
+      const img = new Image();
+      img.onload = () => {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, surface);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+        // Tiled, and mipmapped so the far falloff does not alias into sparkle.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.useProgram(program);
+        gl.uniform1f(uHasSurface, 1);
+      };
+      img.src = "/glass-surface.jpg";
+    };
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -133,6 +167,7 @@ export function GlassLight({
 
     let frame = 0;
     let wasLit = false;
+    const start = performance.now();
 
     const render = (now: number) => {
       frame = requestAnimationFrame(render);
@@ -150,6 +185,7 @@ export function GlassLight({
         return;
       }
       if (!wasLit) {
+        requestSurface();
         canvas.style.opacity = "1";
         wasLit = true;
       }
@@ -207,6 +243,7 @@ export function GlassLight({
       gl.uniform1fv(uTilts, tilts);
       gl.uniform2f(uLight, x, y);
       gl.uniform1f(uCharge, charge);
+      gl.uniform1f(uTime, (now - start) / 1000);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
@@ -219,6 +256,7 @@ export function GlassLight({
       gl.deleteShader(vs);
       gl.deleteShader(fs);
       gl.deleteBuffer(buffer);
+      gl.deleteTexture(surface);
     };
   }, [chargeRef, positionRef]);
 
