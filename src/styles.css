@@ -272,6 +272,13 @@
    * ===================================================================== */
 
   .glass {
+    /*
+     * The pane's thickness, in one place. The side face, the refraction strip
+     * and the shader's own side band all read from here, so an edge is one
+     * depth rather than three.
+     */
+    --side-top: calc(3px + 13px * var(--pane-top, 0.18));
+    --side-bottom: calc(3px + 13px * var(--pane-bottom, 0.18));
     position: relative;
     background-color: oklch(0.145 0.011 55 / 30%);
     backdrop-filter: blur(26px) saturate(150%);
@@ -385,7 +392,7 @@
 
   .glass > .glass__side--top {
     top: 0;
-    height: calc(2px + 10px * var(--pane-top, 0.18));
+    height: var(--side-top);
     opacity: calc(0.35 + 0.65 * var(--pane-top, 0.18));
   }
 
@@ -395,7 +402,7 @@
 
   .glass > .glass__side--bottom {
     bottom: 0;
-    height: calc(2px + 10px * var(--pane-bottom, 0.18));
+    height: var(--side-bottom);
     opacity: calc(0.35 + 0.65 * var(--pane-bottom, 0.18));
     /* The far corner of the bottom face is its upper boundary. */
   }
@@ -404,12 +411,9 @@
     top: 0;
   }
 
-  .glass--bar > .glass__side--top {
-    height: calc(1px + 5px * var(--pane-top, 0.18));
-  }
-
-  .glass--bar > .glass__side--bottom {
-    height: calc(1px + 5px * var(--pane-bottom, 0.18));
+  .glass--bar {
+    --side-top: calc(2px + 7px * var(--pane-top, 0.18));
+    --side-bottom: calc(2px + 7px * var(--pane-bottom, 0.18));
   }
 
   /*
@@ -804,11 +808,13 @@
     left: 0;
     right: 0;
     /*
-     * Tall enough for the bend to be visible. At 14px the displacement had
-     * almost no room to work in and the edge read as a slightly brighter
-     * band rather than as something bending the photograph behind it.
+     * Exactly the band the side face occupies — because they are the same
+     * thing. The bevel IS the pane's thickness seen end-on, so the strip that
+     * bends the photograph and the strip that shows the thickness have to be
+     * one strip. While one was a fixed 22px and the other followed the tilt,
+     * they could not line up at any scroll position, and three edges at three
+     * different depths read as banding rather than as an edge.
      */
-    height: 22px;
     pointer-events: none;
     z-index: 1;
     /*
@@ -828,26 +834,20 @@
 
   .glass > .glass__refract--top {
     top: 0;
+    height: var(--side-top);
   }
 
   .glass > .glass__refract--bottom {
     bottom: 0;
+    height: var(--side-bottom);
   }
 
   /*
-   * The thin fixed bars do not get a bevel.
-   *
-   * A bevel is a property of a pane with real thickness, and it has to be
-   * small relative to the pane or it stops reading as an edge. On a 64px
-   * header even a 12px strip is a fifth of the bar top and bottom, so what you
-   * saw was not an edge catching light but a band across the middle of the
-   * chrome — the two displaced strips squeezing the undisturbed middle into a
-   * stripe. The header is a bar, not a plate. It keeps its blur, its tint and
-   * its arris, and skips the lens.
+   * Bars keep the bevel, but a shallower one, set by their own --side-* above.
+   * The banding was never the bevel existing — it was a fixed 22px strip on a
+   * 64px bar while the thickness underneath it was 3px, so the two disagreed
+   * about where the edge was.
    */
-  .glass--bar > .glass__refract {
-    display: none;
-  }
 
   /*
    * Fresnel.

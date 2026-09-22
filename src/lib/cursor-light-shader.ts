@@ -64,9 +64,9 @@ float apertureDistance(vec2 p, float roundness) {
 vec3 starburst(vec2 p, float r) {
   float phi = atan(p.y, p.x);
   float lobes = abs(cos(phi * BLADES * 0.5));
-  float spike = pow(lobes, 90.0) * exp(-r * 2.2);
+  float spike = pow(lobes, 70.0) * exp(-r * 3.4);
   vec3 tint = mix(vec3(1.0), spectrum(r * 1.6 + 0.1), 0.65);
-  return tint * spike * 3.2;
+  return tint * spike * 4.6;
 }
 
 /*
@@ -95,8 +95,16 @@ void main() {
   // ---- Emission, in linear light with real headroom ----
   // Inverse-square from a small emitter. The +eps keeps the centre finite; the
   // gain is what pushes the core far above 1.0 so the tonemap can clip it.
-  float falloff = 1.0 / (1.0 + 260.0 * r * r);
-  float gain = 26.0 * uCharge;
+  /*
+   * A tighter core than the emitter wants to be.
+   *
+   * Left wide, the blown region swallowed the aperture and the spikes whole
+   * and what was left read as a torch pointed at the page rather than as a
+   * lens looking at a light. The blades and the diffraction they throw ARE
+   * the effect; the white disc is just where the sensor gave up.
+   */
+  float falloff = 1.0 / (1.0 + 900.0 * r * r);
+  float gain = 22.0 * uCharge;
   float core = falloff * gain;
 
   // Two wider lobes. Real bloom sums several kernel sizes; a single falloff
@@ -173,15 +181,25 @@ void main() {
    * the light into a small hard shape at exactly the moment it should read as
    * most intense — the charge was full and the light got SMALLER.
    */
-  float apertureRadius = mix(0.075, 0.046, uClosed);
-  float d = apertureDistance(p, mix(0.42, 0.12, uClosed));
-  float blades = smoothstep(apertureRadius - 0.0015, apertureRadius + 0.0015, d);
-  float occlusion = 1.0 - blades * uClosed * 0.3;
+  /*
+   * Big enough to see, and it does not shrink.
+   *
+   * It used to stop down to a pinhole at full charge, which made the light
+   * SMALLER exactly when it should read as most intense. It now barely closes
+   * at all — what changes is how hard the blades cut, not how small the
+   * opening is, so the hexagon stays legible across the whole wind.
+   */
+  float apertureRadius = mix(0.115, 0.098, uClosed);
+  float d = apertureDistance(p, mix(0.42, 0.14, uClosed));
+  float blades = smoothstep(apertureRadius - 0.0018, apertureRadius + 0.0018, d);
+  float occlusion = 1.0 - blades * (0.25 + uClosed * 0.5);
   colour *= occlusion;
 
   // A thin lit edge where the blades meet the light.
-  float rim = exp(-pow((d - apertureRadius) * 360.0, 2.0)) * uClosed;
-  colour += uWarm * rim * 1.4;
+  // The lit edge of the blades. Present from the start, not only once closed:
+  // an open iris still has edges and they still catch the light.
+  float rim = exp(-pow((d - apertureRadius) * 300.0, 2.0)) * (0.35 + 0.65 * uClosed);
+  colour += mix(uWarm, vec3(1.0), 0.4) * rim * 2.4;
 
   /*
    * Tonemap. THIS is what produces the white core: everything above 1.0 is

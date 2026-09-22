@@ -45,7 +45,7 @@ const DISPLACEMENT_MAP =
  * drags the backdrop. Matched to the strip height: bending it further than the
  * bevel is deep would pull in content from outside the glass.
  */
-const MAX_DISPLACEMENT = 22;
+const MAX_DISPLACEMENT = 13;
 
 export function GlassFilters() {
   return (

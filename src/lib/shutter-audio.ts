@@ -46,6 +46,8 @@ let charge = 0;
 let draining = 0;
 /** How hard it is draining, in charge per second. */
 let drainRate = 0;
+/** The same, eased — this is what the pitch follows. */
+let smoothedDrain = 0;
 let lastCharge = 0;
 let lastAt = 0;
 /**
@@ -198,8 +200,19 @@ function applyCharge() {
    * dumping its charge falls in pitch. Played backwards and falling, which is
    * what the reversed bed is for.
    */
-  const urgency = Math.min(1, drainRate / 0.55);
-  dump.playbackRate.setTargetAtTime(0.85 - urgency * 0.4, now, 0.05);
+  /*
+   * Set slowly, and from a heavily smoothed rate.
+   *
+   * A playback rate IS a pitch, so anything that jitters the rate warbles the
+   * tone — and this one is close to a pure tone, which is the worst case for
+   * it: there is no other content to hide the wobble in. The drain rate is
+   * measured from frame-to-frame charge deltas reported in hundredths, so it
+   * is inherently steppy, and feeding that straight into the rate produced an
+   * audible vibrato rather than a fall. Smoothed hard on the way in, and given
+   * a long time constant on the way out.
+   */
+  const urgency = Math.min(1, smoothedDrain / 0.55);
+  dump.playbackRate.setTargetAtTime(0.85 - urgency * 0.4, now, 0.45);
 }
 
 /**
@@ -229,6 +242,9 @@ function noteDirection(value: number) {
     const falling = velocity < -0.02 ? 1 : 0;
     if (falling) drainRate = Math.max(drainRate * 0.7, -velocity);
     else drainRate *= 0.85;
+    // A long average. The pitch should describe how the charge is going, not
+    // react to every frame of it.
+    smoothedDrain += (drainRate - smoothedDrain) * Math.min(1, dt / 0.5);
     // Roughly a tenth of a second to swing fully from one bed to the other.
     const ease = Math.min(1, dt / 0.1);
     draining += (falling - draining) * ease;
