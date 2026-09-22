@@ -1,11 +1,17 @@
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/integrations/supabase/client";
+import { VARIANT_WIDTHS } from "@/lib/photo-url";
+
+export type PreparedVariant = { width: number; file: File };
 
 export type PreparedImage = {
+  /** The largest rendition — also the row's `storage_path`. */
   file: File;
   width: number;
   height: number;
   blurDataUrl: string;
+  /** Smaller renditions, keyed by rendered width. */
+  variants: PreparedVariant[];
 };
 
 const MAX_EDGE = 2560;
@@ -30,19 +36,42 @@ function blurPlaceholder(bitmap: ImageBitmap): string {
   return canvas.toDataURL("image/webp", 0.5);
 }
 
-/** Resize to a 2560px long edge, convert to WebP, and build a tiny base64 blur preview. */
+/**
+ * Resize to a 2560px long edge, then produce the smaller renditions the site
+ * actually renders. Without these a gallery row 280px tall still downloads the
+ * full 2560px file, which is the single largest cost on a photography site.
+ */
 export async function prepareImage(input: File): Promise<PreparedImage> {
-  const compressed = await imageCompression(input, {
+  const base = await imageCompression(input, {
     maxWidthOrHeight: MAX_EDGE,
     initialQuality: QUALITY,
     fileType: "image/webp",
     useWebWorker: true,
   });
-  const bitmap = await loadBitmap(compressed);
+  const bitmap = await loadBitmap(base);
   const blurDataUrl = blurPlaceholder(bitmap);
-  const name = `${input.name.replace(/\.[^.]+$/, "") || "photo"}.webp`;
-  const file = new File([compressed], name, { type: "image/webp" });
-  const result = { file, width: bitmap.width, height: bitmap.height, blurDataUrl };
+  const stem = input.name.replace(/\.[^.]+$/, "") || "photo";
+
+  // Only generate widths smaller than the image itself — upscaling helps nobody.
+  const targets = VARIANT_WIDTHS.filter((w) => w < bitmap.width);
+  const variants: PreparedVariant[] = [];
+  for (const width of targets) {
+    const resized = await imageCompression(base, {
+      maxWidthOrHeight: width,
+      initialQuality: QUALITY,
+      fileType: "image/webp",
+      useWebWorker: true,
+    });
+    variants.push({ width, file: new File([resized], `${stem}-${width}.webp`, { type: "image/webp" }) });
+  }
+
+  const result: PreparedImage = {
+    file: new File([base], `${stem}.webp`, { type: "image/webp" }),
+    width: bitmap.width,
+    height: bitmap.height,
+    blurDataUrl,
+    variants,
+  };
   bitmap.close?.();
   return result;
 }
@@ -51,22 +80,33 @@ function slugify(name: string) {
   return name.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "photo";
 }
 
-/** Upload one file and create its photos row. */
+/** Upload one file plus its responsive renditions, then create its photos row. */
 export async function uploadPhoto(input: File, categoryId: string | null, sortOrder: number) {
   const prepared = await prepareImage(input);
-  const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${slugify(input.name)}.webp`;
+  const stem = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${slugify(input.name)}`;
+  const path = `${stem}.webp`;
 
-  const { error: uploadError } = await supabase.storage.from("photos").upload(path, prepared.file, {
-    contentType: "image/webp",
-    upsert: false,
-  });
+  // Paths are content-unique, so these objects can be cached indefinitely.
+  const uploadOptions = { contentType: "image/webp", upsert: false, cacheControl: "31536000" };
+
+  const { error: uploadError } = await supabase.storage.from("photos").upload(path, prepared.file, uploadOptions);
   if (uploadError) throw uploadError;
+
+  const sources: Record<string, string> = {};
+  for (const variant of prepared.variants) {
+    const variantPath = `${stem}-${variant.width}.webp`;
+    const { error } = await supabase.storage.from("photos").upload(variantPath, variant.file, uploadOptions);
+    // A missing rendition degrades quality, not correctness — the original still
+    // serves. Don't fail the whole upload over one variant.
+    if (!error) sources[String(variant.width)] = variantPath;
+  }
 
   const { error } = await supabase.from("photos").insert({
     storage_path: path,
     width: prepared.width,
     height: prepared.height,
     blur_data_url: prepared.blurDataUrl,
+    sources,
     alt: "",
     title: input.name.replace(/\.[^.]+$/, ""),
     category_id: categoryId,
@@ -77,8 +117,9 @@ export async function uploadPhoto(input: File, categoryId: string | null, sortOr
   return path;
 }
 
-export async function deletePhoto(id: string, storagePath: string) {
-  await supabase.storage.from("photos").remove([storagePath]);
+export async function deletePhoto(id: string, storagePath: string, sources?: Record<string, string> | null) {
+  const paths = [storagePath, ...Object.values(sources ?? {})].filter(Boolean);
+  await supabase.storage.from("photos").remove(paths);
   const { error } = await supabase.from("photos").delete().eq("id", id);
   if (error) throw error;
 }

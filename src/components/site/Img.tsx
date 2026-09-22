@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
-import { photoUrl } from "@/lib/photo-url";
+import { photoSrcSet, photoUrl, type PhotoSources } from "@/lib/photo-url";
 
 /** Minimal shape needed to render a stored photograph. */
 export type ImgSource = {
@@ -8,11 +8,13 @@ export type ImgSource = {
   width?: number | null;
   height?: number | null;
   blur_data_url?: string | null;
+  sources?: PhotoSources | null;
   alt?: string | null;
 };
 
 type ImgProps = {
   image: ImgSource | null | undefined;
+  /** Rendered width at each breakpoint. Required for `srcset` to mean anything. */
   sizes?: string;
   className?: string;
   imgClassName?: string;
@@ -21,14 +23,16 @@ type ImgProps = {
 };
 
 /**
- * The single image abstraction for the site. Consumes a storage path plus a
- * stored base64 blur placeholder — no build-time image pipeline involved.
+ * The single image abstraction for the site: a blurred placeholder that fades to
+ * the photograph, an aspect-ratio box so nothing shifts, and a real `srcset` so
+ * the browser downloads a rendition matched to how large it is actually drawn.
  */
-export function Img({ image, sizes, className, imgClassName, eager = false, alt }: ImgProps) {
+export function Img({ image, sizes = "100vw", className, imgClassName, eager = false, alt }: ImgProps) {
   const [loaded, setLoaded] = useState(false);
   const width = image?.width ?? 1600;
   const height = image?.height ?? 1067;
   const src = photoUrl(image?.storage_path);
+  const srcSet = photoSrcSet(image?.storage_path, image?.sources, image?.width);
   const blur = image?.blur_data_url || undefined;
 
   return (
@@ -42,10 +46,11 @@ export function Img({ image, sizes, className, imgClassName, eager = false, alt 
       {src ? (
         <img
           src={src}
+          {...(srcSet ? { srcSet } : {})}
+          sizes={sizes}
           alt={alt ?? image?.alt ?? ""}
           width={width}
           height={height}
-          sizes={sizes}
           loading={eager ? "eager" : "lazy"}
           fetchPriority={eager ? "high" : "auto"}
           decoding="async"

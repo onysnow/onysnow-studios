@@ -16,13 +16,25 @@ export function JustifiedGallery({ images, spacing = 6 }: { images: Photo[]; spa
 
   const slides = useMemo(
     () =>
-      images.map((image) => ({
-        src: photoUrl(image.storage_path),
-        alt: image.alt,
-        width: image.width || 1600,
-        height: image.height || 1067,
-        key: image.id,
-      })),
+      images.map((image) => {
+        const width = image.width || 1600;
+        const height = image.height || 1067;
+        const ratio = height / width;
+        // react-photo-album picks from srcSet using the width it lays the frame
+        // out at, so only the needed rendition is fetched.
+        const srcSet = Object.entries(image.sources ?? {})
+          .map(([w, path]) => ({ src: photoUrl(path), width: Number(w), height: Math.round(Number(w) * ratio) }))
+          .filter((c) => Number.isFinite(c.width) && c.width > 0)
+          .sort((a, b) => a.width - b.width);
+        return {
+          src: photoUrl(image.storage_path),
+          alt: image.alt,
+          width,
+          height,
+          key: image.id,
+          ...(srcSet.length > 0 ? { srcSet } : {}),
+        };
+      }),
     [images],
   );
 

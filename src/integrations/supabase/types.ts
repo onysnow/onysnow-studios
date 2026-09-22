@@ -152,6 +152,7 @@ export type Database = {
         Row: {
           alt: string
           blur_data_url: string
+          sources: Json
           category_id: string | null
           created_at: string
           featured: boolean
@@ -167,6 +168,7 @@ export type Database = {
         Insert: {
           alt?: string
           blur_data_url?: string
+          sources?: Json
           category_id?: string | null
           created_at?: string
           featured?: boolean
@@ -182,6 +184,7 @@ export type Database = {
         Update: {
           alt?: string
           blur_data_url?: string
+          sources?: Json
           category_id?: string | null
           created_at?: string
           featured?: boolean

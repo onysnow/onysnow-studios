@@ -17,6 +17,7 @@ export type Photo = {
   width: number;
   height: number;
   blur_data_url: string;
+  sources: Record<string, string> | null;
   alt: string;
   title: string;
   category_id: string | null;

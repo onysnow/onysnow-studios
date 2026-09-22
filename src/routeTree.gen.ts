@@ -31,7 +31,6 @@ import { Route as AuthenticatedAdminPhotosRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAdminServicesRouteImport } from './routes/_authenticated/admin.services'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
 import { Route as AuthenticatedAdminTestimonialsRouteImport } from './routes/_authenticated/admin.testimonials'
-import { Route as ApiPublicPhotoSplatRouteImport } from './routes/api/public/photo.$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -149,11 +148,6 @@ const AuthenticatedAdminTestimonialsRoute =
     path: '/testimonials',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
-const ApiPublicPhotoSplatRoute = ApiPublicPhotoSplatRouteImport.update({
-  id: '/api/public/photo/$',
-  path: '/api/public/photo/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -177,7 +171,6 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/testimonials': typeof AuthenticatedAdminTestimonialsRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
-  '/api/public/photo/$': typeof ApiPublicPhotoSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -199,7 +192,6 @@ export interface FileRoutesByTo {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/testimonials': typeof AuthenticatedAdminTestimonialsRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
-  '/api/public/photo/$': typeof ApiPublicPhotoSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -225,7 +217,6 @@ export interface FileRoutesById {
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/testimonials': typeof AuthenticatedAdminTestimonialsRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
-  '/api/public/photo/$': typeof ApiPublicPhotoSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -251,7 +242,6 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/testimonials'
     | '/admin/'
-    | '/api/public/photo/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -273,7 +263,6 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/testimonials'
     | '/admin'
-    | '/api/public/photo/$'
   id:
     | '__root__'
     | '/'
@@ -298,7 +287,6 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/testimonials'
     | '/_authenticated/admin/'
-    | '/api/public/photo/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -312,7 +300,6 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   ServicesRoute: typeof ServicesRoute
   TermsRoute: typeof TermsRoute
-  ApiPublicPhotoSplatRoute: typeof ApiPublicPhotoSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -471,13 +458,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminTestimonialsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
-    '/api/public/photo/$': {
-      id: '/api/public/photo/$'
-      path: '/api/public/photo/$'
-      fullPath: '/api/public/photo/$'
-      preLoaderRoute: typeof ApiPublicPhotoSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -544,7 +524,6 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   ServicesRoute: ServicesRoute,
   TermsRoute: TermsRoute,
-  ApiPublicPhotoSplatRoute: ApiPublicPhotoSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

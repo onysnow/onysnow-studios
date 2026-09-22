@@ -94,7 +94,7 @@ function PhotosPage() {
     const list = (photos.data ?? []).filter((p) => selected.includes(p.id));
     for (const p of list) {
       try {
-        await deletePhoto(p.id, p.storage_path);
+        await deletePhoto(p.id, p.storage_path, p.sources);
       } catch {
         try { await deleteRow("photos", p.id); } catch { /* ignore */ }
       }
