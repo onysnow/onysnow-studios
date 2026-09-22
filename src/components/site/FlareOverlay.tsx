@@ -48,8 +48,8 @@ type Flare = {
 const STREAK_BLUE: Flare = {
   name: "streak-blue",
   anchor: { x: 0.42, y: 0.46 },
-  scale: 1.05,
-  opacity: 0.3,
+  scale: 1.25,
+  opacity: 0.72,
 };
 const STREAK_GREEN: Flare = {
   name: "streak-green",
@@ -58,13 +58,18 @@ const STREAK_GREEN: Flare = {
   opacity: 0.5,
 };
 const BEAM: Flare = { name: "beam", anchor: { x: 0.12, y: 0.86 }, scale: 2.2, opacity: 0.45 };
-const CHROMA: Flare = { name: "chroma", anchor: { x: 0.78, y: 0.2 }, scale: 0.85, opacity: 0.38 };
+const CHROMA: Flare = { name: "chroma", anchor: { x: 0.78, y: 0.2 }, scale: 1.0, opacity: 0.66 };
 
-/** Unused for now, kept so swapping which flare plays is a one-line change. */
+/** Kept so swapping which flare plays is a one-line change. */
 void STREAK_GREEN;
-void BEAM;
 
-const ACTIVE: Flare[] = [STREAK_BLUE, CHROMA];
+/*
+ * The footage leads. What the shader keeps is the core, the aperture and the
+ * diffraction spikes — the parts that must be pin-sharp and exactly on the
+ * pointer, and which a scaled, resampled video frame cannot give. Everything
+ * that should look photographed comes from here.
+ */
+const ACTIVE: Flare[] = [STREAK_BLUE, CHROMA, BEAM];
 
 export function FlareOverlay({
   chargeRef,

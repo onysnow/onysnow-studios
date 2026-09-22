@@ -155,7 +155,17 @@ void main() {
     vec3 gt = spectrum(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
     // Ghosts fade toward the edges of the frame, as the real ones do.
     float vig = 1.0 - clamp(length(p - axis * t) * 0.55, 0.0, 1.0);
-    colour += ghost(gp, radius, thickness, gt) * 0.85 * vig * uCharge;
+    /*
+     * Held well back now that real footage is carrying this.
+     *
+     * A computed ghost is a clean ring with a clean falloff, and a
+     * photographed one is lopsided, grainy and slightly dirty — which is the
+     * entire difference between looking captured and looking drawn. These
+     * remain because they track the pointer along the optical axis, which
+     * baked footage cannot do, but they are support now rather than the
+     * performance.
+     */
+    colour += ghost(gp, radius, thickness, gt) * 0.3 * vig * uCharge;
   }
 
   /*
@@ -165,15 +175,21 @@ void main() {
    */
   float halo1 = exp(-pow((r - 0.31) / 0.035, 2.0)) * 0.9
               + exp(-pow((r - 0.46) / 0.07, 2.0)) * 0.4;
-  colour += spectrum(r * 3.4 + 0.12) * halo1 * 1.15 * uCharge;
+  colour += spectrum(r * 3.4 + 0.12) * halo1 * 0.45 * uCharge;
 
   /*
    * An anamorphic streak. Even a spherical lens smears a bright point
    * horizontally through its diaphragm; it is the cue people read as "this was
    * photographed" faster than any other.
    */
+  /*
+   * A token streak only. The anamorphic smear is the single thing footage is
+   * best at — it is dirty, banded and asymmetric in a way no exponential is —
+   * so the clip supplies it and this just keeps the core from looking bare
+   * before the video fades up.
+   */
   float streak = exp(-abs(p.x) * 2.6) * exp(-abs(p.y) * 150.0);
-  colour += mix(uWarm, vec3(0.6, 0.8, 1.0), 0.45) * streak * 2.2 * uCharge;
+  colour += mix(uWarm, vec3(0.6, 0.8, 1.0), 0.45) * streak * 0.7 * uCharge;
 
   // ---- The aperture, silhouetted against its own light ----
   /*
