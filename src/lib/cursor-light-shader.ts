@@ -80,6 +80,16 @@ void main() {
   float intensity = core + halo + spill + spikes;
 
   /*
+   * Cut the falloff to zero before the quad's edge.
+   *
+   * The wide lobes still carry real energy at r = 1, so the canvas boundary
+   * was visible as a faint square wherever the light overlapped a dark area.
+   * Nothing in the physics ends the light — the quad does — so it has to be
+   * ended explicitly.
+   */
+  intensity *= smoothstep(1.0, 0.62, r);
+
+  /*
    * Chromatic dispersion: sample the falloff at slightly different radii per
    * channel. Long wavelengths refract least, so red carries furthest — the
    * reason a real highlight fringes warm on the outside.
@@ -87,7 +97,7 @@ void main() {
   float rr = 1.0 / (1.0 + 250.0 * r * r);
   float gg = 1.0 / (1.0 + 268.0 * r * r);
   float bb = 1.0 / (1.0 + 290.0 * r * r);
-  vec3 dispersion = vec3(rr, gg, bb) * gain * 0.34;
+  vec3 dispersion = vec3(rr, gg, bb) * gain * 0.34 * smoothstep(1.0, 0.62, r);
 
   // Warm core, cooler in the far falloff — hot sources read warm at the centre
   // and their scatter goes cool.

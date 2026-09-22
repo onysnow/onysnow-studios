@@ -4,6 +4,19 @@ import { CursorLight } from "./CursorLight";
 import { fireShutter } from "./ShutterFlash";
 
 /**
+ * A photograph the pointer is directly on top of.
+ */
+const PHOTO = "img, picture, video, .gallery-frame";
+
+/**
+ * A photographic *surface* — a hero or parallax band where the picture is the
+ * background and scrims, vignettes and copy are stacked over it. A hit test
+ * there lands on one of those overlays, never on the image, so the container
+ * carries `data-photo` and stands in for it.
+ */
+const PHOTO_SCENE = "[data-photo]";
+
+/**
  * The cursor.
  *
  * A single element that follows the pointer in `mix-blend-mode: difference`.
@@ -63,31 +76,63 @@ export function CustomCursor() {
       const interactive = node?.closest?.(
         'a, button, [role="button"], input, textarea, select, label, summary',
       );
-      const media = node?.closest?.("img, picture, video, .gallery-frame");
+      const media = node?.closest?.(PHOTO);
+      const scene = node?.closest?.(PHOTO_SCENE);
 
       /*
-       * Photographs win over links.
+       * Photographs win over links; photographic *scenes* lose to them.
        *
        * Nearly every photograph on the site is wrapped in something clickable —
        * a lightbox trigger, a card link — so testing for `interactive` first
        * meant the media state almost never fired. What's under the pointer
        * matters more than what it does: over a picture you want the wide
        * negative lens, over a line of text the smaller disc that sits behind it.
+       *
+       * A scene is the other way round. The hero is a photograph, but it also
+       * carries the headline and both calls to action, and those sit *on* the
+       * picture rather than in it. Over one of them the link state is the
+       * truthful one; the wide lens only takes over where the picture is bare.
        */
-      const state = media ? "media" : interactive ? "link" : "default";
+      const state = media ? "media" : interactive ? "link" : scene ? "media" : "default";
       if (el.dataset["state"] !== state) {
         el.dataset["state"] = state;
         dot.dataset["state"] = state;
       }
     };
 
+    /*
+     * Two independent reasons the negative can be hidden — the pointer has left
+     * the window, and the shutter is winding — so both go through one function.
+     * Setting `style.opacity` from either handler on its own meant whichever
+     * fired last won: re-entering the window mid-charge snapped the ring back
+     * to full over the middle of the light.
+     */
+    let inside = true;
+    let wind = 0;
+    const applyVisibility = () => {
+      /*
+       * Gone well before the charge is full, not merely dimmed.
+       *
+       * The ring blends in `difference`, which is a subtraction — laid over the
+       * flash it inverts it, and what you see is a dark hole punched through
+       * the brightest part of the frame. There is no amount of it that looks
+       * like light. So it clears out as soon as the wind is unmistakable and
+       * stays gone; firing the shutter drops the charge to zero, and that is
+       * what brings it back.
+       */
+      const charged = Math.max(0, 1 - wind / 0.25);
+      const value = inside ? charged : 0;
+      el.style.opacity = value.toFixed(2);
+      dot.style.opacity = value.toFixed(2);
+    };
+
     const onLeave = () => {
-      el.style.opacity = "0";
-      dot.style.opacity = "0";
+      inside = false;
+      applyVisibility();
     };
     const onEnter = () => {
-      el.style.opacity = "1";
-      dot.style.opacity = "1";
+      inside = true;
+      applyVisibility();
     };
 
     /*
@@ -136,14 +181,8 @@ export function CustomCursor() {
     const charger = watchShutterCharge({
       onCharge: (charge, armed) => {
         el.style.setProperty("--wind", charge.toFixed(2));
-        /*
-         * The difference-blended ring fades out as the light comes up.
-         * Difference inverts, so over a bright warm source the ring rendered
-         * blue and sat in the middle of the highlight — a blown core has
-         * nothing legible inside it, so the ring gets out of the way.
-         */
-        el.style.opacity = (1 - charge * 0.92).toFixed(2);
-        dot.style.opacity = (1 - charge * 0.92).toFixed(2);
+        wind = charge;
+        applyVisibility();
         chargeRef.current = charge;
         // Blades close over the back half, once it's clearly deliberate.
         const closed = Math.max(0, (charge - 0.5) / 0.5);
@@ -172,7 +211,7 @@ export function CustomCursor() {
        * there a moment earlier.
        */
       const under = document.elementFromPoint(targetX, targetY);
-      if (!under?.closest("img, picture, video, .gallery-frame")) return;
+      if (!under?.closest(`${PHOTO}, ${PHOTO_SCENE}`)) return;
       /*
        * Swallow the click.
        *
