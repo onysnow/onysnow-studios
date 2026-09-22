@@ -39,11 +39,17 @@ type Flare = {
  * Four clips survived the pack. The others were colour washes and haze with no
  * structure in them — bright, but nothing a flare is made of.
  */
+/*
+ * Scales are deliberately close to one. At 2.6 the clip covered the whole
+ * viewport, so what reached the screen was not a flare but the clip's average
+ * colour laid over the page — and an overlay you cannot see the edges of reads
+ * as a colour cast rather than as light.
+ */
 const STREAK_BLUE: Flare = {
   name: "streak-blue",
   anchor: { x: 0.42, y: 0.46 },
-  scale: 2.6,
-  opacity: 0.75,
+  scale: 1.05,
+  opacity: 0.3,
 };
 const STREAK_GREEN: Flare = {
   name: "streak-green",
@@ -52,7 +58,7 @@ const STREAK_GREEN: Flare = {
   opacity: 0.5,
 };
 const BEAM: Flare = { name: "beam", anchor: { x: 0.12, y: 0.86 }, scale: 2.2, opacity: 0.45 };
-const CHROMA: Flare = { name: "chroma", anchor: { x: 0.78, y: 0.2 }, scale: 2.0, opacity: 0.6 };
+const CHROMA: Flare = { name: "chroma", anchor: { x: 0.78, y: 0.2 }, scale: 0.85, opacity: 0.38 };
 
 /** Unused for now, kept so swapping which flare plays is a one-line change. */
 void STREAK_GREEN;

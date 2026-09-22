@@ -103,7 +103,15 @@
   z-index: 9999;
   pointer-events: none;
   opacity: 0;
-  mix-blend-mode: difference;
+  /*
+   * NOT `difference`.
+   *
+   * Inverting was a neat way to stay legible on any background, and over a
+   * photograph it is exactly wrong: it turns the follower into a negative of
+   * somebody's picture. A white ring with a dark shadow under it reads on
+   * anything and leaves the photograph alone, which on a photography site is
+   * the only requirement that actually matters.
+   */
   transition: opacity .25s ease;
   will-change: transform;
 }
@@ -128,17 +136,27 @@
   border: 1px solid #fff;
 }
 
+/*
+ * The default: a thin ring with a small solid dot at its centre, and nothing
+ * else. Matched to bryanminear.com, which is the reference for this.
+ */
 .custom-cursor__dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   background-color: #fff;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.6);
 }
 
 /* Over a link or button: a filled disc big enough to sit behind a nav item. */
+/*
+ * Over a link: wider, and tinted rather than filled. A solid disc only worked
+ * because it was being inverted; painted straight it simply covers the thing
+ * you are pointing at.
+ */
 .custom-cursor[data-state="link"] .custom-cursor__ring {
   width: 56px;
   height: 56px;
-  background-color: #fff;
+  background-color: oklch(1 0 0 / 0.14);
   border-color: #fff;
 }
 .custom-cursor[data-state="link"] .custom-cursor__dot { opacity: 0; }
@@ -632,13 +650,18 @@
  * Amber, like everything else that glows on this site. Under the cursor's
  * `difference` blend over a dark page that stays warm.
  */
+/*
+ * The ring warms as it winds, and that is all.
+ *
+ * It used to carry a 3.4rem amber glow with an INSET glow inside it, which at
+ * full wind filled the ring into a solid disc — and under the old inverting
+ * blend that disc became a hole punched through the photograph. The glow made
+ * sense when the ring WAS the light. It is not any more: there is a shader
+ * emitting and footage flaring, and a second glow drawn in CSS on top of them
+ * only ever competed with both.
+ */
 .custom-cursor__ring {
-  box-shadow:
-    0 0 calc(var(--wind, 0) * 3.4rem) calc(var(--wind, 0) * 0.75rem)
-      color-mix(in oklab, var(--amber) 100%, transparent),
-    0 0 calc(var(--wind, 0) * 1.1rem) calc(var(--wind, 0) * 0.14rem) oklch(1 0 0 / 0.85),
-    inset 0 0 calc(var(--wind, 0) * 1.3rem)
-      color-mix(in oklab, var(--amber) 85%, transparent);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.55);
 }
 
 /* The ring itself thickens and warms as it winds. */
@@ -811,8 +834,19 @@
     bottom: 0;
   }
 
+  /*
+   * The thin fixed bars do not get a bevel.
+   *
+   * A bevel is a property of a pane with real thickness, and it has to be
+   * small relative to the pane or it stops reading as an edge. On a 64px
+   * header even a 12px strip is a fifth of the bar top and bottom, so what you
+   * saw was not an edge catching light but a band across the middle of the
+   * chrome — the two displaced strips squeezing the undisturbed middle into a
+   * stripe. The header is a bar, not a plate. It keeps its blur, its tint and
+   * its arris, and skips the lens.
+   */
   .glass--bar > .glass__refract {
-    height: 12px;
+    display: none;
   }
 
   /*

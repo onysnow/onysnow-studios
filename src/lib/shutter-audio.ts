@@ -132,8 +132,15 @@ function startWhine() {
   // volume — a capacitor winding gets shriller, not just louder.
   whineFilter = context.createBiquadFilter();
   whineFilter.type = "lowpass";
-  // Opens across the top octave, where this recording actually lives.
-  whineFilter.frequency.value = 9000;
+  /*
+   * Parked above the recording, not sweeping through it.
+   *
+   * This filter used to open from 9 kHz to 21 kHz, which is a sensible sweep
+   * for almost any sound and silence for this one: the whole recording is a
+   * 17.8 kHz tone, so at anything under full charge the filter was simply
+   * deleting it. What reached the speakers was the filter, not the flash.
+   */
+  whineFilter.frequency.value = 22000;
   whineFilter.Q.value = 0.7;
 
   whine = context.createBufferSource();
@@ -171,16 +178,28 @@ function applyCharge() {
   whineGain.gain.setTargetAtTime(level * (1 - draining), now, 0.04);
   dumpGain.gain.setTargetAtTime(level * draining * 1.2, now, 0.04);
 
-  whineFilter.frequency.setTargetAtTime(9000 + charge * 12000, now, 0.06);
-  whine.playbackRate.setTargetAtTime(0.78 + charge * 0.46, now, 0.08);
+  /*
+   * Played at the speed it was recorded at.
+   *
+   * It used to rise from 0.78 to 1.24 with the charge, which is what a
+   * capacitor winding does and which works for any sound with headroom above
+   * it. This one has none: 17.8 kHz at 1.24 is 22 kHz, past the Nyquist
+   * frequency of the file and well past anybody's hearing, so the harder you
+   * wound it the more inaudible it became. Exactly backwards. The build now
+   * comes from level alone, which is the only axis this recording leaves.
+   */
+  whine.playbackRate.setTargetAtTime(1.0, now, 0.08);
 
   /*
-   * A drain runs fast, and faster the harder it is draining. The bleed is
-   * around 0.5 per second at rest, so that is the reference: at the standard
-   * bleed it plays at about 1.7x, and a collapse from full runs quicker still.
+   * The drain runs DOWN, and further down the harder it is draining.
+   *
+   * Speeding it up would have the same problem as the wind — there is no room
+   * above 17.8 kHz — but slowing it is both audible and right: a capacitor
+   * dumping its charge falls in pitch. Played backwards and falling, which is
+   * what the reversed bed is for.
    */
   const urgency = Math.min(1, drainRate / 0.55);
-  dump.playbackRate.setTargetAtTime(1.35 + urgency * 0.95, now, 0.05);
+  dump.playbackRate.setTargetAtTime(0.85 - urgency * 0.4, now, 0.05);
 }
 
 /**
