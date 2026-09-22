@@ -32,6 +32,29 @@ export type GlassRect = {
   /** Corner radius, in CSS pixels. */
   r: number;
   /**
+   * The photograph behind this pane, and where it is drawn on screen.
+   *
+   * Refraction means sampling the backdrop from somewhere else, so there has
+   * to BE a backdrop to sample. On this site there always is: every glass band
+   * sits on a parallax scene with a photograph in it, and that photograph is
+   * already in the DOM. No DOM rasterisation needed — the one thing behind the
+   * glass that matters is a picture we can bind directly.
+   */
+  src: string;
+  /** The image element's box, in CSS pixels. */
+  ix: number;
+  iy: number;
+  iw: number;
+  ih: number;
+  /** Intrinsic aspect, for the object-fit: cover mapping. */
+  ia: number;
+  /**
+   * Which surface this pane wears, 0-3. Assigned once and kept for the life of
+   * the element, so a panel's grime does not change as the page scrolls — and
+   * so two sections never show identical dirt.
+   */
+  s: number;
+  /**
    * Viewing angle onto the pane, -1 to 1.
    *
    * A pane has thickness, so which of its two side faces you can see depends
@@ -50,6 +73,71 @@ export type GlassRect = {
  * reading them.
  */
 const radii = new WeakMap<HTMLElement, number>();
+
+/**
+ * The photograph this panel is sitting on.
+ *
+ * Found by walking up to the nearest photographic scene and taking its image,
+ * rather than threading a prop through every call site — the relationship is
+ * "whatever picture I happen to be over", which is a DOM fact, not a prop.
+ */
+/**
+ * The smallest rendition of a photograph, for use as a refraction texture.
+ *
+ * The texture is a SECOND fetch, not a reuse of the one the page already made:
+ * the DOM image is requested without CORS and a texture needs it with, and
+ * those are different cache entries. Left alone that means downloading every
+ * backdrop photograph twice at full size, which on a photography site is a lot
+ * of bandwidth for an effect nobody asked for.
+ *
+ * It does not need to be full size. The backdrop is only ever sampled inside a
+ * bevel a few dozen pixels deep and squeezed into a side band a few pixels
+ * tall, so the smallest stored variant carries more detail than the effect can
+ * show. Adding `crossorigin` to the page's own <img> would avoid the second
+ * request entirely, but it would also mean that the day the storage host stops
+ * sending the header, every photograph on the site vanishes rather than one
+ * effect going quiet. Not worth it.
+ */
+function smallestVariant(img: HTMLImageElement): string {
+  const set = img.getAttribute("srcset");
+  if (!set) return img.currentSrc || img.src;
+  let best = "";
+  let bestWidth = Infinity;
+  for (const entry of set.split(",")) {
+    const [url, descriptor] = entry.trim().split(/\s+/);
+    const width = Number.parseInt(descriptor ?? "", 10);
+    if (url && Number.isFinite(width) && width < bestWidth) {
+      bestWidth = width;
+      best = url;
+    }
+  }
+  return best || img.currentSrc || img.src;
+}
+
+function backdropOf(el: HTMLElement): HTMLImageElement | null {
+  const scene = el.closest("[data-photo]");
+  if (!scene) return null;
+  const images = scene.querySelectorAll<HTMLImageElement>("img[src]");
+  for (let i = images.length - 1; i >= 0; i -= 1) {
+    const img = images[i];
+    // Skip the blurred placeholder, which is an inline data URI.
+    if (img && !img.src.startsWith("data:") && img.naturalWidth > 0) return img;
+  }
+  return null;
+}
+
+const seeds = new WeakMap<HTMLElement, number>();
+let nextSeed = 0;
+
+function surfaceSeed(el: HTMLElement) {
+  let seed = seeds.get(el);
+  if (seed === undefined) {
+    seed = nextSeed % 4;
+    nextSeed += 1;
+    seeds.set(el, seed);
+  }
+  return seed;
+}
 
 function cornerRadius(el: HTMLElement) {
   const known = radii.get(el);
@@ -92,6 +180,8 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
   for (const el of panels) {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) continue;
+    const img = backdropOf(el);
+    const b = img?.getBoundingClientRect();
     geometry.push({
       x: r.left,
       y: r.top,
@@ -99,9 +189,49 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       h: r.height,
       r: cornerRadius(el),
       t: paneTilt(r),
+      s: surfaceSeed(el),
+      src: img ? smallestVariant(img) : "",
+      ix: b?.left ?? 0,
+      iy: b?.top ?? 0,
+      iw: b?.width ?? 1,
+      ih: b?.height ?? 1,
+      ia: img && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
     });
   }
   return geometry;
+}
+
+/**
+ * One panel's custom properties, from one layout read.
+ *
+ * Split out so a panel can be measured the moment it registers as well as on
+ * the shared pass. Panels mount in bursts at different times — the header with
+ * the layout, the bands with the route — and anything that waits for the next
+ * shared frame leaves whichever panels arrived late sitting on their CSS
+ * fallbacks until the visitor moves the pointer.
+ */
+function measure(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+
+  // Distance from the pointer to the rectangle: zero while inside it, and the
+  // straight-line gap to the nearest edge once outside.
+  const dx = Math.max(r.left - pointerX, 0, pointerX - r.right);
+  const dy = Math.max(r.top - pointerY, 0, pointerY - r.bottom);
+  const nearness = Math.max(0, 1 - Math.hypot(dx, dy) / REACH);
+
+  // Eased so it comes up gently as the cursor approaches rather than switching
+  // on at the boundary. The lighting itself is the shader's job; this is only
+  // for anything that wants to know the cursor is near.
+  el.style.setProperty("--glow-on", (nearness * nearness).toFixed(3));
+
+  /*
+   * How far each side face of the pane is turned toward the viewer, 0 to 1.
+   * Never quite zero: the far side is still there, just foreshortened and seen
+   * through the glass, which is why it reads as subtler rather than absent.
+   */
+  const tilt = paneTilt(r);
+  el.style.setProperty("--pane-top", (0.18 + 0.82 * Math.max(0, tilt)).toFixed(3));
+  el.style.setProperty("--pane-bottom", (0.18 + 0.82 * Math.max(0, -tilt)).toFixed(3));
 }
 
 function apply() {
@@ -122,30 +252,7 @@ function apply() {
   // frame is free.
   glassGeometry(now);
 
-  for (const el of panels) {
-    const r = el.getBoundingClientRect();
-
-    // Distance from the pointer to the rectangle: zero while inside it, and
-    // the straight-line gap to the nearest edge once outside.
-    const dx = Math.max(r.left - pointerX, 0, pointerX - r.right);
-    const dy = Math.max(r.top - pointerY, 0, pointerY - r.bottom);
-    const nearness = Math.max(0, 1 - Math.hypot(dx, dy) / REACH);
-
-    // Eased so it comes up gently as the cursor approaches rather than
-    // switching on at the boundary. The lighting itself is the shader's job;
-    // this is only for anything that wants to know the cursor is near.
-    el.style.setProperty("--glow-on", (nearness * nearness).toFixed(3));
-
-    /*
-     * How far each side face of the pane is turned toward the viewer, 0 to 1.
-     * Never quite zero: the far side is still there, just foreshortened and
-     * seen through the glass, which is why it reads as subtler rather than as
-     * absent.
-     */
-    const tilt = paneTilt(r);
-    el.style.setProperty("--pane-top", (0.18 + 0.82 * Math.max(0, tilt)).toFixed(3));
-    el.style.setProperty("--pane-bottom", (0.18 + 0.82 * Math.max(0, -tilt)).toFixed(3));
-  }
+  for (const el of panels) measure(el);
 }
 
 function onMove(event: PointerEvent) {
@@ -164,6 +271,8 @@ export function registerEdgeGlow(el: HTMLElement) {
   panels.add(el);
   radii.delete(el);
   geometryAt = -1;
+  // Measured at once, so this panel is never left on the fallback.
+  measure(el);
   if (!bound) {
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", onLeave);
@@ -181,6 +290,25 @@ export function registerEdgeGlow(el: HTMLElement) {
     });
     bound = true;
   }
+  /*
+   * Measure once on registration. The thickness depends on where the panel
+   * sits relative to the viewport, and nothing had computed that until the
+   * first pointer move or scroll — so a panel that loaded under a stationary
+   * cursor sat on the CSS fallback until you touched something.
+   */
+  /*
+   * Rescheduled, not merely scheduled.
+   *
+   * Panels mount in bursts and at different times — the header with the
+   * layout, the bands with the route — and the ordinary guard skips a
+   * registration whenever a pass is already pending. That meant whichever
+   * panel registered first was measured and the rest were left on the CSS
+   * fallback until the visitor happened to move the pointer or scroll.
+   * Cancelling and re-arming puts the pass after the last arrival instead.
+   */
+  geometryAt = -1;
+  if (frame) cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(apply);
   return () => {
     panels.delete(el);
     geometryAt = -1;

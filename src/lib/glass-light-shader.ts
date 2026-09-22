@@ -1,65 +1,91 @@
 /**
- * Fragment shader for the glass: its thickness, its material, and the cursor
- * light falling on it.
+ * Fragment shader for one pane of glass.
  *
- * The same argument as the cursor light itself. CSS composites in SDR, so a
- * gradient can never be brighter than white and a "blown" edge has to be
- * hand-authored as a white stop — which is precisely why every CSS version of
- * the lit rim read as amber paint along the border rather than as an edge
- * catching a light. Here the emission genuinely exceeds 1.0 and a tonemap
- * crushes it, so the white core is an outcome of the brightness rather than a
- * colour that was chosen.
+ * Built from the technique the LiquidGlass library uses, rather than from
+ * guesswork: a HEIGHT FIELD over the pane, normals taken from its gradient,
+ * and the backdrop SAMPLED at an offset along those normals. That last part is
+ * the whole difference between refraction and a filter. A CSS filter processes
+ * every pixel where it already is; refraction means fetching the backdrop from
+ * somewhere else, which is why no amount of blur, brightness or tint ever
+ * looked like glass here.
  *
- * What a real pane shows, and what is modelled here:
+ * The backdrop is the photograph the band is sitting on. LiquidGlass has to
+ * rasterise arbitrary DOM to get a texture; this site does not, because the
+ * one thing behind every pane that matters is a picture already in the page.
  *
- *   arris    the corner where the face meets the side. A hard, very bright
- *            line — glass totally internally reflects along an edge, which is
- *            why the rim of a plate is the brightest part of it.
- *   side     the polished thickness between the two arrises. Dichroic: the
- *            path through the glass is long enough for dispersion to show, so
- *            the band runs blue to gold along its length.
- *   far arris the second corner, seen THROUGH the pane, so dimmer.
- *   mirror   the specular image of the source — two of them, since a pane
- *            reflects from its front and back surfaces. That doubling is most
- *            of what makes a reflection read as glass rather than as a smear.
- *   material grime and scratches, which appear because they scatter the light
- *            rather than because a shape was painted where the light is.
+ * Parameters carry LiquidGlass's names and its defaults as the starting point
+ * — refraction 0.69, chromatic aberration 0.05, fresnel 1, edge highlight 0.05
+ * — so they can be compared against the reference rather than re-invented.
  *
- * Which side face you can see depends on where the panel sits relative to your
- * eye, which is what `uTilts` carries and what makes the thickness move as the
- * page scrolls.
+ * What is modelled, in the order light meets it:
  *
- * Unused rect slots are parked far offscreen at zero size, so every fragment
- * runs the same fixed number of iterations and there is no dynamic branching.
+ *   height    the bevel. A biconvex profile, deepest at the rim, flat across
+ *             the middle, which is what gives an edge its lens.
+ *   normal    the gradient of that height field, from the rounded-rect SDF.
+ *   refract   the backdrop sampled along the normal, per channel, because
+ *             glass disperses and a real edge fringes into colour.
+ *   fresnel   reflectivity climbing toward grazing angles, so the rim turns
+ *             mirror-like while the centre stays a window.
+ *   specular  Blinn-Phong from the cursor light, treated as a real source.
+ *   arris     the lit corner, blown out by the tonemap rather than drawn.
+ *   sides     the pane's thickness, opening and closing as the page scrolls.
+ *   material  photographed grime, shown only where light rakes across it.
  */
 export const GLASS_LIGHT_FRAGMENT_SHADER = /* glsl */ `
 precision highp float;
 
-#define MAX_RECTS 8
-#define TAU 6.28318530718
-#define BLADES 6.0
+uniform vec2  uViewport;      // device pixels
+uniform float uScale;         // device pixels per CSS pixel
+uniform vec2  uLight;         // CSS pixels, viewport-relative
+uniform float uCharge;        // 0 to 1
 
-uniform vec2  uViewport;          // device pixels
-uniform float uScale;             // device pixels per CSS pixel
-uniform vec2  uLight;             // CSS pixels, viewport-relative
-uniform float uCharge;            // 0 to 1
-uniform float uTime;              // seconds
-uniform vec4  uRects[MAX_RECTS];  // x, y, w, h in CSS pixels
-uniform float uRadii[MAX_RECTS];  // corner radius in CSS pixels
-uniform float uTilts[MAX_RECTS];  // -1 looking up at it, 1 looking down at it
-uniform sampler2D uSurface;       // R specks and scratches, G smears, B wear
-uniform float uHasSurface;        // 0 until the map has loaded
+uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
+uniform float uRadius;        // corner radius, CSS pixels
+uniform float uTilt;          // -1 looking up at it, 1 looking down at it
+uniform float uSeed;          // which atlas cell this pane wears
+
+uniform sampler2D uBackdrop;  // the photograph behind this pane
+uniform float uHasBackdrop;
+uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
+uniform float uImageAspect;   // intrinsic width / height
+
+uniform sampler2D uSurface;   // R specks, G smears, B wear
+uniform float uHasSurface;
+
 uniform vec3  uWarm;
 uniform vec3  uCool;
 
-/* Signed distance to a rounded rectangle. Negative inside, zero on the edge. */
-float roundedBox(vec2 p, vec2 halfSize, float radius) {
-  float r = min(radius, min(halfSize.x, halfSize.y));
-  vec2 q = abs(p) - halfSize + r;
-  return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
-}
+#define TAU 6.28318530718
 
-/* A cosine palette. Cheap, smooth, and it wraps — no lookup texture needed. */
+/* LiquidGlass's defaults, kept by name so they can be compared with it. */
+#define REFRACTION 0.69
+#define CHROM_ABERRATION 0.05
+#define EDGE_HIGHLIGHT 0.05
+#define FRESNEL 1.0
+#define Z_RADIUS 40.0   // bevel depth in CSS pixels
+
+/*
+ * The side face is a different optical path from the face, and the numbers
+ * below are why it has to look different rather than merely brighter.
+ *
+ * Through the FACE you look at near-normal incidence and the path through the
+ * glass is the pane's thickness — a few millimetres. Through the SIDE you are
+ * looking ALONG the pane, so the path is its width: two or three orders of
+ * magnitude further. Everything that scales with path length therefore
+ * explodes: dispersion separates the channels visibly instead of fringing
+ * them, and absorption stops being negligible.
+ *
+ * That absorption is why the cut edge of ordinary glass is green. Iron in
+ * soda-lime absorbs red most, blue next, green least, and over a few
+ * millimetres you cannot see it at all — over a few hundred you see nothing
+ * else. These are Beer-Lambert coefficients in that order.
+ */
+#define SIDE_ABSORB vec3(1.15, 0.28, 0.55)
+/* How much of the scene is squeezed into the thin band, in backdrop UV. */
+#define SIDE_SPAN 0.42
+/* Dispersion scales with path length, and the side's path is enormous. */
+#define SIDE_DISPERSION 7.0
+
 vec3 spectrum(float t) {
   return 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.33, 0.67)));
 }
@@ -68,326 +94,247 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-/* Value noise: hashed lattice, smoothstep between the corners. */
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-    u.y
-  );
-}
-
-float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 4; i++) {
-    v += a * noise(p);
-    p *= 2.03;
-    a *= 0.5;
-  }
-  return v;
+/* Signed distance to a rounded rectangle. Negative inside, zero on the edge. */
+float roundedBox(vec2 p, vec2 halfSize, float radius) {
+  float r = min(radius, min(halfSize.x, halfSize.y));
+  vec2 q = abs(p) - halfSize + r;
+  return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
 }
 
 /*
- * The pane's surface, generated.
+ * The bevel, as a height field.
  *
- * The fallback, used until the photographed map has loaded. Two populations,
- * because they scatter differently: grease is broad, soft and low, a haze that
- * lifts wherever light rakes it; scratches are thin, sharp and directional,
- * and they are what actually catch a point source.
+ * 'depth' is distance in from the rim in pixels. The profile is the convex
+ * squircle — biconvex, in LiquidGlass's terms — which is flat across the body
+ * of the pane and falls away sharply at the very edge. That shape is the
+ * reason a bevel bends hard in a narrow band instead of smearing the whole
+ * panel: the slope is almost zero everywhere except within Z_RADIUS of the rim.
  */
-vec2 proceduralSurface(vec2 uv) {
-  // Greasy blotches and general grime.
-  float grime = fbm(uv * 2.4) * 0.55 + fbm(uv * 7.0) * 0.25;
-
-  /*
-   * Scratches. Noise sampled hard-stretched along one axis turns into streaks;
-   * taking the ridge of it (distance from the midline, inverted) turns the
-   * streaks into thin lines, and a high power makes them hair-fine.
-   */
-  vec2 a = uv * vec2(0.6, 26.0);
-  float ridgeA = 1.0 - abs(noise(a) * 2.0 - 1.0);
-  vec2 b = (uv.yx + 4.7) * vec2(0.9, 34.0);
-  float ridgeB = 1.0 - abs(noise(b) * 2.0 - 1.0);
-  float scratches = pow(ridgeA, 42.0) * 0.8 + pow(ridgeB, 58.0) * 0.55;
-
-  /*
-   * Scratches cluster. A pane has patches that have been wiped and patches
-   * that have been leaned on, and the giveaway that a texture was generated
-   * rather than observed is that its density is the same everywhere. A slow
-   * mask over the top gives it clean regions and dirty ones.
-   */
-  float wear = smoothstep(0.32, 0.78, fbm(uv * 0.55 + 13.0));
-
-  return vec2(scratches * (0.22 + 1.1 * wear), grime * 0.5);
+float height(float depth) {
+  float x = clamp(depth / Z_RADIUS, 0.0, 1.0);
+  float k = 1.0 - x;
+  return pow(1.0 - k * k * k * k, 0.25);
 }
 
-/*
- * The pane's surface, photographed.
- *
- * Generated noise has a statistical evenness that real dirt does not: every
- * region equally dusty, every scratch the same length, no history. This is a
- * high-passed composite of photographs of actual glass, so the lighting it was
- * shot under is gone and only the marks remain — which is the only part that
- * transfers to a different light.
- *
- *   R  specks, grit and hairline scratches. Sharp; they glint.
- *   G  greasy wipes and finger smears. Broad; they haze.
- *   B  where the pane has been handled at all, very low frequency.
- *
- * Returned as (glint, haze): the two scatter differently and the light has to
- * be able to treat them differently.
- */
-vec2 surface(vec2 uv) {
-  vec2 generated = proceduralSurface(uv);
-  vec3 map = texture2D(uSurface, uv * 0.42).rgb;
-  // Handled areas carry more of everything; untouched glass stays clean.
-  float handled = 0.35 + 0.95 * map.b;
-  vec2 photographed = vec2(map.r * 2.6 * handled, map.g * 0.85 * handled);
-  return mix(generated, photographed, uHasSurface);
+/* The surface, photographed. A 2x2 atlas; each pane wears one cell. */
+vec3 surfaceAt(vec2 uv, float seed) {
+  vec2 cell = vec2(mod(seed, 2.0), floor(seed * 0.5));
+  vec2 inCell = fract(uv) * 0.49 + 0.005;
+  return texture2D(uSurface, (inCell + cell) * 0.5).rgb;
 }
 
 void main() {
   // gl_FragCoord counts up from the bottom; the page counts down from the top.
   vec2 frag = vec2(gl_FragCoord.x, uViewport.y - gl_FragCoord.y) / uScale;
 
-  float dl = distance(frag, uLight);
+  vec2 halfSize = uRect.zw * 0.5;
+  vec2 p = frag - (uRect.xy + halfSize);
+  float d = roundedBox(p, halfSize, uRadius);
+  float inside = smoothstep(0.5, -0.5, d);
 
   /*
-   * How much of the source reaches this point. Inverse-square close in, plus a
-   * far exponential tail for the scatter — a single falloff, however bright,
-   * stays a disc, and the tail is what makes a light look like it is lighting
-   * something rather than sitting on top of it.
+   * ---- Normal from the height field ----
+   *
+   * The SDF's gradient is the outward normal of the pane's edge, taken by
+   * central difference. Multiplied by the slope of the height field it becomes
+   * the direction and strength of the bend: hard in the bevel, nothing at all
+   * across the middle, which is exactly how a pane behaves.
    */
+  const float EPS = 1.0;
+  float dx = roundedBox(p + vec2(EPS, 0.0), halfSize, uRadius)
+           - roundedBox(p - vec2(EPS, 0.0), halfSize, uRadius);
+  float dy = roundedBox(p + vec2(0.0, EPS), halfSize, uRadius)
+           - roundedBox(p - vec2(0.0, EPS), halfSize, uRadius);
+  vec2 grad = normalize(vec2(dx, dy) + 1e-6);
+
+  float depth = -d;                       // positive inside
+  float slope = (height(depth + 1.0) - height(max(depth - 1.0, 0.0))) * 0.5;
+  // The bevel bends what is behind it toward the middle of the pane.
+  vec2 bend = grad * slope * REFRACTION * Z_RADIUS * 2.2;
+
+  /*
+   * ---- The backdrop, sampled ----
+   *
+   * Mapped through object-fit: cover, so the photograph is sampled where it is
+   * actually drawn rather than where its element happens to be.
+   */
+  vec2 rel = (frag - uImage.xy) / max(uImage.zw, vec2(1.0));
+  float boxAspect = uImage.z / max(uImage.w, 1.0);
+  vec2 coverScale = boxAspect > uImageAspect
+    ? vec2(1.0, boxAspect / uImageAspect)
+    : vec2(uImageAspect / boxAspect, 1.0);
+  vec2 uvBase = (rel - 0.5) / coverScale + 0.5;
+  vec2 uvBend = bend / max(uImage.zw, vec2(1.0)) / coverScale;
+
+  /*
+   * Per-channel offsets. Long wavelengths refract least, so red travels a
+   * shorter path than blue — the fringe on a real glass edge is not a tint
+   * applied afterwards, it is three different samples.
+   */
+  vec3 refracted = vec3(
+    texture2D(uBackdrop, uvBase + uvBend * (1.0 - CHROM_ABERRATION)).r,
+    texture2D(uBackdrop, uvBase + uvBend).g,
+    texture2D(uBackdrop, uvBase + uvBend * (1.0 + CHROM_ABERRATION)).b
+  );
+  vec3 straight = texture2D(uBackdrop, uvBase).rgb;
+
+  /*
+   * Only the bevel refracts. Across the body of the pane the displaced sample
+   * and the straight one are the same anyway, but mixing explicitly keeps the
+   * middle honest if the slope ever picks up numerical noise.
+   */
+  float bevel = clamp(1.0 - depth / Z_RADIUS, 0.0, 1.0);
+  bevel *= bevel;
+  vec3 backdrop = mix(straight, refracted, bevel) - straight;
+
+  /*
+   * ---- Fresnel ----
+   * Glass is barely reflective face-on and mirror-like at a grazing angle. On
+   * a flat pane the grazing angles are the rim, so reflectivity climbs there.
+   */
+  float facing = clamp(depth / max(min(halfSize.x, halfSize.y), 1.0), 0.0, 1.0);
+  float fresnel = FRESNEL * pow(1.0 - facing, 5.0);
+
+  // ---- The light, and how far it reaches this point ----
+  float dl = distance(frag, uLight);
   float direct = 1.0 / (1.0 + (dl * dl) / 3600.0);
   float spill = exp(-dl / 280.0);
-  /*
-   * Two reaches, because the rim and the face answer the light differently.
-   * An edge is a specular feature: it lights where the source actually falls
-   * on it and goes black elsewhere, so it barely takes the scatter. A wash of
-   * scatter along the whole perimeter is the aura failure in another costume.
-   */
   float reach = direct + spill * 0.11;
   float ambient = direct + spill * 0.14;
+  float rake = direct + spill * 0.035;
 
   /*
-   * Veiling glare: the wide, low wash a real lens throws across the whole
-   * frame from a bright source, out of scattering in the elements themselves.
-   * It has no sharp structure at all, which is why nothing that models only
-   * the bloom ever looks photographed.
+   * ---- Blinn-Phong specular ----
+   * The cursor light is a real source, so the pane answers it with a real
+   * highlight: half-vector against the surface normal, tightened by the bevel.
    */
-  float veil = exp(-dl / 480.0) * 0.035;
+  vec2 toLight = normalize(uLight - frag + 1e-6);
+  float ndl = max(dot(grad, toLight), 0.0);
+  float specular = pow(ndl, 24.0) * bevel * direct * 3.0;
+
+  // ---- The surface ----
+  vec3 surf = surfaceAt((frag - uRect.xy) / 340.0, uSeed) * uHasSurface;
+  float handled = 0.35 + 0.95 * surf.b;
+  float glint = surf.r * 2.6 * handled;
+  float smear = surf.g * 0.85 * handled;
+
+  // ---- The lit arris ----
+  float ad = abs(d);
+  float filament = exp(-ad / 2.8);
+  float flare = exp(-ad / 15.0);
+  float haze = exp(-ad / 48.0);
+  float arrisWear = 0.62 + 0.9 * surf.b * uHasSurface + 0.38 * (1.0 - uHasSurface);
+  vec3 rim = vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach;
 
   /*
-   * The two reflected images of the source. Both sit slightly below the light:
-   * the pane is in front of what it reflects, so its image of a source is
-   * displaced, and the back surface is displaced further than the front. They
-   * are stretched vertically because a highlight on a pane that is not
-   * perfectly flat smears along it.
+   * ---- The side faces ----
+   * Which of the pane's two side faces you can see depends on where it sits
+   * relative to your eye, so they open against each other as the page scrolls.
    */
-  vec2 nearImage = uLight + vec2(0.0, 9.0);
-  vec2 farImage = uLight + vec2(4.0, 27.0);
-  vec2 toNear = frag - nearImage;
-  vec2 qNear = toNear / vec2(1.0, 1.22);
-  float rNear = length(qNear);
-  float rFar = length((frag - farImage) / vec2(1.0, 1.6));
+  float topOpen = 0.18 + 0.82 * max(0.0, uTilt);
+  float botOpen = 0.18 + 0.82 * max(0.0, -uTilt);
+  float topT = 3.0 + 13.0 * topOpen;
+  float botT = 3.0 + 13.0 * botOpen;
+  float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z);
+  float dTop = frag.y - uRect.y;
+  float dBot = (uRect.y + uRect.w) - frag.y;
+  float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
+  float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
+  float farTop = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
+  float farBot = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
+  float along = (frag.x - uRect.x) / max(uRect.z, 1.0);
+  vec3 dichroic = mix(vec3(1.0), spectrum(along * 0.85 + 0.55), 0.42)
+                * (0.78 + 0.55 * surf.g);
+  rim += dichroic * (glareTop * topOpen + glareBot * botOpen) * withinX * 9.0 * reach;
+  rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 6.0 * reach;
 
   /*
-   * Dispersion. Long wavelengths refract least, so red carries furthest, which
-   * is why a real highlight seen through glass fringes warm on the outside and
-   * cool on the inside. Three radii, one per channel, rather than a colour
-   * ramp that imitates the result.
+   * ---- What you see THROUGH the side face ----
+   *
+   * Not a tint on the band: the scene itself, seen end-on through the glass.
+   *
+   * Three things happen to it and all three follow from the path length. It
+   * is compressed, because a tall slice of what is behind the pane has to fit
+   * into a band a few pixels deep. It separates into colour, because
+   * dispersion accumulates over the path and the side's path is the width of
+   * the pane. And it goes green, because absorption accumulates too, and iron
+   * in soda-lime glass takes the red out first.
    */
-  vec3 core = vec3(
+  float onTop = step(0.0, dTop) * step(dTop, topT) * withinX;
+  float onBot = step(0.0, dBot) * step(dBot, botT) * withinX;
+  float across = mix(1.0 - clamp(dBot / botT, 0.0, 1.0),
+                     clamp(dTop / topT, 0.0, 1.0),
+                     step(0.5, onTop));
+  float onSide = max(onTop * topOpen, onBot * botOpen);
+
+  float disp = SIDE_DISPERSION * 0.0035;
+  vec2 sideUv = vec2(uvBase.x, uvBase.y + (across - 0.5) * SIDE_SPAN);
+  vec3 throughSide = vec3(
+    texture2D(uBackdrop, sideUv - vec2(0.0, disp)).r,
+    texture2D(uBackdrop, sideUv).g,
+    texture2D(uBackdrop, sideUv + vec2(0.0, disp)).b
+  ) * exp(-SIDE_ABSORB);
+
+  /*
+   * Total internal reflection at the arris. Past the critical angle — about
+   * 41 degrees for n = 1.5 — glass reflects everything, which is why the very
+   * corner of a plate is the brightest part of it in any light.
+   */
+  float tir = exp(-across * 5.0);
+  throughSide += vec3(tir) * 0.5;
+
+  rim += throughSide * onSide * uHasBackdrop * 2.6;
+
+  // ---- Light scattered into the body, and off the grime ----
+  vec3 face = vec3(inside * (direct * 0.9));
+  face += vec3(inside * rake * (smear * 0.6 + glint * 6.4));
+
+  /*
+   * ---- The reflected source ----
+   * A pane reflects from its front and its back surface, so a bright source
+   * leaves a sharp image and a fainter ghost below it. That doubling is most
+   * of what makes a reflection read as glass rather than as a smear of light.
+   */
+  vec2 toNear = frag - (uLight + vec2(0.0, 9.0));
+  float rNear = length(toNear / vec2(1.0, 1.22));
+  float rFar = length((frag - (uLight + vec2(4.0, 27.0))) / vec2(1.0, 1.6));
+  vec3 image = vec3(
     1.6 / (1.0 + (rNear * rNear) / 620.0),
     1.6 / (1.0 + (rNear * rNear) / 520.0),
     1.6 / (1.0 + (rNear * rNear) / 450.0)
-  );
-  vec3 ghost = vec3(0.3) / (1.0 + (rFar * rFar) / 2600.0);
+  ) + vec3(0.3) / (1.0 + (rFar * rFar) / 2600.0);
+  vec3 mirror = inside * image * (0.24 + 0.76 * fresnel) * (13.0 + glint * 14.0);
 
   /*
-   * Diffraction. An aperture throws as many spikes as it has blades, and a
-   * bright source photographed through glass also leaves concentric ghost
-   * rings from the reflections between its surfaces. Both are properties of
-   * the source, so they decay from it.
-   */
-  float phi = atan(toNear.y, toNear.x);
-  float spikes = pow(abs(cos(phi * BLADES * 0.5)), 260.0) * exp(-rNear / 21.0) * 1.5;
-  float ringR = exp(-pow((rNear - 36.0) / 7.0, 2.0)) * 0.8
-              + exp(-pow((rNear - 66.0) / 14.0, 2.0)) * 0.34;
-  vec3 rings = spectrum(rNear / 95.0) * ringR;
-
-  vec3 image = core + ghost + vec3(spikes) + rings;
-
-  vec3 rim = vec3(0.0);
-  vec3 face = vec3(0.0);
-  vec3 mirror = vec3(0.0);
-
-  for (int i = 0; i < MAX_RECTS; i++) {
-    vec4 rect = uRects[i];
-    vec2 halfSize = rect.zw * 0.5;
-    vec2 p = frag - (rect.xy + halfSize);
-    float d = roundedBox(p, halfSize, uRadii[i]);
-    float ad = abs(d);
-    float tilt = uTilts[i];
-
-    // 1 inside the panel, 0 outside, over a pixel.
-    float inside = smoothstep(0.5, -0.5, d);
-
-    // ---- the near arris ----
-    // A hard filament on the boundary, a flare either side, and a wide haze.
-    // Summed kernels, the way bloom actually is. Modulated by the light
-    // reaching THIS point, so the near edge blows out and the far edge stays
-    // dark without any directional gradient being authored.
-    float filament = exp(-ad / 2.4);
-    float flare = exp(-ad / 13.0);
-    float haze = exp(-ad / 44.0);
-    /*
-     * A real arris is not evenly bright along its length. Coating, polish and
-     * dirt vary, so the highlight travelling it breaks into patches — and a
-     * perfectly even line of light is the single clearest sign that an edge
-     * was drawn rather than photographed.
-     */
-    float arrisWear = 0.62 + 0.62 * fbm(frag * 0.028 + 7.3);
-    rim += vec3(filament * 24.0 * arrisWear + flare * 3.2 + haze * 0.22) * reach;
-
-    /*
-     * ---- the side faces ----
-     *
-     * The band of polished glass between the two arrises. How tall it is
-     * depends on how far that side is turned toward the viewer, and the two
-     * sides answer the tilt in opposite directions — which is the whole
-     * effect: scroll down and the bottom thickness opens as the top closes.
-     *
-     * Never fully shut. The far side is still there, foreshortened and seen
-     * through the pane, which is why it reads as subtler rather than absent.
-     */
-    float topOpen = 0.18 + 0.82 * max(0.0, tilt);
-    float botOpen = 0.18 + 0.82 * max(0.0, -tilt);
-    float topT = 3.0 + 13.0 * topOpen;
-    float botT = 3.0 + 13.0 * botOpen;
-
-    // Depth into the panel from each horizontal edge. Only meaningful where
-    // the fragment is within the panel's width.
-    float withinX = step(rect.x, frag.x) * step(frag.x, rect.x + rect.z);
-    float dTop = frag.y - rect.y;
-    float dBot = (rect.y + rect.w) - frag.y;
-
-    /*
-     * Three features per side, in order inward: the near arris (already in
-     * the rim term), the glare riding the middle of the side face, and the far arris
-     * where the side meets the back surface.
-     */
-    float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
-    float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
-    float farTop = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
-    float farBot = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
-
-    /*
-     * The side is dichroic. Light crossing the thickness of the pane travels
-     * far enough for dispersion to separate it, so the band runs through the
-     * spectrum along its length — the blue-to-gold shift down the edge of a
-     * cut plate. Keyed to position along the panel, not to the light, because
-     * it is a property of the glass.
-     */
-    float along = (frag.x - rect.x) / max(rect.z, 1.0);
-    /*
-     * Muted well back toward white and broken up along its length. Dispersion
-     * off a polished edge is a tint over a bright band, not a saturated
-     * rainbow — a clean spectral sweep is poster art.
-     */
-    vec3 dichroic = mix(vec3(1.0), spectrum(along * 0.85 + 0.55), 0.42)
-                  * (0.74 + 0.5 * fbm(vec2(along * 14.0, 2.1)));
-
-    float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
-    float farArris = (farTop * topOpen + farBot * botOpen) * withinX;
-
-    rim += dichroic * sideGlare * 30.0 * reach;
-    // Seen through the glass, so it never reaches the near arris's brightness.
-    rim += vec3(farArris) * 15.0 * reach;
-
-    // ---- light scattered into the body of the pane ----
-    face += vec3(inside * (direct * 0.9 + veil));
-
-    /*
-     * ---- the material ----
-     *
-     * Grime and scratches are not drawn where the light is; they are always
-     * there, and they show in proportion to the light that reaches them. That
-     * is the whole difference between a texture revealed by a torch and a
-     * shape painted under one. Anchored to the panel so it travels with it
-     * rather than swimming as the page scrolls.
-     */
-    vec2 uv = (frag - rect.xy) / 340.0;
-    vec2 surf = surface(uv);
-    float glint = surf.x;
-    float smear = surf.y;
-    /*
-     * Grease hazes broadly; grit and scratches glint. Separating them is what
-     * stops the whole surface lifting as one flat sheet of dirt.
-     */
-    /*
-     * Raking light only. Scratches are revealed by a light falling across
-     * them, and glass a metre from the source shows none of its history — a
-     * pane grained evenly from end to end is a texture laid over it, not a
-     * surface being lit.
-     */
-    float rake = direct + spill * 0.035;
-    face += vec3(inside * rake * (smear * 0.6 + glint * 6.4));
-
-    /*
-     * ---- the reflection ----
-     *
-     * Fresnel. Glass is barely reflective looked at face-on and mirror-like at
-     * a grazing angle; on a flat panel the grazing angles are at the rim, so
-     * reflectivity climbs toward the edges. The base term is what keeps the
-     * source visible in the middle of the pane at all.
-     */
-    float depth = clamp(-d / max(min(halfSize.x, halfSize.y), 1.0), 0.0, 1.0);
-    float fresnel = 0.3 + 0.7 * pow(1.0 - depth, 4.0);
-    // Scratches are polished facets: they take the reflection too, brighter
-    // than the surface around them.
-    mirror += inside * image * fresnel * (13.0 + glint * 14.0);
-  }
-
-  /*
-   * Everything scales with the charge, and there is genuinely nothing at zero.
-   * Glass does not glow; a light shining on it does, and with nothing wound
-   * there is no light in the room. Eased so that the noise floor of a slow
-   * drifting pointer stays dark rather than smouldering.
+   * Everything the light does scales with the charge, and there is genuinely
+   * nothing at zero: glass does not glow, a light shining on it does. The
+   * refraction is NOT gated — a pane bends what is behind it whether or not
+   * anybody is shining anything at it.
    */
   float lit = uCharge * uCharge * (3.0 - 2.0 * uCharge);
-
-  // Warm at the source, cooling through the falloff, as a hot source does.
   vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
-  vec3 colour = (tint * (rim + face) + mirror) * lit;
 
-  // The tonemap is what blows the edge out. Everything above 1.0 compresses
+  vec3 colour = backdrop * uHasBackdrop * inside;
+  colour += (tint * (rim + face) + mirror) * lit;
+  colour += vec3(specular + EDGE_HIGHLIGHT * bevel) * inside * (0.35 + 0.65 * lit);
+
+  // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.
-  colour = colour / (1.0 + colour);
-  colour = pow(colour, vec3(1.0 / 2.2));
+  colour = colour / (1.0 + abs(colour));
+  colour = sign(colour) * pow(abs(colour), vec3(1.0 / 2.2));
 
   /*
-   * Grain, last of all, after the tonemap — where a sensor's noise lands.
-   *
-   * This is the largest single difference between a render and a photograph.
-   * Analytic falloffs are perfectly smooth, and perfectly smooth gradients
-   * both band on an 8-bit display and read as vector art. Weighted to the
-   * mid-tones, because noise is swamped in a highlight and clipped in true
-   * black, exactly as it is on a sensor.
+   * Grain, after the tonemap, where a sensor's noise lands. Analytic falloffs
+   * are perfectly smooth, and perfectly smooth gradients both band on an 8-bit
+   * display and read as vector art.
    */
-  float l = max(max(colour.r, colour.g), colour.b);
+  float l = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
   float mids = 4.0 * l * (1.0 - l);
-  float g1 = hash(gl_FragCoord.xy + floor(uTime * 24.0) * 37.13);
-  float g2 = hash(gl_FragCoord.yx * 1.7 + floor(uTime * 24.0) * 11.7);
-  // Chroma noise as well as luma: a sensor's colour channels are independent.
-  colour += (vec3(g1, g2, g1 * 0.5 + g2 * 0.5) - 0.5) * 0.14 * mids;
-  colour = max(colour, vec3(0.0));
+  float g1 = hash(gl_FragCoord.xy);
+  float g2 = hash(gl_FragCoord.yx * 1.7);
+  colour += (vec3(g1, g2, g1 * 0.5 + g2 * 0.5) - 0.5) * 0.09 * mids;
 
-  float alpha = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
-  gl_FragColor = vec4(colour, alpha);
+  float alpha = clamp(max(max(abs(colour.r), abs(colour.g)), abs(colour.b)), 0.0, 1.0);
+  gl_FragColor = vec4(colour, alpha * inside);
 }
 `;

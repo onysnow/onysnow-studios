@@ -6,15 +6,16 @@
  *   flash-charge   the capacitor winding. Looped, and both its level and its
  *                  pitch follow the charge, so it rises as you wind and sags
  *                  the moment you stop — the same curve the light follows.
+ *                  Played backwards and faster while the charge is draining,
+ *                  since a rise reversed IS a fall: the same recording read
+ *                  the other way is a capacitor dumping what it had.
  *   shutter-click  the mechanism alone, for a click that takes no photograph.
  *   shutter-flash  the mechanism and the flash together, for one that does.
  *
- * The charge recording is a near-pure 18 kHz tone, which is what a real flash
- * capacitor actually whines at and almost exactly what a person cannot hear:
- * most adults lose 18 kHz entirely, and most laptop speakers never produced it
- * in the first place. It was pitched down to about 4 kHz before shipping, so
- * the asset is audible on the hardware people own rather than authentic on
- * hardware they do not.
+ * The charge recording is a near-pure 18 kHz tone — what a real flash
+ * capacitor actually whines at — and it is kept at that pitch. Everything that
+ * shapes it therefore works in the top octave: a filter sweeping the range a
+ * 4 kHz tone would want silences this one outright.
  */
 
 const CLICK = "/sfx/shutter-click.mp3";
@@ -28,12 +29,41 @@ let ready = false;
 const buffers = new Map<string, AudioBuffer>();
 const pending = new Set<string>();
 
-/** The looped charge bed, and the nodes that shape it. */
+/**
+ * The charge bed: the same recording running forwards and backwards at once,
+ * crossfaded by which way the charge is going. Two sources rather than one
+ * reversed on demand, because swapping a buffer means restarting the source,
+ * and a restart in the middle of a sustained tone is an audible click.
+ */
 let whine: AudioBufferSourceNode | null = null;
 let whineGain: GainNode | null = null;
+let dump: AudioBufferSourceNode | null = null;
+let dumpGain: GainNode | null = null;
 let whineFilter: BiquadFilterNode | null = null;
 
 let charge = 0;
+/** 0 while winding, 1 while draining. Smoothed; see noteDirection. */
+let draining = 0;
+/** How hard it is draining, in charge per second. */
+let drainRate = 0;
+let lastCharge = 0;
+let lastAt = 0;
+/**
+ * Spending the charge drops it to zero in one step. That is not a drain, it is
+ * a photograph, and letting it read as one would put a dying whine underneath
+ * every shutter fire.
+ */
+let spent = false;
+
+function reversed(buffer: AudioBuffer, ctx: AudioContext) {
+  const copy = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+  for (let c = 0; c < buffer.numberOfChannels; c += 1) {
+    const from = buffer.getChannelData(c);
+    const to = copy.getChannelData(c);
+    for (let i = 0, n = from.length; i < n; i += 1) to[i] = from[n - 1 - i] ?? 0;
+  }
+  return copy;
+}
 
 function silent() {
   // The cursor light, the aperture and the winding are all switched off under
@@ -95,39 +125,101 @@ function startWhine() {
    */
   whineGain = context.createGain();
   whineGain.gain.value = 0;
+  dumpGain = context.createGain();
+  dumpGain.gain.value = 0;
 
   // Opens as the charge builds, so the bed gains brightness and not merely
   // volume — a capacitor winding gets shriller, not just louder.
   whineFilter = context.createBiquadFilter();
   whineFilter.type = "lowpass";
-  whineFilter.frequency.value = 900;
+  // Opens across the top octave, where this recording actually lives.
+  whineFilter.frequency.value = 9000;
   whineFilter.Q.value = 0.7;
 
   whine = context.createBufferSource();
   whine.buffer = buffer;
   whine.loop = true;
-  whine.connect(whineFilter);
-  whineFilter.connect(whineGain);
-  whineGain.connect(master);
+  whine.connect(whineGain);
+  whineGain.connect(whineFilter);
+
+  // The loop is seamless forwards, so it is seamless backwards too.
+  dump = context.createBufferSource();
+  dump.buffer = reversed(buffer, context);
+  dump.loop = true;
+  dump.connect(dumpGain);
+  dumpGain.connect(whineFilter);
+
+  whineFilter.connect(master);
   whine.start();
+  dump.start();
   applyCharge();
 }
 
 function applyCharge() {
-  if (!context || !whine || !whineGain || !whineFilter) return;
+  if (!context || !whine || !whineGain || !dump || !dumpGain || !whineFilter) return;
   const now = context.currentTime;
 
   // Eased in, so the noise floor of a drifting pointer stays silent.
-  const level = Math.pow(charge, 1.6) * 0.5;
-  // A short time constant: fast enough to track the wind, slow enough that
-  // the per-frame charge updates do not granulate into a buzz.
-  whineGain.gain.setTargetAtTime(level, now, 0.04);
-  whineFilter.frequency.setTargetAtTime(700 + charge * 5200, now, 0.06);
+  const level = Math.pow(charge, 1.6) * 0.16;
+
+  /*
+   * Winding and draining are the same recording read in opposite directions,
+   * so they crossfade rather than one stopping and the other starting. The
+   * drain is given a little more level: losing a charge you worked for should
+   * be more conspicuous than gaining it.
+   */
+  whineGain.gain.setTargetAtTime(level * (1 - draining), now, 0.04);
+  dumpGain.gain.setTargetAtTime(level * draining * 1.2, now, 0.04);
+
+  whineFilter.frequency.setTargetAtTime(9000 + charge * 12000, now, 0.06);
   whine.playbackRate.setTargetAtTime(0.78 + charge * 0.46, now, 0.08);
+
+  /*
+   * A drain runs fast, and faster the harder it is draining. The bleed is
+   * around 0.5 per second at rest, so that is the reference: at the standard
+   * bleed it plays at about 1.7x, and a collapse from full runs quicker still.
+   */
+  const urgency = Math.min(1, drainRate / 0.55);
+  dump.playbackRate.setTargetAtTime(1.35 + urgency * 0.95, now, 0.05);
+}
+
+/**
+ * Which way the charge is moving, smoothed.
+ *
+ * The raw per-frame delta is far too noisy to switch on — the charge is
+ * reported in hundredths, so a steady wind still produces frames where it
+ * does not change at all, and flipping direction on those would chatter
+ * between the two beds. This eases toward the current direction instead.
+ */
+function noteDirection(value: number) {
+  const now = performance.now();
+  const dt = lastAt ? Math.min(0.25, (now - lastAt) / 1000) : 0;
+  lastAt = now;
+
+  if (spent) {
+    // Consumed, not lost. Reset the baseline so the drop is never measured.
+    spent = false;
+    draining = 0;
+    drainRate = 0;
+    lastCharge = value;
+    return;
+  }
+
+  if (dt > 0) {
+    const velocity = (value - lastCharge) / dt;
+    const falling = velocity < -0.02 ? 1 : 0;
+    if (falling) drainRate = Math.max(drainRate * 0.7, -velocity);
+    else drainRate *= 0.85;
+    // Roughly a tenth of a second to swing fully from one bed to the other.
+    const ease = Math.min(1, dt / 0.1);
+    draining += (falling - draining) * ease;
+  }
+  lastCharge = value;
 }
 
 /** Called every frame the charge changes. */
 export function setShutterCharge(value: number) {
+  noteDirection(value);
   charge = value;
   applyCharge();
 }
@@ -157,5 +249,9 @@ export function playShutterClick() {
  */
 export function playShutterFlash() {
   fire(FLASH, 0.9);
-  if (context && whineGain) whineGain.gain.setTargetAtTime(0, context.currentTime, 0.015);
+  spent = true;
+  if (!context) return;
+  const now = context.currentTime;
+  whineGain?.gain.setTargetAtTime(0, now, 0.015);
+  dumpGain?.gain.setTargetAtTime(0, now, 0.015);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ElementType, type ReactNode } from "react";
+import { useCallback, useRef, type ElementType, type ReactNode } from "react";
 import { registerEdgeGlow } from "@/lib/edge-glow";
 import { cn } from "@/lib/utils";
 
@@ -34,17 +34,29 @@ export function Glass({
   variant?: "panel" | "bar";
   overlap?: boolean;
 }) {
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    return registerEdgeGlow(el);
+  /*
+   * A callback ref, NOT useRef plus an empty-dependency effect.
+   *
+   * An effect with no dependencies runs once, on mount. If React later swaps
+   * the underlying DOM node while the component stays mounted — which it does
+   * to this subtree during hydration — the object ref quietly points at the
+   * new node and the effect never runs again, so the panel is never
+   * registered. That is exactly what happened: the header, which lives in the
+   * root layout, lit correctly while every content band on the page sat on
+   * its CSS fallbacks with no thickness and no cursor response at all.
+   *
+   * A callback ref is invoked with every node React attaches, so registration
+   * follows the element rather than the component's lifetime.
+   */
+  const release = useRef<(() => void) | null>(null);
+  const attach = useCallback((el: HTMLElement | null) => {
+    release.current?.();
+    release.current = el ? registerEdgeGlow(el) : null;
   }, []);
 
   return (
     <Tag
-      ref={ref}
+      ref={attach}
       className={cn(
         "glass",
         variant === "bar" && "glass--bar",
