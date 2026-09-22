@@ -9,6 +9,7 @@ import { useContentRefresh } from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -66,7 +67,16 @@ function SettingsPage() {
           return (
             <div key={row.key} className="space-y-2">
               <Label htmlFor={`setting-${row.key}`}>{row.label || row.key}</Label>
-              {row.kind === "font" ? (
+              {row.kind === "bool" ? (
+                <label className="flex items-center gap-3 text-sm">
+                  <Switch
+                    id={`setting-${row.key}`}
+                    checked={value.toLowerCase() === "true"}
+                    onCheckedChange={(v) => set(v ? "true" : "false")}
+                  />
+                  {value.toLowerCase() === "true" ? "On" : "Off"}
+                </label>
+              ) : row.kind === "font" ? (
                 <Select value={value} onValueChange={set}>
                   <SelectTrigger id={`setting-${row.key}`}><SelectValue /></SelectTrigger>
                   <SelectContent>{DISPLAY_FONTS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent>

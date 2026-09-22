@@ -18,6 +18,7 @@ export const Route = createFileRoute("/_authenticated/admin/pages")({ component:
 
 const LABELS: Record<string, string> = {
   home: "Home", about: "About", portfolio: "Portfolio", services: "Services",
+  journal: "Journal", duo: "Father & daughter",
   book: "Book", contact: "Contact", privacy: "Privacy", terms: "Terms",
 };
 
