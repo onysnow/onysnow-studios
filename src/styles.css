@@ -56,7 +56,7 @@
   :root { --display-family: "Jost"; --display-weight: 300; --display-tracking: 0.01em; }
   :root[data-display-font="inter-tight"] { --display-family: "Inter Tight"; --display-weight: 200; --display-tracking: -0.02em; }
   :root[data-display-font="barlow-condensed"] { --display-family: "Barlow Condensed"; --display-weight: 300; --display-tracking: 0.02em; }
-  .font-display { font-weight: var(--display-weight); letter-spacing: var(--display-tracking); }
+  .font-display { font-weight: var(--display-weight); letter-spacing: var(--display-tracking); font-size: calc(1em * var(--display-scale, 1)); }
   :focus-visible { outline: 2px solid var(--color-ring); }
 }
 

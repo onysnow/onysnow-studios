@@ -7,6 +7,7 @@ import { settingsQuery } from "@/lib/content";
 
 const links = [
   { to: "/portfolio", label: "Portfolio" },
+  { to: "/journal", label: "Journal" },
   { to: "/about", label: "About" },
   { to: "/services", label: "Services" },
   { to: "/contact", label: "Contact" },

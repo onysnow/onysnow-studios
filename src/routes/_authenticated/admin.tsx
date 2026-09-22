@@ -22,8 +22,10 @@ const NAV: { to: string; label: string; icon: typeof Images; exact?: boolean }[]
   { to: "/admin/categories", label: "Categories", icon: Folder },
   { to: "/admin/services", label: "Services", icon: Sparkles },
   { to: "/admin/testimonials", label: "Testimonials", icon: MessageSquareQuote },
+  { to: "/admin/posts", label: "Journal", icon: FileText },
   { to: "/admin/pages", label: "Page copy", icon: FileText },
   { to: "/admin/inquiries", label: "Inquiries", icon: Inbox },
+  { to: "/admin/subscribers", label: "Subscribers", icon: Inbox },
   { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/admin/advanced", label: "Advanced", icon: Code2 },
 ];

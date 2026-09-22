@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Category, Inquiry, PageContent, Photo, Service, SiteSetting, Testimonial } from "@/lib/content";
+import type { Category, Inquiry, PageContent, Photo, Post, Service, SiteSetting, Subscriber, Testimonial } from "@/lib/content";
 
 /** Every table Ony can edit, including through the JSON editor. */
 export const EDITABLE_TABLES = [
@@ -11,6 +11,7 @@ export const EDITABLE_TABLES = [
   "testimonials",
   "page_content",
   "site_settings",
+  "posts",
 ] as const;
 export type EditableTable = (typeof EDITABLE_TABLES)[number];
 
@@ -21,6 +22,7 @@ export const TABLE_PK: Record<EditableTable, string> = {
   testimonials: "id",
   page_content: "id",
   site_settings: "key",
+  posts: "id",
 };
 
 async function all<T>(table: string, order: string, ascending = true): Promise<T[]> {
@@ -53,6 +55,16 @@ export const adminSettingsQuery = queryOptions({
   queryKey: ["admin", "site_settings"],
   queryFn: () => all<SiteSetting>("site_settings", "sort_order"),
 });
+export const adminPostsQuery = queryOptions({
+  queryKey: ["admin", "posts"],
+  queryFn: () => all<Post>("posts", "sort_order"),
+});
+
+export const adminSubscribersQuery = queryOptions({
+  queryKey: ["admin", "subscribers"],
+  queryFn: () => all<Subscriber>("subscribers", "created_at", false),
+});
+
 export const adminInquiriesQuery = queryOptions({
   queryKey: ["admin", "inquiries"],
   queryFn: () => all<Inquiry>("inquiries", "created_at", false),
@@ -91,4 +103,6 @@ export const CONTENT_KEYS = [
   ["testimonials"],
   ["page_content"],
   ["site_settings"],
+  ["posts"],
+  ["subscribers"],
 ];

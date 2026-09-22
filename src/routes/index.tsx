@@ -10,6 +10,10 @@ import { ScrambleText } from "@/components/site/ScrambleText";
 import { ParallaxScene } from "@/components/site/ParallaxScene";
 import { RichText } from "@/components/site/RichText";
 import { Card, CardBody, CardFooter, Container, Grid, Section } from "@/components/site/layout";
+import { GlassPanel } from "@/components/site/GlassPanel";
+import {
+  Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious,
+} from "@/components/ui/carousel";
 import {
   categoriesQuery,
   copy,
@@ -136,44 +140,62 @@ function HomePage() {
         </Container>
       </Section>
 
-      {/* Selected work */}
+      {/* Selected work — a horizontal wheel on frosted glass */}
       <Section size="lg">
         <Container>
-          <Reveal className="flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <p className="eyebrow">{copy(text, "featured_eyebrow", "Selected work")}</p>
-              <h2 className="mt-4 font-display text-3xl lg:text-4xl">
-                {copy(text, "featured_title", "Stories in color.")}
-              </h2>
-            </div>
-            <Link to="/portfolio" className="text-xs uppercase tracking-widest text-primary">
-              View all work
-            </Link>
-          </Reveal>
-          <Grid cols={3} className="mt-12">
-            {catsPending
-              ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="aspect-[4/5] w-full" />)
-              : cats.slice(0, 3).map((cat) => (
-                  <Reveal key={cat.id}>
-                    <Link
-                      to="/portfolio"
-                      search={{ category: cat.slug }}
-                      className="group flex h-full flex-col"
-                    >
-                      <Img
-                        image={coverFor(photos, cat)}
-                        className="aspect-[4/5]"
-                        sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                        imgClassName="transition-transform duration-700 group-hover:scale-105"
-                      />
-                      <div className="mt-4 flex items-center justify-between">
-                        <h3 className="font-display text-lg">{cat.name}</h3>
-                        <ArrowRight className="size-5 text-primary" />
-                      </div>
-                    </Link>
-                  </Reveal>
-                ))}
-          </Grid>
+          <GlassPanel className="p-6 sm:p-10">
+            <Carousel opts={{ align: "start", loop: true }} className="w-full">
+              <Reveal className="flex flex-wrap items-end justify-between gap-6">
+                <div>
+                  <p className="eyebrow">{copy(text, "featured_eyebrow", "Selected work")}</p>
+                  <h2 className="mt-4 font-display text-3xl lg:text-4xl">
+                    {copy(text, "featured_title", "Stories in color.")}
+                  </h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link to="/portfolio" className="text-xs uppercase tracking-widest text-primary">
+                    View all work
+                  </Link>
+                  {/* Arrows live inside Carousel so they drive the same embla instance. */}
+                  <div className="flex gap-2">
+                    <CarouselPrevious className="static translate-y-0" />
+                    <CarouselNext className="static translate-y-0" />
+                  </div>
+                </div>
+              </Reveal>
+
+              <CarouselContent className="mt-10 -ml-4">
+                {catsPending
+                  ? Array.from({ length: 3 }).map((_, i) => (
+                      <CarouselItem key={i} className="pl-4 basis-full sm:basis-1/2 lg:basis-1/3">
+                        <Skeleton className="aspect-[4/5] w-full" />
+                      </CarouselItem>
+                    ))
+                  : cats.map((cat) => (
+                      <CarouselItem key={cat.id} className="pl-4 basis-full sm:basis-1/2 lg:basis-1/3">
+                        <Link
+                          to="/portfolio"
+                          search={{ category: cat.slug }}
+                          className="group flex h-full flex-col"
+                        >
+                          {/* aspect-[4/5] fixes every frame to the same height, whatever
+                              the photograph's own orientation. */}
+                          <Img
+                            image={coverFor(photos, cat)}
+                            className="aspect-[4/5] w-full"
+                            sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                            imgClassName="transition-transform duration-700 group-hover:scale-105"
+                          />
+                          <div className="mt-4 flex items-center justify-between">
+                            <h3 className="font-display text-lg">{cat.name}</h3>
+                            <ArrowRight className="size-5 text-primary transition-transform group-hover:translate-x-1" />
+                          </div>
+                        </Link>
+                      </CarouselItem>
+                    ))}
+              </CarouselContent>
+            </Carousel>
+          </GlassPanel>
         </Container>
       </Section>
 

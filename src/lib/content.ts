@@ -151,3 +151,66 @@ export function coverFor(
     photos.find((p) => p.category_id === category.id)
   );
 }
+
+/* ============================ Blog ============================ */
+
+/**
+ * A post is an ordered list of typed blocks rather than one blob of HTML.
+ * That is what lets a post be laid out like a magazine spread — full-bleed
+ * openers, pull quotes, offset image pairs — instead of a column of text.
+ */
+export type PostBlock =
+  | { type: "prose"; html: string }
+  | { type: "pull_quote"; text: string; attribution?: string }
+  | { type: "full_bleed"; photo_id: string; caption?: string }
+  | { type: "image_pair"; photo_ids: [string, string]; caption?: string }
+  | { type: "gallery"; photo_ids: string[] }
+  | { type: "heading"; text: string };
+
+export type Post = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  cover_photo_id: string | null;
+  blocks: PostBlock[];
+  reading_minutes: number;
+  published: boolean;
+  published_at: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Subscriber = {
+  id: string;
+  email: string;
+  source: string;
+  created_at: string;
+};
+
+export const postsQuery = queryOptions({
+  queryKey: ["posts"],
+  staleTime: STALE,
+  queryFn: () =>
+    rows<Post>("posts", (q) =>
+      q.eq("published", true).order("published_at", { ascending: false, nullsFirst: false }),
+    ),
+});
+
+export function postQuery(slug: string) {
+  return queryOptions({
+    queryKey: ["post", slug],
+    staleTime: STALE,
+    queryFn: async () => {
+      const list = await rows<Post>("posts", (q) => q.eq("slug", slug).eq("published", true).limit(1));
+      return list[0] ?? null;
+    },
+  });
+}
+
+/** Look up a photograph by id — blocks reference photos rather than embedding them. */
+export function photoById(photos: Photo[] | undefined, id: string | null | undefined): Photo | undefined {
+  if (!photos || !id) return undefined;
+  return photos.find((p) => p.id === id);
+}

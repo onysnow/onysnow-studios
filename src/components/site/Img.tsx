@@ -35,10 +35,16 @@ export function Img({ image, sizes = "100vw", className, imgClassName, eager = f
   const srcSet = photoSrcSet(image?.storage_path, image?.sources, image?.width);
   const blur = image?.blur_data_url || undefined;
 
+  // When the caller fixes the box (aspect-*, h-*, size-*, inset-0), that wins.
+  // Setting the photograph's intrinsic ratio inline would override the class and
+  // let a portrait frame blow out a row of landscape ones.
+  const boxed = /(^|\s)(aspect-|h-|size-|inset-)/.test(className ?? "");
+  const style = boxed ? undefined : ({ aspectRatio: `${width} / ${height}` } as CSSProperties);
+
   return (
     <span
       className={cn("relative block overflow-hidden bg-muted", className)}
-      style={{ aspectRatio: `${width} / ${height}` } as CSSProperties}
+      {...(style ? { style } : {})}
     >
       {blur ? (
         <img aria-hidden="true" alt="" src={blur} className="absolute inset-0 size-full scale-110 object-cover blur-xl" />

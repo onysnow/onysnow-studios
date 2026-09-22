@@ -7,7 +7,8 @@ import { AdminHeading } from "@/components/admin/AdminHeading";
 import { CodeEditor, diffLines } from "@/components/admin/CodeEditor";
 import {
   EDITABLE_TABLES, TABLE_PK, adminCategoriesQuery, adminPageContentQuery, adminPhotosQuery,
-  adminServicesQuery, adminSettingsQuery, adminTestimonialsQuery, updateRow, type EditableTable,
+  adminPostsQuery, adminServicesQuery, adminSettingsQuery, adminTestimonialsQuery, updateRow,
+  type EditableTable,
 } from "@/lib/admin";
 import { useContentRefresh } from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ function JsonEditor() {
     testimonials: useQuery(adminTestimonialsQuery),
     page_content: useQuery(adminPageContentQuery),
     site_settings: useQuery(adminSettingsQuery),
+    posts: useQuery(adminPostsQuery),
   };
   const rows = (queries[table].data ?? []) as Row[];
   const pk = TABLE_PK[table];

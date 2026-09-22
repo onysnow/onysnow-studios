@@ -148,6 +148,57 @@ export type Database = {
         }
         Relationships: []
       }
+      posts: {
+        Row: {
+          id: string
+          slug: string
+          title: string
+          excerpt: string
+          cover_photo_id: string | null
+          blocks: Json
+          reading_minutes: number
+          published: boolean
+          published_at: string | null
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          title: string
+          excerpt?: string
+          cover_photo_id?: string | null
+          blocks?: Json
+          reading_minutes?: number
+          published?: boolean
+          published_at?: string | null
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          slug?: string
+          title?: string
+          excerpt?: string
+          cover_photo_id?: string | null
+          blocks?: Json
+          reading_minutes?: number
+          published?: boolean
+          published_at?: string | null
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      subscribers: {
+        Row: { id: string; email: string; source: string; created_at: string }
+        Insert: { id?: string; email: string; source?: string; created_at?: string }
+        Update: { id?: string; email?: string; source?: string; created_at?: string }
+        Relationships: []
+      }
       photos: {
         Row: {
           alt: string
