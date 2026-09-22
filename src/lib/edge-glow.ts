@@ -32,6 +32,23 @@ export type GlassRect = {
   /** Corner radius, in CSS pixels. */
   r: number;
   /**
+   * The photograph behind this pane, and where it is drawn on screen.
+   *
+   * Refraction means sampling the backdrop from somewhere else, so there has
+   * to BE a backdrop to sample. On this site there always is: every glass band
+   * sits on a parallax scene with a photograph in it, and that photograph is
+   * already in the DOM. No DOM rasterisation needed — the one thing behind the
+   * glass that matters is a picture we can bind directly.
+   */
+  src: string;
+  /** The image element's box, in CSS pixels. */
+  ix: number;
+  iy: number;
+  iw: number;
+  ih: number;
+  /** Intrinsic aspect, for the object-fit: cover mapping. */
+  ia: number;
+  /**
    * Which surface this pane wears, 0-3. Assigned once and kept for the life of
    * the element, so a panel's grime does not change as the page scrolls — and
    * so two sections never show identical dirt.
@@ -56,6 +73,25 @@ export type GlassRect = {
  * reading them.
  */
 const radii = new WeakMap<HTMLElement, number>();
+
+/**
+ * The photograph this panel is sitting on.
+ *
+ * Found by walking up to the nearest photographic scene and taking its image,
+ * rather than threading a prop through every call site — the relationship is
+ * "whatever picture I happen to be over", which is a DOM fact, not a prop.
+ */
+function backdropOf(el: HTMLElement): HTMLImageElement | null {
+  const scene = el.closest("[data-photo]");
+  if (!scene) return null;
+  const images = scene.querySelectorAll<HTMLImageElement>("img[src]");
+  for (let i = images.length - 1; i >= 0; i -= 1) {
+    const img = images[i];
+    // Skip the blurred placeholder, which is an inline data URI.
+    if (img && !img.src.startsWith("data:") && img.naturalWidth > 0) return img;
+  }
+  return null;
+}
 
 const seeds = new WeakMap<HTMLElement, number>();
 let nextSeed = 0;
@@ -111,6 +147,8 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
   for (const el of panels) {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) continue;
+    const img = backdropOf(el);
+    const b = img?.getBoundingClientRect();
     geometry.push({
       x: r.left,
       y: r.top,
@@ -119,6 +157,12 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       r: cornerRadius(el),
       t: paneTilt(r),
       s: surfaceSeed(el),
+      src: img?.currentSrc || img?.src || "",
+      ix: b?.left ?? 0,
+      iy: b?.top ?? 0,
+      iw: b?.width ?? 1,
+      ih: b?.height ?? 1,
+      ia: img && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
     });
   }
   return geometry;

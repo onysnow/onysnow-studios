@@ -4,28 +4,34 @@ import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry } from "@/lib/edge-glow";
 
 /**
- * The glass answering the cursor light.
+ * The glass itself: what it does to the photograph behind it, and what it does
+ * with the cursor light falling on it.
  *
- * One viewport-sized canvas for every panel on the page rather than a layer
- * per panel. The rims, the bloom and the reflections are all the same light
- * seen three ways, and computing them together is both cheaper and the only
- * way they can sum — an edge that is being hit by the light AND carrying its
- * reflection has to add up past white, and separate CSS layers can only ever
- * paint over one another.
+ * One draw per pane, scissored to that pane's box, rather than one pass over
+ * the whole viewport. Three reasons, in order of importance:
  *
- * Composited with `plus-lighter`, so the canvas adds to the page instead of
- * covering it. That is what makes it light rather than a picture of light.
+ *   1. Refraction needs the backdrop as a texture, and each pane sits on a
+ *      different photograph. A shader cannot pick a sampler by loop index, so
+ *      the panes have to be separate draws whatever else is true.
+ *   2. The vast majority of the viewport has no glass on it. Shading those
+ *      fragments to have them contribute nothing is most of the cost of a
+ *      full-screen pass.
+ *   3. The shader stops needing a fixed-size loop and a pile of uniform
+ *      arrays, and becomes a shader about one pane.
+ *
+ * Composited with `plus-lighter`, so what it draws ADDS to the page — which is
+ * the only way an edge that is both catching the light and carrying its
+ * reflection can sum past white.
  */
-
-/** Uniform array length in the shader. Unused slots are parked offscreen. */
-const MAX_RECTS = 8;
 
 /*
- * Bloom is low-frequency and the rim filament is a couple of pixels wide, so
- * there is nothing here that repays a full 3x buffer on a dense display. Held
- * at 1.5 the rim is still crisp and the fill cost is less than half.
+ * Bloom is low-frequency and the sharp features are a few pixels wide, so
+ * there is nothing here that repays a full buffer on a dense display.
  */
 const MAX_SCALE = 1.5;
+
+/** How far outside a pane the bloom still has something to contribute. */
+const BLEED = 90;
 
 export function GlassLight({
   chargeRef,
@@ -38,6 +44,10 @@ export function GlassLight({
 
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    // The gesture that drives all of this needs a fine pointer, so on a touch
+    // device the charge can never leave zero. Nothing to do but not start.
+    if (!window.matchMedia?.("(pointer: fine)").matches) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -46,8 +56,6 @@ export function GlassLight({
       premultipliedAlpha: false,
       antialias: false,
     });
-    // No WebGL: the glass simply goes unlit rather than falling back to
-    // something that doesn't work.
     if (!gl) return;
 
     const compile = (type: number, source: string) => {
@@ -55,7 +63,7 @@ export function GlassLight({
       gl.shaderSource(shader, source);
       gl.compileShader(shader);
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("glass light shader:", gl.getShaderInfoLog(shader));
+        console.error("glass shader:", gl.getShaderInfoLog(shader));
         return null;
       }
       return shader;
@@ -70,7 +78,7 @@ export function GlassLight({
     gl.attachShader(program, fs);
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("glass light link:", gl.getProgramInfoLog(program));
+      console.error("glass link:", gl.getProgramInfoLog(program));
       return;
     }
     gl.useProgram(program);
@@ -82,68 +90,28 @@ export function GlassLight({
     gl.enableVertexAttribArray(aPosition);
     gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
 
-    const uViewport = gl.getUniformLocation(program, "uViewport");
-    const uScale = gl.getUniformLocation(program, "uScale");
-    const uLight = gl.getUniformLocation(program, "uLight");
-    const uCharge = gl.getUniformLocation(program, "uCharge");
-    const uRects = gl.getUniformLocation(program, "uRects");
-    const uRadii = gl.getUniformLocation(program, "uRadii");
-    const uTilts = gl.getUniformLocation(program, "uTilts");
-    const uSeeds = gl.getUniformLocation(program, "uSeeds");
-    const uTime = gl.getUniformLocation(program, "uTime");
-    const uHasSurface = gl.getUniformLocation(program, "uHasSurface");
+    const U = (name: string) => gl.getUniformLocation(program, name);
+    const uViewport = U("uViewport");
+    const uScale = U("uScale");
+    const uLight = U("uLight");
+    const uCharge = U("uCharge");
+    const uRect = U("uRect");
+    const uRadius = U("uRadius");
+    const uTilt = U("uTilt");
+    const uSeed = U("uSeed");
+    const uImage = U("uImage");
+    const uImageAspect = U("uImageAspect");
+    const uHasBackdrop = U("uHasBackdrop");
+    const uHasSurface = U("uHasSurface");
 
-    // The same amber and teal as the cursor, in linear light — the shader
-    // works in linear and only returns to display space at the very end.
+    // The site's amber and teal in linear light — the shader works in linear
+    // and only returns to display space at the very end.
     const toLinear = (c: number) => Math.pow(c, 2.2);
-    gl.uniform3f(
-      gl.getUniformLocation(program, "uWarm"),
-      toLinear(1.0),
-      toLinear(0.68),
-      toLinear(0.3),
-    );
-    gl.uniform3f(
-      gl.getUniformLocation(program, "uCool"),
-      toLinear(0.35),
-      toLinear(0.78),
-      toLinear(0.82),
-    );
-
-    /*
-     * The photographed surface map, fetched lazily.
-     *
-     * Not blocking: the shader falls back to a generated surface until this
-     * arrives, so the effect is never missing while a 200KB image is in
-     * flight, and it never loads at all for anyone who never winds the
-     * shutter.
-     */
-    gl.uniform1i(gl.getUniformLocation(program, "uSurface"), 0);
+    gl.uniform3f(U("uWarm"), toLinear(1.0), toLinear(0.68), toLinear(0.3));
+    gl.uniform3f(U("uCool"), toLinear(0.35), toLinear(0.78), toLinear(0.82));
+    gl.uniform1i(U("uSurface"), 0);
+    gl.uniform1i(U("uBackdrop"), 1);
     gl.uniform1f(uHasSurface, 0);
-    const surface = gl.createTexture();
-    let surfaceRequested = false;
-    const requestSurface = () => {
-      if (surfaceRequested) return;
-      surfaceRequested = true;
-      const img = new Image();
-      img.onload = () => {
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, surface);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
-        // Tiled, and mipmapped so the far falloff does not alias into sparkle.
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-        /*
-         * No mipmaps. The map is an atlas of four cells, and a minified level
-         * blends them into one another — every panel would end up wearing an
-         * average of all four rather than the one it was given.
-         */
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.useProgram(program);
-        gl.uniform1f(uHasSurface, 1);
-      };
-      img.src = "/glass-surface.jpg";
-    };
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -164,26 +132,75 @@ export function GlassLight({
     resize();
     window.addEventListener("resize", resize);
 
-    // Reused every frame. Allocating these inside the loop would hand the
-    // collector two arrays per frame for no reason.
-    const rects = new Float32Array(MAX_RECTS * 4);
-    const radii = new Float32Array(MAX_RECTS);
-    const tilts = new Float32Array(MAX_RECTS);
-    const seeds = new Float32Array(MAX_RECTS);
+    /*
+     * The photographed surface map, fetched lazily: the shader falls back to
+     * no surface detail until it arrives, and it never loads at all for
+     * somebody who never winds the shutter.
+     */
+    const surface = gl.createTexture();
+    let surfaceRequested = false;
+    const requestSurface = () => {
+      if (surfaceRequested) return;
+      surfaceRequested = true;
+      const img = new Image();
+      img.onload = () => {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, surface);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        /*
+         * No mipmaps. The map is an atlas of four cells, and a minified level
+         * blends them into one another — every pane would end up wearing an
+         * average of all four rather than the one it was given.
+         */
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.useProgram(program);
+        gl.uniform1f(uHasSurface, 1);
+      };
+      img.src = "/glass-surface.jpg";
+    };
+
+    /*
+     * Backdrop textures, one per photograph, cached by URL.
+     *
+     * `crossOrigin` matters: a texture built from an image the page cannot
+     * read taints the context and every later read throws. If the storage host
+     * declines CORS the entry stays null and that pane simply does not
+     * refract, rather than taking the whole canvas down with it.
+     */
+    const backdrops = new Map<string, WebGLTexture | null>();
+    const requestBackdrop = (src: string) => {
+      if (backdrops.has(src)) return backdrops.get(src) ?? null;
+      backdrops.set(src, null);
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const tex = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+        // Non-power-of-two photographs: clamped and unmipped, as WebGL1 requires.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        backdrops.set(src, tex);
+      };
+      img.src = src;
+      return null;
+    };
 
     let frame = 0;
     let wasLit = false;
-    const start = performance.now();
 
     const render = (now: number) => {
       frame = requestAnimationFrame(render);
 
       const charge = chargeRef.current;
       const lit = charge > 0.002;
-
       if (!lit) {
-        // Clear once on the way down, then leave the canvas alone entirely.
         if (wasLit) {
+          gl.disable(gl.SCISSOR_TEST);
           gl.clear(gl.COLOR_BUFFER_BIT);
           canvas.style.opacity = "0";
           wasLit = false;
@@ -196,65 +213,42 @@ export function GlassLight({
         wasLit = true;
       }
 
-      const panels = glassGeometry(now);
+      const panes = glassGeometry(now);
       const { x, y } = positionRef.current;
 
-      /*
-       * Nearest panels first, and only as many as the shader has slots for.
-       * A panel's contribution dies with distance, so the ones that lose out
-       * are the ones that were about to contribute nothing — and the home page
-       * has more glass on it than any one screen can show at once.
-       */
-      const near =
-        panels.length <= MAX_RECTS
-          ? panels
-          : [...panels]
-              .sort((a, b) => {
-                const da = Math.hypot(
-                  Math.max(a.x - x, 0, x - (a.x + a.w)),
-                  Math.max(a.y - y, 0, y - (a.y + a.h)),
-                );
-                const db = Math.hypot(
-                  Math.max(b.x - x, 0, x - (b.x + b.w)),
-                  Math.max(b.y - y, 0, y - (b.y + b.h)),
-                );
-                return da - db;
-              })
-              .slice(0, MAX_RECTS);
-
-      for (let i = 0; i < MAX_RECTS; i += 1) {
-        const rect = near[i];
-        const o = i * 4;
-        if (rect) {
-          rects[o] = rect.x;
-          rects[o + 1] = rect.y;
-          rects[o + 2] = rect.w;
-          rects[o + 3] = rect.h;
-          radii[i] = rect.r;
-          tilts[i] = rect.t;
-          seeds[i] = rect.s;
-        } else {
-          // Parked far away at zero size: every distance is enormous, every
-          // falloff is zero, and no branch is needed in the shader.
-          rects[o] = -1e5;
-          rects[o + 1] = -1e5;
-          rects[o + 2] = 0;
-          rects[o + 3] = 0;
-          radii[i] = 0;
-          tilts[i] = 0;
-          seeds[i] = 0;
-        }
-      }
-
-      gl.uniform4fv(uRects, rects);
-      gl.uniform1fv(uRadii, radii);
-      gl.uniform1fv(uTilts, tilts);
-      gl.uniform1fv(uSeeds, seeds);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.SCISSOR_TEST);
       gl.uniform2f(uLight, x, y);
       gl.uniform1f(uCharge, charge);
-      gl.uniform1f(uTime, (now - start) / 1000);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, surface);
+
+      for (const pane of panes) {
+        // Offscreen panes cost nothing but a rectangle test.
+        if (pane.y + pane.h < -BLEED || pane.y > window.innerHeight + BLEED) continue;
+
+        const texture = pane.src ? requestBackdrop(pane.src) : null;
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.uniform1f(uHasBackdrop, texture ? 1 : 0);
+
+        gl.uniform4f(uRect, pane.x, pane.y, pane.w, pane.h);
+        gl.uniform1f(uRadius, pane.r);
+        gl.uniform1f(uTilt, pane.t);
+        gl.uniform1f(uSeed, pane.s);
+        gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
+        gl.uniform1f(uImageAspect, pane.ia);
+
+        // Scissor in device pixels, y counted from the bottom.
+        const sx = Math.floor((pane.x - BLEED) * scale);
+        const sw = Math.ceil((pane.w + BLEED * 2) * scale);
+        const sy = Math.floor((window.innerHeight - (pane.y + pane.h) - BLEED) * scale);
+        const sh = Math.ceil((pane.h + BLEED * 2) * scale);
+        gl.scissor(sx, sy, sw, sh);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+      gl.disable(gl.SCISSOR_TEST);
     };
     frame = requestAnimationFrame(render);
 
@@ -266,6 +260,7 @@ export function GlassLight({
       gl.deleteShader(fs);
       gl.deleteBuffer(buffer);
       gl.deleteTexture(surface);
+      for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
     };
   }, [chargeRef, positionRef]);
 
