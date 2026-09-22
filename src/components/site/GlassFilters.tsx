@@ -45,7 +45,7 @@
  * falloff that is strong at the edge and zero in the middle.
  */
 const DISPLACEMENT_MAP =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAACACAIAAAC5jr9pAAAAbklEQVR42u3XQQrAIAwEwK304f7ST3gtpJWqH+geAsUQidchES9mc+SR8XVO3CBQGFQGFwNh8DBoDN7/oDMYlhVaSIBdK9MKZ62cXR7vCAjYBuIv2XawOJvnK1oZZ7i+IL02daYWdW6v6t2AbBMT1tI4bSJg5KIAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAACACAIAAAC5jr9pAAAAWUlEQVR42u3XuwkAIAxF0SgO7lrOZG8h/hbwCQExFi/tIalvXJyynSAJQUZQEFQEDUFXw0Aw7cCL3Np4cYpAIBAIBALhezDNKNOyPPSuPp2butuL+jcA38QCkx8fvd8YKf8AAAAASUVORK5CYII=";
 
 /**
  * Peak displacement, in pixels.
@@ -55,7 +55,7 @@ const DISPLACEMENT_MAP =
  * drags the backdrop. Matched to the strip height: bending it further than the
  * bevel is deep would pull in content from outside the glass.
  */
-const MAX_DISPLACEMENT = 74;
+const MAX_DISPLACEMENT = 26;
 
 export function GlassFilters() {
   return (
@@ -104,47 +104,72 @@ export function GlassFilters() {
             in2="lens"
             operator="arithmetic"
             k1="0"
-            k2="0.34"
-            k3="0.72"
+            k2="0.16"
+            k3="0.84"
             k4="0"
             result="profile"
           />
 
+          {/*
+            Three displacements, not one — the channels are bent by slightly
+            different amounts rather than bent together and then shoved apart.
+
+            The previous version displaced once and split the result with a
+            flat `feOffset` of ±2.2px. That is not dispersion: a uniform shift
+            applies just as hard through the middle of the pane as at its
+            edge, so every photograph behind every panel wore a red/cyan
+            double exposure across its whole face. Real aberration is zero
+            where the glass is flat and grows with the bending, which is
+            exactly what falls out of scaling the same map per channel.
+          */}
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="profile"
+            scale={MAX_DISPLACEMENT * 0.94}
+            xChannelSelector="R"
+            yChannelSelector="G"
+            result="bentR"
+          />
           <feDisplacementMap
             in="SourceGraphic"
             in2="profile"
             scale={MAX_DISPLACEMENT}
             xChannelSelector="R"
             yChannelSelector="G"
-            result="bent"
+            result="bentG"
+          />
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="profile"
+            scale={MAX_DISPLACEMENT * 1.07}
+            xChannelSelector="R"
+            yChannelSelector="G"
+            result="bentB"
           />
 
-          {/*
-            Chromatic dispersion. Glass separates wavelengths by slightly
-            different amounts, so a real edge fringes into colour — the
-            strongest single cue that something is glass and not a blur.
-            Done by nudging the channels of the already-bent result apart,
-            which is visually close to sampling three times and costs a
-            fraction of it.
-          */}
+          {/* Recombined: red from the least-bent pass, blue from the most. */}
           <feColorMatrix
-            in="bent"
+            in="bentR"
             type="matrix"
             values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
-            result="red"
+            result="onlyR"
           />
-          <feOffset in="red" dx="2.2" dy="0.7" result="redShift" />
           <feColorMatrix
-            in="bent"
+            in="bentG"
             type="matrix"
-            values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"
-            result="cyan"
+            values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+            result="onlyG"
           />
-          <feOffset in="cyan" dx="-2.2" dy="-0.7" result="cyanShift" />
-          <feBlend in="redShift" in2="cyanShift" mode="screen" result="dispersed" />
+          <feColorMatrix
+            in="bentB"
+            type="matrix"
+            values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
+            result="onlyB"
+          />
+          <feBlend in="onlyR" in2="onlyG" mode="screen" result="rg" />
+          <feBlend in="rg" in2="onlyB" mode="screen" result="dispersed" />
 
-          {/* Glass edges carry more contrast than the scene behind them. */}
-          <feColorMatrix in="dispersed" type="saturate" values="1.35" />
+          <feColorMatrix in="dispersed" type="saturate" values="1.12" />
         </filter>
       </defs>
     </svg>

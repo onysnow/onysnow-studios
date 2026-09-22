@@ -243,6 +243,24 @@ function measure(el: HTMLElement) {
    * is already measuring it for the shader, so it may as well say so.
    */
   el.style.setProperty("--pane-radius", `${cornerRadius(el)}px`);
+
+  /*
+   * Where this pane sits in the viewport.
+   *
+   * The reflection is ONE room shared by every pane, so its background has
+   * to be positioned in viewport space and then pulled back by each pane's
+   * own offset — that is what turns a pane into a window onto the
+   * reflection rather than a box the reflection is squashed into.
+   *
+   * Done here rather than with `background-attachment: fixed`, which looks
+   * like the built-in answer but is not: `.glass` carries a
+   * `backdrop-filter`, and a filtered element becomes the containing block
+   * for its descendants, so a fixed background would quietly resolve
+   * against the pane again and reintroduce the exact bug it was meant to
+   * fix. This is measured, so it cannot drift.
+   */
+  el.style.setProperty("--pane-x", `${Math.round(r.left)}px`);
+  el.style.setProperty("--pane-y", `${Math.round(r.top)}px`);
 }
 
 function apply() {
