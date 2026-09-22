@@ -115,20 +115,20 @@ export function CustomCursor() {
      * to full over the middle of the light.
      */
     let inside = true;
-    let wind = 0;
     const applyVisibility = () => {
       /*
-       * Gone well before the charge is full, not merely dimmed.
+       * The follower never goes away.
        *
-       * The ring blends in `difference`, which is a subtraction — laid over the
-       * flash it inverts it, and what you see is a dark hole punched through
-       * the brightest part of the frame. There is no amount of it that looks
-       * like light. So it clears out as soon as the wind is unmistakable and
-       * stays gone; firing the shutter drops the charge to zero, and that is
-       * what brings it back.
+       * An earlier version faded it out as the charge came up, on the grounds
+       * that a difference-blended ring over a blown highlight reads as a hole
+       * punched through it. That was solving the wrong problem: the fix is for
+       * the ring to stop being a filled disc, not for it to vanish. Winding is
+       * meant to be the ring TRANSFORMING — tightening, brightening, closing
+       * into an iris — and there is nothing to transform if it has gone.
+       *
+       * Leaving the window is the only thing that hides it.
        */
-      const charged = Math.max(0, 1 - wind / 0.25);
-      const value = inside ? charged : 0;
+      const value = inside ? 1 : 0;
       el.style.opacity = value.toFixed(2);
       dot.style.opacity = value.toFixed(2);
     };
@@ -197,8 +197,7 @@ export function CustomCursor() {
     const charger = watchShutterCharge({
       onCharge: (charge, armed) => {
         el.style.setProperty("--wind", charge.toFixed(2));
-        wind = charge;
-        applyVisibility();
+        dot.style.setProperty("--wind", charge.toFixed(2));
         chargeRef.current = charge;
         setShutterCharge(charge);
         // Blades close over the back half, once it's clearly deliberate.

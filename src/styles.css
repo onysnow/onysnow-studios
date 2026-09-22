@@ -143,15 +143,24 @@
 }
 .custom-cursor[data-state="link"] .custom-cursor__dot { opacity: 0; }
 
-/* Over a photograph: a wider filled disc. Against `difference` this reads as a
-   lens holding a negative of the frame beneath it. */
+/*
+ * Over a photograph: a wider ring, and deliberately NOT filled.
+ *
+ * It used to be a solid white disc, which under `difference` inverts every
+ * pixel beneath it — a negative of the photograph following the pointer
+ * around. That is a striking effect on a page of text and an unwelcome one on
+ * somebody's photography, which is the whole point of the site. The outline
+ * still reads on any background because a 1px inversion is legible against
+ * anything, and it leaves the picture alone.
+ */
 .custom-cursor[data-state="media"] .custom-cursor__ring {
   width: 96px;
   height: 96px;
-  background-color: #fff;
+  background-color: transparent;
   border-color: #fff;
+  border-width: 1px;
 }
-.custom-cursor[data-state="media"] .custom-cursor__dot { opacity: 0; }
+.custom-cursor[data-state="media"] .custom-cursor__dot { opacity: 0.85; }
 
 .has-custom-cursor,
 .has-custom-cursor * { cursor: none !important; }

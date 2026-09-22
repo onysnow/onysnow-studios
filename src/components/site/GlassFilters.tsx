@@ -3,33 +3,49 @@
  *
  * Referenced by `backdrop-filter: url("#glass-refraction")` on the edge strips.
  *
- * The displacement map is a GRADIENT, not turbulence, and that choice is the
- * difference between glass and bathroom glass. In a displacement map the
- * channels are read in [0,255] with 128 meaning "do not move this pixel";
- * above pushes one way, below the other. So a vertical ramp — push down at the
- * top of the strip, neutral through the middle, push up at the bottom — bends
- * the backdrop inward at the rim the way the curved edge of a real pane does.
- * Turbulence instead displaces everything randomly, which reads as textured or
- * frosted glass rather than as a smooth edge.
+ * The constraint that shapes all of this: a CSS filter cannot refract. Filter
+ * functions process each pixel where it already is, and refraction means
+ * fetching the backdrop from SOMEWHERE ELSE. `feDisplacementMap` is the only
+ * thing in the platform that can do that inside a backdrop-filter, and only
+ * Chromium supports SVG filters there at all — so Safari and Firefox take the
+ * plain lensing fallback in the stylesheet and always will.
  *
- * A little turbulence is layered in at low amplitude for imperfection, because
- * a perfectly uniform edge looks synthetic.
+ * THE MAP IS COMPUTED, NOT DRAWN.
+ *
+ * In a displacement map the red channel carries the X component of the
+ * displacement vector and green carries Y, encoded as 128 + component * 127,
+ * so 128 means "leave this pixel alone". The vector is the surface NORMAL of
+ * the glass, and the normal comes from a thickness profile — not from a
+ * gradient someone thought looked about right, which is what this used to be
+ * and why it read as a smear rather than as a lens.
+ *
+ * The profile is the convex squircle
+ *
+ *     y = (1 - (1 - x)^4)^(1/4)
+ *
+ * where x is normalised depth in from the edge, differentiated numerically
+ * (delta 0.001) to get the slope at each row. The slope runs away to infinity
+ * at the very edge, so it is clamped and normalised. Both halves bend toward
+ * the middle of the pane, which is what a real bevel does to what is behind
+ * it.
+ *
+ * Method from kube.io's "Liquid Glass in the Browser" and the screen-space
+ * refraction write-up at zenn.dev/orectic, which independently arrives at the
+ * same shape: normal from the gradient of a distance field, magnitude on a
+ * falloff that is strong at the edge and zero in the middle.
  */
 const DISPLACEMENT_MAP =
-  "data:image/svg+xml," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='8' height='32'>` +
-      `<defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'>` +
-      `<stop offset='0' stop-color='rgb(128,255,128)'/>` +
-      `<stop offset='0.22' stop-color='rgb(128,206,128)'/>` +
-      `<stop offset='0.48' stop-color='rgb(128,128,128)'/>` +
-      `<stop offset='0.52' stop-color='rgb(128,128,128)'/>` +
-      `<stop offset='0.78' stop-color='rgb(128,50,128)'/>` +
-      `<stop offset='1' stop-color='rgb(128,0,128)'/>` +
-      `</linearGradient></defs>` +
-      `<rect width='8' height='32' fill='url(%23g)'/>` +
-      `</svg>`,
-  );
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAACACAIAAAC5jr9pAAAAbklEQVR42u3XQQrAIAwEwK304f7ST3gtpJWqH+geAsUQidchES9mc+SR8XVO3CBQGFQGFwNh8DBoDN7/oDMYlhVaSIBdK9MKZ62cXR7vCAjYBuIv2XawOJvnK1oZZ7i+IL02daYWdW6v6t2AbBMT1tI4bSJg5KIAAAAASUVORK5CYII=";
+
+/**
+ * Peak displacement, in pixels.
+ *
+ * `feDisplacementMap`'s scale converts the map's normalised [-1, 1] back into
+ * real pixels, so this is literally how far the outermost row of the bevel
+ * drags the backdrop. Matched to the strip height: bending it further than the
+ * bevel is deep would pull in content from outside the glass.
+ */
+const MAX_DISPLACEMENT = 22;
 
 export function GlassFilters() {
   return (
@@ -74,7 +90,7 @@ export function GlassFilters() {
           <feDisplacementMap
             in="SourceGraphic"
             in2="profile"
-            scale="54"
+            scale={MAX_DISPLACEMENT}
             xChannelSelector="R"
             yChannelSelector="G"
             result="bent"
