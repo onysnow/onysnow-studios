@@ -81,6 +81,39 @@ const radii = new WeakMap<HTMLElement, number>();
  * rather than threading a prop through every call site — the relationship is
  * "whatever picture I happen to be over", which is a DOM fact, not a prop.
  */
+/**
+ * The smallest rendition of a photograph, for use as a refraction texture.
+ *
+ * The texture is a SECOND fetch, not a reuse of the one the page already made:
+ * the DOM image is requested without CORS and a texture needs it with, and
+ * those are different cache entries. Left alone that means downloading every
+ * backdrop photograph twice at full size, which on a photography site is a lot
+ * of bandwidth for an effect nobody asked for.
+ *
+ * It does not need to be full size. The backdrop is only ever sampled inside a
+ * bevel a few dozen pixels deep and squeezed into a side band a few pixels
+ * tall, so the smallest stored variant carries more detail than the effect can
+ * show. Adding `crossorigin` to the page's own <img> would avoid the second
+ * request entirely, but it would also mean that the day the storage host stops
+ * sending the header, every photograph on the site vanishes rather than one
+ * effect going quiet. Not worth it.
+ */
+function smallestVariant(img: HTMLImageElement): string {
+  const set = img.getAttribute("srcset");
+  if (!set) return img.currentSrc || img.src;
+  let best = "";
+  let bestWidth = Infinity;
+  for (const entry of set.split(",")) {
+    const [url, descriptor] = entry.trim().split(/\s+/);
+    const width = Number.parseInt(descriptor ?? "", 10);
+    if (url && Number.isFinite(width) && width < bestWidth) {
+      bestWidth = width;
+      best = url;
+    }
+  }
+  return best || img.currentSrc || img.src;
+}
+
 function backdropOf(el: HTMLElement): HTMLImageElement | null {
   const scene = el.closest("[data-photo]");
   if (!scene) return null;
@@ -157,7 +190,7 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       r: cornerRadius(el),
       t: paneTilt(r),
       s: surfaceSeed(el),
-      src: img?.currentSrc || img?.src || "",
+      src: img ? smallestVariant(img) : "",
       ix: b?.left ?? 0,
       iy: b?.top ?? 0,
       iw: b?.width ?? 1,

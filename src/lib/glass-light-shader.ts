@@ -64,6 +64,28 @@ uniform vec3  uCool;
 #define FRESNEL 1.0
 #define Z_RADIUS 40.0   // bevel depth in CSS pixels
 
+/*
+ * The side face is a different optical path from the face, and the numbers
+ * below are why it has to look different rather than merely brighter.
+ *
+ * Through the FACE you look at near-normal incidence and the path through the
+ * glass is the pane's thickness — a few millimetres. Through the SIDE you are
+ * looking ALONG the pane, so the path is its width: two or three orders of
+ * magnitude further. Everything that scales with path length therefore
+ * explodes: dispersion separates the channels visibly instead of fringing
+ * them, and absorption stops being negligible.
+ *
+ * That absorption is why the cut edge of ordinary glass is green. Iron in
+ * soda-lime absorbs red most, blue next, green least, and over a few
+ * millimetres you cannot see it at all — over a few hundred you see nothing
+ * else. These are Beer-Lambert coefficients in that order.
+ */
+#define SIDE_ABSORB vec3(1.15, 0.28, 0.55)
+/* How much of the scene is squeezed into the thin band, in backdrop UV. */
+#define SIDE_SPAN 0.42
+/* Dispersion scales with path length, and the side's path is enormous. */
+#define SIDE_DISPERSION 7.0
+
 vec3 spectrum(float t) {
   return 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.33, 0.67)));
 }
@@ -223,8 +245,45 @@ void main() {
   float along = (frag.x - uRect.x) / max(uRect.z, 1.0);
   vec3 dichroic = mix(vec3(1.0), spectrum(along * 0.85 + 0.55), 0.42)
                 * (0.78 + 0.55 * surf.g);
-  rim += dichroic * (glareTop * topOpen + glareBot * botOpen) * withinX * 16.0 * reach;
+  rim += dichroic * (glareTop * topOpen + glareBot * botOpen) * withinX * 9.0 * reach;
   rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 6.0 * reach;
+
+  /*
+   * ---- What you see THROUGH the side face ----
+   *
+   * Not a tint on the band: the scene itself, seen end-on through the glass.
+   *
+   * Three things happen to it and all three follow from the path length. It
+   * is compressed, because a tall slice of what is behind the pane has to fit
+   * into a band a few pixels deep. It separates into colour, because
+   * dispersion accumulates over the path and the side's path is the width of
+   * the pane. And it goes green, because absorption accumulates too, and iron
+   * in soda-lime glass takes the red out first.
+   */
+  float onTop = step(0.0, dTop) * step(dTop, topT) * withinX;
+  float onBot = step(0.0, dBot) * step(dBot, botT) * withinX;
+  float across = mix(1.0 - clamp(dBot / botT, 0.0, 1.0),
+                     clamp(dTop / topT, 0.0, 1.0),
+                     step(0.5, onTop));
+  float onSide = max(onTop * topOpen, onBot * botOpen);
+
+  float disp = SIDE_DISPERSION * 0.0035;
+  vec2 sideUv = vec2(uvBase.x, uvBase.y + (across - 0.5) * SIDE_SPAN);
+  vec3 throughSide = vec3(
+    texture2D(uBackdrop, sideUv - vec2(0.0, disp)).r,
+    texture2D(uBackdrop, sideUv).g,
+    texture2D(uBackdrop, sideUv + vec2(0.0, disp)).b
+  ) * exp(-SIDE_ABSORB);
+
+  /*
+   * Total internal reflection at the arris. Past the critical angle — about
+   * 41 degrees for n = 1.5 — glass reflects everything, which is why the very
+   * corner of a plate is the brightest part of it in any light.
+   */
+  float tir = exp(-across * 5.0);
+  throughSide += vec3(tir) * 0.5;
+
+  rim += throughSide * onSide * uHasBackdrop * 2.6;
 
   // ---- Light scattered into the body, and off the grime ----
   vec3 face = vec3(inside * (direct * 0.9));
