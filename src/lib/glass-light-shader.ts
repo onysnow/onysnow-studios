@@ -224,6 +224,37 @@ void main() {
   vec3 rim = vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach;
 
   /*
+   * ---- Light piped through the pane ----
+   *
+   * A pane is a light guide. Light that gets into it is trapped by total
+   * internal reflection between the two faces and travels until it reaches an
+   * edge, where the angle finally breaks and it escapes — which is the entire
+   * principle of an edge-lit acrylic sign, and why the far edge of a pane
+   * glows when you put a torch anywhere on it.
+   *
+   * The rim above only knows about light arriving at each point directly
+   * through the air, so the edges away from the source stayed dark. This is
+   * the other path: how much is COUPLING into the pane at all, carried along
+   * it with the very low loss that total internal reflection implies.
+   *
+   * The attenuation length is long for the same reason — each bounce loses
+   * almost nothing — so this reaches edges the direct term cannot, and it
+   * goes green on the way, because the path is now measured in the width of
+   * the pane rather than its thickness.
+   */
+  float toPane = roundedBox(uLight - (uRect.xy + halfSize), halfSize, uRadius);
+  float couple = exp(-max(toPane, 0.0) / 130.0);
+  float piped = couple * exp(-dl / 780.0);
+  vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
+  /*
+   * Kept well under the direct term. Piped light has bounced its way along
+   * the pane and lost energy at every interface; if it arrives as bright as
+   * light coming straight through the air, the edge stops reading as glass
+   * and starts reading as a neon outline.
+   */
+  rim += pipedTint * (filament * 1.7 * arrisWear + flare * 0.8) * piped;
+
+  /*
    * ---- The side faces ----
    * Which of the pane's two side faces you can see depends on where it sits
    * relative to your eye, so they open against each other as the page scrolls.
