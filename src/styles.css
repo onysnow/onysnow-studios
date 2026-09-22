@@ -443,7 +443,7 @@
     z-index: 1;
     opacity: 0.55;
     mix-blend-mode: screen;
-    background-image: url("/room.jpg");
+    background-image: var(--room, url("/rooms/metro.jpg"));
     /*
      * The parallax moves the BACKGROUND, not the element.
      *
