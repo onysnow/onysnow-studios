@@ -3,6 +3,12 @@ import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
 import { GlassLight } from "./GlassLight";
 import { fireShutter } from "./ShutterFlash";
+import {
+  playShutterClick,
+  playShutterFlash,
+  primeShutterAudio,
+  setShutterCharge,
+} from "@/lib/shutter-audio";
 
 /**
  * A photograph the pointer is directly on top of.
@@ -169,6 +175,15 @@ export function CustomCursor() {
 
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", onLeave);
+    /*
+     * Browsers refuse to let a page make a sound until somebody has clicked or
+     * typed, and winding is neither — it is pointer movement, which does not
+     * count. That restriction happens to be doing something useful, so it is
+     * honoured rather than worked around: nothing makes a noise until the
+     * visitor has chosen to interact at least once.
+     */
+    window.addEventListener("pointerdown", primeShutterAudio, { once: true });
+    window.addEventListener("keydown", primeShutterAudio, { once: true });
     document.addEventListener("pointerenter", onEnter);
 
     /*
@@ -185,6 +200,7 @@ export function CustomCursor() {
         wind = charge;
         applyVisibility();
         chargeRef.current = charge;
+        setShutterCharge(charge);
         // Blades close over the back half, once it's clearly deliberate.
         const closed = Math.max(0, (charge - 0.5) / 0.5);
         el.style.setProperty("--iris", closed.toFixed(2));
@@ -195,15 +211,6 @@ export function CustomCursor() {
     });
 
     const onClick = (event: MouseEvent) => {
-      if (!charger.isArmed()) return;
-      /*
-       * The shutter only fires at a photograph.
-       *
-       * Firing into empty page does nothing at all — not even spending the
-       * charge — so the discovery is "I'm armed, but not here", which points
-       * at what to try next. Consuming the charge on a miss would just be
-       * punishing.
-       */
       /*
        * Resolved fresh from the pointer position rather than read off the last
        * pointermove. Content moves under a stationary cursor — a carousel
@@ -212,7 +219,23 @@ export function CustomCursor() {
        * there a moment earlier.
        */
       const under = document.elementFromPoint(targetX, targetY);
-      if (!under?.closest(`${PHOTO}, ${PHOTO_SCENE}`)) return;
+      const atPhoto = !!under?.closest(`${PHOTO}, ${PHOTO_SCENE}`);
+
+      /*
+       * The shutter only FIRES at a photograph, and only when wound — but it
+       * always makes a noise. A camera clicks whether or not there is film in
+       * it, and the mechanism answering every click is what tells you the
+       * thing in your hand is a camera at all.
+       *
+       * Firing into empty page does nothing else — not even spending the
+       * charge — so the discovery is "I'm armed, but not here", which points
+       * at what to try next. Consuming the charge on a miss would just be
+       * punishing.
+       */
+      if (!charger.isArmed() || !atPhoto) {
+        playShutterClick();
+        return;
+      }
       /*
        * Swallow the click.
        *
@@ -225,6 +248,7 @@ export function CustomCursor() {
       event.stopPropagation();
 
       charger.spend();
+      playShutterFlash();
       fireShutter({ x: targetX, y: targetY });
     };
     // Capture phase so the shutter still fires when the click lands on a link.
@@ -235,6 +259,8 @@ export function CustomCursor() {
       window.removeEventListener("click", onClick, true);
       cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", primeShutterAudio);
+      window.removeEventListener("keydown", primeShutterAudio);
       document.removeEventListener("pointerleave", onLeave);
       document.removeEventListener("pointerenter", onEnter);
       document.documentElement.classList.remove("has-custom-cursor");
