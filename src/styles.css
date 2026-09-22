@@ -103,7 +103,15 @@
   z-index: 9999;
   pointer-events: none;
   opacity: 0;
-  mix-blend-mode: difference;
+  /*
+   * NOT `difference`.
+   *
+   * Inverting was a neat way to stay legible on any background, and over a
+   * photograph it is exactly wrong: it turns the follower into a negative of
+   * somebody's picture. A white ring with a dark shadow under it reads on
+   * anything and leaves the photograph alone, which on a photography site is
+   * the only requirement that actually matters.
+   */
   transition: opacity .25s ease;
   will-change: transform;
 }
@@ -128,17 +136,27 @@
   border: 1px solid #fff;
 }
 
+/*
+ * The default: a thin ring with a small solid dot at its centre, and nothing
+ * else. Matched to bryanminear.com, which is the reference for this.
+ */
 .custom-cursor__dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   background-color: #fff;
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.6);
 }
 
 /* Over a link or button: a filled disc big enough to sit behind a nav item. */
+/*
+ * Over a link: wider, and tinted rather than filled. A solid disc only worked
+ * because it was being inverted; painted straight it simply covers the thing
+ * you are pointing at.
+ */
 .custom-cursor[data-state="link"] .custom-cursor__ring {
   width: 56px;
   height: 56px;
-  background-color: #fff;
+  background-color: oklch(1 0 0 / 0.14);
   border-color: #fff;
 }
 .custom-cursor[data-state="link"] .custom-cursor__dot { opacity: 0; }
@@ -254,6 +272,13 @@
    * ===================================================================== */
 
   .glass {
+    /*
+     * The pane's thickness, in one place. The side face, the refraction strip
+     * and the shader's own side band all read from here, so an edge is one
+     * depth rather than three.
+     */
+    --side-top: calc(3px + 13px * var(--pane-top, 0.18));
+    --side-bottom: calc(3px + 13px * var(--pane-bottom, 0.18));
     position: relative;
     background-color: oklch(0.145 0.011 55 / 30%);
     backdrop-filter: blur(26px) saturate(150%);
@@ -332,6 +357,8 @@
     right: 0;
     pointer-events: none;
     z-index: 3;
+    /* Clipped to the pane's own corners; see --pane-radius in lib/edge-glow. */
+    clip-path: inset(0 round var(--pane-radius, 0px));
     /*
      * Dichroic.
      *
@@ -367,7 +394,7 @@
 
   .glass > .glass__side--top {
     top: 0;
-    height: calc(2px + 10px * var(--pane-top, 0.18));
+    height: var(--side-top);
     opacity: calc(0.35 + 0.65 * var(--pane-top, 0.18));
   }
 
@@ -377,7 +404,7 @@
 
   .glass > .glass__side--bottom {
     bottom: 0;
-    height: calc(2px + 10px * var(--pane-bottom, 0.18));
+    height: var(--side-bottom);
     opacity: calc(0.35 + 0.65 * var(--pane-bottom, 0.18));
     /* The far corner of the bottom face is its upper boundary. */
   }
@@ -386,12 +413,9 @@
     top: 0;
   }
 
-  .glass--bar > .glass__side--top {
-    height: calc(1px + 5px * var(--pane-top, 0.18));
-  }
-
-  .glass--bar > .glass__side--bottom {
-    height: calc(1px + 5px * var(--pane-bottom, 0.18));
+  .glass--bar {
+    --side-top: calc(2px + 7px * var(--pane-top, 0.18));
+    --side-bottom: calc(2px + 7px * var(--pane-bottom, 0.18));
   }
 
   /*
@@ -413,20 +437,35 @@
    */
   .glass > .glass__reflection {
     position: absolute;
-    inset: -14%;
+    inset: 0;
     border-radius: inherit;
     pointer-events: none;
     z-index: 1;
-    opacity: 0.3;
+    opacity: 0.55;
     mix-blend-mode: screen;
     background-image: url("/room.jpg");
-    background-size: cover;
-    background-position: center;
-    transform: translate3d(
-      calc(var(--reflect-x, 0) * -34px),
-      calc(var(--reflect-y, 0) * -22px),
-      0
-    );
+    /*
+     * The parallax moves the BACKGROUND, not the element.
+     *
+     * Translating the element meant it had to be inset far enough that the
+     * travel never dragged its edge into view — and a percentage inset is
+     * useless for that, because the thin bars are 64px tall, where 14% is 9px
+     * of bleed against 11px of travel. Oversizing the background instead gives
+     * the same parallax with bleed that scales with it automatically, and
+     * nothing overflows the pane at all.
+     */
+    /*
+     * Bleed in pixels, not percent, because the travel is in pixels.
+     *
+     * A percentage oversize gives a 1200px band hundreds of pixels of margin
+     * and a 64px bar eleven — while both are asked to travel the same
+     * distance. Adding a fixed amount to each axis means the margin always
+     * exceeds the throw, whatever the pane's size.
+     */
+    background-size: calc(100% + 150px) calc(100% + 110px);
+    background-position:
+      calc(50% + var(--reflect-x, 0) * -110px)
+      calc(50% + var(--reflect-y, 0) * -72px);
   }
 
   /*
@@ -434,12 +473,7 @@
    * room the same way up five times.
    */
   .glass:nth-of-type(even) > .glass__reflection {
-    transform: translate3d(
-        calc(var(--reflect-x, 0) * -34px),
-        calc(var(--reflect-y, 0) * -22px),
-        0
-      )
-      scaleX(-1);
+    transform: scaleX(-1);
   }
 }
 
@@ -632,13 +666,18 @@
  * Amber, like everything else that glows on this site. Under the cursor's
  * `difference` blend over a dark page that stays warm.
  */
+/*
+ * The ring warms as it winds, and that is all.
+ *
+ * It used to carry a 3.4rem amber glow with an INSET glow inside it, which at
+ * full wind filled the ring into a solid disc — and under the old inverting
+ * blend that disc became a hole punched through the photograph. The glow made
+ * sense when the ring WAS the light. It is not any more: there is a shader
+ * emitting and footage flaring, and a second glow drawn in CSS on top of them
+ * only ever competed with both.
+ */
 .custom-cursor__ring {
-  box-shadow:
-    0 0 calc(var(--wind, 0) * 3.4rem) calc(var(--wind, 0) * 0.75rem)
-      color-mix(in oklab, var(--amber) 100%, transparent),
-    0 0 calc(var(--wind, 0) * 1.1rem) calc(var(--wind, 0) * 0.14rem) oklch(1 0 0 / 0.85),
-    inset 0 0 calc(var(--wind, 0) * 1.3rem)
-      color-mix(in oklab, var(--amber) 85%, transparent);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.55);
 }
 
 /* The ring itself thickens and warms as it winds. */
@@ -708,6 +747,41 @@
   transition: opacity 0.25s ease;
 }
 
+/*
+ * The lens flare footage.
+ *
+ * `screen` rather than `plus-lighter`, because these clips carry no alpha and
+ * screen is what makes a black-background overlay behave: 1-(1-a)(1-b) leaves
+ * the backdrop untouched wherever the clip is black, and lifts it wherever
+ * the clip has light in it. That is the whole reason flare footage is shot on
+ * black and why it needs no transparency channel.
+ *
+ * Above the glass and below the cursor light: the flare is thrown by the lens
+ * you are looking THROUGH, so it sits in front of everything in the scene,
+ * but it cannot be brighter than the source that caused it.
+ */
+.flare-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.flare-clip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: auto;
+  opacity: 0;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flare-overlay { display: none; }
+}
+
 .cursor-light {
   position: fixed;
   inset: 0;
@@ -741,16 +815,67 @@
    * glass surfaces, the largest single cost on the page. These are the rim as
    * geometry, so the filter only touches pixels that are shown.
    */
+  /*
+   * Bokeh, from whatever is bright behind the pane.
+   *
+   * A blur is not bokeh. Blurring a highlight spreads it AND dims it, which is
+   * why the frosted panels turned street lights into grey smudges — the thing
+   * that makes a defocused point read as bokeh is that it stays bright while
+   * it spreads, because all its light is still there, just distributed over a
+   * disc.
+   *
+   * So this isolates the highlights before spreading them: brightness and
+   * contrast first crush everything that is not near-white down to black, and
+   * only then does the blur run, so what spreads is the point lights and
+   * nothing else. Added with `plus-lighter` over the ordinary frosted pass, so
+   * the discs sit on top of the blur rather than being averaged into it.
+   *
+   * Busy street through a wet window. Give it a photograph with actual point
+   * sources in it and it has something to work with; give it an evenly lit
+   * scene and it correctly does nothing.
+   */
+  .glass > .glass__bokeh {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    backdrop-filter: brightness(2.1) contrast(3.2) saturate(1.25) blur(16px);
+    mix-blend-mode: plus-lighter;
+    opacity: 0.6;
+  }
+
+  .glass--bar > .glass__bokeh {
+    backdrop-filter: brightness(1.9) contrast(3) saturate(1.2) blur(9px);
+    opacity: 0.45;
+  }
+
+  /*
+   * ONE layer over the whole pane, not two strips at its edges.
+   *
+   * The displacement map already carries the bevel profile along its height:
+   * it pushes hard at the top, is exactly neutral through the middle, and
+   * pushes the other way at the bottom. Stretched over the whole pane that IS
+   * a bevel — the photograph bends within a band of each edge and is untouched
+   * across the body — and because the profile is continuous there is no strip
+   * boundary to line up or fail to line up with anything.
+   *
+   * Two strips could never show much. They were as tall as the side face,
+   * which is a few pixels, so the bend had nowhere to happen.
+   */
   .glass > .glass__refract {
     position: absolute;
-    left: 0;
-    right: 0;
+    inset: 0;
+    border-radius: inherit;
+    clip-path: inset(0 round var(--pane-radius, 0px));
     /*
-     * Tall enough for the bend to be visible. At 14px the displacement had
-     * almost no room to work in and the edge read as a slightly brighter
-     * band rather than as something bending the photograph behind it.
+     * Exactly the band the side face occupies — because they are the same
+     * thing. The bevel IS the pane's thickness seen end-on, so the strip that
+     * bends the photograph and the strip that shows the thickness have to be
+     * one strip. While one was a fixed 22px and the other followed the tilt,
+     * they could not line up at any scroll position, and three edges at three
+     * different depths read as banding rather than as an edge.
      */
-    height: 22px;
     pointer-events: none;
     z-index: 1;
     /*
@@ -768,16 +893,12 @@
     }
   }
 
-  .glass > .glass__refract--top {
-    top: 0;
-  }
-
-  .glass > .glass__refract--bottom {
-    bottom: 0;
-  }
-
+  /*
+   * Bars get a shallower bend: the profile is stretched over 64px rather than
+   * a 400px band, so the same map would wrench them.
+   */
   .glass--bar > .glass__refract {
-    height: 12px;
+    opacity: 0.55;
   }
 
   /*

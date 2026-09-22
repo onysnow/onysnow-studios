@@ -31,6 +31,8 @@ uniform float uClosed;     // 0 to 1, how far the iris has stopped down
 uniform float uTime;
 uniform vec3  uWarm;       // the amber, linear
 uniform vec3  uCool;       // the teal, linear
+uniform sampler2D uGrit;   // photographed surface, for the ghosts' insides
+uniform float uHasGrit;
 
 #define TAU 6.28318530718
 #define BLADES 6.0
@@ -64,9 +66,9 @@ float apertureDistance(vec2 p, float roundness) {
 vec3 starburst(vec2 p, float r) {
   float phi = atan(p.y, p.x);
   float lobes = abs(cos(phi * BLADES * 0.5));
-  float spike = pow(lobes, 90.0) * exp(-r * 2.2);
+  float spike = pow(lobes, 70.0) * exp(-r * 3.4);
   vec3 tint = mix(vec3(1.0), spectrum(r * 1.6 + 0.1), 0.65);
-  return tint * spike * 3.2;
+  return tint * spike * 4.6;
 }
 
 /*
@@ -95,8 +97,16 @@ void main() {
   // ---- Emission, in linear light with real headroom ----
   // Inverse-square from a small emitter. The +eps keeps the centre finite; the
   // gain is what pushes the core far above 1.0 so the tonemap can clip it.
-  float falloff = 1.0 / (1.0 + 260.0 * r * r);
-  float gain = 26.0 * uCharge;
+  /*
+   * A tighter core than the emitter wants to be.
+   *
+   * Left wide, the blown region swallowed the aperture and the spikes whole
+   * and what was left read as a torch pointed at the page rather than as a
+   * lens looking at a light. The blades and the diffraction they throw ARE
+   * the effect; the white disc is just where the sensor gave up.
+   */
+  float falloff = 1.0 / (1.0 + 900.0 * r * r);
+  float gain = 22.0 * uCharge;
   float core = falloff * gain;
 
   // Two wider lobes. Real bloom sums several kernel sizes; a single falloff
@@ -129,43 +139,157 @@ void main() {
    *
    * Ghosts are reflections between lens elements, so they are images of the
    * source thrown back through the optical axis: they land on the line from
-   * the source through the CENTRE of the frame, spaced along it, and they walk
-   * as the source moves. That axis is the whole reason a flare reads as a lens
-   * and not as decoration stuck to the light.
+   * the source through the CENTRE of the frame and walk along it as the
+   * source moves. That axis is why a flare reads as a lens rather than as
+   * decoration stuck to the light, and it is the one thing baked footage
+   * cannot do, which is why these are computed at all.
+   *
+   * What made them look drawn was not that they were computed. It was that
+   * they were CLEAN: perfectly round, perfectly smooth, evenly spaced, evenly
+   * sized. Real ones are none of those.
    */
   vec2 centre = res * 0.5;
   vec2 axis = (centre - uLight) / unit;
 
   for (int i = 0; i < GHOSTS; i++) {
     float fi = float(i);
-    // Spread across and past the centre, so some ghosts sit the far side of it.
     float t = 0.35 + fi * 0.34;
     vec2 gp = p - axis * t;
-    // Sizes alternate the way a real element stack throws them.
+
+    /*
+     * Optical vignetting — the cat's-eye.
+     *
+     * A ghost is an image of the aperture, and off the optical axis the lens
+     * BARREL clips that image: the further from centre, the more of the disc
+     * is cut away, leaving the lens shape everyone recognises from a
+     * photograph and almost nobody models. It is the single most identifiable
+     * thing about a real ghost.
+     */
+    vec2 fromCentre = (frag - centre) / unit;
+    vec2 clipDir = normalize(fromCentre + 1e-6);
+    // A bite, not a bisection. Vignetting clips a ghost; it does not halve it
+    // except at the extreme corners of a frame.
+    float offAxis = clamp(length(fromCentre) * 0.55, 0.0, 1.0);
+    float cut = dot(gp, clipDir);
+
     float radius = 0.045 + 0.075 * fract(fi * 0.62 + 0.2);
     float thickness = radius * (0.16 + 0.14 * fract(fi * 0.37));
+
+    /*
+     * A ghost is an IMAGE OF THE APERTURE, not a disc.
+     *
+     * That is the thing that makes a real ghost chain recognisable: it is the
+     * diaphragm, defocused, repeated — so with a six-bladed iris you get
+     * hexagons, and they are hexagons whatever else changes. Drawing circles
+     * was the single largest reason these read as computed, because a circle
+     * is what you get from a lens wide open and this one is visibly stopped
+     * down: the core is a hexagon and the spikes are counting its blades.
+     *
+     * Same SDF as the iris itself, for exactly that reason — they are images
+     * of the same opening, so they cannot be a different shape from it.
+     */
+    /*
+     * A mild anamorphic squash. Lens elements are not perfectly figured, so
+     * the internal reflection images the aperture slightly out of round — the
+     * reason ghosts in a photograph are ovals rather than regular polygons
+     * even from a spherical lens. Kept mild: it should read as imperfection,
+     * not as a different aperture.
+     */
+    float roundness = mix(0.55, 0.18, uClosed);
+    float d2 = apertureDistance(gp / vec2(1.0, 0.88), roundness);
+
+    /*
+     * Sampled three times at slightly different scales, per channel. In a
+     * screen-space flare the dispersion comes from splitting the RGB sampling
+     * steps along the ghost vector; the same idea applies to an analytic
+     * ghost, because the cause is the same — the coating disperses, so each
+     * wavelength images the aperture at a fractionally different size.
+     */
+    vec3 disp = vec3(0.985, 1.0, 1.018);
+    vec3 ring = exp(-pow((vec3(d2) - radius * disp) / thickness, vec3(2.0)));
+    /*
+     * A ghost has an inside, not just an edge. It is a defocused image of a
+     * lit opening, so the whole opening is bright — the rim is brighter
+     * because the defocus piles light up there, but a ghost drawn as an
+     * outline reads as a ring rather than as an aperture.
+     */
+    float disc = smoothstep(radius, radius * 0.55, d2) * 0.62;
+    vec3 shape = vec3(disc) + ring * 0.9;
+    // The barrel takes a bite out of the side nearer the frame edge.
+    shape *= smoothstep(radius * (0.6 + offAxis), radius * (0.6 + offAxis) - radius * 0.9, cut);
+
+    /*
+     * And the inside is not smooth. A ghost is a defocused image of a real
+     * aperture in a real lens, so it carries the dust and the coating flaws
+     * of the glass it bounced off — mottling across the disc, not a gradient.
+     * The map is the same photographed surface the panes wear.
+     */
+    /*
+     * Sampled three times, offset per channel. Same reason the ghost itself
+     * disperses: the debris is ON the glass, so its shadow in the reflected
+     * image is spread by the same coating that spreads the image. Sampled once
+     * it is a grey mottle; sampled three times it is the faint colour speckle
+     * a dirty element actually gives. The Ultimate Lens Flare shader does this
+     * to its dirt texture too, which is what pointed at it.
+     *
+     * Mottling, not masking: the dirt varies the ghost's interior, it does not
+     * decide whether the ghost is there.
+     */
+    vec2 gritUv = gp / max(radius, 1e-3) * 0.28 + 0.5 + fi * 0.21;
+    vec2 gritOff = vec2(0.004, -0.003);
+    vec3 gritRGB = vec3(
+      texture2D(uGrit, fract(gritUv + gritOff) * 0.49 + 0.005).g,
+      texture2D(uGrit, fract(gritUv) * 0.49 + 0.005).g,
+      texture2D(uGrit, fract(gritUv - gritOff) * 0.49 + 0.005).g
+    );
+    vec3 grit = mix(vec3(1.0), 0.72 + 1.1 * gritRGB, uHasGrit);
+
     vec3 gt = spectrum(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
-    // Ghosts fade toward the edges of the frame, as the real ones do.
-    float vig = 1.0 - clamp(length(p - axis * t) * 0.55, 0.0, 1.0);
-    colour += ghost(gp, radius, thickness, gt) * 0.85 * vig * uCharge;
+    colour += gt * shape * grit * 1.5 * uCharge;
   }
 
   /*
-   * The big halo: a wide, thin chromatic ring centred on the source itself,
-   * thrown by the front element. This is the ring in the reference photographs
-   * that is far larger than any of the ghosts.
+   * The big halo is centred on the OPTICAL AXIS, not on the light.
+   *
+   * This was wrong before and it is the kind of wrong you feel without being
+   * able to name: I had the ring centred on the source, so it travelled with
+   * the pointer like a bracelet. A halo is a reflection off the front element
+   * back through the system, and the system's axis is the middle of the frame
+   * — so the ring sits around the centre of the picture and only its radius
+   * and brightness change as the source moves. That is why, in a photograph,
+   * the big ring stays put while everything else slides.
    */
-  float halo1 = exp(-pow((r - 0.31) / 0.035, 2.0)) * 0.9
-              + exp(-pow((r - 0.46) / 0.07, 2.0)) * 0.4;
-  colour += spectrum(r * 3.4 + 0.12) * halo1 * 1.15 * uCharge;
+  vec2 fromAxis = (frag - centre) / unit;
+  float axisR = length(fromAxis);
+  float haloR = 0.30 + 0.22 * length(axis);
+  float halo1 = exp(-pow((axisR - haloR) / 0.045, 2.0)) * 0.9
+              + exp(-pow((axisR - haloR * 1.48) / 0.09, 2.0)) * 0.35;
+  colour += spectrum(axisR * 3.4 + 0.12) * halo1 * 0.85 * uCharge;
 
   /*
-   * An anamorphic streak. Even a spherical lens smears a bright point
-   * horizontally through its diaphragm; it is the cue people read as "this was
-   * photographed" faster than any other.
+   * And the whole flare fades as the source leaves the middle of the frame.
+   * Less of the beam finds its way into the barrel off-axis, so a flare is at
+   * its most violent when you point the camera near the light and falls away
+   * as you swing off it.
    */
-  float streak = exp(-abs(p.x) * 2.6) * exp(-abs(p.y) * 150.0);
-  colour += mix(uWarm, vec3(0.6, 0.8, 1.0), 0.45) * streak * 2.2 * uCharge;
+  colour *= 1.0 - 0.55 * smoothstep(0.0, 1.25, length(axis));
+
+  /*
+   * Dirt on the front element, in SCREEN space.
+   *
+   * This does more than any other single cue and it is the one nobody adds: a
+   * flare does not simply appear over a clean frame, it LIGHTS UP whatever is
+   * stuck to the glass. Every smear and speck on the front element glows,
+   * anchored to the lens rather than to the scene — so it stays exactly where
+   * it is while the flare sweeps across it.
+   *
+   * Screen coordinates for that reason. Move the pointer and the flare
+   * travels; the dirt does not, because the dirt is on the lens.
+   */
+  vec2 dirtUv = frag / (res * 0.55);
+  float dirt = mix(0.0, texture2D(uGrit, fract(dirtUv) * 0.49 + 0.5).g, uHasGrit);
+  float flareEnergy = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
+  colour += colour * dirt * 2.6 * flareEnergy;
 
   // ---- The aperture, silhouetted against its own light ----
   /*
@@ -173,15 +297,25 @@ void main() {
    * the light into a small hard shape at exactly the moment it should read as
    * most intense — the charge was full and the light got SMALLER.
    */
-  float apertureRadius = mix(0.075, 0.046, uClosed);
-  float d = apertureDistance(p, mix(0.42, 0.12, uClosed));
-  float blades = smoothstep(apertureRadius - 0.0015, apertureRadius + 0.0015, d);
-  float occlusion = 1.0 - blades * uClosed * 0.3;
+  /*
+   * Big enough to see, and it does not shrink.
+   *
+   * It used to stop down to a pinhole at full charge, which made the light
+   * SMALLER exactly when it should read as most intense. It now barely closes
+   * at all — what changes is how hard the blades cut, not how small the
+   * opening is, so the hexagon stays legible across the whole wind.
+   */
+  float apertureRadius = mix(0.115, 0.098, uClosed);
+  float d = apertureDistance(p, mix(0.42, 0.14, uClosed));
+  float blades = smoothstep(apertureRadius - 0.0018, apertureRadius + 0.0018, d);
+  float occlusion = 1.0 - blades * (0.25 + uClosed * 0.5);
   colour *= occlusion;
 
   // A thin lit edge where the blades meet the light.
-  float rim = exp(-pow((d - apertureRadius) * 360.0, 2.0)) * uClosed;
-  colour += uWarm * rim * 1.4;
+  // The lit edge of the blades. Present from the start, not only once closed:
+  // an open iris still has edges and they still catch the light.
+  float rim = exp(-pow((d - apertureRadius) * 300.0, 2.0)) * (0.35 + 0.65 * uClosed);
+  colour += mix(uWarm, vec3(1.0), 0.4) * rim * 2.4;
 
   /*
    * Tonemap. THIS is what produces the white core: everything above 1.0 is

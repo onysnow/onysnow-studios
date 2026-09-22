@@ -46,6 +46,8 @@ let charge = 0;
 let draining = 0;
 /** How hard it is draining, in charge per second. */
 let drainRate = 0;
+/** The same, eased — this is what the pitch follows. */
+let smoothedDrain = 0;
 let lastCharge = 0;
 let lastAt = 0;
 /**
@@ -132,8 +134,15 @@ function startWhine() {
   // volume — a capacitor winding gets shriller, not just louder.
   whineFilter = context.createBiquadFilter();
   whineFilter.type = "lowpass";
-  // Opens across the top octave, where this recording actually lives.
-  whineFilter.frequency.value = 9000;
+  /*
+   * Parked above the recording, not sweeping through it.
+   *
+   * This filter used to open from 9 kHz to 21 kHz, which is a sensible sweep
+   * for almost any sound and silence for this one: the whole recording is a
+   * 17.8 kHz tone, so at anything under full charge the filter was simply
+   * deleting it. What reached the speakers was the filter, not the flash.
+   */
+  whineFilter.frequency.value = 22000;
   whineFilter.Q.value = 0.7;
 
   whine = context.createBufferSource();
@@ -171,16 +180,39 @@ function applyCharge() {
   whineGain.gain.setTargetAtTime(level * (1 - draining), now, 0.04);
   dumpGain.gain.setTargetAtTime(level * draining * 1.2, now, 0.04);
 
-  whineFilter.frequency.setTargetAtTime(9000 + charge * 12000, now, 0.06);
-  whine.playbackRate.setTargetAtTime(0.78 + charge * 0.46, now, 0.08);
+  /*
+   * Played at the speed it was recorded at.
+   *
+   * It used to rise from 0.78 to 1.24 with the charge, which is what a
+   * capacitor winding does and which works for any sound with headroom above
+   * it. This one has none: 17.8 kHz at 1.24 is 22 kHz, past the Nyquist
+   * frequency of the file and well past anybody's hearing, so the harder you
+   * wound it the more inaudible it became. Exactly backwards. The build now
+   * comes from level alone, which is the only axis this recording leaves.
+   */
+  whine.playbackRate.setTargetAtTime(1.0, now, 0.08);
 
   /*
-   * A drain runs fast, and faster the harder it is draining. The bleed is
-   * around 0.5 per second at rest, so that is the reference: at the standard
-   * bleed it plays at about 1.7x, and a collapse from full runs quicker still.
+   * The drain runs DOWN, and further down the harder it is draining.
+   *
+   * Speeding it up would have the same problem as the wind — there is no room
+   * above 17.8 kHz — but slowing it is both audible and right: a capacitor
+   * dumping its charge falls in pitch. Played backwards and falling, which is
+   * what the reversed bed is for.
    */
-  const urgency = Math.min(1, drainRate / 0.55);
-  dump.playbackRate.setTargetAtTime(1.35 + urgency * 0.95, now, 0.05);
+  /*
+   * Set slowly, and from a heavily smoothed rate.
+   *
+   * A playback rate IS a pitch, so anything that jitters the rate warbles the
+   * tone — and this one is close to a pure tone, which is the worst case for
+   * it: there is no other content to hide the wobble in. The drain rate is
+   * measured from frame-to-frame charge deltas reported in hundredths, so it
+   * is inherently steppy, and feeding that straight into the rate produced an
+   * audible vibrato rather than a fall. Smoothed hard on the way in, and given
+   * a long time constant on the way out.
+   */
+  const urgency = Math.min(1, smoothedDrain / 0.55);
+  dump.playbackRate.setTargetAtTime(0.85 - urgency * 0.4, now, 0.45);
 }
 
 /**
@@ -210,6 +242,9 @@ function noteDirection(value: number) {
     const falling = velocity < -0.02 ? 1 : 0;
     if (falling) drainRate = Math.max(drainRate * 0.7, -velocity);
     else drainRate *= 0.85;
+    // A long average. The pitch should describe how the charge is going, not
+    // react to every frame of it.
+    smoothedDrain += (drainRate - smoothedDrain) * Math.min(1, dt / 0.5);
     // Roughly a tenth of a second to swing fully from one bed to the other.
     const ease = Math.min(1, dt / 0.1);
     draining += (falling - draining) * ease;

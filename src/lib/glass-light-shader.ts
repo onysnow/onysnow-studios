@@ -63,6 +63,7 @@ uniform vec3  uCool;
 #define EDGE_HIGHLIGHT 0.05
 #define FRESNEL 1.0
 #define Z_RADIUS 40.0   // bevel depth in CSS pixels
+#define MAX_BEND 34.0   // peak displacement at the rim, CSS pixels
 
 /*
  * The side face is a different optical path from the face, and the numbers
@@ -86,9 +87,6 @@ uniform vec3  uCool;
 /* Dispersion scales with path length, and the side's path is enormous. */
 #define SIDE_DISPERSION 7.0
 
-vec3 spectrum(float t) {
-  return 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.33, 0.67)));
-}
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -99,21 +97,6 @@ float roundedBox(vec2 p, vec2 halfSize, float radius) {
   float r = min(radius, min(halfSize.x, halfSize.y));
   vec2 q = abs(p) - halfSize + r;
   return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
-}
-
-/*
- * The bevel, as a height field.
- *
- * 'depth' is distance in from the rim in pixels. The profile is the convex
- * squircle — biconvex, in LiquidGlass's terms — which is flat across the body
- * of the pane and falls away sharply at the very edge. That shape is the
- * reason a bevel bends hard in a narrow band instead of smearing the whole
- * panel: the slope is almost zero everywhere except within Z_RADIUS of the rim.
- */
-float height(float depth) {
-  float x = clamp(depth / Z_RADIUS, 0.0, 1.0);
-  float k = 1.0 - x;
-  return pow(1.0 - k * k * k * k, 0.25);
 }
 
 /* The surface, photographed. A 2x2 atlas; each pane wears one cell. */
@@ -148,9 +131,25 @@ void main() {
   vec2 grad = normalize(vec2(dx, dy) + 1e-6);
 
   float depth = -d;                       // positive inside
-  float slope = (height(depth + 1.0) - height(max(depth - 1.0, 0.0))) * 0.5;
+  float band = clamp(depth / Z_RADIUS, 0.0, 1.0);
+
+  /*
+   * A displacement CURVE, not the raw derivative of the height field.
+   *
+   * Differentiating the squircle is correct and useless: its slope is enormous
+   * in the first pixel and essentially zero two pixels in, so the bend existed
+   * in a band three pixels wide and there was nothing to see. What matters is
+   * not the exact surface normal at a point, it is how much displacement the
+   * bevel produces across its whole width — strongest at the rim, falling
+   * smoothly to nothing at the inner boundary.
+   *
+   * pow(1 - band, 1.6), from the screen-space refraction write-up at
+   * zenn.dev/orectic, which reaches the same conclusion from the other
+   * direction: the falloff is what you want, not the gradient.
+   */
+  float curve = pow(1.0 - band, 1.6);
   // The bevel bends what is behind it toward the middle of the pane.
-  vec2 bend = grad * slope * REFRACTION * Z_RADIUS * 2.2;
+  vec2 bend = grad * curve * REFRACTION * MAX_BEND;
 
   /*
    * ---- The backdrop, sampled ----
@@ -183,7 +182,7 @@ void main() {
    * and the straight one are the same anyway, but mixing explicitly keeps the
    * middle honest if the slope ever picks up numerical noise.
    */
-  float bevel = clamp(1.0 - depth / Z_RADIUS, 0.0, 1.0);
+  float bevel = 1.0 - band;
   bevel *= bevel;
   vec3 backdrop = mix(straight, refracted, bevel) - straight;
 
@@ -227,6 +226,37 @@ void main() {
   vec3 rim = vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach;
 
   /*
+   * ---- Light piped through the pane ----
+   *
+   * A pane is a light guide. Light that gets into it is trapped by total
+   * internal reflection between the two faces and travels until it reaches an
+   * edge, where the angle finally breaks and it escapes — which is the entire
+   * principle of an edge-lit acrylic sign, and why the far edge of a pane
+   * glows when you put a torch anywhere on it.
+   *
+   * The rim above only knows about light arriving at each point directly
+   * through the air, so the edges away from the source stayed dark. This is
+   * the other path: how much is COUPLING into the pane at all, carried along
+   * it with the very low loss that total internal reflection implies.
+   *
+   * The attenuation length is long for the same reason — each bounce loses
+   * almost nothing — so this reaches edges the direct term cannot, and it
+   * goes green on the way, because the path is now measured in the width of
+   * the pane rather than its thickness.
+   */
+  float toPane = roundedBox(uLight - (uRect.xy + halfSize), halfSize, uRadius);
+  float couple = exp(-max(toPane, 0.0) / 130.0);
+  float piped = couple * exp(-dl / 780.0);
+  vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
+  /*
+   * Kept well under the direct term. Piped light has bounced its way along
+   * the pane and lost energy at every interface; if it arrives as bright as
+   * light coming straight through the air, the edge stops reading as glass
+   * and starts reading as a neon outline.
+   */
+  rim += pipedTint * (filament * 1.7 * arrisWear + flare * 0.8) * piped;
+
+  /*
    * ---- The side faces ----
    * Which of the pane's two side faces you can see depends on where it sits
    * relative to your eye, so they open against each other as the page scrolls.
@@ -235,18 +265,35 @@ void main() {
   float botOpen = 0.18 + 0.82 * max(0.0, -uTilt);
   float topT = 3.0 + 13.0 * topOpen;
   float botT = 3.0 + 13.0 * botOpen;
-  float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z);
+  /*
+   * Within the pane's width AND inside its rounded outline. The width test
+   * alone is a rectangle, which at the corners describes a region the pane
+   * has already curved out of.
+   */
+  float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z) * inside;
   float dTop = frag.y - uRect.y;
   float dBot = (uRect.y + uRect.w) - frag.y;
   float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
   float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
   float farTop = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
   float farBot = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
-  float along = (frag.x - uRect.x) / max(uRect.z, 1.0);
-  vec3 dichroic = mix(vec3(1.0), spectrum(along * 0.85 + 0.55), 0.42)
-                * (0.78 + 0.55 * surf.g);
-  rim += dichroic * (glareTop * topOpen + glareBot * botOpen) * withinX * 9.0 * reach;
-  rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 6.0 * reach;
+  /*
+   * The side face has no colour of its own.
+   *
+   * It used to carry a spectrum swept along the pane's LENGTH, which made a
+   * rainbow band running the whole width of every section whether or not
+   * anything was lighting it. Nothing produces that. The colour in a glass
+   * edge comes from what is BEHIND it — refracted, dispersed and absorbed over
+   * a long path — and that is computed below. What the light contributes is a
+   * glare, and a glare is only where the light is.
+   *
+   * So this is white, and it is driven by the direct term rather than reach:
+   * reach includes the wide scatter term, which is what was smearing the
+   * highlight along the entire band instead of putting it where the source is.
+   */
+  float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
+  rim += vec3(sideGlare) * 11.0 * direct;
+  rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 5.0 * direct;
 
   /*
    * ---- What you see THROUGH the side face ----
@@ -280,10 +327,16 @@ void main() {
    * 41 degrees for n = 1.5 — glass reflects everything, which is why the very
    * corner of a plate is the brightest part of it in any light.
    */
+  /*
+   * It REFLECTS, though; it does not emit. Adding white here put a constant
+   * bright line along every edge whether or not anything was lighting it,
+   * which is the same mistake as the painted rainbow. It multiplies what is
+   * already coming through instead.
+   */
   float tir = exp(-across * 5.0);
-  throughSide += vec3(tir) * 0.5;
+  throughSide *= 1.0 + tir * 2.2;
 
-  rim += throughSide * onSide * uHasBackdrop * 2.6;
+
 
   // ---- Light scattered into the body, and off the grime ----
   vec3 face = vec3(inside * (direct * 0.9));
@@ -314,7 +367,33 @@ void main() {
   float lit = uCharge * uCharge * (3.0 - 2.0 * uCharge);
   vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
 
-  vec3 colour = backdrop * uHasBackdrop * inside;
+  /*
+   * What the glass does to the photograph is not gated on the charge. A pane
+   * bends and absorbs what is behind it whether or not anybody is shining
+   * anything at it, and the side face is the strongest example — that is the
+   * band you can genuinely see THROUGH, along the pane's whole width. It was
+   * in the lit path, so the edge went blank the moment the shutter was idle.
+   *
+   * It is also untinted. The colour in it belongs to the photograph and to
+   * the absorption; warming it by distance from the cursor would paint the
+   * light's colour onto something the light is not responsible for.
+   */
+  /*
+   * The face's refraction is NOT done here, and cannot be.
+   *
+   * This canvas composites with plus-lighter, which only ever adds. Refraction
+   * means MOVING pixels — the original has to be replaced, not brightened —
+   * and adding a displaced copy on top of an image that is still there at full
+   * strength produces a faint double exposure, which is exactly what it looked
+   * like. The bevel's displacement belongs to the SVG filter in the stylesheet,
+   * which samples the backdrop from another position and composites behind the
+   * content where it can actually replace it.
+   *
+   * The side face stays, because it is genuinely additive: a thin band of the
+   * scene compressed and absorbed, laid over the edge rather than replacing
+   * anything.
+   */
+  vec3 colour = throughSide * onSide * uHasBackdrop * 2.6;
   colour += (tint * (rim + face) + mirror) * lit;
   colour += vec3(specular + EDGE_HIGHLIGHT * bevel) * inside * (0.35 + 0.65 * lit);
 
@@ -334,7 +413,22 @@ void main() {
   float g2 = hash(gl_FragCoord.yx * 1.7);
   colour += (vec3(g1, g2, g1 * 0.5 + g2 * 0.5) - 0.5) * 0.09 * mids;
 
+  /*
+   * NOT clipped to the pane.
+   *
+   * Multiplying alpha by 'inside' cut every contribution off at the boundary,
+   * which killed the one thing that has no business stopping there: the bloom.
+   * A lit edge throws light OUT of the glass as well as into it — that spill
+   * above the top of a pane is most of what tells you the edge is bright
+   * rather than merely pale — and cutting it at the boundary drew a hard line
+   * exactly where the glow should be softest.
+   *
+   * Everything that genuinely belongs inside the pane already carries its own
+   * 'inside' factor: the refracted backdrop, the side band, the scattered
+   * face, the reflected source, the specular. What is left unbounded is the
+   * rim, which is the part that should escape.
+   */
   float alpha = clamp(max(max(abs(colour.r), abs(colour.g)), abs(colour.b)), 0.0, 1.0);
-  gl_FragColor = vec4(colour, alpha * inside);
+  gl_FragColor = vec4(colour, alpha);
 }
 `;

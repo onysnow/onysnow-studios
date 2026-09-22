@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowRight, Camera, Sparkles } from "lucide-react";
+import { ArrowDownRight, ArrowRight } from "lucide-react";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,7 @@ import { Reveal } from "@/components/site/Reveal";
 import { ScrambleText } from "@/components/site/ScrambleText";
 import { ParallaxScene } from "@/components/site/ParallaxScene";
 import { RichText } from "@/components/site/RichText";
-import { Card, CardBody, CardFooter, Container, Grid, Section } from "@/components/site/layout";
-import { GlassPanel } from "@/components/site/GlassPanel";
+import { Container, Grid, Section } from "@/components/site/layout";
 import { PhotoSection } from "@/components/site/PhotoSection";
 import {
   Carousel,
@@ -88,6 +87,7 @@ function HomePage() {
   const bandTwo = photos?.[4] ?? photos?.[2] ?? hero;
   const bandThree = photos?.[5] ?? photos?.[0] ?? hero;
   const bandFour = photos?.[1] ?? photos?.[4] ?? hero;
+  const bandFive = photos?.[2] ?? photos?.[0] ?? hero;
   /*
    * The interstitials: full-bleed frames sitting between the glass bands.
    * Chosen from further down the set so a band and the photograph next to it
@@ -312,20 +312,62 @@ function HomePage() {
         height="min-h-[48svh] lg:min-h-[62svh]"
       />
 
+      {/*
+        Testimonials — a glass band like every other, not a panel inside a section.
+
+        It used to be the one piece of glass on the page that got none of the
+        glass. `GlassPanel` — now deleted, this was its only caller — was a
+        plain blurred div that never registered with the cursor, so it had no
+        thickness, no arris, no reflection and no response to the light. It also sat on the page background rather than
+        on a photograph, and frosted glass over a flat colour is
+        indistinguishable from a slightly lighter rectangle.
+
+        The quotes now sit directly on the band. They were cards — bordered,
+        tinted, `backdrop-blur-xl` — which meant a sheet of frosted glass laid
+        on a sheet of frosted glass, and the inner one had nothing behind it to
+        frost. What separates them now is the grid and a hairline rule, which
+        is all the separation three short quotes need.
+      */}
+      {quotes.length > 0 ? (
+        <PhotoSection image={bandFive} depth="standard">
+          <Section size="base">
+            <Container>
+              <Reveal>
+                <p className="eyebrow">{copy(text, "testimonials_eyebrow", "Kind words")}</p>
+                <Grid cols={3} gap="base" className="mt-8">
+                  {quotes.map((t) => (
+                    <figure key={t.id} className="flex h-full flex-col">
+                      <blockquote className="font-display text-lg leading-snug">
+                        “{t.quote}”
+                      </blockquote>
+                      <figcaption className="mt-auto border-t border-white/10 pt-5 text-[0.65rem] uppercase tracking-widest text-muted-foreground">
+                        {t.author}
+                        {t.context ? ` · ${t.context}` : ""}
+                      </figcaption>
+                    </figure>
+                  ))}
+                </Grid>
+              </Reveal>
+            </Container>
+          </Section>
+        </PhotoSection>
+      ) : null}
+
+      {/* Closing CTA */}
+
       {/* Philosophy — full-bleed parallax band */}
       <ParallaxScene image={philosophyImage} depth="standard" scrim="full" height="min-h-[72svh]">
         <Section size="lg">
           <Container>
             <Reveal className="grid gap-12 lg:grid-cols-2">
               <div>
-                <Camera className="size-8 text-primary" />
                 <RichText
                   html={copy(
                     text,
                     "philosophy_title",
                     "Nothing forced.<br/><em>Everything felt.</em>",
                   )}
-                  className="mt-8 font-display text-3xl leading-none lg:text-4xl"
+                  className="font-display text-3xl leading-none lg:text-4xl"
                 />
               </div>
               <div className="self-end">
@@ -341,39 +383,6 @@ function HomePage() {
         </Section>
       </ParallaxScene>
 
-      {/* Testimonials — on glass, equal height, no dead space */}
-      {quotes.length > 0 ? (
-        <Section size="sm">
-          <Container>
-            <GlassPanel className="p-5 sm:p-7">
-              <Reveal>
-                <p className="eyebrow">{copy(text, "testimonials_eyebrow", "Kind words")}</p>
-                <Grid cols={3} gap="base" className="mt-6">
-                  {quotes.map((t) => (
-                    <Card
-                      key={t.id}
-                      className="rounded-lg border border-white/10 bg-background/30 p-5 backdrop-blur-xl"
-                    >
-                      <CardBody>
-                        <Sparkles className="size-4 text-primary" />
-                        <blockquote className="mt-4 font-display text-base leading-snug">
-                          “{t.quote}”
-                        </blockquote>
-                      </CardBody>
-                      <CardFooter className="pt-5 text-[0.65rem] uppercase tracking-widest text-muted-foreground">
-                        {t.author}
-                        {t.context ? ` · ${t.context}` : ""}
-                      </CardFooter>
-                    </Card>
-                  ))}
-                </Grid>
-              </Reveal>
-            </GlassPanel>
-          </Container>
-        </Section>
-      ) : null}
-
-      {/* Closing CTA */}
       <PhotoSection image={bandFour} depth="deep">
         <Section size="lg" className="text-center">
           <Container width="content">

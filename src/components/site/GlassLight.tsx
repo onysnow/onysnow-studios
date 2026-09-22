@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
+import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry } from "@/lib/edge-glow";
 
@@ -41,6 +42,9 @@ export function GlassLight({
   positionRef: { current: { x: number; y: number } };
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  /* Bumped when a lost GL context returns; see CursorLight for why this is
+     the whole recovery path. */
+  const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
@@ -190,12 +194,11 @@ export function GlassLight({
       return null;
     };
 
-    let frame = 0;
     let wasLit = false;
+    canvas.style.opacity = "0";
 
-    const render = (now: number) => {
-      frame = requestAnimationFrame(render);
-
+    /* Returns whether there is still something to draw; false parks the loop. */
+    const step = (now: number) => {
       const charge = chargeRef.current;
       const lit = charge > 0.002;
       if (!lit) {
@@ -205,7 +208,7 @@ export function GlassLight({
           canvas.style.opacity = "0";
           wasLit = false;
         }
-        return;
+        return false;
       }
       if (!wasLit) {
         requestSurface();
@@ -249,11 +252,27 @@ export function GlassLight({
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
       gl.disable(gl.SCISSOR_TEST);
+      return true;
     };
-    frame = requestAnimationFrame(render);
+
+    const loop = sleepingLoop(step);
+    const wake = () => loop.wake();
+    window.addEventListener("pointermove", wake, { passive: true });
+    loop.wake();
+
+    const onLost = (event: Event) => {
+      event.preventDefault();
+      loop.stop();
+    };
+    const onRestored = () => setGeneration((g) => g + 1);
+    canvas.addEventListener("webglcontextlost", onLost);
+    canvas.addEventListener("webglcontextrestored", onRestored);
 
     return () => {
-      cancelAnimationFrame(frame);
+      loop.stop();
+      window.removeEventListener("pointermove", wake);
+      canvas.removeEventListener("webglcontextlost", onLost);
+      canvas.removeEventListener("webglcontextrestored", onRestored);
       window.removeEventListener("resize", resize);
       gl.deleteProgram(program);
       gl.deleteShader(vs);
@@ -262,7 +281,7 @@ export function GlassLight({
       gl.deleteTexture(surface);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
     };
-  }, [chargeRef, positionRef]);
+  }, [chargeRef, positionRef, generation]);
 
   return <canvas ref={canvasRef} aria-hidden="true" className="glass-light" />;
 }

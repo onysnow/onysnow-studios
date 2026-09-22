@@ -152,11 +152,29 @@ cache the rects and invalidate on scroll and resize rather than re-reading.
 
 ## Action Items
 
-1. [ ] Gate `CursorLight` and `GlassLight` on `(pointer: fine)` as well as
+1. [x] Gate `CursorLight` and `GlassLight` on `(pointer: fine)` as well as
        reduced motion
-2. [ ] Let both render loops sleep at zero charge and wake on the first
-       non-zero report
-3. [ ] Handle `webglcontextlost` / `webglcontextrestored` on both canvases
+2. [x] Let both render loops sleep at zero charge and wake on the first
+       non-zero report — `lib/gl-loop.ts`, woken by `pointermove`, which is a
+       complete signal because the charge can only rise from pointer motion
+3. [x] Handle `webglcontextlost` / `webglcontextrestored` on both canvases —
+       restoration re-runs the whole effect rather than keeping a second
+       recovery path in step with the setup path
 4. [ ] Merge the two passes into one shader and one canvas
 5. [ ] Re-tune the resolution cap once merged
 6. [ ] Revisit the atlas if minification aliasing becomes visible in use
+
+### Note on item 4
+
+The fill argument that decided this has since changed. `GlassLight` no longer
+rasterises the viewport: it draws once per pane, scissored to that pane's box,
+because refraction needs each pane's own photograph as a texture and a shader
+cannot pick a sampler by loop index. So the duplicated full-viewport cost the
+table above was measuring no longer exists — only `CursorLight` is still a
+full-screen pass, and it has to be, because a flare's ghosts march across the
+whole frame.
+
+Merging is therefore no longer a performance fix. It would still remove a GL
+context, a composited layer and a pile of duplicated setup, which is worth
+something, but it is now a tidiness argument rather than a cost one and should
+be re-justified before anyone spends the time.
