@@ -18,7 +18,7 @@ export function PageIntro({
   loading?: boolean;
 }) {
   return (
-    <Section size="none" className="pt-28 pb-10 lg:pt-36 lg:pb-14">
+    <Section size="none" className="pt-24 pb-8 lg:pt-28 lg:pb-10">
       <Container>
         <Reveal>
           <p className="eyebrow">{eyebrow}</p>

@@ -94,7 +94,7 @@ function HomePage() {
       </section>
 
       {/* Intro */}
-      <Section size="lg">
+      <Section size="base">
         <Container>
           <Reveal className="grid gap-10 lg:grid-cols-[.4fr_1fr]">
             <p className="eyebrow">{copy(text, "intro_eyebrow", "What I do")}</p>
@@ -110,29 +110,37 @@ function HomePage() {
         </Container>
       </Section>
 
-      {/* Disciplines */}
-      <Section size="base" tone="bordered">
+      {/* Disciplines — compact, with a thumbnail so the layout reads at a glance */}
+      <Section size="sm" tone="bordered">
         <Container>
           <Reveal>
             <p className="eyebrow">{copy(text, "services_eyebrow", "Ways to work together")}</p>
-            <Grid cols={3} gap="tight" className="mt-10">
+            <Grid cols={3} gap="base" className="mt-7">
               {catsPending
                 ? Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="border-t border-border py-8 lg:py-10">
-                      <Skeleton className="h-9 w-40" />
-                    </div>
+                    <Skeleton key={i} className="aspect-[16/7] w-full" />
                   ))
                 : cats.map((cat, i) => (
                     <Link
-                      to="/services"
+                      to="/portfolio"
+                      search={{ category: cat.slug }}
                       key={cat.id}
-                      className="group flex flex-col border-t border-border py-8 lg:py-10"
+                      className="group relative block overflow-hidden"
                     >
-                      <span className="text-xs text-muted-foreground">0{i + 1}</span>
-                      <h3 className="mt-7 font-display text-xl transition-colors group-hover:text-primary">
-                        {cat.name}
-                      </h3>
-                      <ArrowDownRight className="mt-auto pt-5 size-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:translate-y-1" />
+                      <Img
+                        image={coverFor(photos, cat)}
+                        className="aspect-[16/7] w-full"
+                        sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                        imgClassName="transition-transform duration-700 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/30 to-transparent" />
+                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
+                        <div>
+                          <span className="text-[0.65rem] tracking-widest text-primary">0{i + 1}</span>
+                          <h3 className="font-display text-lg leading-tight">{cat.name}</h3>
+                        </div>
+                        <ArrowDownRight className="size-4 text-foreground/70 transition-transform group-hover:translate-x-1 group-hover:translate-y-1" />
+                      </div>
                     </Link>
                   ))}
             </Grid>

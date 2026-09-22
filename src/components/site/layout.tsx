@@ -14,9 +14,9 @@ import { cn } from "@/lib/utils";
  */
 
 const SECTION_RHYTHM = {
-  sm: "py-10 lg:py-16",
-  base: "py-16 lg:py-28",
-  lg: "py-20 lg:py-36",
+  sm: "py-7 lg:py-10",
+  base: "py-10 lg:py-16",
+  lg: "py-14 lg:py-22",
   none: "",
 } as const;
 
