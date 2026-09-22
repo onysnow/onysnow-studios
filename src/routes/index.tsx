@@ -312,35 +312,6 @@ function HomePage() {
         height="min-h-[48svh] lg:min-h-[62svh]"
       />
 
-      {/* Philosophy — full-bleed parallax band */}
-      <ParallaxScene image={philosophyImage} depth="standard" scrim="full" height="min-h-[72svh]">
-        <Section size="lg">
-          <Container>
-            <Reveal className="grid gap-12 lg:grid-cols-2">
-              <div>
-                <Camera className="size-8 text-primary" />
-                <RichText
-                  html={copy(
-                    text,
-                    "philosophy_title",
-                    "Nothing forced.<br/><em>Everything felt.</em>",
-                  )}
-                  className="mt-8 font-display text-3xl leading-none lg:text-4xl"
-                />
-              </div>
-              <div className="self-end">
-                <p className="text-lg leading-8 text-foreground/75">
-                  {copy(text, "philosophy_body", "")}
-                </p>
-                <Button asChild variant="glass" size="lg" className="mt-8">
-                  <Link to="/about">My approach</Link>
-                </Button>
-              </div>
-            </Reveal>
-          </Container>
-        </Section>
-      </ParallaxScene>
-
       {/* Testimonials — on glass, equal height, no dead space */}
       {quotes.length > 0 ? (
         <Section size="sm">
@@ -374,6 +345,36 @@ function HomePage() {
       ) : null}
 
       {/* Closing CTA */}
+
+      {/* Philosophy — full-bleed parallax band */}
+      <ParallaxScene image={philosophyImage} depth="standard" scrim="full" height="min-h-[72svh]">
+        <Section size="lg">
+          <Container>
+            <Reveal className="grid gap-12 lg:grid-cols-2">
+              <div>
+                <Camera className="size-8 text-primary" />
+                <RichText
+                  html={copy(
+                    text,
+                    "philosophy_title",
+                    "Nothing forced.<br/><em>Everything felt.</em>",
+                  )}
+                  className="mt-8 font-display text-3xl leading-none lg:text-4xl"
+                />
+              </div>
+              <div className="self-end">
+                <p className="text-lg leading-8 text-foreground/75">
+                  {copy(text, "philosophy_body", "")}
+                </p>
+                <Button asChild variant="glass" size="lg" className="mt-8">
+                  <Link to="/about">My approach</Link>
+                </Button>
+              </div>
+            </Reveal>
+          </Container>
+        </Section>
+      </ParallaxScene>
+
       <PhotoSection image={bandFour} depth="deep">
         <Section size="lg" className="text-center">
           <Container width="content">
