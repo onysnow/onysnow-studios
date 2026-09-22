@@ -1,74 +1,206 @@
-import { useEffect, useRef, useState } from "react";
-import { useScramble } from "use-scramble";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * Characters drawn from living writing systems — Greek, Cyrillic, Armenian, Hebrew,
- * Arabic, Devanagari, Thai, Georgian, Japanese kana and Korean jamo — so the
- * settling text reads as *languages* rather than as random symbols.
+ * Scripts whose letters carry roughly a Latin advance width, so a cycling glyph
+ * fits the cell its English character reserves.
+ *
+ * Kana, jamo, Devanagari and Thai are deliberately excluded: they're full-width
+ * or tall, so they either overlap their neighbours or force the settled headline
+ * to sit unnaturally wide. Five writing systems still read unmistakably as
+ * languages rather than as noise.
  */
-const GLYPHS: number[] = [
-  // Greek
-  0x0393, 0x0394, 0x0398, 0x039b, 0x039e, 0x03a0, 0x03a3, 0x03a6, 0x03a8, 0x03a9,
-  // Cyrillic
-  0x0414, 0x0416, 0x0417, 0x0419, 0x041b, 0x0424, 0x0426, 0x0428, 0x042d, 0x042f,
-  // Armenian
-  0x0539, 0x053b, 0x0542, 0x0547, 0x054b,
-  // Hebrew
-  0x05d0, 0x05d2, 0x05d6, 0x05db, 0x05e9,
-  // Arabic
-  0x0634, 0x0637, 0x063a, 0x0641, 0x0644, 0x0646,
-  // Devanagari
-  0x0915, 0x0917, 0x091d, 0x0923, 0x0927, 0x092d, 0x0937,
-  // Thai
-  0x0e01, 0x0e07, 0x0e0e, 0x0e18, 0x0e20,
-  // Georgian
-  0x10d2, 0x10d6, 0x10dd, 0x10e8,
-  // Japanese kana
-  0x3042, 0x3048, 0x304b, 0x3055, 0x305f, 0x306a, 0x307e, 0x3088, 0x30a2, 0x30ab,
-  0x30b5, 0x30c6, 0x30cd, 0x30d5, 0x30e8, 0x30ef,
-  // Korean jamo
-  0x3131, 0x3134, 0x3137, 0x3141, 0x3145, 0x314b,
+/**
+ * Substitutes, bucketed by advance width.
+ *
+ * Each cell reserves the width of its final English character, so a substitute
+ * has to be about that wide or it overlaps its neighbours. Picking from a bucket
+ * matched to the letter being replaced fixes that without ever reflowing the
+ * line — an `i` only ever becomes a narrow glyph, a `w` only ever a wide one.
+ *
+ * Kana, jamo, Devanagari and Thai are excluded: full-width or tall, so they
+ * can't sit in a Latin cell. Greek, Cyrillic, Armenian, Georgian and Hebrew
+ * still read unmistakably as languages.
+ */
+const NARROW = [
+  "ι", "ί", "ϊ", "і", "ї", "ј", "ן", "ו", "י", "ւ", "ի", "ჲ", "ı", "l",
 ];
 
+const WIDE = [
+  "Ж", "Ш", "Щ", "Ю", "Ф", "Ы", "ш", "щ", "ю", "ы", "ω", "ϖ", "Ω", "Φ", "Ψ", "მ", "ღ", "ա",
+];
+
+const MEDIUM = [
+  // Greek
+  "Γ", "Δ", "Θ", "Λ", "Ξ", "Π", "Σ",
+  "α", "β", "γ", "δ", "ε", "ζ", "η", "θ", "κ", "λ", "μ", "ν", "ξ", "π", "ρ", "σ", "τ", "φ", "χ", "ψ",
+  // Cyrillic
+  "Б", "Г", "Д", "З", "И", "Й", "Л", "П", "Ц", "Ч", "Э", "Я",
+  "б", "в", "г", "д", "ж", "з", "и", "й", "к", "н", "п", "т", "ф", "ц", "ч", "э", "я",
+  // Armenian
+  "Թ", "Ի", "Ղ", "Շ", "Ճ", "Ձ", "Ծ", "բ", "գ", "դ", "ե", "զ", "ը", "լ",
+  // Georgian
+  "გ", "ზ", "ო", "შ", "წ", "ჭ", "ჰ", "ე", "ვ", "ლ", "ნ",
+  // Hebrew
+  "א", "ב", "ג", "ד", "ה", "ז", "ח", "ט", "כ", "ל", "מ", "נ", "ס", "ע", "צ", "ק", "ר", "ש", "ת",
+];
+
+type Width = "narrow" | "medium" | "wide";
+
+function widthOf(ch: string): Width {
+  if (/[iltfjrI1.,;:'’!|]/.test(ch)) return "narrow";
+  if (/[mwMW@]/.test(ch)) return "wide";
+  return "medium";
+}
+
+const POOLS: Record<Width, string[]> = { narrow: NARROW, medium: MEDIUM, wide: WIDE };
+
+function pick(width: Width): string {
+  const pool = POOLS[width];
+  return pool[Math.floor(Math.random() * pool.length)] ?? "Δ";
+}
+
+type CharState = {
+  /** The English character this cell resolves to. */
+  final: string;
+  /** Whether this cell animates at all (spaces and punctuation don't). */
+  animates: boolean;
+  /** ms before this cell starts cycling. */
+  start: number;
+  /** ms this cell keeps cycling before it settles. */
+  duration: number;
+  /** ms between glyph changes — each cell cycles at its own speed. */
+  interval: number;
+  /** Which substitute pool this cell draws from, matched to its own width. */
+  width: Width;
+};
+
+/** Punctuation and whitespace stay put, so the sentence keeps its shape throughout. */
+function animatable(ch: string) {
+  return /[\p{L}\p{N}]/u.test(ch);
+}
+
 /**
- * Renders `text` with each character cycling through other writing systems before
- * settling. Letters resolve left to right at a staggered pace rather than all at once.
+ * The whole sentence is present from the first frame; each letter cycles through
+ * other writing systems on its own clock and lands in English at its own moment.
  *
- * The real text stays in the DOM for screen readers and search engines; the animated
- * layer is aria-hidden, so the effect costs nothing in accessibility or SEO.
+ * `use-scramble` can't express this — it advances a single scramble head left to
+ * right at one global speed. Per-character start, speed and settle time need
+ * per-character state, so this is hand-rolled on one rAF loop.
+ *
+ * Layout never shifts and glyphs never collide: each cell reserves the width of
+ * its final English glyph, and substitutes are drawn from a pool matched to that
+ * width, so nothing overflows into its neighbour.
  */
-export function ScrambleText({ text, className }: { text: string; className?: string }) {
+export function ScrambleText({
+  text,
+  className,
+  /** Roughly how long until the last letter settles, in ms. */
+  totalMs = 6500,
+}: {
+  text: string;
+  className?: string;
+  totalMs?: number;
+}) {
+  const [frame, setFrame] = useState(0);
   const [animate, setAnimate] = useState(false);
-  const started = useRef(false);
+  const glyphs = useRef<string[]>([]);
+  const settled = useRef<boolean[]>([]);
+
+  const chars = useMemo<CharState[]>(() => {
+    const list = Array.from(text);
+    return list.map((final) => {
+      const animates = animatable(final);
+      return {
+        final,
+        animates,
+        width: widthOf(final),
+        // Spread the starts across the first half so letters don't move in unison,
+        // and the settles across the rest — hence "different times".
+        start: animates ? Math.random() * totalMs * 0.35 : 0,
+        duration: animates ? totalMs * (0.35 + Math.random() * 0.6) : 0,
+        // 130–420ms per change: slow enough to read each glyph as a letter.
+        interval: 130 + Math.random() * 290,
+      };
+    });
+  }, [text, totalMs]);
 
   useEffect(() => {
-    // Respect users who have asked for less motion — they get the text, plainly.
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduced || started.current) return;
-    started.current = true;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     setAnimate(true);
-  }, []);
 
-  const { ref } = useScramble({
-    text,
-    playOnMount: true,
-    speed: 0.55,
-    tick: 2,
-    step: 1,
-    scramble: 7,
-    seed: 2,
-    chance: 0.9,
-    overdrive: false,
-    overflow: false,
-    range: GLYPHS as unknown as [number, number],
-  });
+    glyphs.current = chars.map((c) => (c.animates ? pick(c.width) : c.final));
+    settled.current = chars.map((c) => !c.animates);
+
+    let raf = 0;
+    const t0 = performance.now();
+    const nextAt = chars.map((c) => t0 + c.start);
+
+    const tick = (now: number) => {
+      let changed = false;
+      let remaining = false;
+
+      for (let i = 0; i < chars.length; i += 1) {
+        const c = chars[i]!;
+        if (settled.current[i]) continue;
+        remaining = true;
+
+        const elapsed = now - t0;
+        if (elapsed >= c.start + c.duration) {
+          glyphs.current[i] = c.final;
+          settled.current[i] = true;
+          changed = true;
+          continue;
+        }
+        if (now >= (nextAt[i] ?? 0)) {
+          glyphs.current[i] = pick(c.width);
+          nextAt[i] = now + c.interval;
+          changed = true;
+        }
+      }
+
+      if (changed) setFrame((f) => f + 1);
+      if (remaining) raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [chars]);
 
   if (!animate) return <span className={className}>{text}</span>;
 
+  // Split into words so a word never breaks across lines mid-scramble.
+  const words: { chars: { state: CharState; index: number }[] }[] = [];
+  let current: { state: CharState; index: number }[] = [];
+  chars.forEach((state, index) => {
+    if (state.final === " ") {
+      if (current.length) words.push({ chars: current });
+      current = [];
+    } else {
+      current.push({ state, index });
+    }
+  });
+  if (current.length) words.push({ chars: current });
+
   return (
-    <>
+    <span className={className}>
+      {/* The real sentence, for screen readers and search engines. */}
       <span className="sr-only">{text}</span>
-      <span aria-hidden="true" ref={ref} className={className} />
-    </>
+      <span aria-hidden="true" data-frame={frame}>
+        {words.map((word, w) => (
+          <span key={w} className="inline-block whitespace-nowrap">
+            {word.chars.map(({ state, index }) => (
+              <span key={index} className="relative inline-block">
+                {/* Reserves the final glyph's width so the line can't reflow. */}
+                <span className="invisible">{state.final}</span>
+                <span className="absolute inset-x-0 top-0 text-center">
+                  {glyphs.current[index] ?? state.final}
+                </span>
+              </span>
+            ))}
+            {w < words.length - 1 ? <span>&nbsp;</span> : null}
+          </span>
+        ))}
+      </span>
+    </span>
   );
 }

@@ -151,7 +151,7 @@ function HomePage() {
       {/* Selected work — a horizontal wheel on frosted glass */}
       <Section size="lg">
         <Container>
-          <GlassPanel className="p-6 sm:p-10">
+          <GlassPanel className="p-5 sm:p-7">
             <Carousel opts={{ align: "start", loop: true }} className="w-full">
               <Reveal className="flex flex-wrap items-end justify-between gap-6">
                 <div>
@@ -172,11 +172,11 @@ function HomePage() {
                 </div>
               </Reveal>
 
-              <CarouselContent className="mt-10 -ml-4">
+              <CarouselContent className="mt-7 -ml-4">
                 {catsPending
                   ? Array.from({ length: 3 }).map((_, i) => (
                       <CarouselItem key={i} className="pl-4 basis-full sm:basis-1/2 lg:basis-1/3">
-                        <Skeleton className="aspect-[4/5] w-full" />
+                        <Skeleton className="aspect-[4/3] w-full" />
                       </CarouselItem>
                     ))
                   : cats.map((cat) => (
@@ -190,7 +190,7 @@ function HomePage() {
                               the photograph's own orientation. */}
                           <Img
                             image={coverFor(photos, cat)}
-                            className="aspect-[4/5] w-full"
+                            className="aspect-[4/3] w-full"
                             sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                             imgClassName="transition-transform duration-700 group-hover:scale-105"
                           />
@@ -230,27 +230,34 @@ function HomePage() {
         </Section>
       </ParallaxScene>
 
-      {/* Testimonials */}
+      {/* Testimonials — on glass, equal height, no dead space */}
       {quotes.length > 0 ? (
-        <Section size="base">
+        <Section size="sm">
           <Container>
-            <Reveal>
-              <p className="eyebrow">{copy(text, "testimonials_eyebrow", "Kind words")}</p>
-              <Grid cols={3} gap="hairline" className="mt-10">
-                {quotes.map((t) => (
-                  <Card key={t.id} className="p-8">
-                    <CardBody>
-                      <Sparkles className="size-4 text-primary" />
-                      <blockquote className="mt-8 font-display text-lg leading-snug">“{t.quote}”</blockquote>
-                    </CardBody>
-                    <CardFooter className="pt-8 text-xs uppercase tracking-widest text-muted-foreground">
-                      {t.author}
-                      {t.context ? ` · ${t.context}` : ""}
-                    </CardFooter>
-                  </Card>
-                ))}
-              </Grid>
-            </Reveal>
+            <GlassPanel className="p-5 sm:p-7">
+              <Reveal>
+                <p className="eyebrow">{copy(text, "testimonials_eyebrow", "Kind words")}</p>
+                <Grid cols={3} gap="base" className="mt-6">
+                  {quotes.map((t) => (
+                    <Card
+                      key={t.id}
+                      className="rounded-lg border border-white/10 bg-background/30 p-5 backdrop-blur-xl"
+                    >
+                      <CardBody>
+                        <Sparkles className="size-4 text-primary" />
+                        <blockquote className="mt-4 font-display text-base leading-snug">
+                          “{t.quote}”
+                        </blockquote>
+                      </CardBody>
+                      <CardFooter className="pt-5 text-[0.65rem] uppercase tracking-widest text-muted-foreground">
+                        {t.author}
+                        {t.context ? ` · ${t.context}` : ""}
+                      </CardFooter>
+                    </Card>
+                  ))}
+                </Grid>
+              </Reveal>
+            </GlassPanel>
           </Container>
         </Section>
       ) : null}

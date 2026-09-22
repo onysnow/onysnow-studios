@@ -17,7 +17,7 @@ export function PortfolioFilterBar({
   const items = [{ slug: undefined as string | undefined, name: "All" }, ...categories];
 
   return (
-    <div className="sticky top-16 z-30 border-b border-white/10 bg-background/40 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/25">
+    <div className="glass-bar sticky top-16 z-30 border-b border-white/10">
       <nav
         aria-label="Filter portfolio by collection"
         className="mx-auto flex max-w-screen-2xl gap-7 overflow-x-auto px-5 py-3 sm:px-8 lg:px-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
