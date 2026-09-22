@@ -12,12 +12,10 @@
  *   shutter-click  the mechanism alone, for a click that takes no photograph.
  *   shutter-flash  the mechanism and the flash together, for one that does.
  *
- * The charge recording is a near-pure 18 kHz tone, which is what a real flash
- * capacitor actually whines at and almost exactly what a person cannot hear:
- * most adults lose 18 kHz entirely, and most laptop speakers never produced it
- * in the first place. It was pitched down to about 4 kHz before shipping, so
- * the asset is audible on the hardware people own rather than authentic on
- * hardware they do not.
+ * The charge recording is a near-pure 18 kHz tone — what a real flash
+ * capacitor actually whines at — and it is kept at that pitch. Everything that
+ * shapes it therefore works in the top octave: a filter sweeping the range a
+ * 4 kHz tone would want silences this one outright.
  */
 
 const CLICK = "/sfx/shutter-click.mp3";
@@ -134,7 +132,8 @@ function startWhine() {
   // volume — a capacitor winding gets shriller, not just louder.
   whineFilter = context.createBiquadFilter();
   whineFilter.type = "lowpass";
-  whineFilter.frequency.value = 900;
+  // Opens across the top octave, where this recording actually lives.
+  whineFilter.frequency.value = 9000;
   whineFilter.Q.value = 0.7;
 
   whine = context.createBufferSource();
@@ -161,7 +160,7 @@ function applyCharge() {
   const now = context.currentTime;
 
   // Eased in, so the noise floor of a drifting pointer stays silent.
-  const level = Math.pow(charge, 1.6) * 0.5;
+  const level = Math.pow(charge, 1.6) * 0.16;
 
   /*
    * Winding and draining are the same recording read in opposite directions,
@@ -170,9 +169,9 @@ function applyCharge() {
    * be more conspicuous than gaining it.
    */
   whineGain.gain.setTargetAtTime(level * (1 - draining), now, 0.04);
-  dumpGain.gain.setTargetAtTime(level * draining * 1.25, now, 0.04);
+  dumpGain.gain.setTargetAtTime(level * draining * 1.2, now, 0.04);
 
-  whineFilter.frequency.setTargetAtTime(700 + charge * 5200, now, 0.06);
+  whineFilter.frequency.setTargetAtTime(9000 + charge * 12000, now, 0.06);
   whine.playbackRate.setTargetAtTime(0.78 + charge * 0.46, now, 0.08);
 
   /*
