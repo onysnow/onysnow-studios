@@ -113,6 +113,34 @@ export function CursorLight({
     resize();
     window.addEventListener("resize", resize);
 
+    /*
+     * The same photographed surface the panes wear, reused here to give the
+     * ghosts an inside. A defocused image of an aperture carries the dust and
+     * coating flaws of the glass it bounced off, and mottling across the disc
+     * is most of what separates a photographed ghost from a drawn one.
+     */
+    gl.uniform1i(gl.getUniformLocation(program, "uGrit"), 0);
+    const uHasGrit = gl.getUniformLocation(program, "uHasGrit");
+    gl.uniform1f(uHasGrit, 0);
+    const grit = gl.createTexture();
+    let gritAsked = false;
+    const askGrit = () => {
+      if (gritAsked) return;
+      gritAsked = true;
+      const img = new Image();
+      img.onload = () => {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, grit);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.useProgram(program);
+        gl.uniform1f(uHasGrit, 1);
+      };
+      img.src = "/glass-surface.jpg";
+    };
+
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -127,6 +155,9 @@ export function CursorLight({
       canvas.style.opacity = charge > 0.002 ? "1" : "0";
 
       if (charge > 0.002) {
+        askGrit();
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, grit);
         gl.uniform2f(uLight, x, y);
         gl.uniform1f(uCharge, charge);
         gl.uniform1f(uClosed, closed);
@@ -146,6 +177,7 @@ export function CursorLight({
       gl.deleteShader(vs);
       gl.deleteShader(fs);
       gl.deleteBuffer(buffer);
+      gl.deleteTexture(grit);
     };
   }, [chargeRef, closedRef, positionRef]);
 

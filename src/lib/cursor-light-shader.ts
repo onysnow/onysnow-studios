@@ -31,6 +31,8 @@ uniform float uClosed;     // 0 to 1, how far the iris has stopped down
 uniform float uTime;
 uniform vec3  uWarm;       // the amber, linear
 uniform vec3  uCool;       // the teal, linear
+uniform sampler2D uGrit;   // photographed surface, for the ghosts' insides
+uniform float uHasGrit;
 
 #define TAU 6.28318530718
 #define BLADES 6.0
@@ -137,59 +139,100 @@ void main() {
    *
    * Ghosts are reflections between lens elements, so they are images of the
    * source thrown back through the optical axis: they land on the line from
-   * the source through the CENTRE of the frame, spaced along it, and they walk
-   * as the source moves. That axis is the whole reason a flare reads as a lens
-   * and not as decoration stuck to the light.
+   * the source through the CENTRE of the frame and walk along it as the
+   * source moves. That axis is why a flare reads as a lens rather than as
+   * decoration stuck to the light, and it is the one thing baked footage
+   * cannot do, which is why these are computed at all.
+   *
+   * What made them look drawn was not that they were computed. It was that
+   * they were CLEAN: perfectly round, perfectly smooth, evenly spaced, evenly
+   * sized. Real ones are none of those.
    */
   vec2 centre = res * 0.5;
   vec2 axis = (centre - uLight) / unit;
 
   for (int i = 0; i < GHOSTS; i++) {
     float fi = float(i);
-    // Spread across and past the centre, so some ghosts sit the far side of it.
     float t = 0.35 + fi * 0.34;
     vec2 gp = p - axis * t;
-    // Sizes alternate the way a real element stack throws them.
+
+    /*
+     * Optical vignetting — the cat's-eye.
+     *
+     * A ghost is an image of the aperture, and off the optical axis the lens
+     * BARREL clips that image: the further from centre, the more of the disc
+     * is cut away, leaving the lens shape everyone recognises from a
+     * photograph and almost nobody models. It is the single most identifiable
+     * thing about a real ghost.
+     */
+    vec2 fromCentre = (frag - centre) / unit;
+    vec2 clipDir = normalize(fromCentre + 1e-6);
+    // A bite, not a bisection. Vignetting clips a ghost; it does not halve it
+    // except at the extreme corners of a frame.
+    float offAxis = clamp(length(fromCentre) * 0.55, 0.0, 1.0);
+    float cut = dot(gp, clipDir);
+
     float radius = 0.045 + 0.075 * fract(fi * 0.62 + 0.2);
     float thickness = radius * (0.16 + 0.14 * fract(fi * 0.37));
-    vec3 gt = spectrum(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
-    // Ghosts fade toward the edges of the frame, as the real ones do.
-    float vig = 1.0 - clamp(length(p - axis * t) * 0.55, 0.0, 1.0);
+
     /*
-     * Held well back now that real footage is carrying this.
+     * A ghost is an IMAGE OF THE APERTURE, not a disc.
      *
-     * A computed ghost is a clean ring with a clean falloff, and a
-     * photographed one is lopsided, grainy and slightly dirty — which is the
-     * entire difference between looking captured and looking drawn. These
-     * remain because they track the pointer along the optical axis, which
-     * baked footage cannot do, but they are support now rather than the
-     * performance.
+     * That is the thing that makes a real ghost chain recognisable: it is the
+     * diaphragm, defocused, repeated — so with a six-bladed iris you get
+     * hexagons, and they are hexagons whatever else changes. Drawing circles
+     * was the single largest reason these read as computed, because a circle
+     * is what you get from a lens wide open and this one is visibly stopped
+     * down: the core is a hexagon and the spikes are counting its blades.
+     *
+     * Same SDF as the iris itself, for exactly that reason — they are images
+     * of the same opening, so they cannot be a different shape from it.
      */
-    colour += ghost(gp, radius, thickness, gt) * 0.3 * vig * uCharge;
+    float roundness = mix(0.55, 0.18, uClosed);
+    float d2 = apertureDistance(gp, roundness);
+
+    /*
+     * Sampled three times at slightly different scales, per channel. In a
+     * screen-space flare the dispersion comes from splitting the RGB sampling
+     * steps along the ghost vector; the same idea applies to an analytic
+     * ghost, because the cause is the same — the coating disperses, so each
+     * wavelength images the aperture at a fractionally different size.
+     */
+    vec3 disp = vec3(0.985, 1.0, 1.018);
+    vec3 ring = exp(-pow((vec3(d2) - radius * disp) / thickness, vec3(2.0)));
+    /*
+     * A ghost has an inside, not just an edge. It is a defocused image of a
+     * lit opening, so the whole opening is bright — the rim is brighter
+     * because the defocus piles light up there, but a ghost drawn as an
+     * outline reads as a ring rather than as an aperture.
+     */
+    float disc = smoothstep(radius, radius * 0.55, d2) * 0.62;
+    vec3 shape = vec3(disc) + ring * 0.9;
+    // The barrel takes a bite out of the side nearer the frame edge.
+    shape *= smoothstep(radius * (0.6 + offAxis), radius * (0.6 + offAxis) - radius * 0.9, cut);
+
+    /*
+     * And the inside is not smooth. A ghost is a defocused image of a real
+     * aperture in a real lens, so it carries the dust and the coating flaws
+     * of the glass it bounced off — mottling across the disc, not a gradient.
+     * The map is the same photographed surface the panes wear.
+     */
+    vec2 gritUv = gp / max(radius, 1e-3) * 0.28 + 0.5 + fi * 0.21;
+    // Mottling, not masking: the dirt varies the ghost's interior, it does
+    // not decide whether the ghost is there.
+    float grit = mix(1.0, 0.72 + 1.1 * texture2D(uGrit, fract(gritUv) * 0.49 + 0.005).g, uHasGrit);
+
+    vec3 gt = spectrum(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
+    colour += gt * shape * grit * 1.5 * uCharge;
   }
 
   /*
-   * The big halo: a wide, thin chromatic ring centred on the source itself,
-   * thrown by the front element. This is the ring in the reference photographs
-   * that is far larger than any of the ghosts.
+   * The big halo off the front element, and the ring the sensor throws back.
+   * Chromatic because the path is long and dispersive.
    */
   float halo1 = exp(-pow((r - 0.31) / 0.035, 2.0)) * 0.9
               + exp(-pow((r - 0.46) / 0.07, 2.0)) * 0.4;
-  colour += spectrum(r * 3.4 + 0.12) * halo1 * 0.45 * uCharge;
-
-  /*
-   * An anamorphic streak. Even a spherical lens smears a bright point
-   * horizontally through its diaphragm; it is the cue people read as "this was
-   * photographed" faster than any other.
-   */
-  /*
-   * A token streak only. The anamorphic smear is the single thing footage is
-   * best at — it is dirty, banded and asymmetric in a way no exponential is —
-   * so the clip supplies it and this just keeps the core from looking bare
-   * before the video fades up.
-   */
-  float streak = exp(-abs(p.x) * 2.6) * exp(-abs(p.y) * 150.0);
-  colour += mix(uWarm, vec3(0.6, 0.8, 1.0), 0.45) * streak * 0.7 * uCharge;
+  colour += spectrum(r * 3.4 + 0.12) * halo1 * 0.85 * uCharge;
 
   // ---- The aperture, silhouetted against its own light ----
   /*
