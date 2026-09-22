@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Glass } from "./Glass";
 import { Menu } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ export function SiteHeader() {
   const lead = words.slice(0, -1).join(" ") || name;
   const tail = words.length > 1 ? words[words.length - 1] : "";
   return (
-    <header className="glass-bar fixed inset-x-0 top-0 z-40">
+    <Glass as="header" variant="bar" className="fixed inset-x-0 top-0 z-40">
       <div className="mx-auto grid h-16 max-w-screen-2xl grid-cols-[minmax(0,1fr)_auto] items-center px-5 sm:px-8 lg:px-12">
         <Link
           to="/"
@@ -71,6 +72,6 @@ export function SiteHeader() {
           </SheetContent>
         </Sheet>
       </div>
-    </header>
+    </Glass>
   );
 }

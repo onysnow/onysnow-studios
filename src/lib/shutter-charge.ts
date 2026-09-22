@@ -43,8 +43,14 @@ const MAX_DRIFT = 520;
  */
 const GAIN = 1.5;
 const DECAY = 0.75;
-/** How long the shutter stays armed once full. */
-const ARMED_MS = 2200;
+/*
+ * Once armed, it STAYS armed until a click spends it. No timer.
+ *
+ * The charge is hard to earn, so putting it on a countdown means losing it
+ * while deciding where to point — which is the moment the whole thing is
+ * building toward. Holding it makes the state something you own rather than
+ * something you race.
+ */
 
 type Sample = { x: number; y: number; t: number };
 
@@ -56,7 +62,7 @@ export type ShutterChargeHandlers = {
 export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
   let samples: Sample[] = [];
   let charge = 0;
-  let armedUntil = 0;
+  let armed = false;
   let lastFrame = performance.now();
   let lastReported = -1;
   let raf = 0;
@@ -98,10 +104,8 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
       local = furthest <= MAX_DRIFT;
     }
 
-    const held = now < armedUntil;
-
-    if (held) {
-      // Pinned at full for the arming window so the click isn't a race.
+    if (armed) {
+      // Held at full until spent, so the glow stays up while you choose a target.
       charge = 1;
     } else {
       if (local && speed > MIN_SPEED) {
@@ -111,10 +115,9 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
       charge -= DECAY * dt;
       charge = Math.max(0, Math.min(1, charge));
 
-      if (charge >= 1) armedUntil = now + ARMED_MS;
+      if (charge >= 1) armed = true;
     }
 
-    const armed = now < armedUntil;
     const rounded = Math.round(charge * 100) / 100;
     if (rounded !== lastReported) {
       lastReported = rounded;
@@ -128,10 +131,10 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
   raf = requestAnimationFrame(frame);
 
   return {
-    isArmed: () => performance.now() < armedUntil,
+    isArmed: () => armed,
     /** Called after the shutter fires, so the charge has to be earned again. */
     spend: () => {
-      armedUntil = 0;
+      armed = false;
       charge = 0;
       lastReported = -1;
       onCharge?.(0, false);

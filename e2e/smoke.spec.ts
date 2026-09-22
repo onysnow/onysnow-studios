@@ -92,7 +92,7 @@ test("an unknown route renders the 404, not a crash", async ({ page }) => {
 test("the frosted bars actually blur their backdrop", async ({ page }) => {
   await page.goto("/portfolio");
 
-  for (const selector of ["header.glass-bar", ".glass-bar.sticky"]) {
+  for (const selector of ["header.glass", ".glass.sticky"]) {
     const filter = await page
       .locator(selector)
       .first()
@@ -101,7 +101,7 @@ test("the frosted bars actually blur their backdrop", async ({ page }) => {
   }
 
   // There must be a photographic band behind the bars, not bare background.
-  const bandOpacity = await page.locator("header.glass-bar").evaluate(() => {
+  const bandOpacity = await page.locator("header.glass").evaluate(() => {
     const behind = document.elementsFromPoint(window.innerWidth / 2, 30);
     return behind.some((el) => el.tagName === "IMG");
   });

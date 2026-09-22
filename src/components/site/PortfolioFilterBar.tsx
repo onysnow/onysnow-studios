@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Glass } from "./Glass";
 import { motion } from "framer-motion";
 import type { Category } from "@/lib/content";
 
@@ -17,7 +18,7 @@ export function PortfolioFilterBar({
   const items = [{ slug: undefined as string | undefined, name: "All" }, ...categories];
 
   return (
-    <div className="glass-bar sticky top-16 z-30 border-b border-white/10">
+    <Glass variant="bar" className="sticky top-16 z-30">
       <nav
         aria-label="Filter portfolio by collection"
         className="mx-auto flex max-w-screen-2xl gap-7 overflow-x-auto px-5 py-3 sm:px-8 lg:px-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -46,6 +47,6 @@ export function PortfolioFilterBar({
           );
         })}
       </nav>
-    </div>
+    </Glass>
   );
 }

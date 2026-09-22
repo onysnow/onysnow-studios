@@ -60,24 +60,6 @@
   :focus-visible { outline: 2px solid var(--color-ring); }
 }
 
-/*
- * The frosted bars (site header, portfolio filter bar).
- *
- * The blur only reads as glass when there is something with detail behind it.
- * Both places this is used sit over a photographic band whose scrim is graded
- * rather than flat — see PageIntro and the portfolio layout. A uniform heavy
- * scrim washes the photograph out to a near-solid colour, and blurring a solid
- * colour looks exactly like plain transparency, which is how this got reported
- * as "not frosted" more than once.
- *
- * Lightning CSS adds the -webkit- prefix at build time; don't write it by hand.
- */
-@utility glass-bar {
-  background-color: oklch(0.145 0.011 55 / 28%);
-  backdrop-filter: blur(28px) saturate(150%);
-  box-shadow: inset 0 1px 0 oklch(1 0 0 / 7%);
-}
-
 @utility display-face { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.015em; text-transform: uppercase; }
 @utility eyebrow { font-size: .7rem; text-transform: uppercase; letter-spacing: .2em; color: var(--color-primary); }
 @utility image-vignette { box-shadow: inset 0 0 9rem 1rem oklch(0.08 0.01 55 / 70%); }
@@ -229,79 +211,243 @@
 }
 
 /*
- * Edge lighting and glass thickness.
+ * Wrapped in @layer components so Tailwind's utilities, which live in a later
+ * layer, still win against it.
  *
- * Two things are happening here.
- *
- * THICKNESS. A pane of glass has an edge you can see into: light catches the
- * top arris brightly, wraps a little way down the inside face, and leaves the
- * bottom edge darker. The inset shadows below reproduce that, which is what
- * makes the band read as a sheet with a thickness rather than as a rectangle
- * of tint.
- *
- * LIGHTING. The rim is lit by the cursor rather than on a timer — the bright
- * part of the edge is wherever the pointer is, and it fades out as the pointer
- * moves away. `--glow-x/y/on` are written by lib/edge-glow.ts. With no pointer
- * (touch, or before first move) `--glow-on` is 0 and the panel is simply unlit,
- * which is a fine resting state.
+ * Unlayered CSS beats every layered rule in the cascade, so an unlayered
+ * `.glass { position: relative }` silently overrode `fixed` on the header —
+ * the bar dropped out of fixed positioning into normal flow, and the
+ * photographic band it is supposed to blur ended up behind it in the document
+ * rather than underneath it on screen. Nothing errored; the header just
+ * quietly stopped being a header.
  */
-.glass-edge {
-  position: relative;
-  box-shadow:
-    /* The lit top arris. */
-    inset 0 1px 0 oklch(1 0 0 / 0.2),
-    /* Light wrapping down the inside of the top edge. */
-    inset 0 10px 20px -14px oklch(1 0 0 / 0.3),
-    /* The far edge, catching much less. */
-    inset 0 -1px 0 oklch(1 0 0 / 0.06),
-    /* Contact shadow, so the sheet sits above the photograph. */
-    0 20px 45px -28px oklch(0 0 0 / 0.95);
-}
+@layer components {
+  /* =====================================================================
+   * GLASS
+   *
+   * One definition for every frosted surface on the site: the content bands,
+   * the header, the portfolio filter bar. Previously these were three separate
+   * implementations that had drifted apart, which is why the header and the
+   * bands never quite matched.
+   *
+   * Apply `.glass` for the surface. Add `.glass--bar` for the thin fixed bars,
+   * which need less tint and a shallower bezel. Register the element with
+   * lib/edge-glow.ts to have its rim lit by the cursor.
+   *
+   * Built from how glass actually behaves, per the liquid-glass technique
+   * write-ups: the rim highlight is DIRECTIONAL — its brightness varies with
+   * where the light is relative to each part of the edge — and the sense of
+   * thickness comes from a bezel that bends what is behind it, not from a
+   * drawn border. Doing this properly with SVG displacement maps is possible
+   * but costs a filter pass over a full-width element on every frame, so the
+   * bezel here is a second, stronger backdrop pass masked to the edge band —
+   * cheap, and close enough at this scale.
+   * ===================================================================== */
 
-/* The rim: a one-pixel ring, lit where the cursor is. A mask keeps only the
-   padding ring, because a gradient can't be used as a border colour. */
-.glass-edge::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  z-index: 2;
-  background: radial-gradient(
-    20rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
-    color-mix(in oklab, var(--amber) 95%, transparent) 0%,
-    color-mix(in oklab, var(--teal) 85%, transparent) 34%,
-    transparent 70%
-  );
-  opacity: calc(var(--glow-on, 0) * 0.95);
-  transition: opacity 0.4s ease;
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-}
+  .glass {
+    position: relative;
+    background-color: oklch(0.145 0.011 55 / 30%);
+    backdrop-filter: blur(26px) saturate(150%);
+    /*
+     * Thickness, kept deliberately faint. An earlier version drew it with heavy
+     * inset shadows and the edge read as a painted bevel; the light is what
+     * should reveal the edge, so this only has to hint that there is one.
+     */
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.1),
+      inset 0 -1px 0 oklch(1 0 0 / 0.04),
+      0 18px 40px -30px oklch(0 0 0 / 0.9);
+  }
 
-/* The bloom the lit rim casts inward across the glass. */
-.glass-edge::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 1;
-  background: radial-gradient(
-    26rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
-    color-mix(in oklab, var(--amber) 26%, transparent) 0%,
-    color-mix(in oklab, var(--teal) 16%, transparent) 38%,
-    transparent 68%
-  );
-  opacity: calc(var(--glow-on, 0) * 0.75);
-  transition: opacity 0.4s ease;
+  .glass--bar {
+    background-color: oklch(0.145 0.011 55 / 26%);
+    backdrop-filter: blur(28px) saturate(150%);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 0.08),
+      inset 0 -1px 0 oklch(1 0 0 / 0.03);
+  }
+
+  /*
+   * The bezel: a band just inside the edge where the backdrop is blurred harder
+   * and lifted, so the edge lenses what is behind it instead of merely sitting
+   * on top of it. This is what actually reads as thickness.
+   */
+  .glass::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    backdrop-filter: blur(6px) brightness(1.22) saturate(1.25);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    padding: 10px;
+  }
+
+  .glass--bar::after {
+    padding: 5px;
+    backdrop-filter: blur(4px) brightness(1.16) saturate(1.2);
+  }
+
+  /*
+   * The specular rim, lit by the cursor.
+   *
+   * Directional rather than a plain spotlight: the gradient is offset toward the
+   * pointer so the near edge takes the highlight and the far edge stays dark,
+   * which is how a real rim catches a light source. `--glow-x/y/on` are written
+   * by lib/edge-glow.ts.
+   */
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    z-index: 2;
+    background:
+      radial-gradient(
+        16rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
+        oklch(1 0 0 / 0.95) 0%,
+        color-mix(in oklab, var(--amber) 95%, transparent) 26%,
+        color-mix(in oklab, var(--teal) 80%, transparent) 52%,
+        transparent 78%
+      );
+    opacity: calc(var(--glow-on, 0) * 1);
+    transition: opacity 0.35s ease;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+
+  /*
+   * The bloom the lit rim throws across the glass. This is the ambient light,
+   * and it exists ONLY on glass — nothing else on the page glows from the
+   * cursor.
+   */
+  .glass > .glass__bloom {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    background: radial-gradient(
+      24rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
+      color-mix(in oklab, var(--amber) 22%, transparent) 0%,
+      color-mix(in oklab, var(--teal) 13%, transparent) 40%,
+      transparent 70%
+    );
+    opacity: calc(var(--glow-on, 0) * 0.8);
+    transition: opacity 0.35s ease;
+  }
+
+  /*
+   * Reflection.
+   *
+   * Distinct from the smudges, and it behaves differently. Smudges SCATTER the
+   * light — a diffuse smear, brightest where the light rakes across them.
+   * A reflection is SPECULAR: it mirrors the source, and it slides in the
+   * OPPOSITE direction to the viewpoint, which is the part that actually reads
+   * as glass rather than as a glow. Hence the mirrored coordinates below.
+   *
+   * Faint on purpose. Glass only turns properly mirror-like when the light on
+   * the near side beats what is coming through from behind, which on a dark page
+   * over a photograph it never quite does.
+   */
+  .glass > .glass__reflection {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    opacity: calc(var(--glow-on, 0) * 0.32);
+    transition: opacity 0.4s ease;
+    background: linear-gradient(
+      104deg,
+      transparent 0%,
+      transparent 38%,
+      oklch(1 0 0 / 0.14) 46%,
+      oklch(1 0 0 / 0.05) 52%,
+      transparent 60%,
+      transparent 100%
+    );
+    background-size: 260% 100%;
+    /* Mirrored: the reflection travels against the light. */
+    background-position: calc(100% - var(--glow-x, 50%)) 0;
+  }
+
+  /*
+   * Smudges.
+   *
+   * What a light rakes out of a pane that people have touched: finger streaks,
+   * a whorl or two, general grime. The layer is always there but is masked to
+   * the cursor's light pool, so it only shows where the light actually falls —
+   * which is the whole point, since a clean-looking window is just a dirty one
+   * nobody is shining a light at.
+   *
+   * The grime is an inline feTurbulence rather than an image: no request, no
+   * asset to manage, and it tiles without seams.
+   */
+  .glass > .glass__smudge {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    opacity: calc(var(--glow-on, 0) * 0.5);
+    transition: opacity 0.35s ease;
+    mix-blend-mode: soft-light;
+    background-image:
+      /* Two finger-drawn arcs. */
+      radial-gradient(
+        ellipse 42% 8% at 28% 34%,
+        oklch(1 0 0 / 0.5) 0%,
+        oklch(1 0 0 / 0.14) 45%,
+        transparent 72%
+      ),
+      radial-gradient(
+        ellipse 30% 6% at 68% 62%,
+        oklch(1 0 0 / 0.42) 0%,
+        transparent 70%
+      ),
+      /* A couple of prints. */
+      repeating-radial-gradient(
+        circle at 47% 22%,
+        oklch(1 0 0 / 0.3) 0 1px,
+        transparent 1px 4px
+      ),
+      repeating-radial-gradient(
+        circle at 81% 41%,
+        oklch(1 0 0 / 0.24) 0 1px,
+        transparent 1px 5px
+      ),
+      /* Overall grime. */
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    background-size:
+      auto,
+      auto,
+      140px 140px,
+      120px 120px,
+      220px 220px;
+    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+    /* Only where the light is. */
+    -webkit-mask: radial-gradient(
+      18rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
+      #000 0%,
+      oklch(0 0 0 / 0.45) 42%,
+      transparent 72%
+    );
+    mask: radial-gradient(
+      18rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
+      #000 0%,
+      oklch(0 0 0 / 0.45) 42%,
+      transparent 72%
+    );
+  }
 }
 
 /* ===================== Shutter =====================
@@ -371,7 +517,7 @@
 /* ---- The glass answering the flash ---- */
 
 /* Glare: a specular band sweeping across the face of the panel. */
-.glass-edge[data-flash]::after {
+.glass[data-flash] > .glass__bloom {
   animation: glass-glare 1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
@@ -407,7 +553,7 @@
 }
 
 /* The rim flaring to full, independent of where the cursor happens to be. */
-.glass-edge[data-flash]::before {
+.glass[data-flash]::before {
   animation: rim-flare 1s ease-out both;
 }
 
@@ -490,10 +636,11 @@
  */
 .custom-cursor__ring {
   box-shadow:
-    0 0 calc(var(--wind, 0) * 1.5rem) calc(var(--wind, 0) * 0.2rem)
-      color-mix(in oklab, var(--amber) 85%, transparent),
-    inset 0 0 calc(var(--wind, 0) * 0.7rem)
-      color-mix(in oklab, var(--amber) 60%, transparent);
+    0 0 calc(var(--wind, 0) * 3.4rem) calc(var(--wind, 0) * 0.75rem)
+      color-mix(in oklab, var(--amber) 100%, transparent),
+    0 0 calc(var(--wind, 0) * 1.1rem) calc(var(--wind, 0) * 0.14rem) oklch(1 0 0 / 0.85),
+    inset 0 0 calc(var(--wind, 0) * 1.3rem)
+      color-mix(in oklab, var(--amber) 85%, transparent);
 }
 
 /* The ring itself thickens and warms as it winds. */
@@ -517,13 +664,15 @@
   0%,
   100% {
     box-shadow:
-      0 0 1.4rem 0.18rem color-mix(in oklab, var(--amber) 85%, transparent),
-      inset 0 0 0.6rem color-mix(in oklab, var(--amber) 60%, transparent);
+      0 0 3.2rem 0.7rem color-mix(in oklab, var(--amber) 100%, transparent),
+      0 0 1.2rem 0.16rem oklch(1 0 0 / 0.9),
+      inset 0 0 1.2rem color-mix(in oklab, var(--amber) 85%, transparent);
   }
   50% {
     box-shadow:
-      0 0 2.4rem 0.4rem color-mix(in oklab, var(--amber) 95%, transparent),
-      inset 0 0 1rem color-mix(in oklab, var(--amber) 80%, transparent);
+      0 0 4.4rem 1.1rem color-mix(in oklab, var(--amber) 100%, transparent),
+      0 0 1.8rem 0.26rem oklch(1 0 0 / 1),
+      inset 0 0 1.8rem color-mix(in oklab, var(--amber) 95%, transparent);
   }
 }
 
