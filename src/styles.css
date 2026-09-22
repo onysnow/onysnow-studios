@@ -268,31 +268,6 @@
   }
 
   /*
-   * The bezel: a band just inside the edge where the backdrop is blurred harder
-   * and lifted, so the edge lenses what is behind it instead of merely sitting
-   * on top of it. This is what actually reads as thickness.
-   */
-  .glass::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-    backdrop-filter: blur(6px) brightness(1.22) saturate(1.25);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    padding: 10px;
-  }
-
-  .glass--bar::after {
-    padding: 5px;
-    backdrop-filter: blur(4px) brightness(1.16) saturate(1.2);
-  }
-
-  /*
    * The specular rim, lit by the cursor.
    *
    * Directional rather than a plain spotlight: the gradient is offset toward the
@@ -570,53 +545,41 @@
   }
 }
 
-/* ---- Iris blades ----
+/* ---- Iris ----
  *
- * Six blades closing toward the centre as a circle is wound. `--iris` runs 0→1
- * and is written straight onto the element by the cursor's gesture handler.
+ * A lens diaphragm: blades whose inner edges form a polygon that shrinks and
+ * rotates as it stops down. This is why out-of-focus highlights in a
+ * photograph are hexagons — the hole is a hexagon. Geometry comes from
+ * lib/iris.ts, redrawn as it closes.
  *
- * The blades are one conic-gradient and the closing aperture is a radial mask
- * whose clear centre shrinks with the same variable, so the whole thing is two
- * paint properties rather than six animated elements.
+ * On its own layer, outside the cursor's `difference` blend. Inside it, white
+ * blades over the warm emitter inverted to blue. Blades are dark metal; the
+ * light comes through the opening.
  */
-.custom-cursor__iris {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 4.25rem;
-  height: 4.25rem;
-  translate: -50% -50%;
-  border-radius: 9999px;
+.cursor-iris {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9998;
+  width: 4.5rem;
+  height: 4.5rem;
+  /* No centring margin: the transform copied from the ring already carries
+     translate(-50%, -50%), and doing it twice offset the aperture from its
+     own light by half its size. */
   pointer-events: none;
-  opacity: calc(var(--iris, 0) * 0.95);
-  /* Winds visibly as it closes. */
-  rotate: calc(var(--iris, 0) * 72deg);
-  background: conic-gradient(
-    from 12deg,
-    #fff 0deg 2.5deg,
-    transparent 2.5deg 60deg,
-    #fff 60deg 62.5deg,
-    transparent 62.5deg 120deg,
-    #fff 120deg 122.5deg,
-    transparent 122.5deg 180deg,
-    #fff 180deg 182.5deg,
-    transparent 182.5deg 240deg,
-    #fff 240deg 242.5deg,
-    transparent 242.5deg 300deg,
-    #fff 300deg 302.5deg,
-    transparent 302.5deg 360deg
-  );
-  /* The open aperture, closing from 44% of the radius down to nothing. */
-  -webkit-mask: radial-gradient(
-    circle,
-    transparent 0 calc(44% - var(--iris, 0) * 40%),
-    #000 calc(45% - var(--iris, 0) * 40%) 100%
-  );
-  mask: radial-gradient(
-    circle,
-    transparent 0 calc(44% - var(--iris, 0) * 40%),
-    #000 calc(45% - var(--iris, 0) * 40%) 100%
-  );
+  overflow: visible;
+  opacity: calc(var(--iris, 0) * 0.98);
+  will-change: transform;
+}
+
+.cursor-iris__blades {
+  fill: oklch(0.12 0.008 55 / 0.92);
+}
+
+.cursor-iris__seams {
+  stroke: oklch(1 0 0 / 0.42);
+  stroke-width: 0.7;
+  fill: none;
 }
 
 /* While winding, the plain ring steps back so the blades are what reads. */
@@ -679,4 +642,154 @@
 /* Blades sit fully closed while armed — the aperture is cocked. */
 .custom-cursor[data-armed] .custom-cursor__iris {
   opacity: 0.95;
+}
+
+/* ===================== The emitter =====================
+ *
+ * The cursor's light, on its own layer.
+ *
+ * Deliberately NOT inside `.custom-cursor`. That element blends with
+ * `difference`, which inverts what is beneath it — a subtraction. Light is
+ * additive, so brightness inside a difference layer can never read as
+ * something emitting; it only inverts harder, which is why an earlier glow
+ * looked like a coloured smudge rather than a lamp. `plus-lighter` genuinely
+ * adds to what is behind and clips at white, so the centre blows out and the
+ * falloff carries the colour — what a real emitter does to a photograph.
+ *
+ * The bloom is a radial GRADIENT on a large element, not `box-shadow`.
+ * Shadows big enough for this halo get clipped at the layer's bounds, which
+ * showed up as a hard rectangle around the light; they are also far more
+ * expensive to rasterise at these radii. The gradient has no edge to clip.
+ */
+.cursor-emit {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9996;
+  /* Large enough that the falloff reaches zero well inside the element. */
+  width: 34rem;
+  height: 34rem;
+  border-radius: 9999px;
+  pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  opacity: var(--wind, 0);
+  will-change: transform, opacity;
+  background:
+    radial-gradient(
+      circle closest-side,
+      oklch(1 0 0 / 1) 0%,
+      oklch(1 0 0 / 0.95) 1.6%,
+      color-mix(in oklab, var(--amber) 100%, transparent) 4%,
+      color-mix(in oklab, var(--amber) 62%, transparent) 9%,
+      color-mix(in oklab, var(--amber) 26%, transparent) 18%,
+      color-mix(in oklab, var(--amber) 9%, transparent) 30%,
+      transparent 52%
+    );
+}
+
+/* Armed: full output, held until spent. */
+.cursor-emit[data-armed] {
+  opacity: 1;
+  animation: emit-throb 1.5s ease-in-out infinite;
+}
+
+@keyframes emit-throb {
+  0%,
+  100% {
+    transform: var(--emit-transform, none) scale(1);
+  }
+  50% {
+    transform: var(--emit-transform, none) scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor-emit[data-armed] {
+    animation: none;
+  }
+}
+
+/* ===================== Real refraction =====================
+ *
+ * The bezel band now bends what is behind it through an SVG displacement map
+ * instead of merely brightening it. Brightening was the shortcut that made the
+ * edges look painted rather than like glass.
+ *
+ * The three displacement passes at different scales, recombined one colour
+ * channel each, are chromatic aberration: glass disperses wavelengths by
+ * slightly different amounts, so a real edge fringes faintly into colour. It
+ * is the single strongest cue that something is glass rather than a blur.
+ */
+@layer components {
+  /*
+   * Edge strips sized to the rim, NOT a full-size layer masked down to one.
+   *
+   * A mask hides pixels; it does not stop the filter running. Masking a
+   * full-width, full-height backdrop pass down to a 14px rim meant filtering
+   * the entire panel every frame and discarding almost all of it — with five
+   * glass surfaces, the largest single cost on the page. These are the rim as
+   * geometry, so the filter only touches pixels that are shown.
+   */
+  .glass > .glass__refract {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 14px;
+    pointer-events: none;
+    z-index: 1;
+    /*
+     * Fallback first. SVG filters in backdrop-filter are Chromium-only —
+     * Safari and Firefox support neither, and would silently render nothing
+     * here. They get a plain lensing pass, which is less convincing but still
+     * reads as an edge rather than as a missing feature.
+     */
+    backdrop-filter: blur(5px) brightness(1.18) saturate(1.3);
+  }
+
+  @supports (backdrop-filter: url("#glass-refraction")) {
+    .glass > .glass__refract {
+      backdrop-filter: url("#glass-refraction");
+    }
+  }
+
+  .glass > .glass__refract--top {
+    top: 0;
+  }
+
+  .glass > .glass__refract--bottom {
+    bottom: 0;
+  }
+
+  .glass--bar > .glass__refract {
+    height: 7px;
+  }
+
+  /*
+   * Fresnel.
+   *
+   * Glass is more reflective the more obliquely you look at it — barely
+   * reflective face-on, mirror-like at a grazing angle. On a flat panel the
+   * grazing angles are at the edges, so reflectivity rises toward the rim.
+   * This is why a real pane has bright edges even in flat light, and none of
+   * the other layers modelled it.
+   */
+  .glass > .glass__fresnel {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 1;
+    background:
+      linear-gradient(
+        to bottom,
+        oklch(1 0 0 / 0.16) 0%,
+        oklch(1 0 0 / 0.03) 9%,
+        transparent 22%,
+        transparent 78%,
+        oklch(1 0 0 / 0.02) 91%,
+        oklch(1 0 0 / 0.1) 100%
+      );
+    mix-blend-mode: plus-lighter;
+    opacity: 0.85;
+  }
 }

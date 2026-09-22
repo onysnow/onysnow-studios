@@ -88,6 +88,14 @@ function HomePage() {
   const bandTwo = photos?.[4] ?? photos?.[2] ?? hero;
   const bandThree = photos?.[5] ?? photos?.[0] ?? hero;
   const bandFour = photos?.[1] ?? photos?.[4] ?? hero;
+  /*
+   * The interstitials: full-bleed frames sitting between the glass bands.
+   * Chosen from further down the set so a band and the photograph next to it
+   * are never the same frame.
+   */
+  const interOne = photos?.[6] ?? photos?.[2] ?? hero;
+  const interTwo = photos?.[7] ?? photos?.[3] ?? hero;
+  const interThree = photos?.[8] ?? photos?.[5] ?? hero;
   const quotes = testimonials ?? [];
 
   return (
@@ -158,6 +166,20 @@ function HomePage() {
         </Section>
       </PhotoSection>
 
+      {/*
+        A full-bleed photograph between the glass bands.
+
+        These are the parallax moments — nothing but the frame, scrolling
+        slower than the page. They also give the glass band that follows
+        something to be seen against as it arrives.
+      */}
+      <ParallaxScene
+        image={interOne}
+        depth="deep"
+        scrim="none"
+        height="min-h-[48svh] lg:min-h-[62svh]"
+      />
+
       {/* Disciplines — compact, with a thumbnail so the layout reads at a glance */}
       <PhotoSection image={bandTwo} depth="standard">
         <Section size="sm">
@@ -199,6 +221,20 @@ function HomePage() {
           </Container>
         </Section>
       </PhotoSection>
+
+      {/*
+        A full-bleed photograph between the glass bands.
+
+        These are the parallax moments — nothing but the frame, scrolling
+        slower than the page. They also give the glass band that follows
+        something to be seen against as it arrives.
+      */}
+      <ParallaxScene
+        image={interTwo}
+        depth="standard"
+        scrim="none"
+        height="min-h-[48svh] lg:min-h-[62svh]"
+      />
 
       {/* Selected work — a horizontal wheel, no container around it */}
       <PhotoSection image={bandThree} depth="standard">
@@ -261,6 +297,20 @@ function HomePage() {
           </Container>
         </Section>
       </PhotoSection>
+
+      {/*
+        A full-bleed photograph between the glass bands.
+
+        These are the parallax moments — nothing but the frame, scrolling
+        slower than the page. They also give the glass band that follows
+        something to be seen against as it arrives.
+      */}
+      <ParallaxScene
+        image={interThree}
+        depth="deep"
+        scrim="none"
+        height="min-h-[48svh] lg:min-h-[62svh]"
+      />
 
       {/* Philosophy — full-bleed parallax band */}
       <ParallaxScene image={philosophyImage} depth="standard" scrim="full" height="min-h-[72svh]">

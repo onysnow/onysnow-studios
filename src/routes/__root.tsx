@@ -12,6 +12,7 @@ import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { CustomCursor } from "@/components/site/CustomCursor";
 import { ShutterFlash } from "@/components/site/ShutterFlash";
+import { GlassFilters } from "@/components/site/GlassFilters";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
@@ -89,6 +90,7 @@ function RootComponent() {
           <SiteFooter />
           <CustomCursor />
           <ShutterFlash />
+          <GlassFilters />
         </>
       )}
       <Toaster position="bottom-right" />

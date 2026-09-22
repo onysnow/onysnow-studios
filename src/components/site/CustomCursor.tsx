@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
+import { irisPath, irisSeams } from "@/lib/iris";
 import { fireShutter } from "./ShutterFlash";
 
 /**
@@ -22,6 +23,10 @@ import { fireShutter } from "./ShutterFlash";
  */
 export function CustomCursor() {
   const ringRef = useRef<HTMLDivElement>(null);
+  const emitRef = useRef<HTMLDivElement>(null);
+  const irisRef = useRef<SVGSVGElement>(null);
+  const bladesRef = useRef<SVGPathElement>(null);
+  const seamsRef = useRef<SVGPathElement>(null);
   const dotRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,7 +36,9 @@ export function CustomCursor() {
 
     const el = ringRef.current;
     const dot = dotRef.current;
-    if (!el || !dot) return;
+    const emit = emitRef.current;
+    const iris = irisRef.current;
+    if (!el || !dot || !emit || !iris) return;
 
     // The native cursor is hidden only once we know we're replacing it, so a
     // failure above leaves the visitor with a working pointer.
@@ -109,6 +116,12 @@ export function CustomCursor() {
 
       el.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
       dot.style.transform = `translate3d(${dotX}px, ${dotY}px, 0) translate(-50%, -50%)`;
+      // The emitter rides with the ring but lives outside the difference layer.
+      // Position goes through a custom property: the armed throb animates
+      // `transform`, and writing transform directly here would fight it.
+      emit.style.setProperty("--emit-transform", el.style.transform);
+      if (!emit.hasAttribute("data-armed")) emit.style.transform = el.style.transform;
+      iris.style.transform = el.style.transform;
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -128,8 +141,15 @@ export function CustomCursor() {
     const charger = watchShutterCharge({
       onCharge: (charge, armed) => {
         el.style.setProperty("--wind", charge.toFixed(2));
+        emit.style.setProperty("--wind", charge.toFixed(2));
+        emit.toggleAttribute("data-armed", armed);
         // Blades close over the back half, once it's clearly deliberate.
-        el.style.setProperty("--iris", Math.max(0, (charge - 0.5) / 0.5).toFixed(2));
+        const closed = Math.max(0, (charge - 0.5) / 0.5);
+        el.style.setProperty("--iris", closed.toFixed(2));
+        // The blades are geometry, so they are redrawn rather than restyled.
+        iris.style.setProperty("--iris", closed.toFixed(2));
+        bladesRef.current?.setAttribute("d", irisPath(closed));
+        seamsRef.current?.setAttribute("d", irisSeams(closed));
         el.toggleAttribute("data-winding", charge > 0.06);
         el.toggleAttribute("data-armed", armed);
       },
@@ -184,10 +204,38 @@ export function CustomCursor() {
 
   return (
     <>
+      {/*
+        The emitter is a SEPARATE element from the ring, and that separation is
+        the whole point. The cursor blends with `difference`, which inverts what
+        is beneath it — a subtraction. Light is additive, so no amount of
+        brightness inside a difference layer will ever read as something
+        emitting; it just inverts harder. This sits outside that layer and
+        blends with `plus-lighter`, which genuinely adds photons to what is
+        behind it, the way an LED does.
+      */}
+      <div ref={emitRef} aria-hidden="true" className="cursor-emit" />
+      {/*
+        The diaphragm, also outside the difference layer. Inside it, white
+        blades over the warm emitter inverted to blue — the blades are supposed
+        to be dark metal silhouetted against the light coming through the hole,
+        which only works with normal blending.
+      */}
+      <svg ref={irisRef} className="cursor-iris" viewBox="0 0 100 100" aria-hidden="true">
+        <path ref={bladesRef} className="cursor-iris__blades" fillRule="evenodd" d={irisPath(0)} />
+        <path ref={seamsRef} className="cursor-iris__seams" d={irisSeams(0)} />
+      </svg>
       <div ref={ringRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__ring" />
-        {/* Iris blades, drawn only while a circle is being wound. */}
-        <span className="custom-cursor__iris" />
+        {/* A real diaphragm: a polygonal hole that shrinks and rotates. */}
+        <svg className="custom-cursor__iris" viewBox="0 0 100 100" aria-hidden="true">
+          <path
+            ref={bladesRef}
+            className="custom-cursor__blades"
+            fillRule="evenodd"
+            d={irisPath(0)}
+          />
+          <path ref={seamsRef} className="custom-cursor__seams" d={irisSeams(0)} />
+        </svg>
       </div>
       <div ref={dotRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__dot" />

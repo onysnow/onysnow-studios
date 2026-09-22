@@ -45,6 +45,11 @@ export function Glass({
         className,
       )}
     >
+      {/* The bezel, bending and dispersing what is behind it. */}
+      <span aria-hidden="true" className="glass__refract glass__refract--top" />
+      <span aria-hidden="true" className="glass__refract glass__refract--bottom" />
+      {/* Reflectivity rising toward the rim, the way glass does at grazing angles. */}
+      <span aria-hidden="true" className="glass__fresnel" />
       {/* The ambient bloom the lit rim casts inward. Glass only. */}
       <span aria-hidden="true" className="glass__bloom" />
       {/* Finger streaks and grime, visible only where the light rakes across. */}
