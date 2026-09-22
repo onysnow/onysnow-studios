@@ -188,8 +188,15 @@ void main() {
      * Same SDF as the iris itself, for exactly that reason — they are images
      * of the same opening, so they cannot be a different shape from it.
      */
+    /*
+     * A mild anamorphic squash. Lens elements are not perfectly figured, so
+     * the internal reflection images the aperture slightly out of round — the
+     * reason ghosts in a photograph are ovals rather than regular polygons
+     * even from a spherical lens. Kept mild: it should read as imperfection,
+     * not as a different aperture.
+     */
     float roundness = mix(0.55, 0.18, uClosed);
-    float d2 = apertureDistance(gp, roundness);
+    float d2 = apertureDistance(gp / vec2(1.0, 0.88), roundness);
 
     /*
      * Sampled three times at slightly different scales, per channel. In a
@@ -217,22 +224,72 @@ void main() {
      * of the glass it bounced off — mottling across the disc, not a gradient.
      * The map is the same photographed surface the panes wear.
      */
+    /*
+     * Sampled three times, offset per channel. Same reason the ghost itself
+     * disperses: the debris is ON the glass, so its shadow in the reflected
+     * image is spread by the same coating that spreads the image. Sampled once
+     * it is a grey mottle; sampled three times it is the faint colour speckle
+     * a dirty element actually gives. The Ultimate Lens Flare shader does this
+     * to its dirt texture too, which is what pointed at it.
+     *
+     * Mottling, not masking: the dirt varies the ghost's interior, it does not
+     * decide whether the ghost is there.
+     */
     vec2 gritUv = gp / max(radius, 1e-3) * 0.28 + 0.5 + fi * 0.21;
-    // Mottling, not masking: the dirt varies the ghost's interior, it does
-    // not decide whether the ghost is there.
-    float grit = mix(1.0, 0.72 + 1.1 * texture2D(uGrit, fract(gritUv) * 0.49 + 0.005).g, uHasGrit);
+    vec2 gritOff = vec2(0.004, -0.003);
+    vec3 gritRGB = vec3(
+      texture2D(uGrit, fract(gritUv + gritOff) * 0.49 + 0.005).g,
+      texture2D(uGrit, fract(gritUv) * 0.49 + 0.005).g,
+      texture2D(uGrit, fract(gritUv - gritOff) * 0.49 + 0.005).g
+    );
+    vec3 grit = mix(vec3(1.0), 0.72 + 1.1 * gritRGB, uHasGrit);
 
     vec3 gt = spectrum(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
     colour += gt * shape * grit * 1.5 * uCharge;
   }
 
   /*
-   * The big halo off the front element, and the ring the sensor throws back.
-   * Chromatic because the path is long and dispersive.
+   * The big halo is centred on the OPTICAL AXIS, not on the light.
+   *
+   * This was wrong before and it is the kind of wrong you feel without being
+   * able to name: I had the ring centred on the source, so it travelled with
+   * the pointer like a bracelet. A halo is a reflection off the front element
+   * back through the system, and the system's axis is the middle of the frame
+   * — so the ring sits around the centre of the picture and only its radius
+   * and brightness change as the source moves. That is why, in a photograph,
+   * the big ring stays put while everything else slides.
    */
-  float halo1 = exp(-pow((r - 0.31) / 0.035, 2.0)) * 0.9
-              + exp(-pow((r - 0.46) / 0.07, 2.0)) * 0.4;
-  colour += spectrum(r * 3.4 + 0.12) * halo1 * 0.85 * uCharge;
+  vec2 fromAxis = (frag - centre) / unit;
+  float axisR = length(fromAxis);
+  float haloR = 0.30 + 0.22 * length(axis);
+  float halo1 = exp(-pow((axisR - haloR) / 0.045, 2.0)) * 0.9
+              + exp(-pow((axisR - haloR * 1.48) / 0.09, 2.0)) * 0.35;
+  colour += spectrum(axisR * 3.4 + 0.12) * halo1 * 0.85 * uCharge;
+
+  /*
+   * And the whole flare fades as the source leaves the middle of the frame.
+   * Less of the beam finds its way into the barrel off-axis, so a flare is at
+   * its most violent when you point the camera near the light and falls away
+   * as you swing off it.
+   */
+  colour *= 1.0 - 0.55 * smoothstep(0.0, 1.25, length(axis));
+
+  /*
+   * Dirt on the front element, in SCREEN space.
+   *
+   * This does more than any other single cue and it is the one nobody adds: a
+   * flare does not simply appear over a clean frame, it LIGHTS UP whatever is
+   * stuck to the glass. Every smear and speck on the front element glows,
+   * anchored to the lens rather than to the scene — so it stays exactly where
+   * it is while the flare sweeps across it.
+   *
+   * Screen coordinates for that reason. Move the pointer and the flare
+   * travels; the dirt does not, because the dirt is on the lens.
+   */
+  vec2 dirtUv = frag / (res * 0.55);
+  float dirt = mix(0.0, texture2D(uGrit, fract(dirtUv) * 0.49 + 0.5).g, uHasGrit);
+  float flareEnergy = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
+  colour += colour * dirt * 2.6 * flareEnergy;
 
   // ---- The aperture, silhouetted against its own light ----
   /*
