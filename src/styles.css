@@ -5,7 +5,7 @@
 
 @theme inline {
   --font-sans: "Manrope", sans-serif;
-  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-display: var(--display-family, "Jost"), "Futura", sans-serif;
   --radius-sm: 0.2rem; --radius-md: 0.3rem; --radius-lg: 0.45rem;
   --color-background: var(--background); --color-foreground: var(--foreground);
   --color-card: var(--card); --color-card-foreground: var(--card-foreground);
@@ -51,8 +51,12 @@
   body::after { content: ""; position: fixed; inset: 0; z-index: 100; pointer-events: none; opacity: .035; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E"); }
   ::selection { background: var(--color-primary); color: var(--color-primary-foreground); }
   a, button, input, textarea { outline-offset: 4px; }
-  .font-display { font-weight: 600; letter-spacing: -0.01em; }
-  h1.font-display, h2.font-display { font-weight: 700; letter-spacing: -0.02em; }
+  /* Thin, clean, cinematic: light weights with open tracking, the way film
+     title cards are set. Weight and tracking travel with the family. */
+  :root { --display-family: "Jost"; --display-weight: 300; --display-tracking: 0.01em; }
+  :root[data-display-font="inter-tight"] { --display-family: "Inter Tight"; --display-weight: 200; --display-tracking: -0.02em; }
+  :root[data-display-font="barlow-condensed"] { --display-family: "Barlow Condensed"; --display-weight: 300; --display-tracking: 0.02em; }
+  .font-display { font-weight: var(--display-weight); letter-spacing: var(--display-tracking); }
   :focus-visible { outline: 2px solid var(--color-ring); }
 }
 

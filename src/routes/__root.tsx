@@ -16,7 +16,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=Manrope:wght@400;500;600&display=swap" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400&family=Inter+Tight:wght@200;300;400&family=Barlow+Condensed:wght@200;300;400&family=Manrope:wght@400;500;600&display=swap" },
       { rel: "icon", href: "/favicon.ico" },
     ],
   }),
