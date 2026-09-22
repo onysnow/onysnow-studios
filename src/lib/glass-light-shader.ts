@@ -47,6 +47,7 @@ uniform float uTime;              // seconds
 uniform vec4  uRects[MAX_RECTS];  // x, y, w, h in CSS pixels
 uniform float uRadii[MAX_RECTS];  // corner radius in CSS pixels
 uniform float uTilts[MAX_RECTS];  // -1 looking up at it, 1 looking down at it
+uniform float uSeeds[MAX_RECTS];  // which atlas cell this panel wears
 uniform sampler2D uSurface;       // R specks and scratches, G smears, B wear
 uniform float uHasSurface;        // 0 until the map has loaded
 uniform vec3  uWarm;
@@ -68,86 +69,29 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
-/* Value noise: hashed lattice, smoothstep between the corners. */
-float noise(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-    mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
-    u.y
-  );
-}
-
-float fbm(vec2 p) {
-  float v = 0.0;
-  float a = 0.5;
-  for (int i = 0; i < 4; i++) {
-    v += a * noise(p);
-    p *= 2.03;
-    a *= 0.5;
-  }
-  return v;
-}
-
-/*
- * The pane's surface, generated.
- *
- * The fallback, used until the photographed map has loaded. Two populations,
- * because they scatter differently: grease is broad, soft and low, a haze that
- * lifts wherever light rakes it; scratches are thin, sharp and directional,
- * and they are what actually catch a point source.
- */
-vec2 proceduralSurface(vec2 uv) {
-  // Greasy blotches and general grime.
-  float grime = fbm(uv * 2.4) * 0.55 + fbm(uv * 7.0) * 0.25;
-
-  /*
-   * Scratches. Noise sampled hard-stretched along one axis turns into streaks;
-   * taking the ridge of it (distance from the midline, inverted) turns the
-   * streaks into thin lines, and a high power makes them hair-fine.
-   */
-  vec2 a = uv * vec2(0.6, 26.0);
-  float ridgeA = 1.0 - abs(noise(a) * 2.0 - 1.0);
-  vec2 b = (uv.yx + 4.7) * vec2(0.9, 34.0);
-  float ridgeB = 1.0 - abs(noise(b) * 2.0 - 1.0);
-  float scratches = pow(ridgeA, 42.0) * 0.8 + pow(ridgeB, 58.0) * 0.55;
-
-  /*
-   * Scratches cluster. A pane has patches that have been wiped and patches
-   * that have been leaned on, and the giveaway that a texture was generated
-   * rather than observed is that its density is the same everywhere. A slow
-   * mask over the top gives it clean regions and dirty ones.
-   */
-  float wear = smoothstep(0.32, 0.78, fbm(uv * 0.55 + 13.0));
-
-  return vec2(scratches * (0.22 + 1.1 * wear), grime * 0.5);
-}
-
 /*
  * The pane's surface, photographed.
  *
- * Generated noise has a statistical evenness that real dirt does not: every
- * region equally dusty, every scratch the same length, no history. This is a
- * high-passed composite of photographs of actual glass, so the lighting it was
- * shot under is gone and only the marks remain — which is the only part that
- * transfers to a different light.
+ * Generated noise is gone from here entirely. It has a statistical evenness
+ * real dirt does not — every region equally dusty, every scratch the same
+ * length, nothing ever wiped — and it read as exactly what it was.
+ *
+ * The map is a 2x2 atlas of four genuinely different surfaces: long
+ * striations, striations the other way with dust, grit and specks, and greasy
+ * wipes. Each panel wears one, picked by a seed that is stable for the life of
+ * the element, so no two sections on a page carry identical grime.
  *
  *   R  specks, grit and hairline scratches. Sharp; they glint.
- *   G  greasy wipes and finger smears. Broad; they haze.
+ *   G  greasy wipes and smears. Broad; they haze.
  *   B  where the pane has been handled at all, very low frequency.
  *
- * Returned as (glint, haze): the two scatter differently and the light has to
- * be able to treat them differently.
+ * Each cell tiles within itself. The inset keeps bilinear sampling from
+ * dragging a neighbouring cell across the seam.
  */
-vec2 surface(vec2 uv) {
-  vec2 generated = proceduralSurface(uv);
-  vec3 map = texture2D(uSurface, uv * 0.42).rgb;
-  // Handled areas carry more of everything; untouched glass stays clean.
-  float handled = 0.35 + 0.95 * map.b;
-  vec2 photographed = vec2(map.r * 2.6 * handled, map.g * 0.85 * handled);
-  return mix(generated, photographed, uHasSurface);
+vec3 surfaceAt(vec2 uv, float seed) {
+  vec2 cell = vec2(mod(seed, 2.0), floor(seed * 0.5));
+  vec2 inCell = fract(uv) * 0.49 + 0.005;
+  return texture2D(uSurface, (inCell + cell) * 0.5 + cell * 0.0).rgb;
 }
 
 void main() {
@@ -242,17 +186,32 @@ void main() {
     // Summed kernels, the way bloom actually is. Modulated by the light
     // reaching THIS point, so the near edge blows out and the far edge stays
     // dark without any directional gradient being authored.
-    float filament = exp(-ad / 2.4);
-    float flare = exp(-ad / 13.0);
-    float haze = exp(-ad / 44.0);
+    /*
+     * The bloom, not the line.
+     *
+     * The hard filament sitting exactly on the boundary was reading as a white
+     * stroke drawn around the panel — the one thing an edge of glass never
+     * looks like. It is kept, because a lit arris does have a bright core, but
+     * pulled right back so what you actually see is the bloom either side of
+     * it rather than the stroke itself.
+     */
+    float filament = exp(-ad / 2.8);
+    float flare = exp(-ad / 15.0);
+    float haze = exp(-ad / 48.0);
     /*
      * A real arris is not evenly bright along its length. Coating, polish and
      * dirt vary, so the highlight travelling it breaks into patches — and a
      * perfectly even line of light is the single clearest sign that an edge
      * was drawn rather than photographed.
      */
-    float arrisWear = 0.62 + 0.62 * fbm(frag * 0.028 + 7.3);
-    rim += vec3(filament * 24.0 * arrisWear + flare * 3.2 + haze * 0.22) * reach;
+    /*
+     * A real arris is not evenly bright along its length — coating, polish and
+     * dirt vary, and a perfectly even line of light is the clearest sign an
+     * edge was drawn rather than photographed. The variation is read off the
+     * pane's own wear rather than invented.
+     */
+    float arrisWear = 0.62 + 0.9 * surf.b * uHasSurface + 0.38 * (1.0 - uHasSurface);
+    rim += vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach;
 
     /*
      * ---- the side faces ----
@@ -300,14 +259,14 @@ void main() {
      * rainbow — a clean spectral sweep is poster art.
      */
     vec3 dichroic = mix(vec3(1.0), spectrum(along * 0.85 + 0.55), 0.42)
-                  * (0.74 + 0.5 * fbm(vec2(along * 14.0, 2.1)));
+                  * (0.78 + 0.55 * surf.g);
 
     float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
     float farArris = (farTop * topOpen + farBot * botOpen) * withinX;
 
-    rim += dichroic * sideGlare * 30.0 * reach;
+    rim += dichroic * sideGlare * 16.0 * reach;
     // Seen through the glass, so it never reaches the near arris's brightness.
-    rim += vec3(farArris) * 15.0 * reach;
+    rim += vec3(farArris) * 6.0 * reach;
 
     // ---- light scattered into the body of the pane ----
     face += vec3(inside * (direct * 0.9 + veil));
@@ -322,9 +281,10 @@ void main() {
      * rather than swimming as the page scrolls.
      */
     vec2 uv = (frag - rect.xy) / 340.0;
-    vec2 surf = surface(uv);
-    float glint = surf.x;
-    float smear = surf.y;
+    vec3 surf = surfaceAt(uv, uSeeds[i]) * uHasSurface;
+    float handled = 0.35 + 0.95 * surf.b;
+    float glint = surf.r * 2.6 * handled;
+    float smear = surf.g * 0.85 * handled;
     /*
      * Grease hazes broadly; grit and scratches glint. Separating them is what
      * stops the whole surface lifting as one flat sheet of dirt.

@@ -89,6 +89,7 @@ export function GlassLight({
     const uRects = gl.getUniformLocation(program, "uRects");
     const uRadii = gl.getUniformLocation(program, "uRadii");
     const uTilts = gl.getUniformLocation(program, "uTilts");
+    const uSeeds = gl.getUniformLocation(program, "uSeeds");
     const uTime = gl.getUniformLocation(program, "uTime");
     const uHasSurface = gl.getUniformLocation(program, "uHasSurface");
 
@@ -132,8 +133,12 @@ export function GlassLight({
         // Tiled, and mipmapped so the far falloff does not alias into sparkle.
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-        gl.generateMipmap(gl.TEXTURE_2D);
+        /*
+         * No mipmaps. The map is an atlas of four cells, and a minified level
+         * blends them into one another — every panel would end up wearing an
+         * average of all four rather than the one it was given.
+         */
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.useProgram(program);
         gl.uniform1f(uHasSurface, 1);
       };
@@ -164,6 +169,7 @@ export function GlassLight({
     const rects = new Float32Array(MAX_RECTS * 4);
     const radii = new Float32Array(MAX_RECTS);
     const tilts = new Float32Array(MAX_RECTS);
+    const seeds = new Float32Array(MAX_RECTS);
 
     let frame = 0;
     let wasLit = false;
@@ -226,6 +232,7 @@ export function GlassLight({
           rects[o + 3] = rect.h;
           radii[i] = rect.r;
           tilts[i] = rect.t;
+          seeds[i] = rect.s;
         } else {
           // Parked far away at zero size: every distance is enormous, every
           // falloff is zero, and no branch is needed in the shader.
@@ -235,12 +242,14 @@ export function GlassLight({
           rects[o + 3] = 0;
           radii[i] = 0;
           tilts[i] = 0;
+          seeds[i] = 0;
         }
       }
 
       gl.uniform4fv(uRects, rects);
       gl.uniform1fv(uRadii, radii);
       gl.uniform1fv(uTilts, tilts);
+      gl.uniform1fv(uSeeds, seeds);
       gl.uniform2f(uLight, x, y);
       gl.uniform1f(uCharge, charge);
       gl.uniform1f(uTime, (now - start) / 1000);

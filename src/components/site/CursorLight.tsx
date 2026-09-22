@@ -12,10 +12,18 @@ import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-s
  * clips it, so the white core, the coloured falloff and the dispersion all
  * fall out of the same calculation instead of being drawn separately.
  *
- * Cheap: one quad, no textures, a few dozen instructions. It costs far less
- * than the stacked backdrop-filters it sits over.
+ * Viewport-sized, not a box that follows the cursor. A lens flare's ghosts
+ * march along the axis from the source through the centre of the frame and
+ * out the other side; penned into a box around the cursor there is nowhere
+ * for them to go, and the box's own edge was visible wherever the falloff
+ * crossed it.
  */
-const SIZE = 512;
+/*
+ * Bloom and flare are low-frequency; the only sharp features are the spikes
+ * and the aperture rim. Held at 1.5 they stay crisp and the fill cost of a
+ * full-viewport pass is less than half what a dense display would ask.
+ */
+const MAX_SCALE = 1.5;
 
 export function CursorLight({
   chargeRef,
@@ -86,7 +94,25 @@ export function CursorLight({
     gl.uniform3f(uWarm, toLinear(1.0), toLinear(0.68), toLinear(0.3));
     gl.uniform3f(uCool, toLinear(0.35), toLinear(0.78), toLinear(0.82));
 
-    gl.viewport(0, 0, SIZE, SIZE);
+    const uViewport = gl.getUniformLocation(program, "uViewport");
+    const uScale = gl.getUniformLocation(program, "uScale");
+    const uLight = gl.getUniformLocation(program, "uLight");
+
+    let scale = 1;
+    const resize = () => {
+      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      const w = Math.round(window.innerWidth * scale);
+      const h = Math.round(window.innerHeight * scale);
+      if (canvas.width === w && canvas.height === h) return;
+      canvas.width = w;
+      canvas.height = h;
+      gl.viewport(0, 0, w, h);
+      gl.uniform2f(uViewport, w, h);
+      gl.uniform1f(uScale, scale);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -98,10 +124,10 @@ export function CursorLight({
       const closed = closedRef.current;
       const { x, y } = positionRef.current;
 
-      canvas.style.transform = `translate3d(${x - SIZE / 2}px, ${y - SIZE / 2}px, 0)`;
       canvas.style.opacity = charge > 0.002 ? "1" : "0";
 
       if (charge > 0.002) {
+        gl.uniform2f(uLight, x, y);
         gl.uniform1f(uCharge, charge);
         gl.uniform1f(uClosed, closed);
         gl.uniform1f(uTime, (now - start) / 1000);
@@ -115,6 +141,7 @@ export function CursorLight({
 
     return () => {
       cancelAnimationFrame(frame);
+      window.removeEventListener("resize", resize);
       gl.deleteProgram(program);
       gl.deleteShader(vs);
       gl.deleteShader(fs);
@@ -122,13 +149,5 @@ export function CursorLight({
     };
   }, [chargeRef, closedRef, positionRef]);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      width={SIZE}
-      height={SIZE}
-      className="cursor-light"
-    />
-  );
+  return <canvas ref={canvasRef} aria-hidden="true" className="cursor-light" />;
 }

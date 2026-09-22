@@ -32,6 +32,12 @@ export type GlassRect = {
   /** Corner radius, in CSS pixels. */
   r: number;
   /**
+   * Which surface this pane wears, 0-3. Assigned once and kept for the life of
+   * the element, so a panel's grime does not change as the page scrolls — and
+   * so two sections never show identical dirt.
+   */
+  s: number;
+  /**
    * Viewing angle onto the pane, -1 to 1.
    *
    * A pane has thickness, so which of its two side faces you can see depends
@@ -50,6 +56,19 @@ export type GlassRect = {
  * reading them.
  */
 const radii = new WeakMap<HTMLElement, number>();
+
+const seeds = new WeakMap<HTMLElement, number>();
+let nextSeed = 0;
+
+function surfaceSeed(el: HTMLElement) {
+  let seed = seeds.get(el);
+  if (seed === undefined) {
+    seed = nextSeed % 4;
+    nextSeed += 1;
+    seeds.set(el, seed);
+  }
+  return seed;
+}
 
 function cornerRadius(el: HTMLElement) {
   const known = radii.get(el);
@@ -99,6 +118,7 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       h: r.height,
       r: cornerRadius(el),
       t: paneTilt(r),
+      s: surfaceSeed(el),
     });
   }
   return geometry;

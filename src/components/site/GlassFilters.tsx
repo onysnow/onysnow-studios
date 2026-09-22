@@ -21,8 +21,10 @@ const DISPLACEMENT_MAP =
     `<svg xmlns='http://www.w3.org/2000/svg' width='8' height='32'>` +
       `<defs><linearGradient id='g' x1='0' y1='0' x2='0' y2='1'>` +
       `<stop offset='0' stop-color='rgb(128,255,128)'/>` +
-      `<stop offset='0.42' stop-color='rgb(128,128,128)'/>` +
-      `<stop offset='0.58' stop-color='rgb(128,128,128)'/>` +
+      `<stop offset='0.22' stop-color='rgb(128,206,128)'/>` +
+      `<stop offset='0.48' stop-color='rgb(128,128,128)'/>` +
+      `<stop offset='0.52' stop-color='rgb(128,128,128)'/>` +
+      `<stop offset='0.78' stop-color='rgb(128,50,128)'/>` +
       `<stop offset='1' stop-color='rgb(128,0,128)'/>` +
       `</linearGradient></defs>` +
       `<rect width='8' height='32' fill='url(%23g)'/>` +
@@ -72,7 +74,7 @@ export function GlassFilters() {
           <feDisplacementMap
             in="SourceGraphic"
             in2="profile"
-            scale="26"
+            scale="54"
             xChannelSelector="R"
             yChannelSelector="G"
             result="bent"
@@ -92,14 +94,14 @@ export function GlassFilters() {
             values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
             result="red"
           />
-          <feOffset in="red" dx="1.4" dy="0.4" result="redShift" />
+          <feOffset in="red" dx="2.2" dy="0.7" result="redShift" />
           <feColorMatrix
             in="bent"
             type="matrix"
             values="0 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"
             result="cyan"
           />
-          <feOffset in="cyan" dx="-1.4" dy="-0.4" result="cyanShift" />
+          <feOffset in="cyan" dx="-2.2" dy="-0.7" result="cyanShift" />
           <feBlend in="redShift" in2="cyanShift" mode="screen" result="dispersed" />
 
           {/* Glass edges carry more contrast than the scene behind them. */}
