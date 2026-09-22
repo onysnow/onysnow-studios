@@ -11,6 +11,7 @@ import { ParallaxScene } from "@/components/site/ParallaxScene";
 import { RichText } from "@/components/site/RichText";
 import { Card, CardBody, CardFooter, Container, Grid, Section } from "@/components/site/layout";
 import { GlassPanel } from "@/components/site/GlassPanel";
+import { PhotoSection } from "@/components/site/PhotoSection";
 import {
   Carousel,
   CarouselContent,
@@ -78,6 +79,15 @@ function HomePage() {
   const cats = categories ?? [];
   const hero = photos?.find((p) => p.featured) ?? photos?.[0];
   const philosophyImage = photos?.[2] ?? photos?.[1] ?? hero;
+  /*
+   * The interstitial bands. Spread across the set so no two show the same
+   * photograph, falling back down the list when fewer have been uploaded than
+   * there are bands to fill.
+   */
+  const bandOne = photos?.[3] ?? photos?.[1] ?? hero;
+  const bandTwo = photos?.[4] ?? photos?.[2] ?? hero;
+  const bandThree = photos?.[5] ?? photos?.[0] ?? hero;
+  const bandFour = photos?.[1] ?? photos?.[4] ?? hero;
   const quotes = testimonials ?? [];
 
   return (
@@ -103,8 +113,11 @@ function HomePage() {
             <p className="eyebrow">
               {copy(text, "hero_eyebrow", "Professional candid photography")}
             </p>
-            <h1 className="mt-4 max-w-4xl font-display text-[2.75rem] leading-[.95] sm:text-6xl lg:text-[4.5rem]">
-              <ScrambleText text={copy(text, "hero_title", "Life, exactly as it felt.")} />
+            <h1 className="mt-4 max-w-5xl font-display text-[2.75rem] leading-[.95] sm:text-6xl lg:text-[4.5rem]">
+              <ScrambleText
+                startOnView={false}
+                text={copy(text, "hero_title", "Life, exactly as it felt.")}
+              />
             </h1>
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Button asChild variant="cinematic" size="lg">
@@ -121,122 +134,133 @@ function HomePage() {
       </section>
 
       {/* Intro */}
-      <Section size="base">
-        <Container>
-          <Reveal className="grid gap-10 lg:grid-cols-[.4fr_1fr]">
-            <p className="eyebrow">{copy(text, "intro_eyebrow", "What I do")}</p>
-            <div>
-              <h2 className="max-w-3xl font-display text-2xl leading-tight sm:text-3xl lg:text-4xl">
-                {copy(
-                  text,
-                  "intro_title",
-                  "I photograph the part you didn’t know you’d want to remember.",
-                )}
-              </h2>
-              <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground">
-                {copy(text, "intro_body", "")}
-              </p>
-            </div>
-          </Reveal>
-        </Container>
-      </Section>
-
-      {/* Disciplines — compact, with a thumbnail so the layout reads at a glance */}
-      <Section size="sm" tone="bordered">
-        <Container>
-          <Reveal>
-            <p className="eyebrow">{copy(text, "services_eyebrow", "Ways to work together")}</p>
-            <Grid cols={3} gap="base" className="mt-7">
-              {catsPending
-                ? Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="aspect-[16/7] w-full" />
-                  ))
-                : cats.map((cat, i) => (
-                    <Link
-                      to="/portfolio"
-                      search={{ category: cat.slug }}
-                      key={cat.id}
-                      className="group relative block overflow-hidden"
-                    >
-                      <Img
-                        image={coverFor(photos, cat)}
-                        className="aspect-[16/7] w-full"
-                        sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                        imgClassName="transition-transform duration-700 group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/30 to-transparent" />
-                      <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
-                        <div>
-                          <span className="text-[0.65rem] tracking-widest text-primary">
-                            0{i + 1}
-                          </span>
-                          <h3 className="font-display text-lg leading-tight">{cat.name}</h3>
-                        </div>
-                        <ArrowDownRight className="size-4 text-foreground/70 transition-transform group-hover:translate-x-1 group-hover:translate-y-1" />
-                      </div>
-                    </Link>
-                  ))}
-            </Grid>
-          </Reveal>
-        </Container>
-      </Section>
-
-      {/* Selected work — a horizontal wheel, no container around it */}
-      <Section size="sm">
-        <Container>
-          <Carousel opts={{ align: "start", loop: true }} className="w-full">
-            <Reveal className="flex flex-wrap items-end justify-between gap-5">
+      <PhotoSection image={bandOne} depth="subtle">
+        <Section size="base">
+          <Container>
+            <Reveal className="grid gap-10 lg:grid-cols-[.4fr_1fr]">
+              <p className="eyebrow">{copy(text, "intro_eyebrow", "What I do")}</p>
               <div>
-                <p className="eyebrow">{copy(text, "featured_eyebrow", "Selected work")}</p>
-                <h2 className="mt-2 font-display text-2xl lg:text-3xl">
-                  {copy(text, "featured_title", "Stories in color.")}
+                <h2 className="max-w-3xl font-display text-2xl leading-tight sm:text-3xl lg:text-4xl">
+                  <ScrambleText
+                    text={copy(
+                      text,
+                      "intro_title",
+                      "I photograph the part you didn’t know you’d want to remember.",
+                    )}
+                  />
                 </h2>
-              </div>
-              <div className="flex items-center gap-3">
-                <Link to="/portfolio" className="text-xs uppercase tracking-widest text-primary">
-                  View all work
-                </Link>
-                {/* Arrows live inside Carousel so they drive the same embla instance. */}
-                <div className="flex gap-2">
-                  <CarouselPrevious className="static size-8 translate-y-0" />
-                  <CarouselNext className="static size-8 translate-y-0" />
-                </div>
+                <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground">
+                  {copy(text, "intro_body", "")}
+                </p>
               </div>
             </Reveal>
+          </Container>
+        </Section>
+      </PhotoSection>
 
-            <CarouselContent className="mt-5 -ml-3">
-              {catsPending
-                ? Array.from({ length: 4 }).map((_, i) => (
-                    <CarouselItem key={i} className="pl-3 basis-4/5 sm:basis-1/2 lg:basis-1/4">
-                      <Skeleton className="aspect-[3/2] w-full" />
-                    </CarouselItem>
-                  ))
-                : cats.map((cat) => (
-                    <CarouselItem key={cat.id} className="pl-3 basis-4/5 sm:basis-1/2 lg:basis-1/4">
+      {/* Disciplines — compact, with a thumbnail so the layout reads at a glance */}
+      <PhotoSection image={bandTwo} depth="standard">
+        <Section size="sm">
+          <Container>
+            <Reveal>
+              <p className="eyebrow">{copy(text, "services_eyebrow", "Ways to work together")}</p>
+              <Grid cols={3} gap="base" className="mt-7">
+                {catsPending
+                  ? Array.from({ length: 6 }).map((_, i) => (
+                      <Skeleton key={i} className="aspect-[16/7] w-full" />
+                    ))
+                  : cats.map((cat, i) => (
                       <Link
                         to="/portfolio"
                         search={{ category: cat.slug }}
-                        className="group flex h-full flex-col"
+                        key={cat.id}
+                        className="group relative block overflow-hidden"
                       >
-                        {/* Fixed 3:2 box keeps every frame the same height whatever the
-                            photograph's own orientation, and reads far thinner than 4:3. */}
                         <Img
                           image={coverFor(photos, cat)}
-                          className="aspect-[3/2] w-full"
-                          sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 80vw"
+                          className="aspect-[16/7] w-full"
+                          sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
                           imgClassName="transition-transform duration-700 group-hover:scale-105"
                         />
-                        <div className="mt-3 flex items-center justify-between">
-                          <h3 className="font-display text-base">{cat.name}</h3>
-                          <ArrowRight className="size-4 text-primary transition-transform group-hover:translate-x-1" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/30 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
+                          <div>
+                            <span className="text-[0.65rem] tracking-widest text-primary">
+                              0{i + 1}
+                            </span>
+                            <h3 className="font-display text-lg leading-tight">{cat.name}</h3>
+                          </div>
+                          <ArrowDownRight className="size-4 text-foreground/70 transition-transform group-hover:translate-x-1 group-hover:translate-y-1" />
                         </div>
                       </Link>
-                    </CarouselItem>
-                  ))}
-            </CarouselContent>
-          </Carousel>
-        </Container>
-      </Section>
+                    ))}
+              </Grid>
+            </Reveal>
+          </Container>
+        </Section>
+      </PhotoSection>
+
+      {/* Selected work — a horizontal wheel, no container around it */}
+      <PhotoSection image={bandThree} depth="standard">
+        <Section size="sm">
+          <Container>
+            <Carousel opts={{ align: "start", loop: true }} className="w-full">
+              <Reveal className="flex flex-wrap items-end justify-between gap-5">
+                <div>
+                  <p className="eyebrow">{copy(text, "featured_eyebrow", "Selected work")}</p>
+                  <h2 className="mt-2 font-display text-2xl lg:text-3xl">
+                    <ScrambleText text={copy(text, "featured_title", "Stories in color.")} />
+                  </h2>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link to="/portfolio" className="text-xs uppercase tracking-widest text-primary">
+                    View all work
+                  </Link>
+                  {/* Arrows live inside Carousel so they drive the same embla instance. */}
+                  <div className="flex gap-2">
+                    <CarouselPrevious className="static size-8 translate-y-0" />
+                    <CarouselNext className="static size-8 translate-y-0" />
+                  </div>
+                </div>
+              </Reveal>
+
+              <CarouselContent className="mt-5 -ml-3">
+                {catsPending
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <CarouselItem key={i} className="pl-3 basis-4/5 sm:basis-1/2 lg:basis-1/4">
+                        <Skeleton className="aspect-[3/2] w-full" />
+                      </CarouselItem>
+                    ))
+                  : cats.map((cat) => (
+                      <CarouselItem
+                        key={cat.id}
+                        className="pl-3 basis-4/5 sm:basis-1/2 lg:basis-1/4"
+                      >
+                        <Link
+                          to="/portfolio"
+                          search={{ category: cat.slug }}
+                          className="group flex h-full flex-col"
+                        >
+                          {/* Fixed 3:2 box keeps every frame the same height whatever the
+                              photograph's own orientation, and reads far thinner than 4:3. */}
+                          <Img
+                            image={coverFor(photos, cat)}
+                            className="aspect-[3/2] w-full"
+                            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 80vw"
+                            imgClassName="transition-transform duration-700 group-hover:scale-105"
+                          />
+                          <div className="mt-3 flex items-center justify-between">
+                            <h3 className="font-display text-base">{cat.name}</h3>
+                            <ArrowRight className="size-4 text-primary transition-transform group-hover:translate-x-1" />
+                          </div>
+                        </Link>
+                      </CarouselItem>
+                    ))}
+              </CarouselContent>
+            </Carousel>
+          </Container>
+        </Section>
+      </PhotoSection>
 
       {/* Philosophy — full-bleed parallax band */}
       <ParallaxScene image={philosophyImage} depth="standard" scrim="full" height="min-h-[72svh]">
@@ -299,47 +323,26 @@ function HomePage() {
         </Section>
       ) : null}
 
-      {/* Instagram strip */}
-      <Section size="sm" bleed className="overflow-hidden">
-        <div className="grid grid-cols-3 md:grid-cols-6">
-          {cats.map((cat) => (
-            <Link key={cat.id} to="/portfolio" search={{ category: cat.slug }} className="group">
-              <Img
-                image={coverFor(photos, cat)}
-                className="aspect-square"
-                sizes="(min-width: 768px) 17vw, 34vw"
-                imgClassName="transition-transform duration-700 group-hover:scale-110"
-              />
-            </Link>
-          ))}
-        </div>
-        <p className="mt-6 text-center text-xs uppercase tracking-widest text-muted-foreground">
-          {settings?.["instagram_url"] ? (
-            <a href={settings["instagram_url"]} target="_blank" rel="me noopener noreferrer">
-              {copy(text, "instagram_caption", "Follow the work · Instagram")}
-            </a>
-          ) : (
-            copy(text, "instagram_caption", "Follow the work · Instagram")
-          )}
-        </p>
-      </Section>
-
       {/* Closing CTA */}
-      <Section size="lg" className="text-center">
-        <Container width="content">
-          <Reveal>
-            <p className="eyebrow">{copy(text, "cta_eyebrow", "Your story, honestly told")}</p>
-            <h2 className="mx-auto mt-5 font-display text-3xl leading-tight lg:text-5xl">
-              {copy(text, "cta_title", "Let’s make something that feels like you.")}
-            </h2>
-            <Button asChild variant="cinematic" size="lg" className="mt-10">
-              <Link to="/book">
-                Book a session <ArrowRight />
-              </Link>
-            </Button>
-          </Reveal>
-        </Container>
-      </Section>
+      <PhotoSection image={bandFour} depth="deep">
+        <Section size="lg" className="text-center">
+          <Container width="content">
+            <Reveal>
+              <p className="eyebrow">{copy(text, "cta_eyebrow", "Your story, honestly told")}</p>
+              <h2 className="mx-auto mt-5 font-display text-3xl leading-tight lg:text-5xl">
+                <ScrambleText
+                  text={copy(text, "cta_title", "Let’s make something that feels like you.")}
+                />
+              </h2>
+              <Button asChild variant="cinematic" size="lg" className="mt-10">
+                <Link to="/book">
+                  Book a session <ArrowRight />
+                </Link>
+              </Button>
+            </Reveal>
+          </Container>
+        </Section>
+      </PhotoSection>
     </>
   );
 }

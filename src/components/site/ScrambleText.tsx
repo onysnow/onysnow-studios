@@ -242,10 +242,8 @@ const pick = () => GLYPHS[Math.floor(Math.random() * GLYPHS.length)] ?? "Δ";
 
 /**
  * Chinese, Japanese and Korean characters are full-width — about twice a Latin
- * letter's advance. Left at full size they widen the line enough to wrap it onto
- * an extra row mid-sequence, which collides with whatever sits below. Rendering
- * them at 0.62em brings their advance back near a Latin letter's, so the line
- * stays roughly its finished width and wraps the same way.
+ * letter's advance. Rendered at 0.62em they sit close to a Latin letter, so a
+ * substitute doesn't tower over the cell it's borrowing.
  */
 const FULL_WIDTH = /[\u3040-\u30ff\u3100-\u312f\u3130-\u318f\u4e00-\u9fff]/;
 
@@ -268,6 +266,46 @@ function animatable(ch: string) {
 }
 
 /**
+ * Starts the sequence the first time the element comes into view, once.
+ *
+ * A headline three screens down has finished settling long before anyone reaches
+ * it otherwise — the effect only reads as an effect if it runs while being
+ * watched. `rootMargin` starts it slightly early so it isn't still resolving
+ * when it reaches comfortable reading position.
+ */
+function useStartOnView(enabled: boolean) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [started, setStarted] = useState(false);
+
+  useEffect(() => {
+    if (started) return;
+    if (!enabled) {
+      setStarted(true);
+      return;
+    }
+    const el = ref.current;
+    // No element or no observer support: run rather than never run.
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setStarted(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setStarted(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -12% 0px", threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [enabled, started]);
+
+  return { ref, started };
+}
+
+/**
  * The whole sentence is present from the first frame; each letter cycles through
  * other writing systems on its own clock and lands in English at its own moment.
  *
@@ -275,24 +313,32 @@ function animatable(ch: string) {
  * head left to right at one global speed — per-character start, speed and settle
  * time need per-character state.
  *
- * Glyph widths differ, so letter spacing shifts while it runs. An invisible copy
- * of the finished sentence underneath reserves the final block size, so the
- * headline's own footprint never changes and nothing below it jumps.
+ * Every letter sits in a cell the width of the character it will become, and each
+ * word is a nowrap box. The line therefore measures and breaks identically on
+ * every frame, whatever is being substituted in. The earlier version overlaid the
+ * scrambling text on the finished text absolutely, so a run of wide glyphs
+ * outgrew the box and wrapped onto a second row mid-sequence before snapping
+ * back. A substitute wider than its cell now overhangs it instead, which costs a
+ * little letter spacing and buys a line that never moves.
  */
 export function ScrambleText({
   text,
   className,
   /** Roughly how long until the last letter settles, in ms. */
   totalMs = 1500,
+  /** Wait until the text scrolls into view. Off for anything above the fold. */
+  startOnView = true,
 }: {
   text: string;
   className?: string;
   totalMs?: number;
+  startOnView?: boolean;
 }) {
   const [frame, setFrame] = useState(0);
   const [animate, setAnimate] = useState(false);
   const glyphs = useRef<string[]>([]);
   const settled = useRef<boolean[]>([]);
+  const { ref, started } = useStartOnView(startOnView);
 
   const chars = useMemo<CharState[]>(() => {
     return Array.from(text).map((final) => {
@@ -310,7 +356,28 @@ export function ScrambleText({
     });
   }, [text, totalMs]);
 
+  /**
+   * Grouped into words so the browser breaks between words and nowhere else.
+   * Each cell is an inline-block, and without this the line could break between
+   * any two letters.
+   */
+  const words = useMemo(() => {
+    const out: number[][] = [];
+    let current: number[] = [];
+    chars.forEach((c, i) => {
+      if (/\s/.test(c.final)) {
+        if (current.length) out.push(current);
+        current = [];
+        return;
+      }
+      current.push(i);
+    });
+    if (current.length) out.push(current);
+    return out;
+  }, [chars]);
+
   useEffect(() => {
+    if (!started) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     setAnimate(true);
 
@@ -349,29 +416,49 @@ export function ScrambleText({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [chars]);
+  }, [chars, started]);
 
-  if (!animate) return <span className={className}>{text}</span>;
-
-  return (
-    <span className={cn("relative block", className)}>
-      {/* Reserves the finished sentence's block size so nothing below it jumps. */}
-      <span aria-hidden="true" className="invisible">
+  // Before it starts, and for anyone who asked for reduced motion, this is just
+  // the sentence — same markup the animation resolves to.
+  if (!animate) {
+    return (
+      <span ref={ref} className={className}>
         {text}
       </span>
+    );
+  }
+
+  return (
+    <span ref={ref} className={className}>
       {/* The real sentence, for screen readers and search engines. */}
       <span className="sr-only">{text}</span>
-      <span aria-hidden="true" data-frame={frame} className="absolute inset-0">
-        {chars.map((state, index) => {
-          const g = glyphs.current[index] ?? state.final;
-          return FULL_WIDTH.test(g) ? (
-            <span key={index} className="text-[0.62em]">
-              {g}
+
+      <span aria-hidden="true" data-frame={frame}>
+        {words.map((indices, wordIndex) => (
+          <span key={wordIndex}>
+            {wordIndex > 0 ? " " : null}
+            <span className="inline-block whitespace-nowrap">
+              {indices.map((i) => {
+                const state = chars[i]!;
+                const g = glyphs.current[i] ?? state.final;
+                return (
+                  <span key={i} className="relative inline-block">
+                    {/* Holds the cell open at the finished character's width. */}
+                    <span className="invisible">{state.final}</span>
+                    <span
+                      className={cn(
+                        "absolute inset-0 whitespace-nowrap text-center",
+                        FULL_WIDTH.test(g) && "text-[0.62em]",
+                      )}
+                    >
+                      {g}
+                    </span>
+                  </span>
+                );
+              })}
             </span>
-          ) : (
-            <span key={index}>{g}</span>
-          );
-        })}
+          </span>
+        ))}
       </span>
     </span>
   );

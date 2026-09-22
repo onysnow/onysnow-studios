@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Reveal } from "./Reveal";
+import { ScrambleText } from "./ScrambleText";
 import { Img } from "./Img";
 import { Container, Section } from "./layout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -58,8 +59,10 @@ export function PageIntro({
                 <Skeleton className="h-11 w-2/3" />
               </div>
             ) : (
-              <h1 className="mt-5 max-w-4xl font-display text-[2.25rem] leading-[.98] sm:text-5xl lg:text-6xl">
-                {title}
+              <h1 className="mt-5 max-w-5xl font-display text-[2.25rem] leading-[.98] sm:text-5xl lg:text-6xl">
+                {/* Above the fold on every page that uses this, so it runs on
+                    mount rather than waiting to be scrolled into view. */}
+                <ScrambleText startOnView={false} text={title} />
               </h1>
             )}
             {loading ? (

@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Img } from "@/components/site/Img";
 import { PageIntro } from "@/components/site/PageIntro";
 import { Reveal } from "@/components/site/Reveal";
+import { ScrambleText } from "@/components/site/ScrambleText";
 import { Container, Section } from "@/components/site/layout";
 import {
   categoriesQuery,
@@ -215,7 +216,7 @@ function Services() {
         <Container width="content">
           <div className="text-center">
             <h2 className="font-display text-2xl lg:text-3xl">
-              {copy(text, "cta_title", "Not sure which of these it is?")}
+              <ScrambleText text={copy(text, "cta_title", "Not sure which of these it is?")} />
             </h2>
             <p className="mx-auto mt-5 max-w-lg leading-7 text-muted-foreground">
               {copy(
