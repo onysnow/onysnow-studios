@@ -1,7 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Category, Inquiry, PageContent, Photo, Post, Service, SiteSetting, Subscriber, Testimonial } from "@/lib/content";
+import type {
+  Category,
+  Inquiry,
+  PageContent,
+  Photo,
+  Post,
+  Service,
+  SiteSetting,
+  Subscriber,
+  Testimonial,
+} from "@/lib/content";
 
 /** Every table Ony can edit, including through the JSON editor. */
 export const EDITABLE_TABLES = [
@@ -26,7 +36,10 @@ export const TABLE_PK: Record<EditableTable, string> = {
 };
 
 async function all<T>(table: string, order: string, ascending = true): Promise<T[]> {
-  const { data, error } = await (supabase as any).from(table).select("*").order(order, { ascending });
+  const { data, error } = await (supabase as any)
+    .from(table)
+    .select("*")
+    .order(order, { ascending });
   if (error) throw error;
   return (data ?? []) as T[];
 }
@@ -89,7 +102,10 @@ export async function deleteRow(table: EditableTable, id: string) {
 export async function saveOrder(table: EditableTable, ids: string[]) {
   const pk = TABLE_PK[table];
   for (let i = 0; i < ids.length; i++) {
-    const { error } = await (supabase as any).from(table).update({ sort_order: i + 1 }).eq(pk, ids[i]);
+    const { error } = await (supabase as any)
+      .from(table)
+      .update({ sort_order: i + 1 })
+      .eq(pk, ids[i]);
     if (error) throw error;
   }
 }

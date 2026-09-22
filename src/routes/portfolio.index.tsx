@@ -4,6 +4,7 @@ import { JustifiedGallery } from "@/components/site/JustifiedGallery";
 import { PortfolioFilterBar } from "@/components/site/PortfolioFilterBar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { categoriesQuery, galleryPhotosQuery } from "@/lib/content";
+import { photoUrl } from "@/lib/photo-url";
 
 type PortfolioSearch = { category?: string };
 
@@ -12,7 +13,15 @@ export const Route = createFileRoute("/portfolio/")({
     const raw = search["category"];
     return typeof raw === "string" && raw.length > 0 ? { category: raw } : {};
   },
-  head: () => ({
+  loaderDeps: ({ search }: { search: PortfolioSearch }) => ({ category: search.category }),
+  // Loaded server-side so the gallery is indexable and the first row is in HTML.
+  loader: async ({ context: { queryClient }, deps }) => {
+    const cats = await queryClient.ensureQueryData(categoriesQuery);
+    const active = cats.find((c) => c.slug === deps.category);
+    const photos = await queryClient.ensureQueryData(galleryPhotosQuery(active?.id ?? null));
+    return { ogImage: photoUrl(photos[0]?.storage_path), category: active?.name ?? null };
+  },
+  head: ({ loaderData }) => ({
     meta: [
       { title: "Portfolio — OnySnow Studios" },
       {
@@ -23,6 +32,7 @@ export const Route = createFileRoute("/portfolio/")({
       { property: "og:title", content: "Portfolio — OnySnow Studios" },
       { property: "og:description", content: "Six disciplines, one cinematic point of view." },
       { property: "og:type", content: "website" },
+      ...(loaderData?.ogImage ? [{ property: "og:image", content: loaderData.ogImage }] : []),
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
@@ -44,6 +54,19 @@ function Portfolio() {
 
   return (
     <>
+      {/*
+        The page's real heading, carried only for screen readers and crawlers.
+
+        The design deliberately has no title block here — the photographs start
+        directly under the bars and nothing is allowed to eat that space. But a
+        page with no h1 at all leaves assistive tech with nothing to announce and
+        search engines with nothing to index, so the heading exists without
+        occupying a pixel. It tracks the active filter.
+      */}
+      <h1 className="sr-only">
+        {active?.name ? `${active.name} photography` : "Portfolio"} — OnySnow Studios
+      </h1>
+
       <PortfolioFilterBar categories={cats} active={active?.slug} />
 
       <section className="px-2 pb-24 pt-2 sm:px-3 lg:px-4">

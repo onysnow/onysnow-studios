@@ -4,9 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { reportWriteError } from "@/lib/form-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 const schema = z.object({
   email: z.string().email("That doesn’t look like an email address."),
@@ -25,7 +27,9 @@ export function SubscribeForm({
   variant = "inline",
 }: {
   source?: string;
-  variant?: "inline" | "banner";
+  /** "bare" renders only the field and button — for places that supply their
+   *  own heading and blurb, like the footer. */
+  variant?: "inline" | "banner" | "bare";
 }) {
   const [done, setDone] = useState(false);
   const {
@@ -44,7 +48,7 @@ export function SubscribeForm({
         setDone(true);
         return;
       }
-      toast.error("Couldn’t sign you up", { description: error.message });
+      reportWriteError(error, "Couldn’t sign you up");
       return;
     }
     setDone(true);
@@ -64,11 +68,15 @@ export function SubscribeForm({
       className={variant === "banner" ? "max-w-xl" : "max-w-md"}
       noValidate
     >
-      <p className="eyebrow">The journal</p>
-      <p className="mt-3 text-lg leading-7 text-muted-foreground">
-        New photographs and the occasional story behind them. No schedule, no noise.
-      </p>
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+      {variant === "bare" ? null : (
+        <>
+          <p className="eyebrow">The journal</p>
+          <p className="mt-3 text-lg leading-7 text-muted-foreground">
+            New photographs and the occasional story behind them. No schedule, no noise.
+          </p>
+        </>
+      )}
+      <div className={cn("flex flex-col gap-3 sm:flex-row", variant === "bare" ? "" : "mt-6")}>
         <Input
           type="email"
           autoComplete="email"
@@ -92,7 +100,9 @@ export function SubscribeForm({
           Subscribe
         </Button>
       </div>
-      {errors.email ? <p className="mt-2 text-sm text-destructive">{errors.email.message}</p> : null}
+      {errors.email ? (
+        <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
+      ) : null}
     </form>
   );
 }

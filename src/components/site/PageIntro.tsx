@@ -31,10 +31,21 @@ export function PageIntro({
   return (
     <div className="relative isolate">
       <div aria-hidden="true" className="absolute inset-0 -z-10 overflow-hidden">
-        <Img image={backdrop} eager className="h-full w-full" sizes="100vw" imgClassName="object-cover" />
-        {/* Heavy scrim: the photograph is there for the blur to catch, not to be read. */}
-        <div className="absolute inset-0 bg-background/80" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+        <Img
+          image={backdrop}
+          eager
+          className="h-full w-full"
+          sizes="100vw"
+          imgClassName="object-cover"
+        />
+        {/*
+          Graded rather than flat. A uniform 80% scrim left the photograph so
+          washed out that the header had nothing to blur — the bar read as plain
+          transparency. It stays light through the top band, where the glass
+          covers it, then deepens to solid background behind the headline so the
+          copy keeps its contrast.
+        */}
+        <div className="absolute inset-0 bg-gradient-to-b from-background/15 via-background/70 to-background" />
       </div>
 
       <Section size="none" className="pt-24 pb-8 lg:pt-28 lg:pb-10">
@@ -54,7 +65,9 @@ export function PageIntro({
             {loading ? (
               <Skeleton className="mt-7 h-10 max-w-2xl" />
             ) : body ? (
-              <p className="mt-7 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">{body}</p>
+              <p className="mt-7 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+                {body}
+              </p>
             ) : null}
           </Reveal>
         </Container>

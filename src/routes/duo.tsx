@@ -9,6 +9,15 @@ import { Container, Section } from "@/components/site/layout";
 import { copy, pageCopyQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 export const Route = createFileRoute("/duo")({
+  // The enabled/disabled decision is made on the server; otherwise every visitor
+  // sees "Not open yet" for a beat before the real page replaces it.
+  loader: async ({ context: { queryClient } }) => {
+    await Promise.all([
+      queryClient.ensureQueryData(settingsQuery),
+      queryClient.ensureQueryData(pageCopyQuery("duo")),
+      queryClient.ensureQueryData(coverPhotosQuery),
+    ]);
+  },
   head: () => ({
     meta: [
       { title: "Father & Daughter Shoots — OnySnow Studios" },
@@ -86,7 +95,11 @@ function DuoPage() {
       <Section size="none" className="pb-20 lg:pb-28">
         <Container className="grid gap-14 lg:grid-cols-2 lg:items-center">
           <Reveal>
-            <Img image={portrait} className="aspect-[4/5]" sizes="(min-width: 1024px) 50vw, 100vw" />
+            <Img
+              image={portrait}
+              className="aspect-[4/5]"
+              sizes="(min-width: 1024px) 50vw, 100vw"
+            />
           </Reveal>
           <Reveal>
             <h2 className="font-display text-2xl lg:text-3xl">

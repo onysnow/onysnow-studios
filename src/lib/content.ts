@@ -73,8 +73,10 @@ export const categoriesQuery = queryOptions({
   queryKey: ["categories"],
   staleTime: STALE,
   queryFn: () =>
-    rows<"categories", Category>("categories", "id,slug,name,description,cover_photo_id,sort_order,published", (q) =>
-      q.eq("published", true).order("sort_order"),
+    rows<"categories", Category>(
+      "categories",
+      "id,slug,name,description,cover_photo_id,sort_order,published",
+      (q) => q.eq("published", true).order("sort_order"),
     ),
 });
 
@@ -130,7 +132,9 @@ export function photosByIdsQuery(ids: string[]) {
     queryFn: () =>
       unique.length === 0
         ? Promise.resolve([] as Photo[])
-        : rows<"photos", Photo>("photos", PHOTO_COLS, (q) => q.in("id", unique).eq("published", true)),
+        : rows<"photos", Photo>("photos", PHOTO_COLS, (q) =>
+            q.in("id", unique).eq("published", true),
+          ),
   });
 }
 
@@ -166,10 +170,15 @@ export function pageCopyQuery(pageSlug: string) {
     queryKey: ["page_content", pageSlug],
     staleTime: STALE,
     queryFn: async () => {
-      const list = await rows<"page_content", PageContent>("page_content", "section_key,value", (q) =>
-        q.eq("page_slug", pageSlug).eq("published", true).order("sort_order"),
+      const list = await rows<"page_content", PageContent>(
+        "page_content",
+        "section_key,value",
+        (q) => q.eq("page_slug", pageSlug).eq("published", true).order("sort_order"),
       );
-      return Object.fromEntries(list.map((r) => [r.section_key, r.value])) as Record<string, string>;
+      return Object.fromEntries(list.map((r) => [r.section_key, r.value])) as Record<
+        string,
+        string
+      >;
     },
   });
 }
@@ -246,7 +255,10 @@ export function postQuery(slug: string) {
 }
 
 /** Look up a photograph by id — blocks reference photos rather than embedding them. */
-export function photoById(photos: Photo[] | undefined, id: string | null | undefined): Photo | undefined {
+export function photoById(
+  photos: Photo[] | undefined,
+  id: string | null | undefined,
+): Photo | undefined {
   if (!photos || !id) return undefined;
   return photos.find((p) => p.id === id);
 }

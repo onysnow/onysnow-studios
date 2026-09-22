@@ -7,9 +7,18 @@ import { useContentRefresh } from "@/hooks/use-admin";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
-export const Route = createFileRoute("/_authenticated/admin/subscribers")({ component: SubscribersPage });
+export const Route = createFileRoute("/_authenticated/admin/subscribers")({
+  component: SubscribersPage,
+});
 
 function SubscribersPage() {
   const subscribers = useQuery(adminSubscribersQuery);
@@ -18,8 +27,13 @@ function SubscribersPage() {
 
   /** Export as CSV so the list can move into whatever email tool gets chosen. */
   function exportCsv() {
-    const rows = [["email", "source", "joined"], ...list.map((s) => [s.email, s.source, s.created_at])];
-    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const rows = [
+      ["email", "source", "joined"],
+      ...list.map((s) => [s.email, s.source, s.created_at]),
+    ];
+    const csv = rows
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = document.createElement("a");
     a.href = url;
@@ -73,7 +87,12 @@ function SubscribersPage() {
                     {new Date(s.created_at).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" aria-label={`Remove ${s.email}`} onClick={() => remove(s.id)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove ${s.email}`}
+                      onClick={() => remove(s.id)}
+                    >
                       <Trash2 className="size-4" />
                     </Button>
                   </TableCell>

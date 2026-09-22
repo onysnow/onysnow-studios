@@ -17,9 +17,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export const Route = createFileRoute("/_authenticated/admin/pages")({ component: PagesPage });
 
 const LABELS: Record<string, string> = {
-  home: "Home", about: "About", portfolio: "Portfolio", services: "Services",
-  journal: "Journal", duo: "Father & daughter",
-  book: "Book", contact: "Contact", privacy: "Privacy", terms: "Terms",
+  home: "Home",
+  about: "About",
+  portfolio: "Portfolio",
+  services: "Services",
+  journal: "Journal",
+  duo: "Father & daughter",
+  book: "Book",
+  contact: "Contact",
+  privacy: "Privacy",
+  terms: "Terms",
 };
 
 function PagesPage() {
@@ -44,25 +51,47 @@ function PagesPage() {
     setSaving(id);
     try {
       await updateRow("page_content", id, { value });
-      setDrafts((d) => { const next = { ...d }; delete next[id]; return next; });
+      setDrafts((d) => {
+        const next = { ...d };
+        delete next[id];
+        return next;
+      });
       refresh();
       toast.success("Saved");
     } catch (error) {
-      toast.error("Could not save", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Could not save", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
     setSaving(null);
   }
 
   if (content.isLoading) {
-    return (<><AdminHeading title="Page copy" /><div className="space-y-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40 w-full" />)}</div></>);
+    return (
+      <>
+        <AdminHeading title="Page copy" />
+        <div className="space-y-4">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
+        </div>
+      </>
+    );
   }
 
   return (
     <>
-      <AdminHeading title="Page copy" description="Every piece of writing on the website. Longer sections use the formatted editor." />
+      <AdminHeading
+        title="Page copy"
+        description="Every piece of writing on the website. Longer sections use the formatted editor."
+      />
       <Tabs defaultValue={slugs[0] ?? "home"}>
         <TabsList className="flex-wrap">
-          {slugs.map((slug) => <TabsTrigger key={slug} value={slug}>{LABELS[slug] ?? slug}</TabsTrigger>)}
+          {slugs.map((slug) => (
+            <TabsTrigger key={slug} value={slug}>
+              {LABELS[slug] ?? slug}
+            </TabsTrigger>
+          ))}
         </TabsList>
         {slugs.map((slug) => (
           <TabsContent key={slug} value={slug} className="mt-6 space-y-8">
@@ -72,17 +101,34 @@ function PagesPage() {
               return (
                 <div key={row.id} className="rounded-lg border border-border bg-card p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <Label className="text-xs uppercase tracking-widest text-muted-foreground">{row.section_key.replace(/_/g, " ")}</Label>
-                    <Button size="sm" variant={dirty ? "cinematic" : "ghost"} disabled={!dirty || saving === row.id} onClick={() => save(row.id)}>
+                    <Label className="text-xs uppercase tracking-widest text-muted-foreground">
+                      {row.section_key.replace(/_/g, " ")}
+                    </Label>
+                    <Button
+                      size="sm"
+                      variant={dirty ? "cinematic" : "ghost"}
+                      disabled={!dirty || saving === row.id}
+                      onClick={() => save(row.id)}
+                    >
                       <Save /> {dirty ? "Save" : "Saved"}
                     </Button>
                   </div>
                   {row.format === "html" ? (
-                    <RichTextEditor value={value} onChange={(html) => setDrafts((d) => ({ ...d, [row.id]: html }))} />
+                    <RichTextEditor
+                      value={value}
+                      onChange={(html) => setDrafts((d) => ({ ...d, [row.id]: html }))}
+                    />
                   ) : value.length > 90 ? (
-                    <Textarea rows={3} value={value} onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))} />
+                    <Textarea
+                      rows={3}
+                      value={value}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
+                    />
                   ) : (
-                    <Input value={value} onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))} />
+                    <Input
+                      value={value}
+                      onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
+                    />
                   )}
                 </div>
               );

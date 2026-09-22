@@ -23,7 +23,13 @@ export function CodeEditor({
         theme="dark"
         extensions={extensions}
         onChange={onChange}
-        basicSetup={{ lineNumbers: true, highlightActiveLine: true, foldGutter: true, bracketMatching: true, autocompletion: true }}
+        basicSetup={{
+          lineNumbers: true,
+          highlightActiveLine: true,
+          foldGutter: true,
+          bracketMatching: true,
+          autocompletion: true,
+        }}
       />
     </div>
   );

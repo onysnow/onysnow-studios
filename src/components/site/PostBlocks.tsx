@@ -11,7 +11,13 @@ import { photoById, type Photo, type PostBlock } from "@/lib/content";
  * Every block composes existing primitives — the editorial feel comes from
  * arrangement and rhythm, not from bespoke CSS per post.
  */
-export function PostBlocks({ blocks, photos }: { blocks: PostBlock[]; photos: Photo[] | undefined }) {
+export function PostBlocks({
+  blocks,
+  photos,
+}: {
+  blocks: PostBlock[];
+  photos: Photo[] | undefined;
+}) {
   return (
     <>
       {blocks.map((block, i) => (
@@ -49,7 +55,10 @@ function Block({
       return (
         <Section size="sm">
           <Container width="prose">
-            <RichText html={block.html} className="space-y-5 text-lg leading-8 text-foreground/85" />
+            <RichText
+              html={block.html}
+              className="space-y-5 text-lg leading-8 text-foreground/85"
+            />
           </Container>
         </Section>
       );

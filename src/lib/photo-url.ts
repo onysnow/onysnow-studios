@@ -6,7 +6,8 @@
  * front of it can cache them properly.
  */
 
-const BASE = (import.meta.env["VITE_SUPABASE_URL"] as string | undefined)?.replace(/\/+$/, "") ?? "";
+const BASE =
+  (import.meta.env["VITE_SUPABASE_URL"] as string | undefined)?.replace(/\/+$/, "") ?? "";
 
 /** The widths we generate at upload time. Keep in sync with lib/image-upload.ts. */
 export const VARIANT_WIDTHS = [640, 1280, 2560] as const;
@@ -34,7 +35,9 @@ export function photoSrcSet(
 ): string | undefined {
   const entries = Object.entries(sources ?? {})
     .map(([w, path]) => [Number(w), path] as const)
-    .filter(([w, path]) => Number.isFinite(w) && w > 0 && typeof path === "string" && path.length > 0)
+    .filter(
+      ([w, path]) => Number.isFinite(w) && w > 0 && typeof path === "string" && path.length > 0,
+    )
     .sort((a, b) => a[0] - b[0]);
 
   if (entries.length === 0) return undefined;

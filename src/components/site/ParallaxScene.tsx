@@ -53,7 +53,9 @@ export function ParallaxScene({
       </motion.div>
       {scrim === "none" ? null : <div className={cn("absolute inset-0", SCRIM[scrim])} />}
       <div className="image-vignette pointer-events-none absolute inset-0" />
-      {children ? <div className="relative flex h-full flex-col justify-end">{children}</div> : null}
+      {children ? (
+        <div className="relative flex h-full flex-col justify-end">{children}</div>
+      ) : null}
     </div>
   );
 }

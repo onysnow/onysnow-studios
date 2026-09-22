@@ -62,7 +62,10 @@ export async function prepareImage(input: File): Promise<PreparedImage> {
       fileType: "image/webp",
       useWebWorker: true,
     });
-    variants.push({ width, file: new File([resized], `${stem}-${width}.webp`, { type: "image/webp" }) });
+    variants.push({
+      width,
+      file: new File([resized], `${stem}-${width}.webp`, { type: "image/webp" }),
+    });
   }
 
   const result: PreparedImage = {
@@ -77,7 +80,14 @@ export async function prepareImage(input: File): Promise<PreparedImage> {
 }
 
 function slugify(name: string) {
-  return name.toLowerCase().replace(/\.[^.]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "photo";
+  return (
+    name
+      .toLowerCase()
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || "photo"
+  );
 }
 
 /** Upload one file plus its responsive renditions, then create its photos row. */
@@ -89,13 +99,17 @@ export async function uploadPhoto(input: File, categoryId: string | null, sortOr
   // Paths are content-unique, so these objects can be cached indefinitely.
   const uploadOptions = { contentType: "image/webp", upsert: false, cacheControl: "31536000" };
 
-  const { error: uploadError } = await supabase.storage.from("photos").upload(path, prepared.file, uploadOptions);
+  const { error: uploadError } = await supabase.storage
+    .from("photos")
+    .upload(path, prepared.file, uploadOptions);
   if (uploadError) throw uploadError;
 
   const sources: Record<string, string> = {};
   for (const variant of prepared.variants) {
     const variantPath = `${stem}-${variant.width}.webp`;
-    const { error } = await supabase.storage.from("photos").upload(variantPath, variant.file, uploadOptions);
+    const { error } = await supabase.storage
+      .from("photos")
+      .upload(variantPath, variant.file, uploadOptions);
     // A missing rendition degrades quality, not correctness — the original still
     // serves. Don't fail the whole upload over one variant.
     if (!error) sources[String(variant.width)] = variantPath;
@@ -117,7 +131,11 @@ export async function uploadPhoto(input: File, categoryId: string | null, sortOr
   return path;
 }
 
-export async function deletePhoto(id: string, storagePath: string, sources?: Record<string, string> | null) {
+export async function deletePhoto(
+  id: string,
+  storagePath: string,
+  sources?: Record<string, string> | null,
+) {
   const paths = [storagePath, ...Object.values(sources ?? {})].filter(Boolean);
   await supabase.storage.from("photos").remove(paths);
   const { error } = await supabase.from("photos").delete().eq("id", id);

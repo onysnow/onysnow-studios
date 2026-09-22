@@ -46,7 +46,14 @@ export type SectionProps = {
   id?: string;
 };
 
-export function Section({ children, size = "base", tone = "default", bleed = false, className, id }: SectionProps) {
+export function Section({
+  children,
+  size = "base",
+  tone = "default",
+  bleed = false,
+  className,
+  id,
+}: SectionProps) {
   return (
     <section id={id} className={cn(SECTION_RHYTHM[size], TONE[tone], !bleed && GUTTER, className)}>
       {children}
@@ -102,7 +109,9 @@ export function Grid({ children, cols = 3, gap = "base", stretch = true, classNa
  * body copy each one carries. Cards never set their own height.
  */
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <article className={cn("flex h-full flex-col bg-background", className)}>{children}</article>;
+  return (
+    <article className={cn("flex h-full flex-col bg-background", className)}>{children}</article>
+  );
 }
 
 export function CardBody({ children, className }: { children: ReactNode; className?: string }) {

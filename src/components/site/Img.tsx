@@ -27,7 +27,14 @@ type ImgProps = {
  * the photograph, an aspect-ratio box so nothing shifts, and a real `srcset` so
  * the browser downloads a rendition matched to how large it is actually drawn.
  */
-export function Img({ image, sizes = "100vw", className, imgClassName, eager = false, alt }: ImgProps) {
+export function Img({
+  image,
+  sizes = "100vw",
+  className,
+  imgClassName,
+  eager = false,
+  alt,
+}: ImgProps) {
   const [loaded, setLoaded] = useState(false);
   const width = image?.width ?? 1600;
   const height = image?.height ?? 1067;
@@ -47,7 +54,12 @@ export function Img({ image, sizes = "100vw", className, imgClassName, eager = f
       {...(style ? { style } : {})}
     >
       {blur ? (
-        <img aria-hidden="true" alt="" src={blur} className="absolute inset-0 size-full scale-110 object-cover blur-xl" />
+        <img
+          aria-hidden="true"
+          alt=""
+          src={blur}
+          className="absolute inset-0 size-full scale-110 object-cover blur-xl"
+        />
       ) : null}
       {src ? (
         <img

@@ -7,7 +7,13 @@ import { Loader2, Star, Trash2, UploadCloud } from "lucide-react";
 import { AdminHeading } from "@/components/admin/AdminHeading";
 import { SortableItem, SortableList } from "@/components/admin/SortableList";
 import { Img } from "@/components/site/Img";
-import { adminCategoriesQuery, adminPhotosQuery, deleteRow, saveOrder, updateRow } from "@/lib/admin";
+import {
+  adminCategoriesQuery,
+  adminPhotosQuery,
+  deleteRow,
+  saveOrder,
+  updateRow,
+} from "@/lib/admin";
 import { deletePhoto, uploadPhoto } from "@/lib/image-upload";
 import { useContentRefresh } from "@/hooks/use-admin";
 import type { Photo } from "@/lib/content";
@@ -17,10 +23,23 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 
@@ -40,30 +59,41 @@ function PhotosPage() {
   const [uploadCategory, setUploadCategory] = useState<string>(UNASSIGNED);
 
   const visible = useMemo(() => {
-    const list = (photos.data ?? []).filter((p) => (filter === "all" ? true : p.category_id === filter));
+    const list = (photos.data ?? []).filter((p) =>
+      filter === "all" ? true : p.category_id === filter,
+    );
     if (!order) return list;
     const rank = new Map(order.map((id, i) => [id, i]));
     return [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
   }, [photos.data, filter, order]);
 
-  const onDrop = useCallback(async (files: File[]) => {
-    if (!files.length) return;
-    setUploading(files.length);
-    const base = (photos.data ?? []).length;
-    let done = 0;
-    for (const [i, file] of files.entries()) {
-      try {
-        await uploadPhoto(file, uploadCategory === UNASSIGNED ? null : uploadCategory, base + i + 1);
-        done++;
-      } catch (error) {
-        toast.error(`Could not upload ${file.name}`, { description: error instanceof Error ? error.message : undefined });
+  const onDrop = useCallback(
+    async (files: File[]) => {
+      if (!files.length) return;
+      setUploading(files.length);
+      const base = (photos.data ?? []).length;
+      let done = 0;
+      for (const [i, file] of files.entries()) {
+        try {
+          await uploadPhoto(
+            file,
+            uploadCategory === UNASSIGNED ? null : uploadCategory,
+            base + i + 1,
+          );
+          done++;
+        } catch (error) {
+          toast.error(`Could not upload ${file.name}`, {
+            description: error instanceof Error ? error.message : undefined,
+          });
+        }
+        setUploading(files.length - i - 1);
       }
-      setUploading(files.length - i - 1);
-    }
-    setUploading(0);
-    if (done) toast.success(`${done} photograph${done === 1 ? "" : "s"} uploaded`);
-    refresh();
-  }, [photos.data, uploadCategory, refresh]);
+      setUploading(0);
+      if (done) toast.success(`${done} photograph${done === 1 ? "" : "s"} uploaded`);
+      refresh();
+    },
+    [photos.data, uploadCategory, refresh],
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -76,7 +106,9 @@ function PhotosPage() {
       await updateRow("photos", id, values);
       refresh();
     } catch (error) {
-      toast.error("Could not save that change", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Could not save that change", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
   }
 
@@ -96,7 +128,11 @@ function PhotosPage() {
       try {
         await deletePhoto(p.id, p.storage_path, p.sources);
       } catch {
-        try { await deleteRow("photos", p.id); } catch { /* ignore */ }
+        try {
+          await deleteRow("photos", p.id);
+        } catch {
+          /* ignore */
+        }
       }
     }
     setSelected([]);
@@ -120,39 +156,75 @@ function PhotosPage() {
           )}
         >
           <input {...getInputProps()} />
-          {uploading ? <Loader2 className="size-6 animate-spin text-primary" /> : <UploadCloud className="size-6 text-primary" />}
-          <p className="font-medium">{uploading ? `Uploading… ${uploading} left` : "Drag photographs here, or click to choose"}</p>
-          <p className="text-xs text-muted-foreground">JPEG, PNG, WebP or HEIC. Multiple files welcome.</p>
+          {uploading ? (
+            <Loader2 className="size-6 animate-spin text-primary" />
+          ) : (
+            <UploadCloud className="size-6 text-primary" />
+          )}
+          <p className="font-medium">
+            {uploading
+              ? `Uploading… ${uploading} left`
+              : "Drag photographs here, or click to choose"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            JPEG, PNG, WebP or HEIC. Multiple files welcome.
+          </p>
         </div>
         <div className="space-y-2">
           <Label>Add to category</Label>
           <Select value={uploadCategory} onValueChange={setUploadCategory}>
-            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-56">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value={UNASSIGNED}>No category</SelectItem>
-              {(categories.data ?? []).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              {(categories.data ?? []).map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
-        <Select value={filter} onValueChange={(v) => { setFilter(v); setOrder(null); }}>
-          <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+        <Select
+          value={filter}
+          onValueChange={(v) => {
+            setFilter(v);
+            setOrder(null);
+          }}
+        >
+          <SelectTrigger className="w-56">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All photographs</SelectItem>
-            {(categories.data ?? []).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            {(categories.data ?? []).map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">{visible.length} shown</span>
         <span className="flex-1" />
         {selected.length ? (
           <AlertDialog>
-            <AlertDialogTrigger asChild><Button variant="destructive"><Trash2 /> Delete {selected.length}</Button></AlertDialogTrigger>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive">
+                <Trash2 /> Delete {selected.length}
+              </Button>
+            </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete {selected.length} photograph{selected.length === 1 ? "" : "s"}?</AlertDialogTitle>
-                <AlertDialogDescription>This removes the files as well and cannot be undone.</AlertDialogDescription>
+                <AlertDialogTitle>
+                  Delete {selected.length} photograph{selected.length === 1 ? "" : "s"}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  This removes the files as well and cannot be undone.
+                </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep them</AlertDialogCancel>
@@ -165,7 +237,9 @@ function PhotosPage() {
 
       {photos.isLoading ? (
         <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="aspect-[3/2] w-full" />)}
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <Skeleton key={i} className="aspect-[3/2] w-full" />
+          ))}
         </div>
       ) : (
         <SortableList
@@ -177,36 +251,74 @@ function PhotosPage() {
             <SortableItem key={photo.id} id={photo.id}>
               <div className="rounded-lg border border-border bg-card">
                 <div className="relative">
-                  <Img image={photo} alt={photo.alt} className="rounded-t-lg" sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 90vw" />
+                  <Img
+                    image={photo}
+                    alt={photo.alt}
+                    className="rounded-t-lg"
+                    sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 90vw"
+                  />
                   <label className="absolute right-2 top-2 grid size-8 place-items-center rounded-md bg-background/80 backdrop-blur">
                     <Checkbox
                       checked={selected.includes(photo.id)}
                       onCheckedChange={(v) =>
-                        setSelected((prev) => (v ? [...prev, photo.id] : prev.filter((id) => id !== photo.id)))
+                        setSelected((prev) =>
+                          v ? [...prev, photo.id] : prev.filter((id) => id !== photo.id),
+                        )
                       }
                       aria-label={`Select ${photo.title || "photograph"}`}
                     />
                   </label>
                 </div>
                 <div className="space-y-3 p-4">
-                  <Input defaultValue={photo.title} placeholder="Title" onBlur={(e) => e.target.value !== photo.title && patch(photo.id, { title: e.target.value })} />
-                  <Input defaultValue={photo.alt} placeholder="Alt text (described for screen readers)" onBlur={(e) => e.target.value !== photo.alt && patch(photo.id, { alt: e.target.value })} />
-                  <Select value={photo.category_id ?? UNASSIGNED} onValueChange={(v) => patch(photo.id, { category_id: v === UNASSIGNED ? null : v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Input
+                    defaultValue={photo.title}
+                    placeholder="Title"
+                    onBlur={(e) =>
+                      e.target.value !== photo.title && patch(photo.id, { title: e.target.value })
+                    }
+                  />
+                  <Input
+                    defaultValue={photo.alt}
+                    placeholder="Alt text (described for screen readers)"
+                    onBlur={(e) =>
+                      e.target.value !== photo.alt && patch(photo.id, { alt: e.target.value })
+                    }
+                  />
+                  <Select
+                    value={photo.category_id ?? UNASSIGNED}
+                    onValueChange={(v) =>
+                      patch(photo.id, { category_id: v === UNASSIGNED ? null : v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={UNASSIGNED}>No category</SelectItem>
-                      {(categories.data ?? []).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      {(categories.data ?? []).map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <div className="flex items-center justify-between gap-4 pt-1">
                     <label className="flex items-center gap-2 text-sm">
-                      <Switch checked={photo.published} onCheckedChange={(v) => patch(photo.id, { published: v })} /> Published
+                      <Switch
+                        checked={photo.published}
+                        onCheckedChange={(v) => patch(photo.id, { published: v })}
+                      />{" "}
+                      Published
                     </label>
                     <Button
-                      variant="ghost" size="icon" aria-label="Feature on the home page"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Feature on the home page"
                       onClick={() => patch(photo.id, { featured: !photo.featured })}
                     >
-                      <Star className={cn("size-4", photo.featured && "fill-primary text-primary")} />
+                      <Star
+                        className={cn("size-4", photo.featured && "fill-primary text-primary")}
+                      />
                     </Button>
                   </div>
                 </div>

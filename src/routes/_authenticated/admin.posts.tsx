@@ -15,11 +15,22 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/_authenticated/admin/posts")({ component: PostsPage });
@@ -34,7 +45,13 @@ const BLOCK_LABELS: Record<PostBlock["type"], string> = {
 };
 
 function slugify(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70) || "untitled";
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 70) || "untitled"
+  );
 }
 
 function PostsPage() {
@@ -48,7 +65,9 @@ function PostsPage() {
       await updateRow("posts", id, values as Record<string, unknown>);
       refresh();
     } catch (error) {
-      toast.error("Could not save", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Could not save", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
   }
 
@@ -65,7 +84,9 @@ function PostsPage() {
       });
       refresh();
     } catch (error) {
-      toast.error("Could not add", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Could not add", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
   }
 
@@ -77,11 +98,19 @@ function PostsPage() {
       <AdminHeading
         title="Journal"
         description="Posts are built from blocks, so each one can be laid out like a magazine spread."
-        action={<Button variant="cinematic" onClick={add}><Plus /> New post</Button>}
+        action={
+          <Button variant="cinematic" onClick={add}>
+            <Plus /> New post
+          </Button>
+        }
       />
 
       {posts.isLoading ? (
-        <div className="space-y-4">{[0, 1].map((i) => <Skeleton key={i} className="h-40 w-full" />)}</div>
+        <div className="space-y-4">
+          {[0, 1].map((i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
+        </div>
       ) : list.length === 0 ? (
         <p className="text-sm text-muted-foreground">No posts yet. Add one to get started.</p>
       ) : (
@@ -99,7 +128,9 @@ function PostsPage() {
                     <Label>Title</Label>
                     <Input
                       defaultValue={post.title}
-                      onBlur={(e) => e.target.value !== post.title && patch(post.id, { title: e.target.value })}
+                      onBlur={(e) =>
+                        e.target.value !== post.title && patch(post.id, { title: e.target.value })
+                      }
                     />
                   </div>
                   <div className="space-y-2">
@@ -117,20 +148,29 @@ function PostsPage() {
                     <Textarea
                       rows={2}
                       defaultValue={post.excerpt}
-                      onBlur={(e) => e.target.value !== post.excerpt && patch(post.id, { excerpt: e.target.value })}
+                      onBlur={(e) =>
+                        e.target.value !== post.excerpt &&
+                        patch(post.id, { excerpt: e.target.value })
+                      }
                     />
                   </div>
                   <div className="space-y-2">
                     <Label>Cover photograph</Label>
                     <Select
                       defaultValue={post.cover_photo_id ?? "none"}
-                      onValueChange={(v) => patch(post.id, { cover_photo_id: v === "none" ? null : v })}
+                      onValueChange={(v) =>
+                        patch(post.id, { cover_photo_id: v === "none" ? null : v })
+                      }
                     >
-                      <SelectTrigger><SelectValue placeholder="Choose a photograph" /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a photograph" />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
                         {photoList.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.title || p.storage_path}</SelectItem>
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.title || p.storage_path}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -141,7 +181,9 @@ function PostsPage() {
                       type="number"
                       min={1}
                       defaultValue={post.reading_minutes}
-                      onBlur={(e) => patch(post.id, { reading_minutes: Number(e.target.value) || 1 })}
+                      onBlur={(e) =>
+                        patch(post.id, { reading_minutes: Number(e.target.value) || 1 })
+                      }
                     />
                   </div>
                 </div>
@@ -153,14 +195,19 @@ function PostsPage() {
                       onCheckedChange={(v) =>
                         patch(post.id, {
                           published: v,
-                          published_at: v && !post.published_at ? new Date().toISOString() : post.published_at,
+                          published_at:
+                            v && !post.published_at ? new Date().toISOString() : post.published_at,
                         })
                       }
                     />
                     Published
                   </label>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setOpenId(isOpen ? null : post.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setOpenId(isOpen ? null : post.id)}
+                    >
                       {isOpen ? "Hide" : "Edit"} blocks ({blocks.length})
                     </Button>
                     <Button asChild variant="ghost" size="sm">
@@ -170,7 +217,9 @@ function PostsPage() {
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label="Delete post"><Trash2 className="size-4" /></Button>
+                        <Button variant="ghost" size="icon" aria-label="Delete post">
+                          <Trash2 className="size-4" />
+                        </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
@@ -180,7 +229,10 @@ function PostsPage() {
                         <AlertDialogFooter>
                           <AlertDialogCancel>Keep it</AlertDialogCancel>
                           <AlertDialogAction
-                            onClick={async () => { await deleteRow("posts", post.id); refresh(); }}
+                            onClick={async () => {
+                              await deleteRow("posts", post.id);
+                              refresh();
+                            }}
                           >
                             Delete
                           </AlertDialogAction>
@@ -243,10 +295,16 @@ function BlockEditor({
 
   const PhotoPicker = ({ value, onPick }: { value: string; onPick: (id: string) => void }) => (
     <Select value={value || "none"} onValueChange={(v) => onPick(v === "none" ? "" : v)}>
-      <SelectTrigger><SelectValue placeholder="Choose a photograph" /></SelectTrigger>
+      <SelectTrigger>
+        <SelectValue placeholder="Choose a photograph" />
+      </SelectTrigger>
       <SelectContent>
         <SelectItem value="none">None</SelectItem>
-        {photos.map((p) => <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>)}
+        {photos.map((p) => (
+          <SelectItem key={p.id} value={p.id}>
+            {p.label}
+          </SelectItem>
+        ))}
       </SelectContent>
     </Select>
   );
@@ -260,9 +318,23 @@ function BlockEditor({
               {i + 1}. {BLOCK_LABELS[block.type]}
             </p>
             <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => move(i, -1)} disabled={i === 0}>↑</Button>
-              <Button variant="ghost" size="sm" onClick={() => move(i, 1)} disabled={i === blocks.length - 1}>↓</Button>
-              <Button variant="ghost" size="icon" aria-label="Remove block" onClick={() => remove(i)}>
+              <Button variant="ghost" size="sm" onClick={() => move(i, -1)} disabled={i === 0}>
+                ↑
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => move(i, 1)}
+                disabled={i === blocks.length - 1}
+              >
+                ↓
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Remove block"
+                onClick={() => remove(i)}
+              >
                 <Trash2 className="size-4" />
               </Button>
             </div>
@@ -278,7 +350,10 @@ function BlockEditor({
             ) : null}
 
             {block.type === "prose" ? (
-              <RichTextEditor value={block.html} onChange={(html) => update(i, { type: "prose", html })} />
+              <RichTextEditor
+                value={block.html}
+                onChange={(html) => update(i, { type: "prose", html })}
+              />
             ) : null}
 
             {block.type === "pull_quote" ? (
@@ -292,14 +367,19 @@ function BlockEditor({
                 <Input
                   defaultValue={block.attribution ?? ""}
                   placeholder="Attribution (optional)"
-                  onBlur={(e) => update(i, { ...block, type: "pull_quote", attribution: e.target.value })}
+                  onBlur={(e) =>
+                    update(i, { ...block, type: "pull_quote", attribution: e.target.value })
+                  }
                 />
               </>
             ) : null}
 
             {block.type === "full_bleed" ? (
               <>
-                <PhotoPicker value={block.photo_id} onPick={(id) => update(i, { ...block, photo_id: id })} />
+                <PhotoPicker
+                  value={block.photo_id}
+                  onPick={(id) => update(i, { ...block, photo_id: id })}
+                />
                 <Input
                   defaultValue={block.caption ?? ""}
                   placeholder="Caption (optional)"

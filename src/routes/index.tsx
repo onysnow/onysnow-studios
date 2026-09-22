@@ -12,7 +12,11 @@ import { RichText } from "@/components/site/RichText";
 import { Card, CardBody, CardFooter, Container, Grid, Section } from "@/components/site/layout";
 import { GlassPanel } from "@/components/site/GlassPanel";
 import {
-  Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious,
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
 } from "@/components/ui/carousel";
 import {
   categoriesQuery,
@@ -23,9 +27,23 @@ import {
   settingsQuery,
   testimonialsQuery,
 } from "@/lib/content";
+import { photoUrl } from "@/lib/photo-url";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
+  // Loading on the server means crawlers and social cards get real content
+  // instead of skeletons, and the hero image is known before first paint.
+  loader: async ({ context: { queryClient } }) => {
+    const [photos] = await Promise.all([
+      queryClient.ensureQueryData(coverPhotosQuery),
+      queryClient.ensureQueryData(categoriesQuery),
+      queryClient.ensureQueryData(pageCopyQuery("home")),
+      queryClient.ensureQueryData(testimonialsQuery),
+      queryClient.ensureQueryData(settingsQuery),
+    ]);
+    const hero = photos.find((p) => p.featured) ?? photos[0];
+    return { ogImage: photoUrl(hero?.storage_path) };
+  },
+  head: ({ loaderData }) => ({
     meta: [
       { title: "OnySnow Studios — Professional Candid Photography" },
       {
@@ -34,8 +52,12 @@ export const Route = createFileRoute("/")({
           "Cinematic candid, event, portrait, fine art, cosplay, and street photography by Ony Shannon.",
       },
       { property: "og:title", content: "OnySnow Studios — Professional Candid Photography" },
-      { property: "og:description", content: "Real moments, cinematic color, and photographs with atmosphere." },
+      {
+        property: "og:description",
+        content: "Real moments, cinematic color, and photographs with atmosphere.",
+      },
       { property: "og:type", content: "website" },
+      ...(loaderData?.ogImage ? [{ property: "og:image", content: loaderData.ogImage }] : []),
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
@@ -62,7 +84,10 @@ function HomePage() {
     <>
       {/* Hero */}
       <section className="relative min-h-[92svh] overflow-hidden">
-        <motion.div className="absolute inset-0 max-md:!translate-y-0" {...(reduced ? {} : { style: { y: heroY } })}>
+        <motion.div
+          className="absolute inset-0 max-md:!translate-y-0"
+          {...(reduced ? {} : { style: { y: heroY } })}
+        >
           <Img
             image={hero}
             eager
@@ -75,7 +100,9 @@ function HomePage() {
         <div className="image-vignette absolute inset-0" />
         <div className="relative flex min-h-[92svh] flex-col justify-end px-5 pb-14 sm:px-8 lg:px-12 lg:pb-20">
           <Container>
-            <p className="eyebrow">{copy(text, "hero_eyebrow", "Professional candid photography")}</p>
+            <p className="eyebrow">
+              {copy(text, "hero_eyebrow", "Professional candid photography")}
+            </p>
             <h1 className="mt-4 max-w-4xl font-display text-[2.75rem] leading-[.95] sm:text-6xl lg:text-[4.5rem]">
               <ScrambleText text={copy(text, "hero_title", "Life, exactly as it felt.")} />
             </h1>
@@ -100,7 +127,11 @@ function HomePage() {
             <p className="eyebrow">{copy(text, "intro_eyebrow", "What I do")}</p>
             <div>
               <h2 className="max-w-3xl font-display text-2xl leading-tight sm:text-3xl lg:text-4xl">
-                {copy(text, "intro_title", "I photograph the part you didn’t know you’d want to remember.")}
+                {copy(
+                  text,
+                  "intro_title",
+                  "I photograph the part you didn’t know you’d want to remember.",
+                )}
               </h2>
               <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground">
                 {copy(text, "intro_body", "")}
@@ -136,7 +167,9 @@ function HomePage() {
                       <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/30 to-transparent" />
                       <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
                         <div>
-                          <span className="text-[0.65rem] tracking-widest text-primary">0{i + 1}</span>
+                          <span className="text-[0.65rem] tracking-widest text-primary">
+                            0{i + 1}
+                          </span>
                           <h3 className="font-display text-lg leading-tight">{cat.name}</h3>
                         </div>
                         <ArrowDownRight className="size-4 text-foreground/70 transition-transform group-hover:translate-x-1 group-hover:translate-y-1" />
@@ -213,12 +246,18 @@ function HomePage() {
               <div>
                 <Camera className="size-8 text-primary" />
                 <RichText
-                  html={copy(text, "philosophy_title", "Nothing forced.<br/><em>Everything felt.</em>")}
+                  html={copy(
+                    text,
+                    "philosophy_title",
+                    "Nothing forced.<br/><em>Everything felt.</em>",
+                  )}
                   className="mt-8 font-display text-3xl leading-none lg:text-4xl"
                 />
               </div>
               <div className="self-end">
-                <p className="text-lg leading-8 text-foreground/75">{copy(text, "philosophy_body", "")}</p>
+                <p className="text-lg leading-8 text-foreground/75">
+                  {copy(text, "philosophy_body", "")}
+                </p>
                 <Button asChild variant="glass" size="lg" className="mt-8">
                   <Link to="/about">My approach</Link>
                 </Button>

@@ -11,7 +11,8 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground shadow hover:bg-primary/90",
         cinematic: "bg-primary text-primary-foreground shadow-lg hover:bg-primary/85",
-        glass: "border border-foreground/25 bg-background/20 text-foreground backdrop-blur-sm hover:bg-background/35",
+        glass:
+          "border border-foreground/25 bg-background/20 text-foreground backdrop-blur-sm hover:bg-background/35",
         destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
         outline:
           "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",

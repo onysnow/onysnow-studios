@@ -8,9 +8,20 @@ import { SubscribeForm } from "@/components/site/SubscribeForm";
 import { Card, CardBody, CardFooter, Container, Grid, Section } from "@/components/site/layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { copy, pageCopyQuery, photoById, coverPhotosQuery, postsQuery } from "@/lib/content";
+import { photoUrl } from "@/lib/photo-url";
 
 export const Route = createFileRoute("/journal/")({
-  head: () => ({
+  // Server-rendered: a journal crawlers index as an empty page isn't a journal.
+  loader: async ({ context: { queryClient } }) => {
+    const [posts, photos] = await Promise.all([
+      queryClient.ensureQueryData(postsQuery),
+      queryClient.ensureQueryData(coverPhotosQuery),
+      queryClient.ensureQueryData(pageCopyQuery("journal")),
+    ]);
+    const cover = photoById(photos, posts[0]?.cover_photo_id);
+    return { ogImage: photoUrl(cover?.storage_path) };
+  },
+  head: ({ loaderData }) => ({
     meta: [
       { title: "Journal — OnySnow Studios" },
       {
@@ -20,6 +31,7 @@ export const Route = createFileRoute("/journal/")({
       { property: "og:title", content: "Journal — OnySnow Studios" },
       { property: "og:description", content: "Photographs and the stories behind them." },
       { property: "og:type", content: "website" },
+      ...(loaderData?.ogImage ? [{ property: "og:image", content: loaderData.ogImage }] : []),
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
@@ -28,7 +40,11 @@ export const Route = createFileRoute("/journal/")({
 
 function formatDate(value: string | null) {
   if (!value) return "";
-  return new Date(value).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function Journal() {
@@ -62,7 +78,11 @@ function Journal() {
             <Grid cols={3}>
               {list.map((post) => (
                 <Reveal key={post.id}>
-                  <Link to="/journal/$slug" params={{ slug: post.slug }} className="group block h-full">
+                  <Link
+                    to="/journal/$slug"
+                    params={{ slug: post.slug }}
+                    className="group block h-full"
+                  >
                     <Card>
                       <Img
                         image={photoById(photos, post.cover_photo_id)}

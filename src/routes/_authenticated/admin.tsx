@@ -1,15 +1,37 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Camera, Code2, FileText, Folder, Images, LayoutDashboard, LogOut, MessageSquareQuote,
-  Inbox, Loader2, Settings, Sparkles, ExternalLink,
+  Camera,
+  Code2,
+  FileText,
+  Folder,
+  Images,
+  LayoutDashboard,
+  LogOut,
+  MessageSquareQuote,
+  Inbox,
+  Loader2,
+  Settings,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminStatus } from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
 import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -44,7 +66,11 @@ function AdminLayout() {
   }
 
   if (isLoading) {
-    return <div className="grid min-h-screen place-items-center"><Loader2 className="size-6 animate-spin text-primary" /></div>;
+    return (
+      <div className="grid min-h-screen place-items-center">
+        <Loader2 className="size-6 animate-spin text-primary" />
+      </div>
+    );
   }
 
   if (!data?.isAdmin) {
@@ -53,11 +79,13 @@ function AdminLayout() {
         <div className="max-w-md">
           <h1 className="font-display text-2xl">Not authorised</h1>
           <p className="mt-4 text-sm text-muted-foreground">
-            This account is signed in but has not been granted studio access. Only accounts explicitly
-            granted access can manage the site.
+            This account is signed in but has not been granted studio access. Only accounts
+            explicitly granted access can manage the site.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">{data?.user?.email}</p>
-          <Button variant="outline" className="mt-8" onClick={signOut}>Sign out</Button>
+          <Button variant="outline" className="mt-8" onClick={signOut}>
+            Sign out
+          </Button>
         </div>
       </main>
     );
@@ -78,11 +106,16 @@ function AdminLayout() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {NAV.map((item) => {
-                  const active = item.exact ? pathname === item.to || pathname === `${item.to}/` : pathname.startsWith(item.to);
+                  const active = item.exact
+                    ? pathname === item.to || pathname === `${item.to}/`
+                    : pathname.startsWith(item.to);
                   return (
                     <SidebarMenuItem key={item.to}>
                       <SidebarMenuButton asChild isActive={active}>
-                        <Link to={item.to}><item.icon /><span>{item.label}</span></Link>
+                        <Link to={item.to}>
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
@@ -94,10 +127,18 @@ function AdminLayout() {
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild><Link to="/"><ExternalLink /><span>View site</span></Link></SidebarMenuButton>
+              <SidebarMenuButton asChild>
+                <Link to="/">
+                  <ExternalLink />
+                  <span>View site</span>
+                </Link>
+              </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={signOut}><LogOut /><span>Sign out</span></SidebarMenuButton>
+              <SidebarMenuButton onClick={signOut}>
+                <LogOut />
+                <span>Sign out</span>
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
@@ -107,7 +148,9 @@ function AdminLayout() {
           <SidebarTrigger />
           <p className="text-sm text-muted-foreground">Signed in as {data.user?.email}</p>
         </header>
-        <div className="p-5 sm:p-8"><Outlet /></div>
+        <div className="p-5 sm:p-8">
+          <Outlet />
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

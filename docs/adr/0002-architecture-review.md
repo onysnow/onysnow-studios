@@ -137,14 +137,49 @@ Options A and B aren't really in competition — B is half a day and A is a day 
 
 ## Action items
 
-1. [ ] Resolve post-block photographs by id rather than scanning the full `photosQuery` result.
-2. [ ] Scope `photosQuery`: select only rendered columns, filter server-side, paginate the gallery.
-3. [ ] Convert public routes to loaders with `queryClient.ensureQueryData`; hydrate on the client.
-4. [ ] Derive `og:image` per route — post cover, category cover, or hero.
-5. [ ] Add per-route error boundaries in the same pass as item 3.
-6. [ ] Delete the 12 unused shadcn components and `recharts`.
-7. [ ] Type the Supabase client; remove the six `any` casts.
+1. [x] Resolve post-block photographs by id rather than scanning the full `photosQuery` result.
+2. [x] Scope `photosQuery`: select only rendered columns, filter server-side, paginate the gallery.
+3. [x] Convert public routes to loaders with `queryClient.ensureQueryData`; hydrate on the client.
+4. [x] Derive `og:image` per route — post cover, category cover, or hero.
+5. [x] Add per-route error boundaries in the same pass as item 3.
+6. [x] Delete the 12 unused shadcn components and `recharts`.
+7. [x] Type the Supabase client; remove the six `any` casts.
 8. [ ] Make the repository private.
-9. [ ] Vitest on `lib/`, one Playwright smoke test per public route, both in GitHub Actions.
-10. [ ] Rate-limit `inquiries` and `subscribers` — schedule against traffic, not against the calendar.
+9. [x] Vitest on `lib/`, one Playwright smoke test per public route, both in GitHub Actions.
+10. [x] Rate-limit `inquiries` and `subscribers` — schedule against traffic, not against the calendar.
 11. [ ] Harvest `ScrambleText`, `ParallaxScene`, `GlassPanel`, `JustifiedGallery` and `Reveal` into the OnySnow UI registry.
+
+
+## Status of the action items — 2026-09-22
+
+Items 1–7, 9 and 10 are implemented. Two remain, both requiring action outside
+this repository:
+
+- **8 — make the repository private.** Ony's to do; nothing here can change it.
+- **11 — harvest the effects into the OnySnow UI registry.** `ScrambleText`,
+  `ParallaxScene`, `GlassPanel`, `JustifiedGallery`, `Reveal` and now
+  `CustomCursor` are the candidates. The registry lives in a separate repository
+  that isn't checked out here.
+
+### Notes from the implementation
+
+**The rate-limit migration is written but not applied.** `20260922090000_public_write_rate_limits.sql`
+adds a `BEFORE INSERT` trigger on `inquiries` and `subscribers` that counts
+writes per caller per window, keyed on a salted hash of the request IP (falling
+back to the email when no IP is visible) so no address is ever stored. Limits
+live in `rate_limit_rules` rather than in the trigger, so tuning them against
+real traffic is an UPDATE rather than a migration — which is what this document
+asked for. It needs to be run against the database before it does anything.
+
+**The e2e suite runs against `vite dev`, not `vite preview`.** The production
+build targets a Cloudflare Worker through Nitro, so its output lands in
+`.output/` and `vite preview` — which looks for `dist/server` — can't serve it.
+CI therefore runs `build` as its own check alongside the smoke tests rather than
+testing the built artefact directly. Serving the worker with wrangler in CI would
+close that gap if it ever matters.
+
+**The portfolio page had no `h1`.** Removing the header block to protect the fold
+also removed the page's only heading. It now carries an `sr-only` one that tracks
+the active filter, so the design is unchanged and the page is still announceable
+and indexable. Worth remembering as a cost of that pattern rather than a one-off
+bug.

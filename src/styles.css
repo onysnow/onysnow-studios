@@ -60,12 +60,24 @@
   :focus-visible { outline: 2px solid var(--color-ring); }
 }
 
+/*
+ * The frosted bars (site header, portfolio filter bar).
+ *
+ * The blur only reads as glass when there is something with detail behind it.
+ * Both places this is used sit over a photographic band whose scrim is graded
+ * rather than flat — see PageIntro and the portfolio layout. A uniform heavy
+ * scrim washes the photograph out to a near-solid colour, and blurring a solid
+ * colour looks exactly like plain transparency, which is how this got reported
+ * as "not frosted" more than once.
+ *
+ * Lightning CSS adds the -webkit- prefix at build time; don't write it by hand.
+ */
 @utility glass-bar {
   background-color: oklch(0.145 0.011 55 / 28%);
   backdrop-filter: blur(28px) saturate(150%);
-  -webkit-backdrop-filter: blur(28px) saturate(150%);
   box-shadow: inset 0 1px 0 oklch(1 0 0 / 7%);
 }
+
 @utility display-face { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.015em; text-transform: uppercase; }
 @utility eyebrow { font-size: .7rem; text-transform: uppercase; letter-spacing: .2em; color: var(--color-primary); }
 @utility image-vignette { box-shadow: inset 0 0 9rem 1rem oklch(0.08 0.01 55 / 70%); }
@@ -91,3 +103,81 @@
 /* TipTap editor surface */
 .tiptap { min-height: 14rem; outline: none; }
 .tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--color-muted-foreground); float: left; height: 0; pointer-events: none; }
+
+/* ===================== Cursor =====================
+ *
+ * `mix-blend-mode: difference` on a white element inverts whatever sits beneath
+ * it, which is what gives the negative over photographs and the knocked-out
+ * lettering over links — one element, every background.
+ *
+ * The native cursor is hidden by a class the component adds only after it has
+ * confirmed a fine pointer, so touch devices and anyone with reduced motion
+ * keep their own pointer and never meet this at all.
+ */
+.custom-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: difference;
+  transition: opacity .25s ease;
+  will-change: transform;
+}
+
+.custom-cursor__ring,
+.custom-cursor__dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  border-radius: 9999px;
+  translate: -50% -50%;
+  /* White is the identity for `difference`: the result is a true inversion of
+     the pixels underneath rather than a tint. */
+  transition: width .32s cubic-bezier(.22,1,.36,1), height .32s cubic-bezier(.22,1,.36,1),
+              background-color .32s ease, border-color .32s ease, opacity .2s ease;
+}
+
+.custom-cursor__ring {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #fff;
+}
+
+.custom-cursor__dot {
+  width: 4px;
+  height: 4px;
+  background-color: #fff;
+}
+
+/* Over a link or button: a filled disc big enough to sit behind a nav item. */
+.custom-cursor[data-state="link"] .custom-cursor__ring {
+  width: 56px;
+  height: 56px;
+  background-color: #fff;
+  border-color: #fff;
+}
+.custom-cursor[data-state="link"] .custom-cursor__dot { opacity: 0; }
+
+/* Over a photograph: a wider filled disc. Against `difference` this reads as a
+   lens holding a negative of the frame beneath it. */
+.custom-cursor[data-state="media"] .custom-cursor__ring {
+  width: 96px;
+  height: 96px;
+  background-color: #fff;
+  border-color: #fff;
+}
+.custom-cursor[data-state="media"] .custom-cursor__dot { opacity: 0; }
+
+.has-custom-cursor,
+.has-custom-cursor * { cursor: none !important; }
+
+/* The lightbox opens its own layer above everything; the disc chasing the
+   pointer over it is noise rather than atmosphere. */
+.has-custom-cursor:has(.yarl__container) .custom-cursor { opacity: 0 !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-cursor { display: none; }
+}

@@ -23,7 +23,11 @@ export function JustifiedGallery({ images, spacing = 6 }: { images: Photo[]; spa
         // react-photo-album picks from srcSet using the width it lays the frame
         // out at, so only the needed rendition is fetched.
         const srcSet = Object.entries(image.sources ?? {})
-          .map(([w, path]) => ({ src: photoUrl(path), width: Number(w), height: Math.round(Number(w) * ratio) }))
+          .map(([w, path]) => ({
+            src: photoUrl(path),
+            width: Number(w),
+            height: Math.round(Number(w) * ratio),
+          }))
           .filter((c) => Number.isFinite(c.width) && c.width > 0)
           .sort((a, b) => a.width - b.width);
         return {

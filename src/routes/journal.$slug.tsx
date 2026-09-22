@@ -7,20 +7,49 @@ import { SubscribeForm } from "@/components/site/SubscribeForm";
 import { Container, Section } from "@/components/site/layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { photoById, photosByIdsQuery, postQuery, type PostBlock } from "@/lib/content";
+import { photoUrl } from "@/lib/photo-url";
 
 function titleFromSlug(slug: string) {
-  return slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  return slug
+    .split("-")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 export const Route = createFileRoute("/journal/$slug")({
-  head: ({ params }) => {
-    const name = titleFromSlug(params.slug);
+  /**
+   * Loaded on the server so the post's own title, excerpt and cover photograph
+   * are in the HTML — which is what makes a shared link worth clicking and what
+   * lets the piece be indexed at all.
+   */
+  loader: async ({ context: { queryClient }, params }) => {
+    const post = await queryClient.ensureQueryData(postQuery(params.slug));
+    if (!post) return { post: null, ogImage: "" };
+
+    const referenced = ((post.blocks ?? []) as PostBlock[]).flatMap((b) =>
+      b.type === "full_bleed"
+        ? [b.photo_id]
+        : b.type === "image_pair" || b.type === "gallery"
+          ? b.photo_ids
+          : [],
+    );
+    const photos = await queryClient.ensureQueryData(
+      photosByIdsQuery([...referenced, post.cover_photo_id ?? ""]),
+    );
+    const cover = photos.find((p) => p.id === post.cover_photo_id);
+    return { post, ogImage: photoUrl(cover?.storage_path) };
+  },
+  head: ({ params, loaderData }) => {
+    const title = loaderData?.post?.title ?? titleFromSlug(params.slug);
+    const description = loaderData?.post?.excerpt || `${title}, from the OnySnow Studios journal.`;
     return {
       meta: [
-        { title: `${name} — OnySnow Studios` },
-        { name: "description", content: `${name}, from the OnySnow Studios journal.` },
-        { property: "og:title", content: `${name} — OnySnow Studios` },
+        { title: `${title} — OnySnow Studios` },
+        { name: "description", content: description },
+        { property: "og:title", content: `${title} — OnySnow Studios` },
+        { property: "og:description", content: description },
         { property: "og:type", content: "article" },
+        ...(loaderData?.ogImage ? [{ property: "og:image", content: loaderData.ogImage }] : []),
         { name: "twitter:card", content: "summary_large_image" },
       ],
     };
@@ -30,7 +59,11 @@ export const Route = createFileRoute("/journal/$slug")({
 
 function formatDate(value: string | null) {
   if (!value) return "";
-  return new Date(value).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function PostPage() {
@@ -47,9 +80,7 @@ function PostPage() {
           ? b.photo_ids
           : [],
   );
-  const { data: photos } = useQuery(
-    photosByIdsQuery([...referenced, post?.cover_photo_id ?? ""]),
-  );
+  const { data: photos } = useQuery(photosByIdsQuery([...referenced, post?.cover_photo_id ?? ""]));
 
   if (isPending) {
     return (

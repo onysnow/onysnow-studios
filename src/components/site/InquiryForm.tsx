@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { reportWriteError } from "@/lib/form-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,7 +38,15 @@ export function InquiryForm({ kind, successNote }: { kind: string; successNote: 
     formState: { errors, isSubmitting },
   } = useForm<Values>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", email: "", organisation: "", usage: "", region: "", message: "", website: "" },
+    defaultValues: {
+      name: "",
+      email: "",
+      organisation: "",
+      usage: "",
+      region: "",
+      message: "",
+      website: "",
+    },
   });
 
   async function onSubmit(values: Values) {
@@ -56,7 +65,7 @@ export function InquiryForm({ kind, successNote }: { kind: string; successNote: 
       .insert({ name: values.name, email: values.email, kind, message });
 
     if (error) {
-      toast.error("Couldn’t send that", { description: error.message });
+      reportWriteError(error, "Couldn’t send that");
       return;
     }
     setSent(true);
@@ -79,12 +88,22 @@ export function InquiryForm({ kind, successNote }: { kind: string; successNote: 
         <div>
           <Label htmlFor={`${kind}-name`}>Your name</Label>
           <Input id={`${kind}-name`} className={field} autoComplete="name" {...register("name")} />
-          {errors.name ? <p className="mt-2 text-sm text-destructive">{errors.name.message}</p> : null}
+          {errors.name ? (
+            <p className="mt-2 text-sm text-destructive">{errors.name.message}</p>
+          ) : null}
         </div>
         <div>
           <Label htmlFor={`${kind}-email`}>Email</Label>
-          <Input id={`${kind}-email`} type="email" className={field} autoComplete="email" {...register("email")} />
-          {errors.email ? <p className="mt-2 text-sm text-destructive">{errors.email.message}</p> : null}
+          <Input
+            id={`${kind}-email`}
+            type="email"
+            className={field}
+            autoComplete="email"
+            {...register("email")}
+          />
+          {errors.email ? (
+            <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
+          ) : null}
         </div>
       </div>
 
@@ -104,22 +123,35 @@ export function InquiryForm({ kind, successNote }: { kind: string; successNote: 
           placeholder="Product listing, campaign, social, print…"
           {...register("usage")}
         />
-        {errors.usage ? <p className="mt-2 text-sm text-destructive">{errors.usage.message}</p> : null}
+        {errors.usage ? (
+          <p className="mt-2 text-sm text-destructive">{errors.usage.message}</p>
+        ) : null}
       </div>
 
       <div>
         <Label htmlFor={`${kind}-region`}>City or region</Label>
         <Input id={`${kind}-region`} className={field} {...register("region")} />
-        {errors.region ? <p className="mt-2 text-sm text-destructive">{errors.region.message}</p> : null}
+        {errors.region ? (
+          <p className="mt-2 text-sm text-destructive">{errors.region.message}</p>
+        ) : null}
       </div>
 
       <div>
         <Label htmlFor={`${kind}-message`}>Tell me about the shoot</Label>
         <Textarea id={`${kind}-message`} rows={5} className="mt-2" {...register("message")} />
-        {errors.message ? <p className="mt-2 text-sm text-destructive">{errors.message.message}</p> : null}
+        {errors.message ? (
+          <p className="mt-2 text-sm text-destructive">{errors.message.message}</p>
+        ) : null}
       </div>
 
-      <input type="text" tabIndex={-1} aria-hidden="true" autoComplete="off" className="hidden" {...register("website")} />
+      <input
+        type="text"
+        tabIndex={-1}
+        aria-hidden="true"
+        autoComplete="off"
+        className="hidden"
+        {...register("website")}
+      />
 
       <Button type="submit" variant="cinematic" size="lg" disabled={isSubmitting}>
         {isSubmitting ? <Loader2 className="animate-spin" /> : null}

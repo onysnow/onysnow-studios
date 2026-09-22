@@ -12,7 +12,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({ component: SettingsPage });
@@ -39,13 +45,24 @@ function SettingsPage() {
       refresh();
       toast.success("Settings saved");
     } catch (error) {
-      toast.error("Could not save the settings", { description: error instanceof Error ? error.message : undefined });
+      toast.error("Could not save the settings", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
     setSaving(false);
   }
 
   if (settings.isLoading) {
-    return (<><AdminHeading title="Settings" /><div className="space-y-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}</div></>);
+    return (
+      <>
+        <AdminHeading title="Settings" />
+        <div className="space-y-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      </>
+    );
   }
 
   // Custom CSS has its own editor under Advanced.
@@ -57,7 +74,11 @@ function SettingsPage() {
       <AdminHeading
         title="Settings"
         description="Studio details, links, search-engine defaults, and how the headline type looks."
-        action={<Button variant="cinematic" disabled={!dirty || saving} onClick={saveAll}><Save /> {dirty ? "Save changes" : "Saved"}</Button>}
+        action={
+          <Button variant="cinematic" disabled={!dirty || saving} onClick={saveAll}>
+            <Save /> {dirty ? "Save changes" : "Saved"}
+          </Button>
+        }
       />
 
       <div className="grid max-w-3xl gap-6">
@@ -78,22 +99,39 @@ function SettingsPage() {
                 </label>
               ) : row.kind === "font" ? (
                 <Select value={value} onValueChange={set}>
-                  <SelectTrigger id={`setting-${row.key}`}><SelectValue /></SelectTrigger>
-                  <SelectContent>{DISPLAY_FONTS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}</SelectContent>
+                  <SelectTrigger id={`setting-${row.key}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DISPLAY_FONTS.map((f) => (
+                      <SelectItem key={f.value} value={f.value}>
+                        {f.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               ) : row.kind === "scale" ? (
                 <div className="flex items-center gap-4">
                   <Slider
                     id={`setting-${row.key}`}
-                    min={0.8} max={1.3} step={0.01}
+                    min={0.8}
+                    max={1.3}
+                    step={0.01}
                     value={[Number(value) || 1]}
                     onValueChange={([v]) => set(String(v ?? 1))}
                     className="max-w-sm"
                   />
-                  <span className="w-16 font-mono text-sm text-muted-foreground">{Number(value || 1).toFixed(2)}×</span>
+                  <span className="w-16 font-mono text-sm text-muted-foreground">
+                    {Number(value || 1).toFixed(2)}×
+                  </span>
                 </div>
               ) : row.kind === "longtext" ? (
-                <Textarea id={`setting-${row.key}`} rows={3} value={value} onChange={(e) => set(e.target.value)} />
+                <Textarea
+                  id={`setting-${row.key}`}
+                  rows={3}
+                  value={value}
+                  onChange={(e) => set(e.target.value)}
+                />
               ) : (
                 <Input
                   id={`setting-${row.key}`}

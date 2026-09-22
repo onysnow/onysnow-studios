@@ -4,6 +4,9 @@ import { Img } from "@/components/site/Img";
 import { coverPhotosQuery } from "@/lib/content";
 
 export const Route = createFileRoute("/portfolio")({
+  // The backdrop is what makes the frosted bars read as glass, so it needs to be
+  // in the first paint rather than appearing a beat after the gallery.
+  loader: ({ context: { queryClient } }) => queryClient.ensureQueryData(coverPhotosQuery),
   component: PortfolioLayout,
 });
 
@@ -21,9 +24,16 @@ function PortfolioLayout() {
         without this the top of the page left them looking like flat slabs.
       */}
       <div aria-hidden="true" className="absolute inset-x-0 top-0 h-40 overflow-hidden">
-        <Img image={backdrop} eager className="h-full w-full" sizes="100vw" imgClassName="object-cover" />
-        <div className="absolute inset-0 bg-background/70" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+        <Img
+          image={backdrop}
+          eager
+          className="h-full w-full"
+          sizes="100vw"
+          imgClassName="object-cover"
+        />
+        {/* Light where the two bars sit, solid by the time the first row of
+            photographs begins, so the gallery still starts on clean background. */}
+        <div className="absolute inset-0 bg-gradient-to-b from-background/20 via-background/50 to-background" />
       </div>
 
       {/* pt-16 clears the fixed header; the filter bar then sits directly beneath
