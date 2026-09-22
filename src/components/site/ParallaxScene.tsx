@@ -42,7 +42,13 @@ export function ParallaxScene({
   const y = useTransform(scrollYProgress, [0, 1], [`-${shift}%`, `${shift}%`]);
 
   return (
-    <div ref={ref} className={cn("relative overflow-hidden", height, className)}>
+    /*
+     * `data-photo` marks this as a photographic surface for the cursor.
+     * The scrim and vignette are siblings of the image and cover it edge to
+     * edge, so a hit test from the pointer lands on a plain div and finds no
+     * `img` above it. The marker is on the container they all share.
+     */
+    <div ref={ref} data-photo className={cn("relative overflow-hidden", height, className)}>
       <motion.div
         className="absolute inset-0 max-md:!translate-y-0"
         {...(reduced ? {} : { style: { y } })}

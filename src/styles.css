@@ -268,12 +268,13 @@
   }
 
   /*
-   * The specular rim, lit by the cursor.
+   * The near arris.
    *
-   * Directional rather than a plain spotlight: the gradient is offset toward the
-   * pointer so the near edge takes the highlight and the far edge stays dark,
-   * which is how a real rim catches a light source. `--glow-x/y/on` are written
-   * by lib/edge-glow.ts.
+   * The corner where the face of the pane meets its side. Glass totally
+   * internally reflects along an edge, which is why the rim of a cut plate is
+   * the brightest part of it even in flat light — so this is always present,
+   * unlike everything the cursor lights. The shader blows it out; this is only
+   * the hairline it blows out FROM.
    */
   .glass::before {
     content: "";
@@ -282,145 +283,151 @@
     border-radius: inherit;
     padding: 1px;
     pointer-events: none;
-    z-index: 2;
-    background:
-      radial-gradient(
-        16rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
-        oklch(1 0 0 / 0.95) 0%,
-        color-mix(in oklab, var(--amber) 95%, transparent) 26%,
-        color-mix(in oklab, var(--teal) 80%, transparent) 52%,
-        transparent 78%
-      );
-    opacity: calc(var(--glow-on, 0) * 1);
-    transition: opacity 0.35s ease;
+    z-index: 3;
+    background: linear-gradient(
+      to bottom,
+      oklch(1 0 0 / 0.42) 0%,
+      oklch(1 0 0 / 0.08) 3%,
+      oklch(1 0 0 / 0.05) 97%,
+      oklch(1 0 0 / 0.3) 100%
+    );
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     mask-composite: exclude;
   }
 
-  /*
-   * The bloom the lit rim throws across the glass. This is the ambient light,
-   * and it exists ONLY on glass — nothing else on the page glows from the
-   * cursor.
-   */
-  .glass > .glass__bloom {
+  /* =====================================================================
+   * Thickness.
+   *
+   * A pane is not a plane. Between its two arrises is the polished side face,
+   * and which of the two side faces you can see depends on where the panel is
+   * relative to your eye: a panel below eye level shows you its top side, one
+   * above shows you its bottom. Scrolling carries a panel from one to the
+   * other, so the thickness opens on one edge as it closes on the other, and
+   * that differential is what reads as depth rather than as a drawn border.
+   *
+   * `--pane-top` and `--pane-bottom` are written by lib/edge-glow.ts. Neither
+   * ever reaches zero: the far side is still there, foreshortened and seen
+   * through the glass, which is why it reads as subtler rather than absent.
+   * ===================================================================== */
+  .glass > .glass__side {
     position: absolute;
-    inset: 0;
-    border-radius: inherit;
+    left: 0;
+    right: 0;
     pointer-events: none;
-    z-index: 1;
-    background: radial-gradient(
-      24rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
-      color-mix(in oklab, var(--amber) 22%, transparent) 0%,
-      color-mix(in oklab, var(--teal) 13%, transparent) 40%,
-      transparent 70%
+    z-index: 3;
+    /*
+     * Dichroic.
+     *
+     * Light crossing the thickness of the pane travels far enough for
+     * dispersion to separate it, which is why the cut edge of a plate runs
+     * blue through gold to violet along its length rather than being a neutral
+     * grey band.
+     */
+    background-image: linear-gradient(
+      100deg,
+      oklch(0.72 0.11 250 / 0.5) 0%,
+      oklch(0.8 0.07 200 / 0.3) 22%,
+      oklch(0.86 0.09 95 / 0.42) 48%,
+      oklch(0.78 0.1 330 / 0.34) 72%,
+      oklch(0.7 0.12 255 / 0.46) 100%
     );
-    opacity: calc(var(--glow-on, 0) * 0.8);
-    transition: opacity 0.35s ease;
+    mix-blend-mode: plus-lighter;
   }
 
   /*
-   * Reflection.
+   * The far arris sits at the inner boundary of the side face — the corner
+   * where the side meets the back surface, seen THROUGH the glass, hence
+   * dimmer than the near one.
+   */
+  .glass > .glass__side::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: oklch(1 0 0 / 0.34);
+  }
+
+  .glass > .glass__side--top {
+    top: 0;
+    height: calc(2px + 10px * var(--pane-top, 0.18));
+    opacity: calc(0.35 + 0.65 * var(--pane-top, 0.18));
+  }
+
+  .glass > .glass__side--top::after {
+    bottom: 0;
+  }
+
+  .glass > .glass__side--bottom {
+    bottom: 0;
+    height: calc(2px + 10px * var(--pane-bottom, 0.18));
+    opacity: calc(0.35 + 0.65 * var(--pane-bottom, 0.18));
+    /* The far corner of the bottom face is its upper boundary. */
+  }
+
+  .glass > .glass__side--bottom::after {
+    top: 0;
+  }
+
+  .glass--bar > .glass__side--top {
+    height: calc(1px + 5px * var(--pane-top, 0.18));
+  }
+
+  .glass--bar > .glass__side--bottom {
+    height: calc(1px + 5px * var(--pane-bottom, 0.18));
+  }
+
+  /*
+   * The environment reflection.
    *
-   * Distinct from the smudges, and it behaves differently. Smudges SCATTER the
-   * light — a diffuse smear, brightest where the light rakes across them.
-   * A reflection is SPECULAR: it mirrors the source, and it slides in the
-   * OPPOSITE direction to the viewpoint, which is the part that actually reads
-   * as glass rather than as a glow. Hence the mirrored coordinates below.
+   * Always there, unlike everything the cursor lights: a room reflects in a
+   * window whether or not anyone is shining a torch at it, and a pane with no
+   * reflection at all reads as a hole rather than as glass.
    *
-   * Faint on purpose. Glass only turns properly mirror-like when the light on
-   * the near side beats what is coming through from behind, which on a dark page
-   * over a photograph it never quite does.
+   * It parallaxes against the pointer in both axes. A reflection is an image
+   * of something standing OFF the surface, so moving relative to the pane
+   * slides it — and it slides the opposite way to the viewer, which is the
+   * part that actually reads as a reflection rather than as a glow.
    */
   .glass > .glass__reflection {
     position: absolute;
-    inset: 0;
+    inset: -12%;
     border-radius: inherit;
     pointer-events: none;
     z-index: 1;
-    opacity: calc(var(--glow-on, 0) * 0.32);
-    transition: opacity 0.4s ease;
-    background: linear-gradient(
-      104deg,
-      transparent 0%,
-      transparent 38%,
-      oklch(1 0 0 / 0.14) 46%,
-      oklch(1 0 0 / 0.05) 52%,
-      transparent 60%,
-      transparent 100%
-    );
-    background-size: 260% 100%;
-    /* Mirrored: the reflection travels against the light. */
-    background-position: calc(100% - var(--glow-x, 50%)) 0;
-  }
-
-  /*
-   * Smudges.
-   *
-   * What a light rakes out of a pane that people have touched: finger streaks,
-   * a whorl or two, general grime. The layer is always there but is masked to
-   * the cursor's light pool, so it only shows where the light actually falls —
-   * which is the whole point, since a clean-looking window is just a dirty one
-   * nobody is shining a light at.
-   *
-   * The grime is an inline feTurbulence rather than an image: no request, no
-   * asset to manage, and it tiles without seams.
-   */
-  .glass > .glass__smudge {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-    opacity: calc(var(--glow-on, 0) * 0.5);
-    transition: opacity 0.35s ease;
-    mix-blend-mode: soft-light;
+    opacity: 0.42;
+    mix-blend-mode: plus-lighter;
     background-image:
-      /* Two finger-drawn arcs. */
+      /* A soft window shape, the brightest thing in most rooms. */
+      linear-gradient(
+        102deg,
+        transparent 0 34%,
+        oklch(1 0 0 / 0.1) 38%,
+        oklch(1 0 0 / 0.16) 45%,
+        oklch(1 0 0 / 0.04) 52%,
+        transparent 58% 100%
+      ),
+      /* Its mullion. */
+      linear-gradient(
+        102deg,
+        transparent 0 43%,
+        oklch(0 0 0 / 0.5) 44% 45.4%,
+        transparent 46% 100%
+      ),
+      /* The dim bulk of the room behind the viewer. */
       radial-gradient(
-        ellipse 42% 8% at 28% 34%,
-        oklch(1 0 0 / 0.5) 0%,
-        oklch(1 0 0 / 0.14) 45%,
-        transparent 72%
-      ),
-      radial-gradient(
-        ellipse 30% 6% at 68% 62%,
-        oklch(1 0 0 / 0.42) 0%,
-        transparent 70%
-      ),
-      /* A couple of prints. */
-      repeating-radial-gradient(
-        circle at 47% 22%,
-        oklch(1 0 0 / 0.3) 0 1px,
-        transparent 1px 4px
-      ),
-      repeating-radial-gradient(
-        circle at 81% 41%,
-        oklch(1 0 0 / 0.24) 0 1px,
-        transparent 1px 5px
-      ),
-      /* Overall grime. */
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
-    background-size:
-      auto,
-      auto,
-      140px 140px,
-      120px 120px,
-      220px 220px;
-    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, repeat;
-    /* Only where the light is. */
-    -webkit-mask: radial-gradient(
-      18rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
-      #000 0%,
-      oklch(0 0 0 / 0.45) 42%,
-      transparent 72%
-    );
-    mask: radial-gradient(
-      18rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
-      #000 0%,
-      oklch(0 0 0 / 0.45) 42%,
-      transparent 72%
+        ellipse 70% 52% at 74% 88%,
+        oklch(0.7 0.03 250 / 0.14) 0%,
+        transparent 68%
+      );
+    background-repeat: no-repeat;
+    /* Moves against the viewer, and further than the pane itself. */
+    transform: translate3d(
+      calc(var(--reflect-x, 0) * -22px),
+      calc(var(--reflect-y, 0) * -14px),
+      0
     );
   }
 }
@@ -491,8 +498,24 @@
 
 /* ---- The glass answering the flash ---- */
 
-/* Glare: a specular band sweeping across the face of the panel. */
-.glass[data-flash] > .glass__bloom {
+/*
+ * Glare: a specular band sweeping across the face of the panel.
+ *
+ * Its own layer. The cursor's light lives in the shader now, and this has to
+ * be able to run over a panel the cursor is nowhere near — the flash lights
+ * the whole page at once.
+ */
+.glass > .glass__glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  mix-blend-mode: plus-lighter;
+}
+
+.glass[data-flash] > .glass__glare {
   animation: glass-glare 1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
@@ -533,9 +556,10 @@
 }
 
 @keyframes rim-flare {
-  0% { opacity: 1; }
-  30% { opacity: 0.9; }
-  100% { opacity: calc(var(--glow-on, 0) * 0.95); }
+  0% { opacity: 4; }
+  30% { opacity: 2.6; }
+  /* Back to the arris the pane always has, not to nothing. */
+  100% { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -652,6 +676,27 @@
  * is transparent outside the falloff, and the shader has already tonemapped,
  * so this only has to place it and let it accumulate.
  */
+/*
+ * The glass light canvas.
+ *
+ * Viewport-sized and `plus-lighter`, so what it draws ADDS to the panels
+ * underneath rather than covering them — which is the only way an edge that is
+ * both catching the light and carrying its reflection can sum past white.
+ * Below the cursor light: this is that light landing on something, so it
+ * cannot be brighter than the source.
+ */
+.glass-light {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9997;
+  pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
 .cursor-light {
   position: fixed;
   top: 0;

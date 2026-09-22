@@ -3,9 +3,9 @@
  *
  * No particular shape is required — circling, scrubbing, shaking, whatever.
  * Charge comes from SPEED alone, and what makes it a deliberate act is that it
- * has to be SUSTAINED: the bleed is constant, so around a second and a half of
- * continuous fast movement is needed before it fills, and it starts draining
- * the moment you slow down.
+ * has to be SUSTAINED: the bleed is constant, so several seconds of continuous
+ * fast movement are needed before it fills, and it starts draining the moment
+ * you slow down.
  *
  * That duration requirement is what keeps it from triggering by accident. A
  * single fast flick across the page lasts a fraction of a second and barely
@@ -36,13 +36,15 @@ const MAX_DRIFT = 520;
  *
  * GAIN must exceed DECAY by a clear margin or the charge can never rise at all
  * — an earlier pair had the bleed larger than the gain, so the meter sat at
- * zero no matter how hard the pointer was moved. The difference between them
- * is the real fill rate: ~0.8/s here, so roughly 1.3s of hard circling to
- * fill, and the same to drain once you stop. At a measured 1350 px/s the net
- * is about +0.7/s, so roughly a second and a half of circling.
+ * zero no matter how hard the pointer was moved.
+ *
+ * The difference between them is the fill rate: ~0.3/s here, so a bit over
+ * three seconds of sustained movement. That is deliberately long — winding a
+ * shutter should feel like work, and a charge that arrives in a second isn't
+ * something anyone notices earning.
  */
-const GAIN = 1.5;
-const DECAY = 0.75;
+const GAIN = 0.8;
+const DECAY = 0.5;
 /*
  * Once armed, it STAYS armed until a click spends it. No timer.
  *

@@ -1,7 +1,27 @@
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
+import { GlassLight } from "./GlassLight";
 import { fireShutter } from "./ShutterFlash";
+import {
+  playShutterClick,
+  playShutterFlash,
+  primeShutterAudio,
+  setShutterCharge,
+} from "@/lib/shutter-audio";
+
+/**
+ * A photograph the pointer is directly on top of.
+ */
+const PHOTO = "img, picture, video, .gallery-frame";
+
+/**
+ * A photographic *surface* — a hero or parallax band where the picture is the
+ * background and scrims, vignettes and copy are stacked over it. A hit test
+ * there lands on one of those overlays, never on the image, so the container
+ * carries `data-photo` and stands in for it.
+ */
+const PHOTO_SCENE = "[data-photo]";
 
 /**
  * The cursor.
@@ -63,31 +83,63 @@ export function CustomCursor() {
       const interactive = node?.closest?.(
         'a, button, [role="button"], input, textarea, select, label, summary',
       );
-      const media = node?.closest?.("img, picture, video, .gallery-frame");
+      const media = node?.closest?.(PHOTO);
+      const scene = node?.closest?.(PHOTO_SCENE);
 
       /*
-       * Photographs win over links.
+       * Photographs win over links; photographic *scenes* lose to them.
        *
        * Nearly every photograph on the site is wrapped in something clickable —
        * a lightbox trigger, a card link — so testing for `interactive` first
        * meant the media state almost never fired. What's under the pointer
        * matters more than what it does: over a picture you want the wide
        * negative lens, over a line of text the smaller disc that sits behind it.
+       *
+       * A scene is the other way round. The hero is a photograph, but it also
+       * carries the headline and both calls to action, and those sit *on* the
+       * picture rather than in it. Over one of them the link state is the
+       * truthful one; the wide lens only takes over where the picture is bare.
        */
-      const state = media ? "media" : interactive ? "link" : "default";
+      const state = media ? "media" : interactive ? "link" : scene ? "media" : "default";
       if (el.dataset["state"] !== state) {
         el.dataset["state"] = state;
         dot.dataset["state"] = state;
       }
     };
 
+    /*
+     * Two independent reasons the negative can be hidden — the pointer has left
+     * the window, and the shutter is winding — so both go through one function.
+     * Setting `style.opacity` from either handler on its own meant whichever
+     * fired last won: re-entering the window mid-charge snapped the ring back
+     * to full over the middle of the light.
+     */
+    let inside = true;
+    let wind = 0;
+    const applyVisibility = () => {
+      /*
+       * Gone well before the charge is full, not merely dimmed.
+       *
+       * The ring blends in `difference`, which is a subtraction — laid over the
+       * flash it inverts it, and what you see is a dark hole punched through
+       * the brightest part of the frame. There is no amount of it that looks
+       * like light. So it clears out as soon as the wind is unmistakable and
+       * stays gone; firing the shutter drops the charge to zero, and that is
+       * what brings it back.
+       */
+      const charged = Math.max(0, 1 - wind / 0.25);
+      const value = inside ? charged : 0;
+      el.style.opacity = value.toFixed(2);
+      dot.style.opacity = value.toFixed(2);
+    };
+
     const onLeave = () => {
-      el.style.opacity = "0";
-      dot.style.opacity = "0";
+      inside = false;
+      applyVisibility();
     };
     const onEnter = () => {
-      el.style.opacity = "1";
-      dot.style.opacity = "1";
+      inside = true;
+      applyVisibility();
     };
 
     /*
@@ -123,6 +175,15 @@ export function CustomCursor() {
 
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", onLeave);
+    /*
+     * Browsers refuse to let a page make a sound until somebody has clicked or
+     * typed, and winding is neither — it is pointer movement, which does not
+     * count. That restriction happens to be doing something useful, so it is
+     * honoured rather than worked around: nothing makes a noise until the
+     * visitor has chosen to interact at least once.
+     */
+    window.addEventListener("pointerdown", primeShutterAudio, { once: true });
+    window.addEventListener("keydown", primeShutterAudio, { once: true });
     document.addEventListener("pointerenter", onEnter);
 
     /*
@@ -136,15 +197,10 @@ export function CustomCursor() {
     const charger = watchShutterCharge({
       onCharge: (charge, armed) => {
         el.style.setProperty("--wind", charge.toFixed(2));
-        /*
-         * The difference-blended ring fades out as the light comes up.
-         * Difference inverts, so over a bright warm source the ring rendered
-         * blue and sat in the middle of the highlight — a blown core has
-         * nothing legible inside it, so the ring gets out of the way.
-         */
-        el.style.opacity = (1 - charge * 0.92).toFixed(2);
-        dot.style.opacity = (1 - charge * 0.92).toFixed(2);
+        wind = charge;
+        applyVisibility();
         chargeRef.current = charge;
+        setShutterCharge(charge);
         // Blades close over the back half, once it's clearly deliberate.
         const closed = Math.max(0, (charge - 0.5) / 0.5);
         el.style.setProperty("--iris", closed.toFixed(2));
@@ -155,15 +211,6 @@ export function CustomCursor() {
     });
 
     const onClick = (event: MouseEvent) => {
-      if (!charger.isArmed()) return;
-      /*
-       * The shutter only fires at a photograph.
-       *
-       * Firing into empty page does nothing at all — not even spending the
-       * charge — so the discovery is "I'm armed, but not here", which points
-       * at what to try next. Consuming the charge on a miss would just be
-       * punishing.
-       */
       /*
        * Resolved fresh from the pointer position rather than read off the last
        * pointermove. Content moves under a stationary cursor — a carousel
@@ -172,7 +219,23 @@ export function CustomCursor() {
        * there a moment earlier.
        */
       const under = document.elementFromPoint(targetX, targetY);
-      if (!under?.closest("img, picture, video, .gallery-frame")) return;
+      const atPhoto = !!under?.closest(`${PHOTO}, ${PHOTO_SCENE}`);
+
+      /*
+       * The shutter only FIRES at a photograph, and only when wound — but it
+       * always makes a noise. A camera clicks whether or not there is film in
+       * it, and the mechanism answering every click is what tells you the
+       * thing in your hand is a camera at all.
+       *
+       * Firing into empty page does nothing else — not even spending the
+       * charge — so the discovery is "I'm armed, but not here", which points
+       * at what to try next. Consuming the charge on a miss would just be
+       * punishing.
+       */
+      if (!charger.isArmed() || !atPhoto) {
+        playShutterClick();
+        return;
+      }
       /*
        * Swallow the click.
        *
@@ -185,6 +248,7 @@ export function CustomCursor() {
       event.stopPropagation();
 
       charger.spend();
+      playShutterFlash();
       fireShutter({ x: targetX, y: targetY });
     };
     // Capture phase so the shutter still fires when the click lands on a link.
@@ -195,6 +259,8 @@ export function CustomCursor() {
       window.removeEventListener("click", onClick, true);
       cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", primeShutterAudio);
+      window.removeEventListener("keydown", primeShutterAudio);
       document.removeEventListener("pointerleave", onLeave);
       document.removeEventListener("pointerenter", onEnter);
       document.documentElement.classList.remove("has-custom-cursor");
@@ -212,6 +278,12 @@ export function CustomCursor() {
         aura with a white dot in the middle, because that is the most a
         gradient can express.
       */}
+      {/*
+        The glass sits UNDER the cursor light, both in z-order and in fact: it
+        is the light landing on the panels, so it cannot be brighter than the
+        source of it.
+      */}
+      <GlassLight chargeRef={chargeRef} positionRef={lightPos} />
       <CursorLight chargeRef={chargeRef} closedRef={closedRef} positionRef={lightPos} />
       <div ref={ringRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__ring" />

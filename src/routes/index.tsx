@@ -101,7 +101,7 @@ function HomePage() {
   return (
     <>
       {/* Hero */}
-      <section className="relative min-h-[92svh] overflow-hidden">
+      <section data-photo className="relative min-h-[92svh] overflow-hidden">
         <motion.div
           className="absolute inset-0 max-md:!translate-y-0"
           {...(reduced ? {} : { style: { y: heroY } })}

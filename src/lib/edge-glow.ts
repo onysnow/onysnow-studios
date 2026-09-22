@@ -1,5 +1,5 @@
 /**
- * Cursor-tracked edge lighting for the frosted bands.
+ * The glass surfaces, and the cursor light falling on them.
  *
  * Every registered panel shares ONE pointer listener and one rAF pass. Each
  * panel having its own listener would mean a `getBoundingClientRect` per panel
@@ -7,8 +7,11 @@
  * the kind of thing that makes a page feel heavy for an effect nobody asked to
  * pay for.
  *
- * Writes only custom properties, never layout properties, so the work stays in
- * paint rather than triggering reflow.
+ * Two consumers now. The CSS layers read `--glow-x/y/on` off each panel, and
+ * the shader in components/site/GlassLight.tsx reads the panels' geometry to
+ * light their rims for real. Both are served from the same single layout pass.
+ *
+ * Nothing here writes a layout property, so the work stays in paint.
  */
 const panels = new Set<HTMLElement>();
 
@@ -20,8 +23,105 @@ let pointerX = -9999;
 let pointerY = -9999;
 let bound = false;
 
+export type GlassRect = {
+  /** Top-left corner and size, in CSS pixels, viewport-relative. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Corner radius, in CSS pixels. */
+  r: number;
+  /**
+   * Viewing angle onto the pane, -1 to 1.
+   *
+   * A pane has thickness, so which of its two side faces you can see depends
+   * on where it sits relative to your eye. Positive means the panel is below
+   * the middle of the viewport and you are looking down at it, so its TOP side
+   * is turned toward you; negative means it is above and you see the BOTTOM
+   * side. Scrolling carries a panel from one to the other, which is what makes
+   * the thickness move.
+   */
+  t: number;
+};
+
+/*
+ * Corner radii are read once and kept. Unlike position and size they do not
+ * change as the page scrolls, and `getComputedStyle` is the expensive half of
+ * reading them.
+ */
+const radii = new WeakMap<HTMLElement, number>();
+
+function cornerRadius(el: HTMLElement) {
+  const known = radii.get(el);
+  if (known !== undefined) return known;
+  const raw = getComputedStyle(el).borderTopLeftRadius;
+  const value = Number.parseFloat(raw);
+  const px = Number.isFinite(value) && !raw.includes("%") ? value : 0;
+  radii.set(el, px);
+  return px;
+}
+
+/**
+ * How far the panel is from eye level, as a fraction of half the viewport.
+ *
+ * Clamped, and eased so the middle of the screen is a broad flat region rather
+ * than a point the effect pivots around — a pane should not visibly flip its
+ * thickness as it crosses the centre line.
+ */
+function paneTilt(r: DOMRect) {
+  const middle = window.innerHeight / 2;
+  const offset = (r.top + r.height / 2 - middle) / middle;
+  const clamped = Math.max(-1, Math.min(1, offset));
+  return clamped * Math.abs(clamped);
+}
+
+let geometry: GlassRect[] = [];
+let geometryAt = -1;
+
+/**
+ * Where the glass is, right now.
+ *
+ * Cached for the length of a frame so that the CSS pass and the shader pass
+ * asking in the same tick cost one set of layout reads between them rather
+ * than two.
+ */
+export function glassGeometry(now = performance.now()): readonly GlassRect[] {
+  if (now - geometryAt < 8) return geometry;
+  geometryAt = now;
+  geometry = [];
+  for (const el of panels) {
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) continue;
+    geometry.push({
+      x: r.left,
+      y: r.top,
+      w: r.width,
+      h: r.height,
+      r: cornerRadius(el),
+      t: paneTilt(r),
+    });
+  }
+  return geometry;
+}
+
 function apply() {
   frame = 0;
+  const now = performance.now();
+
+  /*
+   * Where the viewer is, as a fraction of the viewport from its centre.
+   *
+   * The environment reflection parallaxes against this. It is the same for
+   * every pane on the page — there is only one viewer — so it is written once
+   * on the root rather than onto each panel.
+   */
+  const root = document.documentElement.style;
+  root.setProperty("--reflect-x", (pointerX / window.innerWidth - 0.5).toFixed(3));
+  root.setProperty("--reflect-y", (pointerY / window.innerHeight - 0.5).toFixed(3));
+  // Refreshes the shared cache as a side effect, so the shader's call this
+  // frame is free.
+  glassGeometry(now);
+
   for (const el of panels) {
     const r = el.getBoundingClientRect();
 
@@ -31,11 +131,20 @@ function apply() {
     const dy = Math.max(r.top - pointerY, 0, pointerY - r.bottom);
     const nearness = Math.max(0, 1 - Math.hypot(dx, dy) / REACH);
 
-    el.style.setProperty("--glow-x", `${pointerX - r.left}px`);
-    el.style.setProperty("--glow-y", `${pointerY - r.top}px`);
-    // Eased so the light comes up gently as the cursor approaches rather than
-    // switching on at the boundary.
+    // Eased so it comes up gently as the cursor approaches rather than
+    // switching on at the boundary. The lighting itself is the shader's job;
+    // this is only for anything that wants to know the cursor is near.
     el.style.setProperty("--glow-on", (nearness * nearness).toFixed(3));
+
+    /*
+     * How far each side face of the pane is turned toward the viewer, 0 to 1.
+     * Never quite zero: the far side is still there, just foreshortened and
+     * seen through the glass, which is why it reads as subtler rather than as
+     * absent.
+     */
+    const tilt = paneTilt(r);
+    el.style.setProperty("--pane-top", (0.18 + 0.82 * Math.max(0, tilt)).toFixed(3));
+    el.style.setProperty("--pane-bottom", (0.18 + 0.82 * Math.max(0, -tilt)).toFixed(3));
   }
 }
 
@@ -53,22 +162,28 @@ function onLeave() {
 
 export function registerEdgeGlow(el: HTMLElement) {
   panels.add(el);
+  radii.delete(el);
+  geometryAt = -1;
   if (!bound) {
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", onLeave);
     // Scrolling moves panels under a stationary cursor, so the lighting has to
     // be recomputed even when the pointer itself hasn't moved.
-    window.addEventListener(
-      "scroll",
-      () => {
-        if (!frame) frame = requestAnimationFrame(apply);
-      },
-      { passive: true },
-    );
+    const invalidate = () => {
+      geometryAt = -1;
+      if (!frame) frame = requestAnimationFrame(apply);
+    };
+    window.addEventListener("scroll", invalidate, { passive: true });
+    window.addEventListener("resize", () => {
+      // Radii are cached, and a breakpoint can change them.
+      for (const panel of panels) radii.delete(panel);
+      invalidate();
+    });
     bound = true;
   }
   return () => {
     panels.delete(el);
+    geometryAt = -1;
   };
 }
 
