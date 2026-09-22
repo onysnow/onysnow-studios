@@ -19,7 +19,7 @@ import {
   copy,
   coverFor,
   pageCopyQuery,
-  photosQuery,
+  coverPhotosQuery,
   settingsQuery,
   testimonialsQuery,
 } from "@/lib/content";
@@ -49,7 +49,7 @@ function HomePage() {
 
   const { data: text } = useQuery(pageCopyQuery("home"));
   const { data: categories, isPending: catsPending } = useQuery(categoriesQuery);
-  const { data: photos } = useQuery(photosQuery);
+  const { data: photos } = useQuery(coverPhotosQuery);
   const { data: testimonials } = useQuery(testimonialsQuery);
   const { data: settings } = useQuery(settingsQuery);
 

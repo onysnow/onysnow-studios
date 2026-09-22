@@ -6,7 +6,7 @@ import { PostBlocks } from "@/components/site/PostBlocks";
 import { SubscribeForm } from "@/components/site/SubscribeForm";
 import { Container, Section } from "@/components/site/layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { photoById, photosQuery, postQuery } from "@/lib/content";
+import { photoById, photosByIdsQuery, postQuery, type PostBlock } from "@/lib/content";
 
 function titleFromSlug(slug: string) {
   return slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -36,7 +36,20 @@ function formatDate(value: string | null) {
 function PostPage() {
   const { slug } = Route.useParams();
   const { data: post, isPending } = useQuery(postQuery(slug));
-  const { data: photos } = useQuery(photosQuery);
+  // Only the photographs this post actually references — the renderer used to
+  // scan the whole archive to resolve each block.
+  const referenced = ((post?.blocks ?? []) as PostBlock[]).flatMap((b) =>
+    b.type === "full_bleed"
+      ? [b.photo_id]
+      : b.type === "image_pair"
+        ? b.photo_ids
+        : b.type === "gallery"
+          ? b.photo_ids
+          : [],
+  );
+  const { data: photos } = useQuery(
+    photosByIdsQuery([...referenced, post?.cover_photo_id ?? ""]),
+  );
 
   if (isPending) {
     return (

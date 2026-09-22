@@ -8,13 +8,13 @@ import { SocialRail } from "@/components/site/SocialRail";
 import { settingsQuery } from "@/lib/content";
 import { Reveal } from "@/components/site/Reveal";
 import { RichText } from "@/components/site/RichText";
-import { copy, pageCopyQuery, photosQuery } from "@/lib/content";
+import { copy, pageCopyQuery, coverPhotosQuery } from "@/lib/content";
 
 export const Route=createFileRoute("/about")({head:()=>({meta:[{title:"About Ony Shannon — OnySnow Studios"},{name:"description",content:"Meet Ony Shannon and learn about his candid-first, cinematic approach to photography."},{property:"og:title",content:"About Ony Shannon — OnySnow Studios"},{property:"og:description",content:"The story and approach behind OnySnow Studios."},{property:"og:type",content:"profile"},{name:"twitter:card",content:"summary_large_image"}]}),component:About});
 
 function About(){
   const { data: text, isPending } = useQuery(pageCopyQuery("about"));
-  const { data: photos } = useQuery(photosQuery);
+  const { data: photos } = useQuery(coverPhotosQuery);
   const { data: settings } = useQuery(settingsQuery);
   const portrait = photos?.find((p) => p.height > p.width) ?? photos?.[0];
   return <>

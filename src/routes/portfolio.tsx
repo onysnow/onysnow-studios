@@ -1,14 +1,14 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Img } from "@/components/site/Img";
-import { photosQuery } from "@/lib/content";
+import { coverPhotosQuery } from "@/lib/content";
 
 export const Route = createFileRoute("/portfolio")({
   component: PortfolioLayout,
 });
 
 function PortfolioLayout() {
-  const { data: photos } = useQuery(photosQuery);
+  const { data: photos } = useQuery(coverPhotosQuery);
   const backdrop = photos?.find((p) => p.width > p.height) ?? photos?.[0];
 
   return (

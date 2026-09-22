@@ -3,7 +3,7 @@ import { Reveal } from "./Reveal";
 import { Img } from "./Img";
 import { Container, Section } from "./layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { photosQuery } from "@/lib/content";
+import { coverPhotosQuery } from "@/lib/content";
 
 /**
  * The standard page header.
@@ -24,7 +24,7 @@ export function PageIntro({
   body: string;
   loading?: boolean;
 }) {
-  const { data: photos } = useQuery(photosQuery);
+  const { data: photos } = useQuery(coverPhotosQuery);
   // Any photograph will do — it sits well behind the copy, heavily dimmed.
   const backdrop = photos?.find((p) => p.width > p.height) ?? photos?.[0];
 

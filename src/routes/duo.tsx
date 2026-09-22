@@ -6,7 +6,7 @@ import { PageIntro } from "@/components/site/PageIntro";
 import { InquiryForm } from "@/components/site/InquiryForm";
 import { Reveal } from "@/components/site/Reveal";
 import { Container, Section } from "@/components/site/layout";
-import { copy, pageCopyQuery, photosQuery, settingsQuery } from "@/lib/content";
+import { copy, pageCopyQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 export const Route = createFileRoute("/duo")({
   head: () => ({
@@ -39,7 +39,7 @@ export const Route = createFileRoute("/duo")({
 function DuoPage() {
   const { data: settings, isPending: settingsPending } = useQuery(settingsQuery);
   const { data: text, isPending: textPending } = useQuery(pageCopyQuery("duo"));
-  const { data: photos } = useQuery(photosQuery);
+  const { data: photos } = useQuery(coverPhotosQuery);
 
   const enabled = (settings?.["duo_enabled"] ?? "false").toLowerCase() === "true";
   const portrait = photos?.find((p) => p.height > p.width) ?? photos?.[0];

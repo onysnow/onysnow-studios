@@ -7,7 +7,7 @@ import { Reveal } from "@/components/site/Reveal";
 import { SubscribeForm } from "@/components/site/SubscribeForm";
 import { Card, CardBody, CardFooter, Container, Grid, Section } from "@/components/site/layout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { copy, pageCopyQuery, photoById, photosQuery, postsQuery } from "@/lib/content";
+import { copy, pageCopyQuery, photoById, coverPhotosQuery, postsQuery } from "@/lib/content";
 
 export const Route = createFileRoute("/journal/")({
   head: () => ({
@@ -34,7 +34,7 @@ function formatDate(value: string | null) {
 function Journal() {
   const { data: text, isPending: textPending } = useQuery(pageCopyQuery("journal"));
   const { data: posts, isPending } = useQuery(postsQuery);
-  const { data: photos } = useQuery(photosQuery);
+  const { data: photos } = useQuery(coverPhotosQuery);
   const list = posts ?? [];
 
   return (

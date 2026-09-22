@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { JustifiedGallery } from "@/components/site/JustifiedGallery";
 import { PortfolioFilterBar } from "@/components/site/PortfolioFilterBar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { categoriesQuery, photosQuery } from "@/lib/content";
+import { categoriesQuery, galleryPhotosQuery } from "@/lib/content";
 
 type PortfolioSearch = { category?: string };
 
@@ -32,13 +32,15 @@ export const Route = createFileRoute("/portfolio/")({
 function Portfolio() {
   const { category: activeSlug } = Route.useSearch();
   const { data: categories, isPending: catsPending } = useQuery(categoriesQuery);
-  const { data: photos, isPending: photosPending } = useQuery(photosQuery);
-
   const cats = categories ?? [];
   const active = cats.find((c) => c.slug === activeSlug);
 
-  // No filter selected means every photograph, all collections mixed together.
-  const images = (photos ?? []).filter((p) => (active ? p.category_id === active.id : true));
+  // Filtering happens in Postgres and the page is bounded, so a large archive
+  // never lands on the client in one go.
+  const { data: photos, isPending: photosPending } = useQuery(
+    galleryPhotosQuery(active?.id ?? null),
+  );
+  const images = photos ?? [];
 
   return (
     <>
