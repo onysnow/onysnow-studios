@@ -199,6 +199,13 @@ export function CustomCursor() {
       onCharge: (charge, armed) => {
         el.style.setProperty("--wind", charge.toFixed(2));
         dot.style.setProperty("--wind", charge.toFixed(2));
+        /*
+         * And on the root, because the glass needs it too. At rest a pane
+         * holds only the faintest reflection and its edge is a hairline; the
+         * light is what reveals both. That has to be a CSS custom property,
+         * since the layers doing the revealing are CSS, not the shader.
+         */
+        document.documentElement.style.setProperty("--wind", charge.toFixed(2));
         chargeRef.current = charge;
         setShutterCharge(charge);
         // Blades close over the back half, once it's clearly deliberate.

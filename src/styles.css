@@ -6,17 +6,30 @@
 @theme inline {
   --font-sans: "Manrope", sans-serif;
   --font-display: var(--display-family, "Jost"), "Futura", sans-serif;
-  --radius-sm: 0.2rem; --radius-md: 0.3rem; --radius-lg: 0.45rem;
-  --color-background: var(--background); --color-foreground: var(--foreground);
-  --color-card: var(--card); --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive); --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
-  --color-teal: var(--teal); --color-amber: var(--amber);
+  --radius-sm: 0.2rem;
+  --radius-md: 0.3rem;
+  --radius-lg: 0.45rem;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-teal: var(--teal);
+  --color-amber: var(--amber);
 }
 
 :root {
@@ -45,46 +58,169 @@
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
-  html { scroll-behavior: smooth; background: var(--color-background); }
-  body { margin: 0; background: var(--color-background); color: var(--color-foreground); font-family: var(--font-sans); letter-spacing: 0; }
-  body::after { content: ""; position: fixed; inset: 0; z-index: 100; pointer-events: none; opacity: .035; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E"); }
-  ::selection { background: var(--color-primary); color: var(--color-primary-foreground); }
-  a, button, input, textarea { outline-offset: 4px; }
+  * {
+    border-color: var(--color-border);
+  }
+  html {
+    scroll-behavior: smooth;
+    background: var(--color-background);
+  }
+  body {
+    margin: 0;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    letter-spacing: 0;
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+  }
+  ::selection {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+  a,
+  button,
+  input,
+  textarea {
+    outline-offset: 4px;
+  }
   /* Thin, clean, cinematic: light weights with open tracking, the way film
      title cards are set. Weight and tracking travel with the family. */
-  :root { --display-family: "Jost"; --display-weight: 300; --display-tracking: 0.01em; }
-  :root[data-display-font="inter-tight"] { --display-family: "Inter Tight"; --display-weight: 200; --display-tracking: -0.02em; }
-  :root[data-display-font="barlow-condensed"] { --display-family: "Barlow Condensed"; --display-weight: 300; --display-tracking: 0.02em; }
-  .font-display { font-weight: var(--display-weight); letter-spacing: var(--display-tracking); font-size: calc(1em * var(--display-scale, 1)); }
-  :focus-visible { outline: 2px solid var(--color-ring); }
+  :root {
+    --display-family: "Jost";
+    --display-weight: 300;
+    --display-tracking: 0.01em;
+  }
+  :root[data-display-font="inter-tight"] {
+    --display-family: "Inter Tight";
+    --display-weight: 200;
+    --display-tracking: -0.02em;
+  }
+  :root[data-display-font="barlow-condensed"] {
+    --display-family: "Barlow Condensed";
+    --display-weight: 300;
+    --display-tracking: 0.02em;
+  }
+  .font-display {
+    font-weight: var(--display-weight);
+    letter-spacing: var(--display-tracking);
+    font-size: calc(1em * var(--display-scale, 1));
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+  }
 }
 
-@utility display-face { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.015em; text-transform: uppercase; }
-@utility eyebrow { font-size: .7rem; text-transform: uppercase; letter-spacing: .2em; color: var(--color-primary); }
-@utility image-vignette { box-shadow: inset 0 0 9rem 1rem oklch(0.08 0.01 55 / 70%); }
+@utility display-face {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+}
+@utility eyebrow {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--color-primary);
+}
+@utility image-vignette {
+  box-shadow: inset 0 0 9rem 1rem oklch(0.08 0.01 55 / 70%);
+}
 
-.gallery-frame { background-color: var(--color-muted); cursor: zoom-in; transition: filter .5s ease, opacity .5s ease; animation: frame-in .6s cubic-bezier(.22,1,.36,1) both; }
-.gallery-frame:hover { filter: brightness(1.12) saturate(1.05); }
-@keyframes frame-in { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .gallery-frame { animation: none; } }
+.gallery-frame {
+  background-color: var(--color-muted);
+  cursor: zoom-in;
+  transition:
+    filter 0.5s ease,
+    opacity 0.5s ease;
+  animation: frame-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.gallery-frame:hover {
+  filter: brightness(1.12) saturate(1.05);
+}
+@keyframes frame-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gallery-frame {
+    animation: none;
+  }
+}
 
-.yarl__container { background-color: oklch(0.08 0.008 55 / 96%) !important; }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+.yarl__container {
+  background-color: oklch(0.08 0.008 55 / 96%) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 
 /* Rich text saved from the admin portal */
-.rich-text > * + * { margin-top: 1.25rem; }
-.rich-text h2 { font-family: var(--font-display); font-size: 1.875rem; color: var(--color-foreground); margin-top: 2.5rem; }
-.rich-text h3 { font-family: var(--font-display); font-size: 1.5rem; color: var(--color-foreground); margin-top: 2rem; }
-.rich-text ul { list-style: disc; padding-left: 1.25rem; }
-.rich-text ol { list-style: decimal; padding-left: 1.25rem; }
-.rich-text a { color: var(--color-primary); text-decoration: underline; }
-.rich-text em { font-style: italic; }
-.rich-text strong { font-weight: 600; }
+.rich-text > * + * {
+  margin-top: 1.25rem;
+}
+.rich-text h2 {
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  color: var(--color-foreground);
+  margin-top: 2.5rem;
+}
+.rich-text h3 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--color-foreground);
+  margin-top: 2rem;
+}
+.rich-text ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.rich-text ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.rich-text a {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+.rich-text em {
+  font-style: italic;
+}
+.rich-text strong {
+  font-weight: 600;
+}
 
 /* TipTap editor surface */
-.tiptap { min-height: 14rem; outline: none; }
-.tiptap p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--color-muted-foreground); float: left; height: 0; pointer-events: none; }
+.tiptap {
+  min-height: 14rem;
+  outline: none;
+}
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-muted-foreground);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
 
 /* ===================== Cursor =====================
  *
@@ -112,7 +248,7 @@
    * anything and leaves the photograph alone, which on a photography site is
    * the only requirement that actually matters.
    */
-  transition: opacity .25s ease;
+  transition: opacity 0.25s ease;
   will-change: transform;
 }
 
@@ -126,8 +262,12 @@
   translate: -50% -50%;
   /* White is the identity for `difference`: the result is a true inversion of
      the pixels underneath rather than a tint. */
-  transition: width .32s cubic-bezier(.22,1,.36,1), height .32s cubic-bezier(.22,1,.36,1),
-              background-color .32s ease, border-color .32s ease, opacity .2s ease;
+  transition:
+    width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.32s ease,
+    border-color 0.32s ease,
+    opacity 0.2s ease;
 }
 
 .custom-cursor__ring {
@@ -159,7 +299,9 @@
   background-color: oklch(1 0 0 / 0.14);
   border-color: #fff;
 }
-.custom-cursor[data-state="link"] .custom-cursor__dot { opacity: 0; }
+.custom-cursor[data-state="link"] .custom-cursor__dot {
+  opacity: 0;
+}
 
 /*
  * Over a photograph: a wider ring, and deliberately NOT filled.
@@ -178,17 +320,25 @@
   border-color: #fff;
   border-width: 1px;
 }
-.custom-cursor[data-state="media"] .custom-cursor__dot { opacity: 0.85; }
+.custom-cursor[data-state="media"] .custom-cursor__dot {
+  opacity: 0.85;
+}
 
 .has-custom-cursor,
-.has-custom-cursor * { cursor: none !important; }
+.has-custom-cursor * {
+  cursor: none !important;
+}
 
 /* The lightbox opens its own layer above everything; the disc chasing the
    pointer over it is noise rather than atmosphere. */
-.has-custom-cursor:has(.yarl__container) .custom-cursor { opacity: 0 !important; }
+.has-custom-cursor:has(.yarl__container) .custom-cursor {
+  opacity: 0 !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .custom-cursor { display: none; }
+  .custom-cursor {
+    display: none;
+  }
 }
 
 /* ===================== Glass edges and bokeh =====================
@@ -331,9 +481,13 @@
       oklch(1 0 0 / 0.025) 97%,
       oklch(1 0 0 / 0.12) 100%
     );
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
     mask-composite: exclude;
   }
 
@@ -356,7 +510,7 @@
     left: 0;
     right: 0;
     pointer-events: none;
-    z-index: 3;
+    z-index: -2;
     /* Clipped to the pane's own corners; see --pane-radius in lib/edge-glow. */
     clip-path: inset(0 round var(--pane-radius, 0px));
     /*
@@ -389,13 +543,13 @@
     left: 0;
     right: 0;
     height: 1px;
-    background: oklch(1 0 0 / 0.34);
+    background: oklch(1 0 0 / 0.16);
   }
 
   .glass > .glass__side--top {
     top: 0;
     height: var(--side-top);
-    opacity: calc(0.35 + 0.65 * var(--pane-top, 0.18));
+    opacity: calc((0.35 + 0.65 * var(--pane-top, 0.18)) * (0.1 + 0.9 * var(--wind, 0)));
   }
 
   .glass > .glass__side--top::after {
@@ -405,7 +559,7 @@
   .glass > .glass__side--bottom {
     bottom: 0;
     height: var(--side-bottom);
-    opacity: calc(0.35 + 0.65 * var(--pane-bottom, 0.18));
+    opacity: calc((0.35 + 0.65 * var(--pane-bottom, 0.18)) * (0.1 + 0.9 * var(--wind, 0)));
     /* The far corner of the bottom face is its upper boundary. */
   }
 
@@ -421,60 +575,66 @@
   /*
    * The environment reflection — the room the viewer is standing in.
    *
-   * Always there, unlike everything the cursor lights: a room reflects in a
-   * window whether or not anyone is shining a torch at it, and a pane with no
-   * reflection at all reads as a hole rather than as glass.
+   * ONE room, at ONE scale, across the whole page. `background-attachment:
+   * fixed` anchors the image to the viewport rather than to each pane, so a
+   * pane is a WINDOW onto the reflection instead of a container that the
+   * reflection is squashed to fit.
    *
-   * An actual picture of a room rather than a stack of gradients. Gradients
-   * were the previous attempt and they were invisible, because what makes a
-   * reflection legible is recognising something in it — a window, a strip
-   * light, the shape of a room — and a gradient is not a thing.
+   * That distinction was the bug. With a percentage `background-size` every
+   * pane showed the entire room scaled to its own box, so a 64px bar and a
+   * 600px band displayed the same room at wildly different magnifications,
+   * and two panes above one another showed the same furniture twice at two
+   * sizes. Real reflections do not do that: the room is one size and each
+   * piece of glass shows whatever part of it happens to line up.
    *
-   * It parallaxes against the pointer in both axes and slides OPPOSITE to it,
-   * because a reflection is an image of something standing off the surface;
-   * moving relative to the pane slides it the other way. That counter-motion
-   * is the part that reads as a reflection rather than as a texture.
+   * Sized in `vw` for the same reason — a single scale every pane shares.
+   * Large, because a pane is a small mirror held close: you see a fragment of
+   * the room magnified, not the whole room shrunk.
+   *
+   * Nearly invisible at rest and revealed by the light. Glass does hold a
+   * reflection in the dark, but faintly; what makes you notice it is
+   * something bright moving across it, which is exactly what the cursor is.
    */
   .glass > .glass__reflection {
     position: absolute;
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
-    z-index: 1;
-    opacity: 0.55;
+    z-index: -4;
     mix-blend-mode: screen;
     background-image: var(--room, url("/rooms/metro.jpg"));
+    background-repeat: no-repeat;
     /*
-     * The parallax moves the BACKGROUND, not the element.
-     *
-     * Translating the element meant it had to be inset far enough that the
-     * travel never dragged its edge into view — and a percentage inset is
-     * useless for that, because the thin bars are 64px tall, where 14% is 9px
-     * of bleed against 11px of travel. Oversizing the background instead gives
-     * the same parallax with bleed that scales with it automatically, and
-     * nothing overflows the pane at all.
+     * Sized against the viewport's HEIGHT, so every pane shares one
+     * magnification whatever shape it is. Large, because a pane is a small
+     * mirror held close: a fragment of the room, magnified.
      */
+    background-size: auto 160vh;
     /*
-     * Bleed in pixels, not percent, because the travel is in pixels.
+     * Anchored in viewport space, then pulled back by the pane's own offset.
+     * That is what makes the reflection continuous: two bands stacked above
+     * one another show adjacent parts of one room rather than two copies of
+     * all of it. `background-attachment: fixed` looks like the built-in way to
+     * do this and is not — `.glass` carries a backdrop-filter, and a filtered
+     * element is the containing block for its descendants, so a fixed
+     * background resolves against the pane again and the squashing comes
+     * straight back. --pane-x/--pane-y are measured, so they cannot drift.
      *
-     * A percentage oversize gives a 1200px band hundreds of pixels of margin
-     * and a 64px bar eleven — while both are asked to travel the same
-     * distance. Adding a fixed amount to each axis means the margin always
-     * exceeds the throw, whatever the pane's size.
+     * The parallax is added once, identically for every pane: one viewer, one
+     * reflection moving.
      */
-    background-size: calc(100% + 150px) calc(100% + 110px);
-    background-position:
-      calc(50% + var(--reflect-x, 0) * -110px)
-      calc(50% + var(--reflect-y, 0) * -72px);
+    background-position: calc(-120vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -260px)
+      calc(-30vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -170px);
+    opacity: calc(0.05 + 0.6 * var(--wind, 0));
   }
 
   /*
-   * Flipped on every other panel, so a page of glass does not show the same
-   * room the same way up five times.
+   * No per-pane flip any more. It existed to stop five panes showing the same
+   * room the same way up, which was only a problem while each pane held its
+   * own copy. Now that they are windows onto one continuous reflection,
+   * mirroring every other pane would break exactly the continuity that makes
+   * it read as a reflection at all.
    */
-  .glass:nth-of-type(even) > .glass__reflection {
-    transform: scaleX(-1);
-  }
 }
 
 /* ===================== Shutter =====================
@@ -490,13 +650,12 @@
   z-index: 9998;
   pointer-events: none;
   opacity: 0;
-  background:
-    radial-gradient(
-      circle at var(--flash-x, 50%) var(--flash-y, 50%),
-      oklch(1 0 0 / 0.9) 0%,
-      color-mix(in oklab, var(--amber) 70%, oklch(1 0 0)) 28%,
-      transparent 72%
-    );
+  background: radial-gradient(
+    circle at var(--flash-x, 50%) var(--flash-y, 50%),
+    oklch(1 0 0 / 0.9) 0%,
+    color-mix(in oklab, var(--amber) 70%, oklch(1 0 0)) 28%,
+    transparent 72%
+  );
 }
 
 .shutter-flash[data-firing] {
@@ -504,10 +663,16 @@
 }
 
 @keyframes shutter-fire {
-  0% { opacity: 0; }
+  0% {
+    opacity: 0;
+  }
   /* Fast rise, slow fall — the shape of a real strobe discharge. */
-  9% { opacity: 0.82; }
-  100% { opacity: 0; }
+  9% {
+    opacity: 0.82;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* The frame lines that snap in at the corners as the shutter fires. */
@@ -530,15 +695,44 @@
   border: 1px solid color-mix(in oklab, var(--amber) 85%, transparent);
 }
 
-.shutter-frame span:nth-child(1) { top: 2rem; left: 2rem; border-right: 0; border-bottom: 0; }
-.shutter-frame span:nth-child(2) { top: 2rem; right: 2rem; border-left: 0; border-bottom: 0; }
-.shutter-frame span:nth-child(3) { bottom: 2rem; left: 2rem; border-right: 0; border-top: 0; }
-.shutter-frame span:nth-child(4) { bottom: 2rem; right: 2rem; border-left: 0; border-top: 0; }
+.shutter-frame span:nth-child(1) {
+  top: 2rem;
+  left: 2rem;
+  border-right: 0;
+  border-bottom: 0;
+}
+.shutter-frame span:nth-child(2) {
+  top: 2rem;
+  right: 2rem;
+  border-left: 0;
+  border-bottom: 0;
+}
+.shutter-frame span:nth-child(3) {
+  bottom: 2rem;
+  left: 2rem;
+  border-right: 0;
+  border-top: 0;
+}
+.shutter-frame span:nth-child(4) {
+  bottom: 2rem;
+  right: 2rem;
+  border-left: 0;
+  border-top: 0;
+}
 
 @keyframes shutter-frame {
-  0% { opacity: 0; transform: scale(1.06); }
-  18% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1); }
+  0% {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
 }
 
 /* ---- The glass answering the flash ---- */
@@ -555,7 +749,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  z-index: 2;
+  z-index: -3;
   opacity: 0;
   mix-blend-mode: plus-lighter;
 }
@@ -601,10 +795,16 @@
 }
 
 @keyframes rim-flare {
-  0% { opacity: 4; }
-  30% { opacity: 2.6; }
+  0% {
+    opacity: 4;
+  }
+  30% {
+    opacity: 2.6;
+  }
   /* Back to the arris the pane always has, not to nothing. */
-  100% { opacity: 1; }
+  100% {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -779,7 +979,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flare-overlay { display: none; }
+  .flare-overlay {
+    display: none;
+  }
 }
 
 .cursor-light {
@@ -839,7 +1041,7 @@
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
-    z-index: 0;
+    z-index: -5;
     backdrop-filter: brightness(2.1) contrast(3.2) saturate(1.25) blur(16px);
     mix-blend-mode: plus-lighter;
     opacity: 0.6;
@@ -877,7 +1079,7 @@
      * different depths read as banding rather than as an edge.
      */
     pointer-events: none;
-    z-index: 1;
+    z-index: -4;
     /*
      * Fallback first. SVG filters in backdrop-filter are Chromium-only —
      * Safari and Firefox support neither, and would silently render nothing
@@ -915,17 +1117,16 @@
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
-    z-index: 1;
-    background:
-      linear-gradient(
-        to bottom,
-        oklch(1 0 0 / 0.16) 0%,
-        oklch(1 0 0 / 0.03) 9%,
-        transparent 22%,
-        transparent 78%,
-        oklch(1 0 0 / 0.02) 91%,
-        oklch(1 0 0 / 0.1) 100%
-      );
+    z-index: -4;
+    background: linear-gradient(
+      to bottom,
+      oklch(1 0 0 / 0.16) 0%,
+      oklch(1 0 0 / 0.03) 9%,
+      transparent 22%,
+      transparent 78%,
+      oklch(1 0 0 / 0.02) 91%,
+      oklch(1 0 0 / 0.1) 100%
+    );
     mix-blend-mode: plus-lighter;
     opacity: 0.85;
   }
