@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ParallaxScene } from "./ParallaxScene";
 import { GlassSection } from "./GlassSection";
+import { BokehField } from "./BokehField";
 import type { ImgSource } from "./Img";
 
 /**
@@ -35,6 +36,8 @@ export function PhotoSection({
       height=""
       {...(className ? { className } : {})}
     >
+      {/* Behind the glass, so the panel's blur is what turns these into bokeh. */}
+      <BokehField />
       <GlassSection overlap={false}>{children}</GlassSection>
     </ParallaxScene>
   );

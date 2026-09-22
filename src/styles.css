@@ -181,3 +181,125 @@
 @media (prefers-reduced-motion: reduce) {
   .custom-cursor { display: none; }
 }
+
+/* ===================== Glass edges and bokeh =====================
+ *
+ * Both of these live behind or on the frosted bands, and both are built from
+ * the two accent hues the photographs already trade in — warm amber and cool
+ * teal — so the glow reads as part of the same light rather than as UI chrome.
+ */
+
+/*
+ * Bokeh.
+ *
+ * Soft discs of light drifting behind the glass. They are NOT pre-blurred: the
+ * panel's own backdrop-filter does that, which is exactly how a real
+ * out-of-focus highlight forms — a point of light spread by the optics in front
+ * of it. Anything not covered by glass keeps a gentle falloff of its own so the
+ * edges of the field don't show as hard circles.
+ */
+.bokeh-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bokeh {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle closest-side,
+    var(--bokeh-tint) 0%,
+    color-mix(in oklab, var(--bokeh-tint) 45%, transparent) 42%,
+    transparent 72%
+  );
+  opacity: var(--bokeh-alpha, 0.4);
+  will-change: transform;
+  animation: bokeh-drift var(--bokeh-dur, 24s) ease-in-out var(--bokeh-delay, 0s) infinite alternate;
+}
+
+@keyframes bokeh-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(var(--bokeh-dx, 3rem), var(--bokeh-dy, -2rem), 0) scale(1.14);
+  }
+}
+
+/*
+ * Edge lighting and glass thickness.
+ *
+ * Two things are happening here.
+ *
+ * THICKNESS. A pane of glass has an edge you can see into: light catches the
+ * top arris brightly, wraps a little way down the inside face, and leaves the
+ * bottom edge darker. The inset shadows below reproduce that, which is what
+ * makes the band read as a sheet with a thickness rather than as a rectangle
+ * of tint.
+ *
+ * LIGHTING. The rim is lit by the cursor rather than on a timer — the bright
+ * part of the edge is wherever the pointer is, and it fades out as the pointer
+ * moves away. `--glow-x/y/on` are written by lib/edge-glow.ts. With no pointer
+ * (touch, or before first move) `--glow-on` is 0 and the panel is simply unlit,
+ * which is a fine resting state.
+ */
+.glass-edge {
+  position: relative;
+  box-shadow:
+    /* The lit top arris. */
+    inset 0 1px 0 oklch(1 0 0 / 0.2),
+    /* Light wrapping down the inside of the top edge. */
+    inset 0 10px 20px -14px oklch(1 0 0 / 0.3),
+    /* The far edge, catching much less. */
+    inset 0 -1px 0 oklch(1 0 0 / 0.06),
+    /* Contact shadow, so the sheet sits above the photograph. */
+    0 20px 45px -28px oklch(0 0 0 / 0.95);
+}
+
+/* The rim: a one-pixel ring, lit where the cursor is. A mask keeps only the
+   padding ring, because a gradient can't be used as a border colour. */
+.glass-edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  z-index: 2;
+  background: radial-gradient(
+    20rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
+    color-mix(in oklab, var(--amber) 95%, transparent) 0%,
+    color-mix(in oklab, var(--teal) 85%, transparent) 34%,
+    transparent 70%
+  );
+  opacity: calc(var(--glow-on, 0) * 0.95);
+  transition: opacity 0.4s ease;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* The bloom the lit rim casts inward across the glass. */
+.glass-edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(
+    26rem circle at var(--glow-x, 50%) var(--glow-y, 0px),
+    color-mix(in oklab, var(--amber) 26%, transparent) 0%,
+    color-mix(in oklab, var(--teal) 16%, transparent) 38%,
+    transparent 68%
+  );
+  opacity: calc(var(--glow-on, 0) * 0.75);
+  transition: opacity 0.4s ease;
+}

@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { registerEdgeGlow } from "@/lib/edge-glow";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,11 +25,21 @@ export function GlassSection({
   className?: string;
   overlap?: boolean;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return registerEdgeGlow(el);
+  }, []);
+
   return (
     <div
+      ref={ref}
       className={cn(
         // z-10 so the shadow lands on the image rather than behind it.
-        "relative z-10 border-y border-white/10 bg-background/45",
+        // `glass-edge` draws the drifting hairline along the top and bottom.
+        "glass-edge relative z-10 bg-background/45",
         "backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-background/30",
         "shadow-[0_-22px_55px_-26px_oklch(0_0_0/0.85),0_30px_70px_-32px_oklch(0_0_0/0.95)]",
         overlap && "-mt-14 lg:-mt-24",
