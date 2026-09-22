@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { roomScript } from "@/lib/rooms";
 import {
   HeadContent,
   Link,
@@ -59,6 +60,14 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        {/*
+          Picks the room the glass reflects, before anything paints. Inline and
+          synchronous on purpose: it only sets a CSS custom property, so there
+          is no markup for React to disagree with at hydration, and running it
+          after hydration instead would paint one room and then swap it on
+          every load.
+        */}
+        <script dangerouslySetInnerHTML={{ __html: roomScript() }} />
       </head>
       <body>
         {children}
