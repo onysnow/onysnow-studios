@@ -708,6 +708,41 @@
   transition: opacity 0.25s ease;
 }
 
+/*
+ * The lens flare footage.
+ *
+ * `screen` rather than `plus-lighter`, because these clips carry no alpha and
+ * screen is what makes a black-background overlay behave: 1-(1-a)(1-b) leaves
+ * the backdrop untouched wherever the clip is black, and lifts it wherever
+ * the clip has light in it. That is the whole reason flare footage is shot on
+ * black and why it needs no transparency channel.
+ *
+ * Above the glass and below the cursor light: the flare is thrown by the lens
+ * you are looking THROUGH, so it sits in front of everything in the scene,
+ * but it cannot be brighter than the source that caused it.
+ */
+.flare-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.flare-clip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: auto;
+  opacity: 0;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flare-overlay { display: none; }
+}
+
 .cursor-light {
   position: fixed;
   inset: 0;
