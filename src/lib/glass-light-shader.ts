@@ -86,9 +86,6 @@ uniform vec3  uCool;
 /* Dispersion scales with path length, and the side's path is enormous. */
 #define SIDE_DISPERSION 7.0
 
-vec3 spectrum(float t) {
-  return 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.33, 0.67)));
-}
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -247,11 +244,23 @@ void main() {
   float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
   float farTop = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
   float farBot = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
-  float along = (frag.x - uRect.x) / max(uRect.z, 1.0);
-  vec3 dichroic = mix(vec3(1.0), spectrum(along * 0.85 + 0.55), 0.42)
-                * (0.78 + 0.55 * surf.g);
-  rim += dichroic * (glareTop * topOpen + glareBot * botOpen) * withinX * 9.0 * reach;
-  rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 6.0 * reach;
+  /*
+   * The side face has no colour of its own.
+   *
+   * It used to carry a spectrum swept along the pane's LENGTH, which made a
+   * rainbow band running the whole width of every section whether or not
+   * anything was lighting it. Nothing produces that. The colour in a glass
+   * edge comes from what is BEHIND it — refracted, dispersed and absorbed over
+   * a long path — and that is computed below. What the light contributes is a
+   * glare, and a glare is only where the light is.
+   *
+   * So this is white, and it is driven by the direct term rather than reach:
+   * reach includes the wide scatter term, which is what was smearing the
+   * highlight along the entire band instead of putting it where the source is.
+   */
+  float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
+  rim += vec3(sideGlare) * 11.0 * direct;
+  rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 5.0 * direct;
 
   /*
    * ---- What you see THROUGH the side face ----
@@ -285,10 +294,16 @@ void main() {
    * 41 degrees for n = 1.5 — glass reflects everything, which is why the very
    * corner of a plate is the brightest part of it in any light.
    */
+  /*
+   * It REFLECTS, though; it does not emit. Adding white here put a constant
+   * bright line along every edge whether or not anything was lighting it,
+   * which is the same mistake as the painted rainbow. It multiplies what is
+   * already coming through instead.
+   */
   float tir = exp(-across * 5.0);
-  throughSide += vec3(tir) * 0.5;
+  throughSide *= 1.0 + tir * 2.2;
 
-  rim += throughSide * onSide * uHasBackdrop * 2.6;
+
 
   // ---- Light scattered into the body, and off the grime ----
   vec3 face = vec3(inside * (direct * 0.9));
@@ -319,7 +334,19 @@ void main() {
   float lit = uCharge * uCharge * (3.0 - 2.0 * uCharge);
   vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
 
+  /*
+   * What the glass does to the photograph is not gated on the charge. A pane
+   * bends and absorbs what is behind it whether or not anybody is shining
+   * anything at it, and the side face is the strongest example — that is the
+   * band you can genuinely see THROUGH, along the pane's whole width. It was
+   * in the lit path, so the edge went blank the moment the shutter was idle.
+   *
+   * It is also untinted. The colour in it belongs to the photograph and to
+   * the absorption; warming it by distance from the cursor would paint the
+   * light's colour onto something the light is not responsible for.
+   */
   vec3 colour = backdrop * uHasBackdrop * inside;
+  colour += throughSide * onSide * uHasBackdrop * 2.6;
   colour += (tint * (rim + face) + mirror) * lit;
   colour += vec3(specular + EDGE_HIGHLIGHT * bevel) * inside * (0.35 + 0.65 * lit);
 
