@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
+import { GlassLight } from "./GlassLight";
 import { fireShutter } from "./ShutterFlash";
 
 /**
@@ -251,6 +252,12 @@ export function CustomCursor() {
         aura with a white dot in the middle, because that is the most a
         gradient can express.
       */}
+      {/*
+        The glass sits UNDER the cursor light, both in z-order and in fact: it
+        is the light landing on the panels, so it cannot be brighter than the
+        source of it.
+      */}
+      <GlassLight chargeRef={chargeRef} positionRef={lightPos} />
       <CursorLight chargeRef={chargeRef} closedRef={closedRef} positionRef={lightPos} />
       <div ref={ringRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__ring" />

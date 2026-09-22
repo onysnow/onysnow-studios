@@ -88,6 +88,7 @@ export function GlassLight({
     const uCharge = gl.getUniformLocation(program, "uCharge");
     const uRects = gl.getUniformLocation(program, "uRects");
     const uRadii = gl.getUniformLocation(program, "uRadii");
+    const uTilts = gl.getUniformLocation(program, "uTilts");
 
     // The same amber and teal as the cursor, in linear light — the shader
     // works in linear and only returns to display space at the very end.
@@ -128,6 +129,7 @@ export function GlassLight({
     // collector two arrays per frame for no reason.
     const rects = new Float32Array(MAX_RECTS * 4);
     const radii = new Float32Array(MAX_RECTS);
+    const tilts = new Float32Array(MAX_RECTS);
 
     let frame = 0;
     let wasLit = false;
@@ -187,6 +189,7 @@ export function GlassLight({
           rects[o + 2] = rect.w;
           rects[o + 3] = rect.h;
           radii[i] = rect.r;
+          tilts[i] = rect.t;
         } else {
           // Parked far away at zero size: every distance is enormous, every
           // falloff is zero, and no branch is needed in the shader.
@@ -195,11 +198,13 @@ export function GlassLight({
           rects[o + 2] = 0;
           rects[o + 3] = 0;
           radii[i] = 0;
+          tilts[i] = 0;
         }
       }
 
       gl.uniform4fv(uRects, rects);
       gl.uniform1fv(uRadii, radii);
+      gl.uniform1fv(uTilts, tilts);
       gl.uniform2f(uLight, x, y);
       gl.uniform1f(uCharge, charge);
       gl.clear(gl.COLOR_BUFFER_BIT);

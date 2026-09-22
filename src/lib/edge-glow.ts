@@ -23,22 +23,6 @@ let pointerX = -9999;
 let pointerY = -9999;
 let bound = false;
 
-/*
- * The shutter charge gates ALL of it.
- *
- * A glass panel does not glow; a light shining on one does. With no light in
- * the room — the pointer drifting, nothing wound — the rim, the bloom, the
- * glare and the smudges have nothing to reveal them and are simply absent.
- * They come up with the charge and hold while it is held.
- */
-let charge = 0;
-
-export function setGlowCharge(value: number) {
-  if (value === charge) return;
-  charge = value;
-  if (!frame) frame = requestAnimationFrame(apply);
-}
-
 export type GlassRect = {
   /** Top-left corner and size, in CSS pixels, viewport-relative. */
   x: number;
@@ -47,6 +31,17 @@ export type GlassRect = {
   h: number;
   /** Corner radius, in CSS pixels. */
   r: number;
+  /**
+   * Viewing angle onto the pane, -1 to 1.
+   *
+   * A pane has thickness, so which of its two side faces you can see depends
+   * on where it sits relative to your eye. Positive means the panel is below
+   * the middle of the viewport and you are looking down at it, so its TOP side
+   * is turned toward you; negative means it is above and you see the BOTTOM
+   * side. Scrolling carries a panel from one to the other, which is what makes
+   * the thickness move.
+   */
+  t: number;
 };
 
 /*
@@ -66,6 +61,20 @@ function cornerRadius(el: HTMLElement) {
   return px;
 }
 
+/**
+ * How far the panel is from eye level, as a fraction of half the viewport.
+ *
+ * Clamped, and eased so the middle of the screen is a broad flat region rather
+ * than a point the effect pivots around — a pane should not visibly flip its
+ * thickness as it crosses the centre line.
+ */
+function paneTilt(r: DOMRect) {
+  const middle = window.innerHeight / 2;
+  const offset = (r.top + r.height / 2 - middle) / middle;
+  const clamped = Math.max(-1, Math.min(1, offset));
+  return clamped * Math.abs(clamped);
+}
+
 let geometry: GlassRect[] = [];
 let geometryAt = -1;
 
@@ -83,7 +92,14 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
   for (const el of panels) {
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) continue;
-    geometry.push({ x: r.left, y: r.top, w: r.width, h: r.height, r: cornerRadius(el) });
+    geometry.push({
+      x: r.left,
+      y: r.top,
+      w: r.width,
+      h: r.height,
+      r: cornerRadius(el),
+      t: paneTilt(r),
+    });
   }
   return geometry;
 }
@@ -91,6 +107,17 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
 function apply() {
   frame = 0;
   const now = performance.now();
+
+  /*
+   * Where the viewer is, as a fraction of the viewport from its centre.
+   *
+   * The environment reflection parallaxes against this. It is the same for
+   * every pane on the page — there is only one viewer — so it is written once
+   * on the root rather than onto each panel.
+   */
+  const root = document.documentElement.style;
+  root.setProperty("--reflect-x", (pointerX / window.innerWidth - 0.5).toFixed(3));
+  root.setProperty("--reflect-y", (pointerY / window.innerHeight - 0.5).toFixed(3));
   // Refreshes the shared cache as a side effect, so the shader's call this
   // frame is free.
   glassGeometry(now);
@@ -104,11 +131,20 @@ function apply() {
     const dy = Math.max(r.top - pointerY, 0, pointerY - r.bottom);
     const nearness = Math.max(0, 1 - Math.hypot(dx, dy) / REACH);
 
-    el.style.setProperty("--glow-x", `${pointerX - r.left}px`);
-    el.style.setProperty("--glow-y", `${pointerY - r.top}px`);
-    // Eased so the light comes up gently as the cursor approaches rather than
-    // switching on at the boundary, then scaled by how wound the shutter is.
-    el.style.setProperty("--glow-on", (nearness * nearness * charge).toFixed(3));
+    // Eased so it comes up gently as the cursor approaches rather than
+    // switching on at the boundary. The lighting itself is the shader's job;
+    // this is only for anything that wants to know the cursor is near.
+    el.style.setProperty("--glow-on", (nearness * nearness).toFixed(3));
+
+    /*
+     * How far each side face of the pane is turned toward the viewer, 0 to 1.
+     * Never quite zero: the far side is still there, just foreshortened and
+     * seen through the glass, which is why it reads as subtler rather than as
+     * absent.
+     */
+    const tilt = paneTilt(r);
+    el.style.setProperty("--pane-top", (0.18 + 0.82 * Math.max(0, tilt)).toFixed(3));
+    el.style.setProperty("--pane-bottom", (0.18 + 0.82 * Math.max(0, -tilt)).toFixed(3));
   }
 }
 
