@@ -560,7 +560,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 9998;
+  z-index: 9997;
   width: 4.5rem;
   height: 4.5rem;
   /* No centring margin: the transform copied from the ring already carries
@@ -646,45 +646,111 @@
 
 /* ===================== The emitter =====================
  *
- * The cursor's light, on its own layer.
+ * A light source, not a glow.
  *
- * Deliberately NOT inside `.custom-cursor`. That element blends with
- * `difference`, which inverts what is beneath it — a subtraction. Light is
- * additive, so brightness inside a difference layer can never read as
- * something emitting; it only inverts harder, which is why an earlier glow
- * looked like a coloured smudge rather than a lamp. `plus-lighter` genuinely
- * adds to what is behind and clips at white, so the centre blows out and the
- * falloff carries the colour — what a real emitter does to a photograph.
+ * The difference is blown highlight. Bloom in a real camera or renderer comes
+ * from values that EXCEED the display's white point: the core clips to pure
+ * white and colour survives only in the falloff. An earlier version was amber
+ * from a few pixels out, which is precisely the recipe for an aura — a tinted
+ * smear with no source in it. Here the centre is solid white with a hard
+ * shoulder, and the amber lives outside it.
  *
- * The bloom is a radial GRADIENT on a large element, not `box-shadow`.
- * Shadows big enough for this halo get clipped at the layer's bounds, which
- * showed up as a hard rectangle around the light; they are also far more
- * expensive to rasterise at these radii. The gradient has no edge to clip.
+ * Three things stack up:
+ *   1. the clipped white core,
+ *   2. bloom at two radii — real bloom convolves several kernel sizes, and one
+ *      gradient alone falls off too evenly to look like light,
+ *   3. diffraction spikes, which is the cue that separates a bright source
+ *      from a bright patch.
+ *
+ * The spikes are also physically owed to the aperture: a diaphragm with an
+ * even number of blades throws that many spikes, so the six blades of the iris
+ * and the six spikes here are the same fact about the same lens.
+ *
+ * All of it composites with `plus-lighter`, which adds and clips at white —
+ * `difference` (what the cursor itself uses) inverts instead, and can never
+ * produce a source.
  */
 .cursor-emit {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 9996;
-  /* Large enough that the falloff reaches zero well inside the element. */
-  width: 34rem;
-  height: 34rem;
-  border-radius: 9999px;
+  z-index: 9999;
+  width: 40rem;
+  height: 40rem;
   pointer-events: none;
   mix-blend-mode: plus-lighter;
   opacity: var(--wind, 0);
   will-change: transform, opacity;
-  background:
-    radial-gradient(
-      circle closest-side,
-      oklch(1 0 0 / 1) 0%,
-      oklch(1 0 0 / 0.95) 1.6%,
-      color-mix(in oklab, var(--amber) 100%, transparent) 4%,
-      color-mix(in oklab, var(--amber) 62%, transparent) 9%,
-      color-mix(in oklab, var(--amber) 26%, transparent) 18%,
-      color-mix(in oklab, var(--amber) 9%, transparent) 30%,
-      transparent 52%
-    );
+  /* The core: white, held flat, with a short shoulder into amber. Everything
+     inside the shoulder is clipping — which is what "bright" looks like. */
+  background: radial-gradient(
+    circle closest-side,
+    oklch(1 0 0) 0%,
+    oklch(1 0 0) 4.5%,
+    oklch(0.99 0.04 72) 5.6%,
+    color-mix(in oklab, var(--amber) 92%, oklch(1 0 0)) 8%,
+    color-mix(in oklab, var(--amber) 78%, transparent) 13%,
+    color-mix(in oklab, var(--amber) 45%, transparent) 22%,
+    color-mix(in oklab, var(--amber) 20%, transparent) 36%,
+    color-mix(in oklab, var(--amber) 7%, transparent) 55%,
+    transparent 82%
+  );
+}
+
+/* The wide, soft kernel. Bloom is several blur radii summed; a single falloff
+   reads as a gradient, two read as light. */
+.cursor-emit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle closest-side,
+    oklch(1 0 0 / 0.5) 0%,
+    color-mix(in oklab, var(--amber) 46%, transparent) 10%,
+    color-mix(in oklab, var(--amber) 22%, transparent) 28%,
+    color-mix(in oklab, var(--amber) 8%, transparent) 50%,
+    transparent 80%
+  );
+}
+
+/*
+ * Diffraction spikes.
+ *
+ * Six, because the iris has six blades and that is where spikes come from.
+ * Narrow wedges of near-white, faded out along their length so they read as
+ * streaks of light rather than as drawn lines.
+ */
+.cursor-emit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-conic-gradient(
+    from 12deg,
+    oklch(1 0 0 / 0.9) 0deg 0.28deg,
+    color-mix(in oklab, var(--amber) 85%, oklch(1 0 0)) 0.28deg 0.7deg,
+    color-mix(in oklab, var(--amber) 40%, transparent) 0.7deg 1.5deg,
+    transparent 1.5deg 60deg
+  );
+  -webkit-mask: radial-gradient(
+    circle closest-side,
+    #000 0%,
+    #000 2.5%,
+    oklch(0 0 0 / 0.55) 7%,
+    oklch(0 0 0 / 0.18) 13%,
+    transparent 22%
+  );
+  mask: radial-gradient(
+    circle closest-side,
+    #000 0%,
+    #000 2.5%,
+    oklch(0 0 0 / 0.55) 7%,
+    oklch(0 0 0 / 0.18) 13%,
+    transparent 22%
+  );
+  /* Spikes lengthen as the charge builds. */
+  transform: scale(calc(0.55 + var(--wind, 0) * 0.85));
+  opacity: calc(var(--wind, 0) * 0.9);
 }
 
 /* Armed: full output, held until spent. */
@@ -699,7 +765,7 @@
     transform: var(--emit-transform, none) scale(1);
   }
   50% {
-    transform: var(--emit-transform, none) scale(1.12);
+    transform: var(--emit-transform, none) scale(1.1);
   }
 }
 

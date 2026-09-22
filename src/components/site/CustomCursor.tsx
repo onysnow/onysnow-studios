@@ -141,6 +141,14 @@ export function CustomCursor() {
     const charger = watchShutterCharge({
       onCharge: (charge, armed) => {
         el.style.setProperty("--wind", charge.toFixed(2));
+        /*
+         * The difference-blended ring fades out as the light comes up.
+         * Difference inverts, so over a bright warm source the ring rendered
+         * blue and sat in the middle of the highlight — a blown core has
+         * nothing legible inside it, so the ring gets out of the way.
+         */
+        el.style.opacity = (1 - charge * 0.92).toFixed(2);
+        dot.style.opacity = (1 - charge * 0.92).toFixed(2);
         emit.style.setProperty("--wind", charge.toFixed(2));
         emit.toggleAttribute("data-armed", armed);
         // Blades close over the back half, once it's clearly deliberate.
