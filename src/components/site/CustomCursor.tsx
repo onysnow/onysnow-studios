@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { watchCircleGesture } from "@/lib/circle-gesture";
+import { fireShutter } from "./ShutterFlash";
 
 /**
  * The cursor.
@@ -115,7 +117,46 @@ export function CustomCursor() {
     document.addEventListener("pointerleave", onLeave);
     document.addEventListener("pointerenter", onEnter);
 
+    /*
+     * Circling winds the iris shut, and completing a turn fires the shutter.
+     *
+     * Progress drives the blades through a custom property rather than React
+     * state: this updates on every pointer move, and re-rendering the cursor
+     * at that rate to change one number would be absurd.
+     */
+    const stopGesture = watchCircleGesture({
+      onProgress: (p) => {
+        /*
+         * Two separate signals, deliberately.
+         *
+         * `--wind` is the raw turn and drives the ring's glow, which starts
+         * almost immediately and brightens the whole way round. That glow is
+         * the discovery mechanism: it tells someone who has started circling
+         * by accident that circling *does* something, without the page having
+         * to announce it. Eased so a stray bit of rotation is a faint shimmer
+         * rather than a flare.
+         *
+         * `--iris` is gated to the back half and closes the blades. By then
+         * the gesture is unambiguous and this reads as "about to fire".
+         */
+        el.style.setProperty("--wind", (p * p).toFixed(3));
+        const shown = Math.max(0, (p - 0.5) / 0.5);
+        el.style.setProperty("--iris", shown.toFixed(3));
+        const winding = p > 0.12;
+        if (el.hasAttribute("data-winding") !== winding) {
+          el.toggleAttribute("data-winding", winding);
+        }
+      },
+      onComplete: () => {
+        el.style.setProperty("--iris", "0");
+        el.style.setProperty("--wind", "0");
+        el.removeAttribute("data-winding");
+        fireShutter({ x: targetX, y: targetY });
+      },
+    });
+
     return () => {
+      stopGesture();
       cancelAnimationFrame(frame);
       window.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerleave", onLeave);
@@ -128,6 +169,8 @@ export function CustomCursor() {
     <>
       <div ref={ringRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__ring" />
+        {/* Iris blades, drawn only while a circle is being wound. */}
+        <span className="custom-cursor__iris" />
       </div>
       <div ref={dotRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__dot" />

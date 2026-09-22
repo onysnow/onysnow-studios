@@ -303,3 +303,201 @@
   opacity: calc(var(--glow-on, 0) * 0.75);
   transition: opacity 0.4s ease;
 }
+
+/* ===================== Shutter =====================
+ *
+ * Fired by circling the cursor. A single flash, never a strobe: one rise and
+ * one decay, with a hard floor on how often it can repeat (see
+ * lib/circle-gesture.ts). Suppressed entirely under prefers-reduced-motion,
+ * where a full-screen luminance jump is not a style preference but a hazard.
+ */
+.shutter-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(
+      circle at var(--flash-x, 50%) var(--flash-y, 50%),
+      oklch(1 0 0 / 0.9) 0%,
+      color-mix(in oklab, var(--amber) 70%, oklch(1 0 0)) 28%,
+      transparent 72%
+    );
+}
+
+.shutter-flash[data-firing] {
+  animation: shutter-fire 0.5s cubic-bezier(0.1, 0.8, 0.2, 1) both;
+}
+
+@keyframes shutter-fire {
+  0% { opacity: 0; }
+  /* Fast rise, slow fall — the shape of a real strobe discharge. */
+  9% { opacity: 0.82; }
+  100% { opacity: 0; }
+}
+
+/* The frame lines that snap in at the corners as the shutter fires. */
+.shutter-frame {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.shutter-frame[data-firing] {
+  animation: shutter-frame 0.75s ease-out both;
+}
+
+.shutter-frame span {
+  position: absolute;
+  width: 3.2rem;
+  height: 3.2rem;
+  border: 1px solid color-mix(in oklab, var(--amber) 85%, transparent);
+}
+
+.shutter-frame span:nth-child(1) { top: 2rem; left: 2rem; border-right: 0; border-bottom: 0; }
+.shutter-frame span:nth-child(2) { top: 2rem; right: 2rem; border-left: 0; border-bottom: 0; }
+.shutter-frame span:nth-child(3) { bottom: 2rem; left: 2rem; border-right: 0; border-top: 0; }
+.shutter-frame span:nth-child(4) { bottom: 2rem; right: 2rem; border-left: 0; border-top: 0; }
+
+@keyframes shutter-frame {
+  0% { opacity: 0; transform: scale(1.06); }
+  18% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+/* ---- The glass answering the flash ---- */
+
+/* Glare: a specular band sweeping across the face of the panel. */
+.glass-edge[data-flash]::after {
+  animation: glass-glare 1s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes glass-glare {
+  0% {
+    opacity: 0.85;
+    background: linear-gradient(
+      108deg,
+      transparent 0%,
+      transparent 32%,
+      oklch(1 0 0 / 0.5) 46%,
+      color-mix(in oklab, var(--teal) 60%, oklch(1 0 0)) 52%,
+      transparent 66%,
+      transparent 100%
+    );
+    background-size: 280% 100%;
+    background-position: -60% 0;
+  }
+  100% {
+    opacity: 0;
+    background: linear-gradient(
+      108deg,
+      transparent 0%,
+      transparent 32%,
+      oklch(1 0 0 / 0.5) 46%,
+      color-mix(in oklab, var(--teal) 60%, oklch(1 0 0)) 52%,
+      transparent 66%,
+      transparent 100%
+    );
+    background-size: 280% 100%;
+    background-position: 160% 0;
+  }
+}
+
+/* The rim flaring to full, independent of where the cursor happens to be. */
+.glass-edge[data-flash]::before {
+  animation: rim-flare 1s ease-out both;
+}
+
+@keyframes rim-flare {
+  0% { opacity: 1; }
+  30% { opacity: 0.9; }
+  100% { opacity: calc(var(--glow-on, 0) * 0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shutter-flash,
+  .shutter-frame {
+    display: none;
+  }
+}
+
+/* ---- Iris blades ----
+ *
+ * Six blades closing toward the centre as a circle is wound. `--iris` runs 0→1
+ * and is written straight onto the element by the cursor's gesture handler.
+ *
+ * The blades are one conic-gradient and the closing aperture is a radial mask
+ * whose clear centre shrinks with the same variable, so the whole thing is two
+ * paint properties rather than six animated elements.
+ */
+.custom-cursor__iris {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4.25rem;
+  height: 4.25rem;
+  translate: -50% -50%;
+  border-radius: 9999px;
+  pointer-events: none;
+  opacity: calc(var(--iris, 0) * 0.95);
+  /* Winds visibly as it closes. */
+  rotate: calc(var(--iris, 0) * 72deg);
+  background: conic-gradient(
+    from 12deg,
+    #fff 0deg 2.5deg,
+    transparent 2.5deg 60deg,
+    #fff 60deg 62.5deg,
+    transparent 62.5deg 120deg,
+    #fff 120deg 122.5deg,
+    transparent 122.5deg 180deg,
+    #fff 180deg 182.5deg,
+    transparent 182.5deg 240deg,
+    #fff 240deg 242.5deg,
+    transparent 242.5deg 300deg,
+    #fff 300deg 302.5deg,
+    transparent 302.5deg 360deg
+  );
+  /* The open aperture, closing from 44% of the radius down to nothing. */
+  -webkit-mask: radial-gradient(
+    circle,
+    transparent 0 calc(44% - var(--iris, 0) * 40%),
+    #000 calc(45% - var(--iris, 0) * 40%) 100%
+  );
+  mask: radial-gradient(
+    circle,
+    transparent 0 calc(44% - var(--iris, 0) * 40%),
+    #000 calc(45% - var(--iris, 0) * 40%) 100%
+  );
+}
+
+/* While winding, the plain ring steps back so the blades are what reads. */
+.custom-cursor[data-winding] .custom-cursor__ring {
+  opacity: 0.35;
+}
+
+/* ---- Winding glow ----
+ *
+ * The ring brightens as a circle is traced, from the first few degrees through
+ * to the shutter firing. This is the hint: someone who starts circling by
+ * chance sees the cursor respond and learns there is something here, without
+ * the page having to tell them.
+ *
+ * Amber, like everything else that glows on this site. Under the cursor's
+ * `difference` blend over a dark page that stays warm.
+ */
+.custom-cursor__ring {
+  box-shadow:
+    0 0 calc(var(--wind, 0) * 1.5rem) calc(var(--wind, 0) * 0.2rem)
+      color-mix(in oklab, var(--amber) 85%, transparent),
+    inset 0 0 calc(var(--wind, 0) * 0.7rem)
+      color-mix(in oklab, var(--amber) 60%, transparent);
+}
+
+/* The ring itself thickens and warms as it winds. */
+.custom-cursor[data-winding] .custom-cursor__ring {
+  border-color: color-mix(in oklab, #fff 55%, var(--amber));
+  opacity: 1;
+}

@@ -71,3 +71,25 @@ export function registerEdgeGlow(el: HTMLElement) {
     panels.delete(el);
   };
 }
+
+/**
+ * The frosted panels reacting to the shutter flash.
+ *
+ * The flash is a light source, so the glass answers it the way glass does: a
+ * specular glare travelling across the face of each panel, and the rim flaring
+ * to full brightness before falling back to whatever the cursor is doing.
+ *
+ * The attribute is removed and re-added around a forced reflow because
+ * re-applying the same animation to an element that already has it does
+ * nothing — the browser sees no change and the animation never restarts.
+ */
+export function flashPanels() {
+  for (const el of panels) {
+    el.removeAttribute("data-flash");
+    // Reading layout here is the point: it flushes the removal so the
+    // re-added attribute counts as a change.
+    void el.offsetWidth;
+    el.setAttribute("data-flash", "");
+    window.setTimeout(() => el.removeAttribute("data-flash"), 1100);
+  }
+}

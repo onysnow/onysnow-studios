@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { CustomCursor } from "@/components/site/CustomCursor";
+import { ShutterFlash } from "@/components/site/ShutterFlash";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
@@ -87,6 +88,7 @@ function RootComponent() {
           </main>
           <SiteFooter />
           <CustomCursor />
+          <ShutterFlash />
         </>
       )}
       <Toaster position="bottom-right" />
