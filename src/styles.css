@@ -357,6 +357,8 @@
     right: 0;
     pointer-events: none;
     z-index: 3;
+    /* Clipped to the pane's own corners; see --pane-radius in lib/edge-glow. */
+    clip-path: inset(0 round var(--pane-radius, 0px));
     /*
      * Dichroic.
      *
@@ -452,10 +454,18 @@
      * the same parallax with bleed that scales with it automatically, and
      * nothing overflows the pane at all.
      */
-    background-size: 135% 135%;
+    /*
+     * Bleed in pixels, not percent, because the travel is in pixels.
+     *
+     * A percentage oversize gives a 1200px band hundreds of pixels of margin
+     * and a 64px bar eleven — while both are asked to travel the same
+     * distance. Adding a fixed amount to each axis means the margin always
+     * exceeds the throw, whatever the pane's size.
+     */
+    background-size: calc(100% + 150px) calc(100% + 110px);
     background-position:
-      calc(50% + var(--reflect-x, 0) * -40px)
-      calc(50% + var(--reflect-y, 0) * -26px);
+      calc(50% + var(--reflect-x, 0) * -110px)
+      calc(50% + var(--reflect-y, 0) * -72px);
   }
 
   /*
@@ -809,6 +819,7 @@
     position: absolute;
     left: 0;
     right: 0;
+    clip-path: inset(0 round var(--pane-radius, 0px));
     /*
      * Exactly the band the side face occupies — because they are the same
      * thing. The bevel IS the pane's thickness seen end-on, so the strip that

@@ -232,6 +232,17 @@ function measure(el: HTMLElement) {
   const tilt = paneTilt(r);
   el.style.setProperty("--pane-top", (0.18 + 0.82 * Math.max(0, tilt)).toFixed(3));
   el.style.setProperty("--pane-bottom", (0.18 + 0.82 * Math.max(0, -tilt)).toFixed(3));
+
+  /*
+   * The corner radius, published for the stylesheet.
+   *
+   * The edge strips are rectangles and the pane is a rounded rectangle, so at
+   * the corners the strips ran straight past where the pane had already curved
+   * away — a band overshooting the section at both ends. The radius is set by
+   * utility classes at each call site, so the stylesheet cannot know it; this
+   * is already measuring it for the shader, so it may as well say so.
+   */
+  el.style.setProperty("--pane-radius", `${cornerRadius(el)}px`);
 }
 
 function apply() {

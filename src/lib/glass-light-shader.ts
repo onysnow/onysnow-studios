@@ -235,7 +235,12 @@ void main() {
   float botOpen = 0.18 + 0.82 * max(0.0, -uTilt);
   float topT = 3.0 + 13.0 * topOpen;
   float botT = 3.0 + 13.0 * botOpen;
-  float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z);
+  /*
+   * Within the pane's width AND inside its rounded outline. The width test
+   * alone is a rectangle, which at the corners describes a region the pane
+   * has already curved out of.
+   */
+  float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z) * inside;
   float dTop = frag.y - uRect.y;
   float dBot = (uRect.y + uRect.w) - frag.y;
   float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
