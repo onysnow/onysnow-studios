@@ -95,7 +95,7 @@ export function ScrambleText({
   text,
   className,
   /** Roughly how long until the last letter settles, in ms. */
-  totalMs = 4000,
+  totalMs = 2000,
 }: {
   text: string;
   className?: string;
@@ -118,8 +118,8 @@ export function ScrambleText({
         // and the settles across the rest — hence "different times".
         start: animates ? Math.random() * totalMs * 0.35 : 0,
         duration: animates ? totalMs * (0.35 + Math.random() * 0.6) : 0,
-        // 95–300ms per change: quick enough to feel alive, slow enough that each
-        // glyph still registers as a letter rather than a flicker.
+        // 95–300ms per change: in a 2s window each letter still gets 7-20 changes,
+        // enough to register as letters rather than a flicker.
         interval: 95 + Math.random() * 205,
       };
     });
