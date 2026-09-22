@@ -63,6 +63,21 @@ export function Img({
       ) : null}
       {src ? (
         <img
+          /*
+           * `onLoad` alone is not enough.
+           *
+           * The markup is server-rendered, so the browser can finish fetching a
+           * photograph before React hydrates and attaches this handler — and an
+           * image that is already complete never fires `load` again. The result
+           * was a frame stuck at `opacity-0` forever, showing nothing but its
+           * blurred placeholder. Anything served from cache hit this on every
+           * repeat visit.
+           *
+           * The ref runs at attach time and catches exactly that case.
+           */
+          ref={(el) => {
+            if (el?.complete && el.naturalWidth > 0) setLoaded(true);
+          }}
           src={src}
           {...(srcSet ? { srcSet } : {})}
           sizes={sizes}

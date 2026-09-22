@@ -107,3 +107,32 @@ test("the frosted bars actually blur their backdrop", async ({ page }) => {
   });
   expect(bandOpacity, "a photograph must sit behind the header for the blur to catch").toBe(true);
 });
+
+/**
+ * Regression guard for the photograph fade-in.
+ *
+ * `Img` fades from a blurred placeholder to the real photograph on the `load`
+ * event. An image that the browser had already finished fetching before React
+ * hydrated never fires that event again, so the frame stayed at `opacity: 0`
+ * and the site showed nothing but blurred placeholders — on every cached visit,
+ * everywhere. Nothing failed: the markup was correct and the file was fetched.
+ */
+test("photographs are actually visible, not left behind their placeholders", async ({ page }) => {
+  for (const path of ["/portfolio", "/services"]) {
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    // Reload once: the second visit is served from cache, which is the case
+    // that broke.
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(1200);
+
+    const hidden = await page.evaluate(() =>
+      [...document.querySelectorAll("img")]
+        .filter((img) => img.complete && img.naturalWidth > 20 && !img.hasAttribute("aria-hidden"))
+        .filter((img) => Number(getComputedStyle(img).opacity) < 0.9)
+        .map((img) => img.currentSrc.slice(-48)),
+    );
+    expect(hidden, `loaded photographs stuck transparent on ${path}`).toEqual([]);
+  }
+});
