@@ -64,9 +64,14 @@ export function Glass({
         className,
       )}
     >
-      {/* The bezel, bending and dispersing what is behind it. */}
-      <span aria-hidden="true" className="glass__refract glass__refract--top" />
-      <span aria-hidden="true" className="glass__refract glass__refract--bottom" />
+      {/* Bright points behind the glass, thrown out of focus into discs. */}
+      <span aria-hidden="true" className="glass__bokeh" />
+      {/*
+        The bezel, bending and dispersing what is behind it. One layer over the
+        whole pane: the displacement map carries the profile, pushing at the
+        edges and neutral through the middle, which is what a bevel IS.
+      */}
+      <span aria-hidden="true" className="glass__refract" />
       {/*
         The two side faces — the actual thickness of the pane, between its
         arrises. Which one you can see depends on where the panel sits relative

@@ -815,10 +815,58 @@
    * glass surfaces, the largest single cost on the page. These are the rim as
    * geometry, so the filter only touches pixels that are shown.
    */
+  /*
+   * Bokeh, from whatever is bright behind the pane.
+   *
+   * A blur is not bokeh. Blurring a highlight spreads it AND dims it, which is
+   * why the frosted panels turned street lights into grey smudges — the thing
+   * that makes a defocused point read as bokeh is that it stays bright while
+   * it spreads, because all its light is still there, just distributed over a
+   * disc.
+   *
+   * So this isolates the highlights before spreading them: brightness and
+   * contrast first crush everything that is not near-white down to black, and
+   * only then does the blur run, so what spreads is the point lights and
+   * nothing else. Added with `plus-lighter` over the ordinary frosted pass, so
+   * the discs sit on top of the blur rather than being averaged into it.
+   *
+   * Busy street through a wet window. Give it a photograph with actual point
+   * sources in it and it has something to work with; give it an evenly lit
+   * scene and it correctly does nothing.
+   */
+  .glass > .glass__bokeh {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    backdrop-filter: brightness(2.1) contrast(3.2) saturate(1.25) blur(16px);
+    mix-blend-mode: plus-lighter;
+    opacity: 0.6;
+  }
+
+  .glass--bar > .glass__bokeh {
+    backdrop-filter: brightness(1.9) contrast(3) saturate(1.2) blur(9px);
+    opacity: 0.45;
+  }
+
+  /*
+   * ONE layer over the whole pane, not two strips at its edges.
+   *
+   * The displacement map already carries the bevel profile along its height:
+   * it pushes hard at the top, is exactly neutral through the middle, and
+   * pushes the other way at the bottom. Stretched over the whole pane that IS
+   * a bevel — the photograph bends within a band of each edge and is untouched
+   * across the body — and because the profile is continuous there is no strip
+   * boundary to line up or fail to line up with anything.
+   *
+   * Two strips could never show much. They were as tall as the side face,
+   * which is a few pixels, so the bend had nowhere to happen.
+   */
   .glass > .glass__refract {
     position: absolute;
-    left: 0;
-    right: 0;
+    inset: 0;
+    border-radius: inherit;
     clip-path: inset(0 round var(--pane-radius, 0px));
     /*
      * Exactly the band the side face occupies — because they are the same
@@ -845,22 +893,13 @@
     }
   }
 
-  .glass > .glass__refract--top {
-    top: 0;
-    height: var(--side-top);
-  }
-
-  .glass > .glass__refract--bottom {
-    bottom: 0;
-    height: var(--side-bottom);
-  }
-
   /*
-   * Bars keep the bevel, but a shallower one, set by their own --side-* above.
-   * The banding was never the bevel existing — it was a fixed 22px strip on a
-   * 64px bar while the thickness underneath it was 3px, so the two disagreed
-   * about where the edge was.
+   * Bars get a shallower bend: the profile is stretched over 64px rather than
+   * a 400px band, so the same map would wrench them.
    */
+  .glass--bar > .glass__refract {
+    opacity: 0.55;
+  }
 
   /*
    * Fresnel.

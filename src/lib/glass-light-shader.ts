@@ -63,6 +63,7 @@ uniform vec3  uCool;
 #define EDGE_HIGHLIGHT 0.05
 #define FRESNEL 1.0
 #define Z_RADIUS 40.0   // bevel depth in CSS pixels
+#define MAX_BEND 34.0   // peak displacement at the rim, CSS pixels
 
 /*
  * The side face is a different optical path from the face, and the numbers
@@ -98,21 +99,6 @@ float roundedBox(vec2 p, vec2 halfSize, float radius) {
   return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
 }
 
-/*
- * The bevel, as a height field.
- *
- * 'depth' is distance in from the rim in pixels. The profile is the convex
- * squircle — biconvex, in LiquidGlass's terms — which is flat across the body
- * of the pane and falls away sharply at the very edge. That shape is the
- * reason a bevel bends hard in a narrow band instead of smearing the whole
- * panel: the slope is almost zero everywhere except within Z_RADIUS of the rim.
- */
-float height(float depth) {
-  float x = clamp(depth / Z_RADIUS, 0.0, 1.0);
-  float k = 1.0 - x;
-  return pow(1.0 - k * k * k * k, 0.25);
-}
-
 /* The surface, photographed. A 2x2 atlas; each pane wears one cell. */
 vec3 surfaceAt(vec2 uv, float seed) {
   vec2 cell = vec2(mod(seed, 2.0), floor(seed * 0.5));
@@ -145,9 +131,25 @@ void main() {
   vec2 grad = normalize(vec2(dx, dy) + 1e-6);
 
   float depth = -d;                       // positive inside
-  float slope = (height(depth + 1.0) - height(max(depth - 1.0, 0.0))) * 0.5;
+  float band = clamp(depth / Z_RADIUS, 0.0, 1.0);
+
+  /*
+   * A displacement CURVE, not the raw derivative of the height field.
+   *
+   * Differentiating the squircle is correct and useless: its slope is enormous
+   * in the first pixel and essentially zero two pixels in, so the bend existed
+   * in a band three pixels wide and there was nothing to see. What matters is
+   * not the exact surface normal at a point, it is how much displacement the
+   * bevel produces across its whole width — strongest at the rim, falling
+   * smoothly to nothing at the inner boundary.
+   *
+   * pow(1 - band, 1.6), from the screen-space refraction write-up at
+   * zenn.dev/orectic, which reaches the same conclusion from the other
+   * direction: the falloff is what you want, not the gradient.
+   */
+  float curve = pow(1.0 - band, 1.6);
   // The bevel bends what is behind it toward the middle of the pane.
-  vec2 bend = grad * slope * REFRACTION * Z_RADIUS * 2.2;
+  vec2 bend = grad * curve * REFRACTION * MAX_BEND;
 
   /*
    * ---- The backdrop, sampled ----
@@ -180,7 +182,7 @@ void main() {
    * and the straight one are the same anyway, but mixing explicitly keeps the
    * middle honest if the slope ever picks up numerical noise.
    */
-  float bevel = clamp(1.0 - depth / Z_RADIUS, 0.0, 1.0);
+  float bevel = 1.0 - band;
   bevel *= bevel;
   vec3 backdrop = mix(straight, refracted, bevel) - straight;
 
@@ -376,8 +378,22 @@ void main() {
    * the absorption; warming it by distance from the cursor would paint the
    * light's colour onto something the light is not responsible for.
    */
-  vec3 colour = backdrop * uHasBackdrop * inside;
-  colour += throughSide * onSide * uHasBackdrop * 2.6;
+  /*
+   * The face's refraction is NOT done here, and cannot be.
+   *
+   * This canvas composites with plus-lighter, which only ever adds. Refraction
+   * means MOVING pixels — the original has to be replaced, not brightened —
+   * and adding a displaced copy on top of an image that is still there at full
+   * strength produces a faint double exposure, which is exactly what it looked
+   * like. The bevel's displacement belongs to the SVG filter in the stylesheet,
+   * which samples the backdrop from another position and composites behind the
+   * content where it can actually replace it.
+   *
+   * The side face stays, because it is genuinely additive: a thin band of the
+   * scene compressed and absorbed, laid over the edge rather than replacing
+   * anything.
+   */
+  vec3 colour = throughSide * onSide * uHasBackdrop * 2.6;
   colour += (tint * (rim + face) + mirror) * lit;
   colour += vec3(specular + EDGE_HIGHLIGHT * bevel) * inside * (0.35 + 0.65 * lit);
 

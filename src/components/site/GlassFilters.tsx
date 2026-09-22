@@ -19,6 +19,16 @@
  * gradient someone thought looked about right, which is what this used to be
  * and why it read as a smear rather than as a lens.
  *
+ * Green only. The bands run the full width of the page, so their left and
+ * right sides are never in view — there is no vertical arris to bend around,
+ * and putting a horizontal edge profile in the red channel would draw a bevel
+ * where the eye can plainly see there is not one. Sideways movement still
+ * happens, from the waviness below, which is the glass being uneven rather
+ * than the glass having an edge there.
+ *
+ * The body of the map is deliberately NOT neutral: a pane distorts what is
+ * behind it everywhere, most violently at the bevel.
+ *
  * The profile is the convex squircle
  *
  *     y = (1 - (1 - x)^4)^(1/4)
@@ -45,7 +55,7 @@ const DISPLACEMENT_MAP =
  * drags the backdrop. Matched to the strip height: bending it further than the
  * bevel is deep would pull in content from outside the glass.
  */
-const MAX_DISPLACEMENT = 13;
+const MAX_DISPLACEMENT = 74;
 
 export function GlassFilters() {
   return (
@@ -69,10 +79,23 @@ export function GlassFilters() {
           <feImage href={DISPLACEMENT_MAP} preserveAspectRatio="none" result="lens" />
 
           {/* Imperfection, at low amplitude — a flawless edge looks synthetic. */}
+          {/*
+            Waviness, and it is not decoration.
+ 
+            Float glass is not optically flat. It is poured, and it cools with
+            a slow undulation across its surface that you see every day without
+            naming it — the reason a reflection in a shop window wobbles as you
+            walk past, and why what is behind a large pane is never quite
+            where it should be. A very low frequency is the whole point: fine
+            noise is frosted glass, broad noise is a real window.
+ 
+            This is what gives the BODY of the pane its distortion. The map
+            underneath it handles the edges.
+          */}
           <feTurbulence
             type="fractalNoise"
-            baseFrequency="0.02 0.06"
-            numOctaves={1}
+            baseFrequency="0.004 0.009"
+            numOctaves={2}
             seed={9}
             result="flaw"
           />
@@ -81,8 +104,8 @@ export function GlassFilters() {
             in2="lens"
             operator="arithmetic"
             k1="0"
-            k2="0.12"
-            k3="0.88"
+            k2="0.34"
+            k3="0.72"
             k4="0"
             result="profile"
           />
