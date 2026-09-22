@@ -366,7 +366,22 @@ void main() {
   float g2 = hash(gl_FragCoord.yx * 1.7);
   colour += (vec3(g1, g2, g1 * 0.5 + g2 * 0.5) - 0.5) * 0.09 * mids;
 
+  /*
+   * NOT clipped to the pane.
+   *
+   * Multiplying alpha by 'inside' cut every contribution off at the boundary,
+   * which killed the one thing that has no business stopping there: the bloom.
+   * A lit edge throws light OUT of the glass as well as into it — that spill
+   * above the top of a pane is most of what tells you the edge is bright
+   * rather than merely pale — and cutting it at the boundary drew a hard line
+   * exactly where the glow should be softest.
+   *
+   * Everything that genuinely belongs inside the pane already carries its own
+   * 'inside' factor: the refracted backdrop, the side band, the scattered
+   * face, the reflected source, the specular. What is left unbounded is the
+   * rim, which is the part that should escape.
+   */
   float alpha = clamp(max(max(abs(colour.r), abs(colour.g)), abs(colour.b)), 0.0, 1.0);
-  gl_FragColor = vec4(colour, alpha * inside);
+  gl_FragColor = vec4(colour, alpha);
 }
 `;
