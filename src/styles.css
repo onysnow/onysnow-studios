@@ -273,7 +273,7 @@
 .custom-cursor__ring {
   width: 28px;
   height: 28px;
-  border: 1px solid #fff;
+  border: 1px solid #000;
 }
 
 /*
@@ -283,8 +283,10 @@
 .custom-cursor__dot {
   width: 5px;
   height: 5px;
-  background-color: #fff;
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.6);
+  background-color: #000;
+  /* Black, with a faint light halo rather than a dark one -- a black dot on a
+     dark photograph is invisible without something to separate it. */
+  box-shadow: 0 0 3px oklch(1 0 0 / 0.55);
 }
 
 /* Over a link or button: a filled disc big enough to sit behind a nav item. */
@@ -617,7 +619,7 @@
      * than a gaussian, done in linear light before tonemapping, which is why
      * the lamps come out as hard-rimmed bokeh circles instead of smudges.
      */
-    background-size: auto 420vh;
+    background-size: auto 210vh;
     /*
      * Anchored in viewport space, then pulled back by the pane's own offset.
      * That is what makes the reflection continuous: two bands stacked above
@@ -631,9 +633,16 @@
      * The parallax is added once, identically for every pane: one viewer, one
      * reflection moving.
      */
-    background-position: calc(-700vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1100px)
-      calc(-160vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -750px);
-    opacity: calc(0.05 + 0.6 * var(--wind, 0));
+    background-position: calc(-330vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1100px)
+      calc(-72vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -750px);
+    /*
+     * 420vh was too far: the rooms are mostly black with a few lights in them,
+     * so at ten times magnification most panes landed on an empty patch and
+     * showed nothing at all. 210vh still reads as a fragment but guarantees
+     * something is in frame. Base opacity up too -- 0.05 was not "subtle", it
+     * was invisible, which is removing the feature rather than restraining it.
+     */
+    opacity: calc(0.16 + 0.5 * var(--wind, 0));
   }
 
   /*
@@ -885,7 +894,9 @@
  * only ever competed with both.
  */
 .custom-cursor__ring {
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.55);
+  box-shadow:
+    0 0 3px oklch(1 0 0 / 0.5),
+    inset 0 0 2px oklch(1 0 0 / 0.35);
 }
 
 /* The ring itself thickens and warms as it winds. */

@@ -223,7 +223,23 @@ void main() {
   float flare = exp(-ad / 15.0);
   float haze = exp(-ad / 48.0);
   float arrisWear = 0.62 + 0.9 * surf.b * uHasSurface + 0.38 * (1.0 - uHasSurface);
-  vec3 rim = vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach;
+
+  /*
+   * Only the edges that are actually in view.
+   *
+   * The SDF's gradient is the outward normal of the perimeter, so its Y
+   * component is 1 along the top and bottom and 0 along the left and right.
+   * Weighting by it lights the two faces the viewer can see and leaves the
+   * other two alone.
+   *
+   * These bands run the full width of the page: their left and right edges are
+   * off-screen, or butted against the viewport. There is no vertical arris to
+   * catch anything, so drawing one put a bright teal line -- the thickness
+   * tint, exp(-SIDE_ABSORB) -- down the inside of every pane's right edge,
+   * which read as a layer stopping short of the container.
+   */
+  float facing = smoothstep(0.35, 0.85, abs(grad.y));
+  vec3 rim = vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach * facing;
 
   /*
    * ---- Light piped through the pane ----
@@ -254,7 +270,7 @@ void main() {
    * light coming straight through the air, the edge stops reading as glass
    * and starts reading as a neon outline.
    */
-  rim += pipedTint * (filament * 1.7 * arrisWear + flare * 0.8) * piped;
+  rim += pipedTint * (filament * 1.7 * arrisWear + flare * 0.8) * piped * facing;
 
   /*
    * ---- The side faces ----
@@ -292,7 +308,7 @@ void main() {
    * highlight along the entire band instead of putting it where the source is.
    */
   float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
-  rim += vec3(sideGlare) * 11.0 * direct;
+  rim += vec3(sideGlare) * 11.0 * direct * facing;
   rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 5.0 * direct;
 
   /*

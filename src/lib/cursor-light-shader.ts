@@ -90,7 +90,17 @@ void main() {
   vec2 res = uViewport / uScale;
 
   // Normalised so the flare geometry does not change with window shape.
-  float unit = min(res.x, res.y) * 0.5;
+  /*
+   * The flare GROWS as it winds; it does not merely brighten.
+   *
+   * Scaling intensity alone meant a barely-touched pointer still threw a
+   * full-size flare at low opacity, which reads as a big dim light rather than
+   * a small one starting up. Shrinking the unit at low charge expands p, and
+   * every feature measured against it -- core, halo, spikes, aperture --
+   * contracts together.
+   */
+  float spread = mix(0.30, 1.0, uCharge * uCharge);
+  float unit = min(res.x, res.y) * 0.5 * spread;
   vec2 p = (frag - uLight) / unit;
   float r = length(p);
 
@@ -305,7 +315,7 @@ void main() {
    * at all — what changes is how hard the blades cut, not how small the
    * opening is, so the hexagon stays legible across the whole wind.
    */
-  float apertureRadius = mix(0.115, 0.098, uClosed);
+  float apertureRadius = mix(0.062, 0.053, uClosed);
   float d = apertureDistance(p, mix(0.42, 0.14, uClosed));
   float blades = smoothstep(apertureRadius - 0.0018, apertureRadius + 0.0018, d);
   float occlusion = 1.0 - blades * (0.25 + uClosed * 0.5);
