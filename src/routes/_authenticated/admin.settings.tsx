@@ -52,7 +52,14 @@ function SettingsPage() {
     if (!entries.length) return;
     setSaving(true);
     try {
-      for (const [key, value] of entries) await updateRow("site_settings", key, { value });
+      /*
+       * Together, not one round trip at a time.
+       *
+       * Saving fifteen settings was fifteen sequential requests, so the button
+       * sat spinning for as long as the network took times fifteen. They are
+       * independent rows; nothing needs the previous one to have landed.
+       */
+      await Promise.all(entries.map(([key, value]) => updateRow("site_settings", key, { value })));
       setDrafts({});
       refresh();
       toast.success("Settings saved");

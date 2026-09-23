@@ -236,7 +236,16 @@ export const postsQuery = queryOptions({
   queryFn: () =>
     rows<"posts", Post>(
       "posts",
-      "id,slug,title,excerpt,cover_photo_id,reading_minutes,published,published_at,sort_order,created_at,updated_at,blocks",
+      /*
+       * Without `blocks`.
+       *
+       * /journal renders title, excerpt and cover — it never reads the body.
+       * Selecting it meant every post's entire prose came down to draw a list
+       * of cards, AND was serialised into the dehydrated query cache inlined
+       * in the page's own HTML. `postQuery` still fetches it for the one post
+       * that actually needs it.
+       */
+      "id,slug,title,excerpt,cover_photo_id,reading_minutes,published,published_at,sort_order,created_at,updated_at",
       (q) => q.eq("published", true).order("published_at", { ascending: false, nullsFirst: false }),
     ),
 });

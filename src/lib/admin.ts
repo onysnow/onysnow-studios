@@ -35,11 +35,26 @@ export const TABLE_PK: Record<EditableTable, string> = {
   posts: "id",
 };
 
+/**
+ * Every row of a table, bounded.
+ *
+ * There was no limit here at all, which is fine for the tables the studio
+ * curates — categories, services, testimonials — and is not fine for the two
+ * that grow on their own. `inquiries` and `subscribers` accumulate for the
+ * life of the site, and the admin pages render them unvirtualised, so at a few
+ * thousand rows the portal becomes a multi-megabyte fetch that blocks on
+ * parse. A ceiling is not pagination, but it is the difference between slow
+ * and unusable, and it makes the day pagination is needed obvious rather than
+ * gradual.
+ */
+const MAX_ROWS = 500;
+
 async function all<T>(table: string, order: string, ascending = true): Promise<T[]> {
   const { data, error } = await (supabase as any)
     .from(table)
     .select("*")
-    .order(order, { ascending });
+    .order(order, { ascending })
+    .limit(MAX_ROWS);
   if (error) throw error;
   return (data ?? []) as T[];
 }

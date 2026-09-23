@@ -17,6 +17,14 @@ export type PreparedImage = {
 const MAX_EDGE = 2560;
 const QUALITY = 0.82;
 
+/** The real pixel width of an encoded image. */
+async function widthOf(file: Blob): Promise<number> {
+  const bitmap = await createImageBitmap(file);
+  const width = bitmap.width;
+  bitmap.close();
+  return width;
+}
+
 async function loadBitmap(file: Blob): Promise<ImageBitmap> {
   return createImageBitmap(file);
 }
@@ -52,7 +60,15 @@ export async function prepareImage(input: File): Promise<PreparedImage> {
   const blurDataUrl = blurPlaceholder(bitmap);
   const stem = input.name.replace(/\.[^.]+$/, "") || "photo";
 
-  // Only generate widths smaller than the image itself — upscaling helps nobody.
+  /*
+   * Only widths smaller than the image itself — upscaling helps nobody.
+   *
+   * `bitmap` is the already-resized base, so its long edge is at most
+   * MAX_EDGE. That is why the 2560 entry never produced anything: for a
+   * landscape photograph the width IS 2560 and `2560 < 2560` is false. The
+   * lightbox therefore topped out at a 1280w candidate on any display, and
+   * photo-url.ts advertised a size that did not exist.
+   */
   const targets = VARIANT_WIDTHS.filter((w) => w < bitmap.width);
   const variants: PreparedVariant[] = [];
   for (const width of targets) {
@@ -62,9 +78,20 @@ export async function prepareImage(input: File): Promise<PreparedImage> {
       fileType: "image/webp",
       useWebWorker: true,
     });
+
+    /*
+     * Named by what came out, not by what was asked for.
+     *
+     * `maxWidthOrHeight` constrains the LONGER edge, so a 2:3 portrait asked
+     * for 1280 comes back 853 wide. Labelling that file `1280w` tells the
+     * browser it is half again as wide as it is, so it picks a candidate too
+     * small for the slot — a visible upscale on a photography site. Measuring
+     * the result costs one decode and makes the descriptor true.
+     */
+    const actual = await widthOf(resized).catch(() => width);
     variants.push({
-      width,
-      file: new File([resized], `${stem}-${width}.webp`, { type: "image/webp" }),
+      width: actual,
+      file: new File([resized], `${stem}-${actual}.webp`, { type: "image/webp" }),
     });
   }
 
