@@ -26,6 +26,21 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+/**
+ * Studio sign in.
+ *
+ * There is deliberately no way to create an account here.
+ *
+ * Accounts used to be self-service, which paired badly with the
+ * `grant_first_admin` trigger: whoever signed up while `admin_users` was empty
+ * became the studio owner. The trigger is gone (migration
+ * 20260923120000_close_first_admin_grant), and so is the button.
+ *
+ * Removing the button is not the control — the Supabase Auth endpoint is still
+ * reachable directly until self-service signup is turned off in the project's
+ * Auth settings. It removes the invitation. Granting access is a deliberate act
+ * performed from the dashboard.
+ */
 function AuthPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -47,21 +62,6 @@ function AuthPage() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) toast.error("Could not sign in", { description: error.message });
-  }
-
-  async function signUp() {
-    setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${window.location.origin}/auth` },
-    });
-    setBusy(false);
-    if (error) toast.error("Could not create the account", { description: error.message });
-    else
-      toast.success("Account created", {
-        description: "Check your email if confirmation is required, then sign in.",
-      });
   }
 
   async function google() {
@@ -131,15 +131,6 @@ function AuthPage() {
             disabled={busy || !email || !password}
           >
             {busy ? <Loader2 className="animate-spin" /> : "Sign in"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full"
-            disabled={busy || !email || !password}
-            onClick={signUp}
-          >
-            Create my studio account
           </Button>
         </form>
       </div>
