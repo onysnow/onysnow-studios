@@ -42,7 +42,12 @@ uniform float uCharge;        // 0 to 1
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
 uniform float uTilt;          // -1 looking up at it, 1 looking down at it
-uniform float uSeed;          // which atlas cell this pane wears
+uniform float uSeed;
+uniform float uGrimeRake;   // tunable
+uniform float uGrimeSpecks; // tunable
+uniform float uSheen;       // tunable
+uniform float uSheenReach;  // tunable
+uniform float uArris;       // tunable          // which atlas cell this pane wears
 
 uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
@@ -246,7 +251,7 @@ void main() {
    * width that included the scrollbar.
    */
   float facing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
-  vec3 rim = vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach * facing;
+  vec3 rim = vec3(filament * uArris * arrisWear + flare * 4.6 + haze * 0.34) * reach * facing;
 
   /*
    * ---- Light piped through the pane ----
@@ -376,7 +381,7 @@ void main() {
    * The smears carry most of it now rather than the specks: a wiped pane is
    * mostly broad films with a few bright points in them, not an even dusting.
    */
-  face += vec3(inside * rake * (smear * 2.4 + glint * 9.5));
+  face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks));
 
   /*
    * And some of it shows without the light raking it at all, because grime
@@ -418,8 +423,8 @@ void main() {
    * actually does, and falling off over hundreds of pixels so it covers the
    * band rather than pooling.
    */
-  float sheen = exp(-dl / 540.0);
-  mirror += inside * (0.12 + 0.88 * fresnel) * sheen * 2.6;
+  float sheen = exp(-dl / uSheenReach);
+  mirror += inside * (0.12 + 0.88 * fresnel) * sheen * uSheen;
 
   /*
    * Everything the light does scales with the charge, and there is genuinely

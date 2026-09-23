@@ -1,4 +1,5 @@
 import { reportCharge } from "@/lib/edge-glow";
+import { t } from "@/lib/tuning";
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
@@ -167,14 +168,14 @@ export function CustomCursor() {
      *
      * Converted to per-frame lerps that settle in about the same time.
      */
-    const RING_EASE = 0.38;
-    const DOT_EASE = 0.46;
 
     const tick = () => {
-      ringX += (targetX - ringX) * RING_EASE;
-      ringY += (targetY - ringY) * RING_EASE;
-      dotX += (targetX - dotX) * DOT_EASE;
-      dotY += (targetY - dotY) * DOT_EASE;
+      const ringEase = t("ringEase");
+      const dotEase = t("dotEase");
+      ringX += (targetX - ringX) * ringEase;
+      ringY += (targetY - ringY) * ringEase;
+      dotX += (targetX - dotX) * dotEase;
+      dotY += (targetY - dotY) * dotEase;
 
       el.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
       dot.style.transform = `translate3d(${dotX}px, ${dotY}px, 0) translate(-50%, -50%)`;

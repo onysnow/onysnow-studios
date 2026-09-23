@@ -34,11 +34,26 @@ jobs:
       # The build is its own check: it's where Lightning CSS, the router codegen
       # and the Nitro/Cloudflare bundling actually run, and none of those are
       # exercised by the dev server the e2e job uses.
+      # Repo secrets win when they are configured; when they are NOT, an
+      # `env:` block still exports the variable as an EMPTY string, and an empty
+      # value shadows the committed .env. That is what broke the smoke test: the
+      # server client reads the unprefixed SUPABASE_URL and kept working, while
+      # every VITE_-prefixed value went blank, so photoUrl() returned "" and the
+      # gallery server-rendered with no <img> in it at all.
+      #
+      # Exporting only the secrets that actually have a value leaves .env alone
+      # otherwise, so CI passes with or without them configured.
+      - name: Prefer repo secrets, fall back to .env
+        run: |
+          if [ -n "${{ secrets.VITE_SUPABASE_URL }}" ]; then
+            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}" ]; then
+            echo "VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}" >> "$GITHUB_ENV"
+          fi
+
       - name: Build
         run: bun run build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
   e2e:
     name: Smoke tests
@@ -55,11 +70,26 @@ jobs:
       - name: Install Playwright browser
         run: bunx playwright install --with-deps chromium
 
+      # Repo secrets win when they are configured; when they are NOT, an
+      # `env:` block still exports the variable as an EMPTY string, and an empty
+      # value shadows the committed .env. That is what broke the smoke test: the
+      # server client reads the unprefixed SUPABASE_URL and kept working, while
+      # every VITE_-prefixed value went blank, so photoUrl() returned "" and the
+      # gallery server-rendered with no <img> in it at all.
+      #
+      # Exporting only the secrets that actually have a value leaves .env alone
+      # otherwise, so CI passes with or without them configured.
+      - name: Prefer repo secrets, fall back to .env
+        run: |
+          if [ -n "${{ secrets.VITE_SUPABASE_URL }}" ]; then
+            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}" ]; then
+            echo "VITE_SUPABASE_PUBLISHABLE_KEY=${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}" >> "$GITHUB_ENV"
+          fi
+
       - name: Smoke tests
         run: bun run test:e2e
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       - uses: actions/upload-artifact@v4
         if: failure()

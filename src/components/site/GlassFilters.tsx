@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import { t } from "@/lib/tuning";
 /**
  * The SVG filter the glass rim refracts through.
  *
@@ -58,6 +60,28 @@ const DISPLACEMENT_MAP =
 const MAX_DISPLACEMENT = 40;
 
 export function GlassFilters() {
+  /*
+   * The displacement scale is an SVG attribute, not a CSS property, so the
+   * panel cannot reach it with a custom property. Written directly instead,
+   * and only when it actually differs -- setting an attribute every frame
+   * invalidates the filter and re-rasterises every pane behind it.
+   */
+  const maps = useRef<SVGFEDisplacementMapElement[]>([]);
+  useEffect(() => {
+    let frame = 0;
+    let last = -1;
+    const tick = () => {
+      frame = requestAnimationFrame(tick);
+      const want = t("displacement");
+      if (want === last) return;
+      last = want;
+      const mult = [0.94, 1, 1.07];
+      maps.current.forEach((m, i) => m?.setAttribute("scale", String(want * (mult[i] ?? 1))));
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   return (
     <svg
       aria-hidden="true"

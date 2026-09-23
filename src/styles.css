@@ -279,8 +279,8 @@
 
 .custom-cursor__ring {
   /* Measured off bryanminear.com: .circle-outer is 30x30, 1px solid #fff. */
-  width: 30px;
-  height: 30px;
+  width: var(--tune-ring, 30px);
+  height: var(--tune-ring, 30px);
   border: 1px solid #fff;
 }
 
@@ -290,8 +290,8 @@
  */
 .custom-cursor__dot {
   /* Measured: .circle-inner is 6x6, solid white. */
-  width: 6px;
-  height: 6px;
+  width: var(--tune-dot, 6px);
+  height: var(--tune-dot, 6px);
   background-color: #fff;
 }
 
@@ -635,7 +635,7 @@
      * than a gaussian, done in linear light before tonemapping, which is why
      * the lamps come out as hard-rimmed bokeh circles instead of smudges.
      */
-    background-size: auto 210vh;
+    background-size: auto var(--tune-reflect-zoom, 210vh);
     /*
      * Anchored in viewport space, then pulled back by the pane's own offset.
      * That is what makes the reflection continuous: two bands stacked above
@@ -649,8 +649,10 @@
      * The parallax is added once, identically for every pane: one viewer, one
      * reflection moving.
      */
-    background-position: calc(-330vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1100px)
-      calc(-72vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -750px);
+    background-position: calc(
+        -330vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1 * var(--tune-reflect-x, 1100px)
+      )
+      calc(-72vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -1 * var(--tune-reflect-y, 750px));
     /*
      * 420vh was too far: the rooms are mostly black with a few lights in them,
      * so at ten times magnification most panes landed on an empty patch and
@@ -658,7 +660,7 @@
      * something is in frame. Base opacity up too -- 0.05 was not "subtle", it
      * was invisible, which is removing the feature rather than restraining it.
      */
-    opacity: calc(0.16 + 0.5 * var(--wind, 0));
+    opacity: calc(var(--tune-reflect-base, 0.16) + var(--tune-reflect-lit, 0.5) * var(--wind, 0));
   }
 
   /*

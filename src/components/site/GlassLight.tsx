@@ -3,6 +3,7 @@ import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry } from "@/lib/edge-glow";
+import { t } from "@/lib/tuning";
 
 /**
  * The glass itself: what it does to the photograph behind it, and what it does
@@ -45,7 +46,6 @@ const MAX_SCALE = 1.5;
  */
 const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth;
 const viewportHeight = () => document.documentElement.clientHeight || window.innerHeight;
-
 
 /** How far outside a pane the bloom still has something to contribute. */
 const BLEED = 90;
@@ -123,6 +123,11 @@ export function GlassLight({
     const uImageAspect = U("uImageAspect");
     const uHasBackdrop = U("uHasBackdrop");
     const uHasSurface = U("uHasSurface");
+    const uGrimeRake = U("uGrimeRake");
+    const uGrimeSpecks = U("uGrimeSpecks");
+    const uSheen = U("uSheen");
+    const uSheenReach = U("uSheenReach");
+    const uArris = U("uArris");
 
     // The site's amber and teal in linear light — the shader works in linear
     // and only returns to display space at the very end.
@@ -240,6 +245,11 @@ export function GlassLight({
       gl.enable(gl.SCISSOR_TEST);
       gl.uniform2f(uLight, x, y);
       gl.uniform1f(uCharge, charge);
+      gl.uniform1f(uGrimeRake, t("grimeRake"));
+      gl.uniform1f(uGrimeSpecks, t("grimeSpecks"));
+      gl.uniform1f(uSheen, t("sheen"));
+      gl.uniform1f(uSheenReach, t("sheenFalloff"));
+      gl.uniform1f(uArris, t("arris"));
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, surface);
 

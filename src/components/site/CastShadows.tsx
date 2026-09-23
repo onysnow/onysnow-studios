@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { lightState } from "@/lib/edge-glow";
+import { t } from "@/lib/tuning";
 
 /**
  * What the glass and the things on it block.
@@ -31,13 +32,13 @@ import { lightState } from "@/lib/edge-glow";
  */
 
 /** Depth from the content down to the photograph, in CSS pixels. */
-const GAP = 22;
+const _GAP_DEFAULT = 22;
 /** Grime sits on the glass, so it is nearer the picture than the content is. */
 const GRIME_GAP = 13;
 /** How far the light floats above the page. Smaller = more dramatic throw. */
-const HEIGHT = 300;
+const _HEIGHT_DEFAULT = 300;
 /** The emitter's radius. This is what gives the penumbra its width. */
-const LIGHT_RADIUS = 46;
+const _LIGHT_RADIUS_DEFAULT = 46;
 /** Beyond this the light contributes nothing and the canvas stays clear. */
 const REACH = 900;
 
@@ -84,6 +85,9 @@ export function CastShadows() {
         return;
       }
 
+      const GAP = t("shadowGap");
+      const HEIGHT = t("shadowHeight");
+      const LIGHT_RADIUS = t("shadowSoftness");
       const box = section.getBoundingClientRect();
       // Nothing to do for a section that is not on screen.
       if (box.bottom < -REACH || box.top > window.innerHeight + REACH) return;
@@ -161,7 +165,7 @@ export function CastShadows() {
         cctx.filter = "none";
         cctx.globalCompositeOperation = "destination-in";
         const beamC = cctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, REACH * 0.42);
-        beamC.addColorStop(0, `rgba(0,0,0,${(0.42 * charge * charge).toFixed(3)})`);
+        beamC.addColorStop(0, `rgba(0,0,0,${(t("causticStrength") * charge * charge).toFixed(3)})`);
         beamC.addColorStop(1, "rgba(0,0,0,0)");
         cctx.fillStyle = beamC;
         cctx.fillRect(0, 0, box.width, box.height);
@@ -188,7 +192,7 @@ export function CastShadows() {
         const fade = Math.max(0, 1 - dist / REACH);
 
         ctx.filter = `blur(${Math.max(0.5, penumbra).toFixed(2)}px)`;
-        ctx.globalAlpha = 0.5 * fade * fade * charge;
+        ctx.globalAlpha = t("shadowStrength") * fade * fade * charge;
         ctx.fillRect(r.left - box.left + offX, r.top - box.top + offY, r.width, r.height);
       }
       ctx.restore();
