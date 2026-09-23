@@ -240,14 +240,21 @@
   pointer-events: none;
   opacity: 0;
   /*
-   * NOT `difference`.
+   * `difference`, as it was originally, because that is what the reference
+   * actually does.
    *
-   * Inverting was a neat way to stay legible on any background, and over a
-   * photograph it is exactly wrong: it turns the follower into a negative of
-   * somebody's picture. A white ring with a dark shadow under it reads on
-   * anything and leaves the photograph alone, which on a photography site is
-   * the only requirement that actually matters.
+   * bryanminear's cursor is not black. It INVERTS: dark on his white header,
+   * light over his photographs, always legible and never a chosen colour.
+   * White is difference's identity, so a white ring comes out as a true
+   * inversion of the pixels underneath rather than a tint. Painting it black
+   * instead, which is what I did after taking this out, gets the header right
+   * and then disappears against every dark photograph on the page.
+   *
+   * It comes back off over photographs -- see the media state -- because
+   * inverting somebody's picture is the one place this is genuinely wrong,
+   * and that was the original complaint. Everywhere else it is the effect.
    */
+  mix-blend-mode: difference;
   transition: opacity 0.25s ease;
   will-change: transform;
 }
@@ -271,9 +278,9 @@
 }
 
 .custom-cursor__ring {
-  width: 20px;
-  height: 20px;
-  border: 1px solid #000;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #fff;
 }
 
 /*
@@ -283,10 +290,7 @@
 .custom-cursor__dot {
   width: 4px;
   height: 4px;
-  background-color: #000;
-  /* Black, with a faint light halo rather than a dark one -- a black dot on a
-     dark photograph is invisible without something to separate it. */
-  box-shadow: 0 0 3px oklch(1 0 0 / 0.55);
+  background-color: #fff;
 }
 
 /* Over a link or button: a filled disc big enough to sit behind a nav item. */
@@ -315,6 +319,16 @@
  * still reads on any background because a 1px inversion is legible against
  * anything, and it leaves the picture alone.
  */
+/*
+ * Over a photograph, inverting is the one case where this is wrong -- it turns
+ * the follower into a negative of the picture. Composite normally there and
+ * let the white carry it, which the photographs on this site are dark enough
+ * for.
+ */
+.custom-cursor[data-state="media"] {
+  mix-blend-mode: normal;
+}
+
 .custom-cursor[data-state="media"] .custom-cursor__ring {
   width: 96px;
   height: 96px;
@@ -894,9 +908,6 @@
  * only ever competed with both.
  */
 .custom-cursor__ring {
-  box-shadow:
-    0 0 3px oklch(1 0 0 / 0.5),
-    inset 0 0 2px oklch(1 0 0 / 0.35);
 }
 
 /* The ring itself thickens and warms as it winds. */
@@ -907,29 +918,20 @@
 
 /* ---- Armed ----
  *
- * Charge is full and a click will fire. The ring holds a steady bright pulse so
- * the state is unmistakable — this is the moment the whole gesture has been
- * building toward, and it has to be obvious that something is now possible.
+ * Charge is full and a click will fire. It has to be unmistakable, but it does
+ * not have to shout: this was a 3-4rem amber glow pulsing on a 1.1s loop, and
+ * between the aura and the throb it was the loudest thing on a page whose
+ * subject is photographs.
+ *
+ * A crisp, brighter ring instead. No colour of its own -- the cursor inverts
+ * whatever is beneath it, and painting amber onto that both fights the
+ * inversion and drops the studio's accent on top of somebody's picture. No
+ * animation either; the state is constant, so something that reads instantly
+ * and then holds still says it better than something that keeps moving.
  */
 .custom-cursor[data-armed] .custom-cursor__ring {
-  animation: armed-pulse 1.1s ease-in-out infinite;
-  border-color: color-mix(in oklab, #fff 30%, var(--amber));
-}
-
-@keyframes armed-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 3.2rem 0.7rem color-mix(in oklab, var(--amber) 100%, transparent),
-      0 0 1.2rem 0.16rem oklch(1 0 0 / 0.9),
-      inset 0 0 1.2rem color-mix(in oklab, var(--amber) 85%, transparent);
-  }
-  50% {
-    box-shadow:
-      0 0 4.4rem 1.1rem color-mix(in oklab, var(--amber) 100%, transparent),
-      0 0 1.8rem 0.26rem oklch(1 0 0 / 1),
-      inset 0 0 1.8rem color-mix(in oklab, var(--amber) 95%, transparent);
-  }
+  border-width: 2px;
+  scale: 1.12;
 }
 
 /* Blades sit fully closed while armed — the aperture is cocked. */
@@ -991,7 +993,9 @@
   position: absolute;
   top: 0;
   left: 0;
-  height: auto;
+  /* Square and oversized; object-fit does the fitting, so the clip's own
+     aspect can never leave an edge on screen. */
+  object-fit: cover;
   opacity: 0;
   mix-blend-mode: screen;
   will-change: transform, opacity;
@@ -1164,7 +1168,13 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  /*
+   * No z-index. These sit before .glass in the DOM and the pane is z-index
+   * auto, so document order already puts them above the photograph and below
+   * the glass -- which is the whole point. Promoting them to 1 put them ABOVE
+   * the pane, so the multiply darkened the glass and the content sitting on
+   * it rather than the picture behind.
+   */
   pointer-events: none;
   mix-blend-mode: multiply;
   opacity: 0;
@@ -1182,7 +1192,6 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
   pointer-events: none;
   mix-blend-mode: plus-lighter;
   opacity: 0;

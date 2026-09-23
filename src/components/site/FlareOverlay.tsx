@@ -104,7 +104,7 @@ export function FlareOverlay({
         const video = document.createElement("video");
         video.className = "flare-clip";
         video.muted = true;
-        video.loop = true;
+        video.loop = false;
         /*
          * Not autoplaying. The clip advances only when the pointer moves --
          * see the tick below.
@@ -134,7 +134,11 @@ export function FlareOverlay({
     let frame = 0;
     let lastX = 0;
     let lastY = 0;
+    let prevX = 0;
+    let prevY = 0;
     let smoothSpeed = 0;
+    /* Signed travel, in clip-seconds. Right and down advance; left and up rewind. */
+    let scrub = 0;
     const tick = () => {
       frame = requestAnimationFrame(tick);
       const charge = chargeRef.current;
@@ -166,6 +170,9 @@ export function FlareOverlay({
       lastX = x;
       lastY = y;
       smoothSpeed += (speed - smoothSpeed) * 0.25;
+      scrub += (x - prevX + (y - prevY)) * 0.004;
+      prevX = x;
+      prevY = y;
 
       /*
        * And the whole layer rotates to the optical axis. A flare's streaks and
@@ -198,29 +205,48 @@ export function FlareOverlay({
          * which also retires the edge-feathering: the clip's own edges are
          * off-screen now, so there is no box to hide.
          */
-        const ratio = video.videoWidth > 0 ? video.videoHeight / video.videoWidth : 0.5625;
-        const diag = Math.hypot(vw, vh);
-        const w = (diag / Math.min(1, ratio)) * 1.06;
-        video.style.width = `${w}px`;
+        /*
+         * Covered by force, in BOTH axes, with object-fit doing the fitting.
+         *
+         * Sizing from the clip's aspect ratio was the bug: before metadata
+         * loads videoWidth is 0, so the ratio is a guess, and a clip that is
+         * not 16:9 does not cover -- its own edge lands on screen and reads as
+         * a box. Square and oversized cannot fail, whatever the clip turns out
+         * to be, and leaves room for the rotation to swing without bringing a
+         * corner in.
+         */
+        const span = Math.hypot(vw, vh) * 1.2;
+        video.style.width = `${span.toFixed(0)}px`;
+        video.style.height = `${span.toFixed(0)}px`;
         video.style.transformOrigin = "50% 50%";
         video.style.transform =
-          `translate3d(${(vw / 2 - w / 2).toFixed(1)}px, ${(vh / 2 - (w * ratio) / 2).toFixed(1)}px, 0) ` +
+          `translate3d(${(vw / 2 - span / 2).toFixed(1)}px, ${(vh / 2 - span / 2).toFixed(1)}px, 0) ` +
           `rotate(${axis.toFixed(1)}deg)`;
 
-        /*
-         * Off-axis is what drives it. A flare is strongest when the source is
-         * near the middle of the frame and shooting straight down the barrel;
-         * push it toward a corner and the reflections walk out of the picture.
-         */
-        const offAxis = Math.hypot(x - vw / 2, y - vh / 2) / (diag / 2);
+        const offAxis = Math.hypot(x - vw / 2, y - vh / 2) / (Math.hypot(vw, vh) / 2);
         const presence = 1 - 0.55 * Math.min(1, offAxis);
         video.style.opacity = (lit * flare.opacity * presence).toFixed(3);
 
-        if (smoothSpeed < 0.4) {
-          if (!video.paused) video.pause();
-        } else {
-          video.playbackRate = Math.min(4, 0.3 + smoothSpeed / 9);
-          if (video.paused) void video.play().catch(() => {});
+        /*
+         * Scrubbed by MOVEMENT, forwards and backwards.
+         *
+         * The clip has no clock. Its frame is wherever the cursor has driven
+         * it: move one way and it advances, move back and it rewinds. That is
+         * what makes it feel alive rather than played -- a flare changes
+         * because the source moved, and moving back retraces it.
+         *
+         * Distance-from-centre was the previous mapping and it was nearly
+         * static, which is why nothing appeared to animate. Signed
+         * displacement wraps around the clip instead, so there is always
+         * somewhere further to go in both directions.
+         */
+        if (!video.paused) video.pause();
+        const dur = video.duration;
+        if (dur > 0 && Number.isFinite(dur)) {
+          const want = ((scrub % dur) + dur) % dur;
+          if (Math.abs(video.currentTime - want) > dur / 120) {
+            video.currentTime = Math.min(dur - 0.001, want);
+          }
         }
       }
     };

@@ -363,7 +363,27 @@ void main() {
 
   // ---- Light scattered into the body, and off the grime ----
   vec3 face = vec3(inside * (direct * 0.9));
-  face += vec3(inside * rake * (smear * 0.6 + glint * 6.4));
+
+  /*
+   * The grime, raked by the light.
+   *
+   * This is the term that makes a pane look USED, and it had been tuned down
+   * far enough to disappear. Dust and finger-smear on glass are invisible
+   * until something catches them at a shallow angle -- which is what rake is
+   * -- and then they are the most obvious thing on the surface. Weak here does
+   * not read as subtle, it reads as clean glass.
+   *
+   * The smears carry most of it now rather than the specks: a wiped pane is
+   * mostly broad films with a few bright points in them, not an even dusting.
+   */
+  face += vec3(inside * rake * (smear * 2.4 + glint * 9.5));
+
+  /*
+   * And some of it shows without the light raking it at all, because grime
+   * scatters whatever is passing through the pane, not only what grazes it.
+   * Small, but it stops the surface vanishing entirely between sweeps.
+   */
+  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2));
 
   /*
    * ---- The reflected source ----
@@ -380,6 +400,26 @@ void main() {
     1.6 / (1.0 + (rNear * rNear) / 450.0)
   ) + vec3(0.3) / (1.0 + (rFar * rFar) / 2600.0);
   vec3 mirror = inside * image * (0.24 + 0.76 * fresnel) * (13.0 + glint * 14.0);
+
+  /*
+   * ---- The broad sheen ----
+   *
+   * The term above is the IMAGE of the source: tight, a few tens of pixels
+   * across, and sitting directly under the cursor's own blown core, which is
+   * why it has been invisible -- it was hidden inside the thing casting it.
+   *
+   * What was missing is the other half of a specular response. A sheet of
+   * glass does not only show you a small bright copy of the lamp; its whole
+   * face lifts on the side the light is on, because the surface is reflecting
+   * the light's wide falloff as well as its core. That is the part you read as
+   * GLARE, and it works at pane scale rather than at cursor scale.
+   *
+   * Weighted by fresnel, so it climbs toward the rim the way reflectivity
+   * actually does, and falling off over hundreds of pixels so it covers the
+   * band rather than pooling.
+   */
+  float sheen = exp(-dl / 540.0);
+  mirror += inside * (0.12 + 0.88 * fresnel) * sheen * 2.6;
 
   /*
    * Everything the light does scales with the charge, and there is genuinely
