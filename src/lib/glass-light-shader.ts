@@ -238,7 +238,14 @@ void main() {
    * tint, exp(-SIDE_ABSORB) -- down the inside of every pane's right edge,
    * which read as a layer stopping short of the container.
    */
-  float facing = smoothstep(0.35, 0.85, abs(grad.y));
+  /*
+   * All four edges, at full strength on the top and bottom and a little
+   * softer on the sides -- a vertical arris IS there, it is just seen more
+   * obliquely. The bright line inboard of the right edge was never this
+   * term being wrong; it was the drawing buffer being sized from a viewport
+   * width that included the scrollbar.
+   */
+  float facing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
   vec3 rim = vec3(filament * 6.5 * arrisWear + flare * 4.6 + haze * 0.34) * reach * facing;
 
   /*

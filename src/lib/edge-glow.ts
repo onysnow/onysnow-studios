@@ -275,8 +275,8 @@ function apply() {
    * on the root rather than onto each panel.
    */
   const root = document.documentElement.style;
-  root.setProperty("--reflect-x", (pointerX / window.innerWidth - 0.5).toFixed(3));
-  root.setProperty("--reflect-y", (pointerY / window.innerHeight - 0.5).toFixed(3));
+  root.setProperty("--reflect-x", (pointerX / (document.documentElement.clientWidth || window.innerWidth) - 0.5).toFixed(3));
+  root.setProperty("--reflect-y", (pointerY / (document.documentElement.clientHeight || window.innerHeight) - 0.5).toFixed(3));
   // Refreshes the shared cache as a side effect, so the shader's call this
   // frame is free.
   glassGeometry(now);
