@@ -259,7 +259,7 @@ export function setShutterCharge(value: number) {
   applyCharge();
 }
 
-function fire(url: string, gain: number) {
+function fire(url: string, gain: number, delay = 0) {
   const buffer = buffers.get(url);
   if (!context || !master || !buffer) return;
   if (context.state === "suspended") void context.resume();
@@ -269,7 +269,7 @@ function fire(url: string, gain: number) {
   level.gain.value = gain;
   source.connect(level);
   level.connect(master);
-  source.start();
+  source.start(delay > 0 ? context.currentTime + delay : 0);
 }
 
 /** A click that takes no photograph: the mechanism alone. */
@@ -283,7 +283,21 @@ export function playShutterClick() {
  * stops on the same frame as the shutter rather than a beat after it.
  */
 export function playShutterFlash() {
-  fire(FLASH, 0.9);
+  /*
+   * BOTH sounds, not just the flash.
+   *
+   * The blades fire whether or not there is a flash behind them -- the flash
+   * is additional, not a replacement. This played the flash alone, so a
+   * successful capture was the one case where you never heard the mechanism,
+   * which is backwards: the uncharged click had the mechanism and the charged
+   * one did not.
+   *
+   * The click leads by 18ms. A flash fires once the shutter is fully open, so
+   * the mechanism is audibly first; simultaneous reads as one indistinct
+   * noise, and the small gap is what makes it a camera rather than a sample.
+   */
+  fire(CLICK, 0.45);
+  fire(FLASH, 0.9, 0.018);
   spent = true;
   if (!context) return;
   const now = context.currentTime;
