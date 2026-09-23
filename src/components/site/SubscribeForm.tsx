@@ -83,6 +83,7 @@ export function SubscribeForm({
           placeholder="you@example.com"
           aria-label="Email address"
           aria-invalid={errors.email ? true : undefined}
+          aria-describedby={errors.email ? "subscribe-email-error" : undefined}
           className="h-10"
           {...register("email")}
         />
@@ -101,7 +102,9 @@ export function SubscribeForm({
         </Button>
       </div>
       {errors.email ? (
-        <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
+        <p id="subscribe-email-error" role="alert" className="mt-2 text-sm text-destructive">
+          {errors.email.message}
+        </p>
       ) : null}
     </form>
   );

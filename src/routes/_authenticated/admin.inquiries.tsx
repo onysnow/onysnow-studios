@@ -85,8 +85,28 @@ function InquiriesPage() {
               {rows.map((i) => (
                 <TableRow
                   key={i.id}
-                  className="cursor-pointer"
+                  /*
+                   * Reachable from a keyboard, because opening a row is the
+                   * ONLY way to read what a customer wrote — the table shows
+                   * name, email, kind and status, and nothing else. A `tr`
+                   * with a click handler and no role, tabIndex or key handler
+                   * meant an admin using a keyboard or a screen reader could
+                   * mark an inquiry read and archive it without ever being
+                   * able to see it.
+                   */
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open the inquiry from ${i.name}`}
+                  className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-ring)]"
                   onClick={() => {
+                    setOpen(i);
+                    if (i.status === "new") void setStatus(i.id, "read");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    // Space scrolls the page otherwise, which is the usual way
+                    // this half-gets-done.
+                    event.preventDefault();
                     setOpen(i);
                     if (i.status === "new") void setStatus(i.id, "read");
                   }}

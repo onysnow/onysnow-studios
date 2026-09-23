@@ -48,10 +48,15 @@
   --muted-foreground: oklch(0.69 0.02 75);
   --accent: oklch(0.63 0.105 190);
   --accent-foreground: oklch(0.12 0.014 190);
-  --destructive: oklch(0.58 0.2 28);
+  /* L raised from 0.58: that measured 4.19:1 on the background, and AA
+     wants 4.5. This is 4.94:1, and it is the text a reader most needs. */
+  --destructive: oklch(0.62 0.2 28);
   --destructive-foreground: oklch(0.96 0.01 80);
   --border: oklch(0.35 0.018 55 / 55%);
-  --input: oklch(0.3 0.016 55);
+  /* L raised from 0.30: that measured 1.45:1, and with a transparent fill
+     this hairline is the only sign a field is there. 3.02:1 clears the
+     3:1 that WCAG asks of a control's boundary. */
+  --input: oklch(0.48 0.016 55);
   --ring: oklch(0.72 0.14 68);
   --teal: oklch(0.63 0.105 190);
   --amber: oklch(0.72 0.14 68);
@@ -796,6 +801,58 @@
   100% {
     opacity: 0;
     transform: scale(1);
+  }
+}
+
+/* ---- Coarse pointers ---- */
+
+/*
+ * The effect layer's biggest cost is not the part that runs JavaScript.
+ *
+ * Every JS piece — the shaders, the cursor, the flare, the shutter — already
+ * checks `(pointer: fine)` and shuts down on a phone. The stylesheet did not
+ * check anything at all: there was not one `(pointer: coarse)` query in it.
+ *
+ * What that left running is the expensive half. Each `.glass` stacks THREE
+ * full-panel `backdrop-filter` passes — the pane's own blur, the bokeh layer
+ * and the refraction — and the home page has six panels, so eighteen
+ * full-width blurs over parallaxing photographs. Behind them sit thirty
+ * permanently-promoted bokeh spans animating `transform` forever, and because
+ * they are behind the glass, every frame of that drift invalidates every blur
+ * above it. A phone renders all of it, continuously, on a page nobody is
+ * touching, and none of it can even be seen without a pointer to light it.
+ *
+ * So: the two decorative passes go entirely, the pane keeps a much cheaper
+ * blur so it still reads as glass, and the drift stops. What remains is a
+ * frosted panel over a photograph, which is the whole idea — the rest was
+ * always a response to a cursor that a phone does not have.
+ */
+@media (pointer: coarse), (hover: none) {
+  .glass {
+    backdrop-filter: blur(12px) saturate(130%);
+  }
+
+  .glass--bar {
+    backdrop-filter: blur(14px) saturate(130%);
+  }
+
+  /* Both of these exist to be lit, and there is nothing here to light them. */
+  .glass > .glass__bokeh,
+  .glass > .glass__refract,
+  .glass > .glass__grime,
+  .glass > .glass__side::before,
+  .transmitted,
+  .photo-surface {
+    display: none;
+  }
+
+  /*
+   * Thirty layers drifting behind eighteen blurs, invalidating them every
+   * frame. Kept in place, since they are part of the picture, but still.
+   */
+  .bokeh {
+    animation: none;
+    will-change: auto;
   }
 }
 

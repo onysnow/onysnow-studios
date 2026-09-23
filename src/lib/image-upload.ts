@@ -121,14 +121,57 @@ export async function uploadPhoto(input: File, categoryId: string | null, sortOr
     height: prepared.height,
     blur_data_url: prepared.blurDataUrl,
     sources,
-    alt: "",
+    /*
+     * Not published, and not silently without a description.
+     *
+     * Every upload used to land `alt: ""` AND `published: true`, so the
+     * default outcome was a photograph live on the site that a screen reader
+     * announces as nothing at all. In the gallery that is a row of buttons
+     * reading "button, button, button"; in the footer strip it is a link with
+     * no accessible name whatsoever.
+     *
+     * The alt is seeded from the filename, which is not a description but is
+     * at least something, and is the same thing the title already did. The row
+     * stays unpublished until the studio has looked at it, which is a better
+     * default for a photography site regardless of accessibility — a
+     * photograph should reach the public because someone chose it.
+     */
+    alt: describeFrom(input.name),
     title: input.name.replace(/\.[^.]+$/, ""),
     category_id: categoryId,
     sort_order: sortOrder,
-    published: true,
+    published: false,
   });
   if (error) throw error;
   return path;
+}
+
+/**
+ * A first pass at a description, from the filename.
+ *
+ * `DSC_0413.jpg` yields nothing worth saying, so it yields nothing; a name
+ * somebody actually typed usually does. Either way the studio is expected to
+ * replace it — this only exists so the failure mode is a weak description
+ * rather than none.
+ */
+export function describeFrom(filename: string): string {
+  const stem = filename
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  /*
+   * Camera output: a prefix and some counters, which describes nothing.
+   *
+   * The separators are already collapsed to spaces by this point, so
+   * `PXL_20260101_120000` arrives as `PXL 20260101 120000` — the pattern has
+   * to allow several number groups, not one.
+   */
+  if (/^(dsc|dscf|img|imgp|p|pxl|gopr|mvi|photo|image)[\s\d-]*$/i.test(stem)) return "";
+  if (/^[\s\d-]+$/.test(stem)) return "";
+
+  return stem.length > 2 ? stem.charAt(0).toUpperCase() + stem.slice(1) : "";
 }
 
 export async function deletePhoto(

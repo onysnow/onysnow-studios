@@ -136,3 +136,39 @@ test("photographs are actually visible, not left behind their placeholders", asy
     expect(hidden, `loaded photographs stuck transparent on ${path}`).toEqual([]);
   }
 });
+
+test("the expensive effect layer is off on a coarse pointer", async ({ browser }) => {
+  /*
+   * The JS pieces all check `(pointer: fine)` and always did. The stylesheet
+   * checked nothing, which left the costly half running on phones: three
+   * stacked backdrop-filters per panel, six panels, over thirty animating
+   * layers behind them invalidating every blur every frame — for effects that
+   * exist to respond to a pointer the device does not have.
+   */
+  const context = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+
+  const hidden = await page.evaluate(() =>
+    [".glass__bokeh", ".glass__refract", ".glass__grime", ".transmitted", ".photo-surface"].map(
+      (sel) => {
+        const el = document.querySelector(sel);
+        return el ? getComputedStyle(el).display : "absent";
+      },
+    ),
+  );
+  for (const display of hidden) expect(["none", "absent"]).toContain(display);
+
+  // The pane still reads as glass, just for a great deal less.
+  const pane = await page.evaluate(
+    () => getComputedStyle(document.querySelector(".glass")!).backdropFilter,
+  );
+  expect(pane).toMatch(/blur/);
+
+  await context.close();
+});
