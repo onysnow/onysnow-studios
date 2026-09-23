@@ -41,6 +41,9 @@ let pointerY = -9999;
  * to reach them would put the gesture in the layout's vocabulary for no gain.
  * One pointer listener already runs here; this is the same reading.
  */
+import { t } from "./tuning";
+import { castShadow } from "./cast-shadow";
+
 export const lightState = { x: -9999, y: -9999, charge: 0 };
 
 /** Called by whoever owns the shutter gesture. */
@@ -370,6 +373,40 @@ function litSurface(el: HTMLElement) {
   const dy = Math.max(r.top - pointerY, 0, pointerY - r.bottom);
   const near = Math.max(0, 1 - Math.hypot(dx, dy) / 420);
   el.style.setProperty("--lit-near", (near * near).toFixed(3));
+
+  /*
+   * The shadow this surface casts onto whatever it is resting on.
+   *
+   * A photograph and a line of type both sit ON the glass, a small distance
+   * above it, so a light off to one side throws them across it. Three numbers
+   * decide what that looks like, and all three are geometry rather than taste:
+   *
+   *   offset   = gap * lateral / height
+   *   penumbra = lightRadius * gap / distance
+   *   strength falls off with distance, like any real source
+   *
+   * The second one is the one everybody gets backwards, including every
+   * tutorial I have read on this: a shadow gets SHARPER as the light retreats,
+   * not softer. The sun is ninety-three million miles away and casts the
+   * crispest shadow you will ever see; move a desk lamp closer and the edges
+   * go to mush. `distance` on the bottom is what says so.
+   */
+  const centreX = r.left + r.width / 2;
+  const centreY = r.top + r.height / 2;
+  const cast = castShadow({
+    gap: t("shadowGap"),
+    height: t("shadowHeight"),
+    lightRadius: t("shadowSoftness"),
+    lateralX: centreX - pointerX,
+    lateralY: centreY - pointerY,
+  });
+
+  el.style.setProperty("--cast-x", `${cast.x.toFixed(1)}px`);
+  el.style.setProperty("--cast-y", `${cast.y.toFixed(1)}px`);
+  el.style.setProperty("--cast-blur", `${cast.blur.toFixed(1)}px`);
+
+  // Only while the light is on it, and weaker the further away it is.
+  el.style.setProperty("--cast-alpha", (near * near * t("shadowStrength")).toFixed(3));
 
   /*
    * The room reflection, offset for height.

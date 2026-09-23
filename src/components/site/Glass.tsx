@@ -1,6 +1,7 @@
 import { useCallback, useRef, type ElementType, type ReactNode } from "react";
 import { registerEdgeGlow } from "@/lib/edge-glow";
 import { requestBevelFilter } from "@/lib/bevel-filters";
+import { registerLitSurface } from "@/lib/edge-glow";
 import { cn } from "@/lib/utils";
 
 /**
@@ -82,8 +83,21 @@ export function Glass({
     const observer = new ResizeObserver(fit);
     observer.observe(el);
 
+    /*
+     * The copy resting on the pane casts a shadow too.
+     *
+     * Registered per block rather than once for the whole panel: the light is
+     * a cursor a few hundred pixels away, not the sun, so the direction it
+     * throws a heading at one end of a full-width band is visibly not the
+     * direction it throws a paragraph at the other. Done here so no call site
+     * has to know about it.
+     */
+    const copy = [...el.querySelectorAll<HTMLElement>("h1, h2, h3, h4, p, blockquote")];
+    const letGo = copy.map((node) => registerLitSurface(node));
+
     release.current = () => {
       observer.disconnect();
+      for (const stop of letGo) stop();
       unregister();
     };
   }, []);

@@ -799,6 +799,64 @@
   }
 }
 
+/* ---- What sits on the glass, and what that throws across it ---- */
+
+/*
+ * Things resting on the pane cast a shadow onto it.
+ *
+ * `--cast-x`, `--cast-y`, `--cast-blur` and `--cast-alpha` are computed per
+ * element in lib/edge-glow.ts, from the light's real position rather than from
+ * a fixed direction. The offset is `gap * lateral / height` and the penumbra is
+ * `lightRadius * gap / distance` -- so the shadow swings around as the cursor
+ * passes, and SHARPENS as the light moves away rather than softening, which is
+ * the way round that every recipe for this gets wrong.
+ *
+ * `--cast-alpha` carries the gate: it is the eased nearness times the strength
+ * knob, so there is no shadow at all until the light is on it, and it fades in
+ * rather than switching.
+ *
+ * Done with box-shadow and text-shadow on the real elements instead of drawn
+ * on a canvas, which was the first plan. Rounded corners, exact glyph outlines
+ * and correct stacking all come free, and nothing has to be measured per frame
+ * beyond the four numbers above.
+ */
+/* The photograph's own frame, thrown across the pane under it. */
+span:has(> .photo-surface) {
+  box-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px)
+    rgba(0, 0, 0, var(--cast-alpha, 0));
+}
+
+/*
+ * Type, the same way.
+ *
+ * Kept well under the photographs': a line of type stands off the glass by a
+ * fraction of what a mounted print does, so its shadow is tighter and fainter.
+ * Anything heavier reads as a drop shadow someone added rather than as light
+ * falling across a surface.
+ */
+.glass h1,
+.glass h2,
+.glass h3,
+.glass h4,
+.glass p,
+.glass blockquote {
+  text-shadow: calc(var(--cast-x, 0px) * 0.42) calc(var(--cast-y, 0px) * 0.42)
+    calc(var(--cast-blur, 0px) * 0.6 + 1px) rgba(0, 0, 0, calc(var(--cast-alpha, 0) * 0.55));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  span:has(> .photo-surface),
+  .glass h1,
+  .glass h2,
+  .glass h3,
+  .glass h4,
+  .glass p,
+  .glass blockquote {
+    box-shadow: none;
+    text-shadow: none;
+  }
+}
+
 /* ---- Photographic paper ---- */
 
 /*
