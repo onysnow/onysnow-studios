@@ -1231,8 +1231,17 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 34px;
-  height: 34px;
+  /*
+   * Flush with the ring, and DERIVED from it rather than a second number to
+   * keep in sync.
+   *
+   * The housing circle in the SVG has radius 46 in a 100-unit viewBox, so it
+   * covers 92% of the element's width. Scaling the element by 100/92 therefore
+   * lands the blades' housing exactly on the ring's own circle -- and it stays
+   * there if the ring size is tuned, which a hard-coded 34px did not.
+   */
+  width: calc(var(--tune-ring, 30px) * 100 / 92);
+  height: calc(var(--tune-ring, 30px) * 100 / 92);
   translate: -50% -50%;
   opacity: 0;
   pointer-events: none;
