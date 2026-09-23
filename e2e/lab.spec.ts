@@ -8,10 +8,20 @@ import { expect, test } from "@playwright/test";
  * layout but the wiring: that a control actually moves the value the effects
  * read, and that the preview is the real components rather than a swatch.
  */
+/*
+ * The route is `ssr: false`, so nothing of it exists until React has rendered
+ * on the client — and `networkidle` can fire before that. Waiting on an
+ * element that only the rendered page has is the difference between a test
+ * that passes alone and one that passes in a loaded parallel run.
+ */
+async function openLab(page: import("@playwright/test").Page) {
+  await page.goto("/lab");
+  await page.locator("#knob-grimeAmount").waitFor({ state: "attached" });
+}
+
 test.describe("/lab", () => {
   test("puts every knob on a control", async ({ page }) => {
-    await page.goto("/lab");
-    await page.waitForLoadState("networkidle");
+    await openLab(page);
 
     const sliders = page.locator("input[type=range]");
     // One per knob, and a number field beside each for typing an exact value.
@@ -21,8 +31,7 @@ test.describe("/lab", () => {
   });
 
   test("moving a control changes what the effects read", async ({ page }) => {
-    await page.goto("/lab");
-    await page.waitForLoadState("networkidle");
+    await openLab(page);
 
     const read = () =>
       page.evaluate(() =>
@@ -42,8 +51,7 @@ test.describe("/lab", () => {
   });
 
   test("previews on the real components, not a swatch", async ({ page }) => {
-    await page.goto("/lab");
-    await page.waitForLoadState("networkidle");
+    await openLab(page);
 
     // The pieces interact, so tuning one against a mock would be worse than not
     // tuning it at all.
