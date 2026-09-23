@@ -16,6 +16,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as BookRouteImport } from './routes/book'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as DuoRouteImport } from './routes/duo'
+import { Route as LabRouteImport } from './routes/lab'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ServicesRouteImport } from './routes/services'
@@ -69,6 +70,11 @@ const ContactRoute = ContactRouteImport.update({
 const DuoRoute = DuoRouteImport.update({
   id: '/duo',
   path: '/duo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabRoute = LabRouteImport.update({
+  id: '/lab',
+  path: '/lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PortfolioRoute = PortfolioRouteImport.update({
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/book': typeof BookRoute
   '/contact': typeof ContactRoute
   '/duo': typeof DuoRoute
+  '/lab': typeof LabRoute
   '/portfolio': typeof PortfolioRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
@@ -215,6 +222,7 @@ export interface FileRoutesByTo {
   '/book': typeof BookRoute
   '/contact': typeof ContactRoute
   '/duo': typeof DuoRoute
+  '/lab': typeof LabRoute
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
@@ -243,6 +251,7 @@ export interface FileRoutesById {
   '/book': typeof BookRoute
   '/contact': typeof ContactRoute
   '/duo': typeof DuoRoute
+  '/lab': typeof LabRoute
   '/portfolio': typeof PortfolioRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
@@ -273,6 +282,7 @@ export interface FileRouteTypes {
     | '/book'
     | '/contact'
     | '/duo'
+    | '/lab'
     | '/portfolio'
     | '/privacy'
     | '/services'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/book'
     | '/contact'
     | '/duo'
+    | '/lab'
     | '/privacy'
     | '/services'
     | '/terms'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/book'
     | '/contact'
     | '/duo'
+    | '/lab'
     | '/portfolio'
     | '/privacy'
     | '/services'
@@ -358,6 +370,7 @@ export interface RootRouteChildren {
   BookRoute: typeof BookRoute
   ContactRoute: typeof ContactRoute
   DuoRoute: typeof DuoRoute
+  LabRoute: typeof LabRoute
   PortfolioRoute: typeof PortfolioRouteWithChildren
   PrivacyRoute: typeof PrivacyRoute
   ServicesRoute: typeof ServicesRoute
@@ -415,6 +428,13 @@ declare module '@tanstack/react-router' {
       path: '/duo'
       fullPath: '/duo'
       preLoaderRoute: typeof DuoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab': {
+      id: '/lab'
+      path: '/lab'
+      fullPath: '/lab'
+      preLoaderRoute: typeof LabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/portfolio': {
@@ -624,6 +644,7 @@ const rootRouteChildren: RootRouteChildren = {
   BookRoute: BookRoute,
   ContactRoute: ContactRoute,
   DuoRoute: DuoRoute,
+  LabRoute: LabRoute,
   PortfolioRoute: PortfolioRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
   ServicesRoute: ServicesRoute,
