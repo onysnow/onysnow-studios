@@ -402,6 +402,26 @@ void main() {
   vec3 mirror = inside * image * (0.24 + 0.76 * fresnel) * (13.0 + glint * 14.0);
 
   /*
+   * ---- The broad sheen ----
+   *
+   * The term above is the IMAGE of the source: tight, a few tens of pixels
+   * across, and sitting directly under the cursor's own blown core, which is
+   * why it has been invisible -- it was hidden inside the thing casting it.
+   *
+   * What was missing is the other half of a specular response. A sheet of
+   * glass does not only show you a small bright copy of the lamp; its whole
+   * face lifts on the side the light is on, because the surface is reflecting
+   * the light's wide falloff as well as its core. That is the part you read as
+   * GLARE, and it works at pane scale rather than at cursor scale.
+   *
+   * Weighted by fresnel, so it climbs toward the rim the way reflectivity
+   * actually does, and falling off over hundreds of pixels so it covers the
+   * band rather than pooling.
+   */
+  float sheen = exp(-dl / 540.0);
+  mirror += inside * (0.12 + 0.88 * fresnel) * sheen * 2.6;
+
+  /*
    * Everything the light does scales with the charge, and there is genuinely
    * nothing at zero: glass does not glow, a light shining on it does. The
    * refraction is NOT gated — a pane bends what is behind it whether or not
