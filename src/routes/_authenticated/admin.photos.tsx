@@ -135,22 +135,48 @@ function PhotosPage() {
     }
   }
 
+  /**
+   * The count in the toast is the number that actually went.
+   *
+   * It used to report `list.length` -- the number SELECTED -- and the catch
+   * retried the same row delete that had just failed, with the second failure
+   * swallowed. So an RLS refusal produced "3 photographs deleted" while the
+   * photograph stayed on the grid and on the public site.
+   */
   async function removeSelected() {
     const list = (photos.data ?? []).filter((p) => selected.includes(p.id));
-    for (const p of list) {
-      try {
-        await deletePhoto(p.id, p.storage_path, p.sources);
-      } catch {
+
+    const results = await Promise.all(
+      list.map(async (p) => {
         try {
-          await deleteRow("photos", p.id);
-        } catch {
-          /* ignore */
+          const { orphanedFiles } = await deletePhoto(p.id, p.storage_path, p.sources);
+          return { ok: true as const, orphanedFiles };
+        } catch (error) {
+          return { ok: false as const, error };
         }
-      }
-    }
-    setSelected([]);
-    toast.success(`${list.length} photograph${list.length === 1 ? "" : "s"} deleted`);
+      }),
+    );
+
+    const deleted = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+    const orphaned = deleted.reduce((n, r) => n + (r.orphanedFiles ?? 0), 0);
+
+    setSelected(failed.length ? selected : []);
     refresh();
+
+    if (deleted.length) {
+      toast.success(`${deleted.length} photograph${deleted.length === 1 ? "" : "s"} deleted`, {
+        description: orphaned
+          ? `${orphaned} file${orphaned === 1 ? "" : "s"} could not be removed from storage.`
+          : undefined,
+      });
+    }
+    if (failed.length) {
+      const first = failed[0]?.error;
+      toast.error(`${failed.length} could not be deleted`, {
+        description: first instanceof Error ? first.message : "They are still on the site.",
+      });
+    }
   }
 
   return (

@@ -137,7 +137,15 @@ export async function deletePhoto(
   sources?: Record<string, string> | null,
 ) {
   const paths = [storagePath, ...Object.values(sources ?? {})].filter(Boolean);
-  await supabase.storage.from("photos").remove(paths);
+
+  // The row is what the site reads, so its delete is the one that decides
+  // whether this succeeded. A storage failure leaves orphaned objects, which is
+  // worth knowing about but is not worth keeping the photograph on the site
+  // over -- so it is reported rather than thrown.
+  const removed = await supabase.storage.from("photos").remove(paths);
+
   const { error } = await supabase.from("photos").delete().eq("id", id);
   if (error) throw error;
+
+  return { orphanedFiles: removed.error ? paths.length : 0 };
 }

@@ -6,8 +6,23 @@ import { safeCustomCss } from "@/lib/safe-content";
 /** Display faces the portal can switch between. */
 const FONTS = new Set(["jost", "inter-tight", "barlow-condensed"]);
 
-/** Headline size multipliers, applied as a CSS variable. */
-const SCALES: Record<string, string> = { small: "0.9", default: "1", large: "1.12" };
+/**
+ * The headline size multiplier, as the slider writes it.
+ *
+ * This was a lookup keyed by "small" / "default" / "large", but the portal
+ * renders a continuous slider over 0.8-1.3 and stores something like "1.12", so
+ * every lookup missed and the value was always 1. The slider is the better
+ * control, so the reader was the half worth changing. Clamped to the slider's
+ * own range, because the stored value is just text and nothing else bounds it.
+ */
+const SCALE_MIN = 0.8;
+const SCALE_MAX = 1.3;
+
+function displayScale(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return "1";
+  return String(Math.min(SCALE_MAX, Math.max(SCALE_MIN, n)));
+}
 
 /**
  * Applies the studio's saved theme settings: the display font, the headline
@@ -30,7 +45,7 @@ export function CustomCss() {
     if (FONTS.has(font) && font !== "jost") root.setAttribute("data-display-font", font);
     else root.removeAttribute("data-display-font");
 
-    root.style.setProperty("--display-scale", SCALES[scale] ?? "1");
+    root.style.setProperty("--display-scale", displayScale(scale));
   }, [font, scale]);
 
   const css = safeCustomCss(data?.["custom_css"]);
