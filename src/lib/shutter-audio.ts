@@ -168,8 +168,15 @@ function applyCharge() {
   if (!context || !whine || !whineGain || !dump || !dumpGain || !whineFilter) return;
   const now = context.currentTime;
 
-  // Eased in, so the noise floor of a drifting pointer stays silent.
-  const level = Math.pow(charge, 1.6) * 0.16;
+  /*
+   * Eased in, so the noise floor of a drifting pointer stays silent.
+   *
+   * Halved from 0.16. A capacitor winding is a background noise you notice
+   * rather than a sound that asks for attention, and at full charge this sat
+   * on top of everything on a page whose subject is photographs. The curve is
+   * unchanged -- this is level, not shape, so the rise still tracks the wind.
+   */
+  const level = Math.pow(charge, 1.6) * 0.08;
 
   /*
    * Winding and draining are the same recording read in opposite directions,
