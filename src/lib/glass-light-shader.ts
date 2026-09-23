@@ -363,7 +363,27 @@ void main() {
 
   // ---- Light scattered into the body, and off the grime ----
   vec3 face = vec3(inside * (direct * 0.9));
-  face += vec3(inside * rake * (smear * 0.6 + glint * 6.4));
+
+  /*
+   * The grime, raked by the light.
+   *
+   * This is the term that makes a pane look USED, and it had been tuned down
+   * far enough to disappear. Dust and finger-smear on glass are invisible
+   * until something catches them at a shallow angle -- which is what rake is
+   * -- and then they are the most obvious thing on the surface. Weak here does
+   * not read as subtle, it reads as clean glass.
+   *
+   * The smears carry most of it now rather than the specks: a wiped pane is
+   * mostly broad films with a few bright points in them, not an even dusting.
+   */
+  face += vec3(inside * rake * (smear * 2.4 + glint * 9.5));
+
+  /*
+   * And some of it shows without the light raking it at all, because grime
+   * scatters whatever is passing through the pane, not only what grazes it.
+   * Small, but it stops the surface vanishing entirely between sweeps.
+   */
+  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2));
 
   /*
    * ---- The reflected source ----
