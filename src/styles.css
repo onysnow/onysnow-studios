@@ -1170,3 +1170,21 @@
   opacity: 0;
   transition: opacity 0.25s ease;
 }
+
+/*
+ * The other half of what the grime does. Dirt subtracts and scratches add, so
+ * the darkening pass above cannot carry both — `multiply` has no way to make
+ * anything brighter. This one composites `plus-lighter` and draws only the
+ * scratch highlights.
+ */
+.cast-caustics {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}

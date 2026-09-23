@@ -43,6 +43,7 @@ const REACH = 900;
 
 export function CastShadows() {
   const hostRef = useRef<HTMLCanvasElement>(null);
+  const causticRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = hostRef.current;
@@ -51,7 +52,9 @@ export function CastShadows() {
     if (!window.matchMedia?.("(pointer: fine)").matches) return;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const caustic = causticRef.current;
+    const cctx = caustic?.getContext("2d");
+    if (!ctx || !caustic || !cctx) return;
     const section = canvas.parentElement;
     if (!section) return;
 
@@ -73,7 +76,9 @@ export function CastShadows() {
       if (charge <= 0.02) {
         if (wasLit) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          cctx.clearRect(0, 0, caustic.width, caustic.height);
           canvas.style.opacity = "0";
+          caustic.style.opacity = "0";
           wasLit = false;
         }
         return;
@@ -89,6 +94,7 @@ export function CastShadows() {
           grime.src = "/glass-surface.jpg";
         }
         canvas.style.opacity = "1";
+        caustic.style.opacity = "1";
         wasLit = true;
       }
 
@@ -99,8 +105,14 @@ export function CastShadows() {
         canvas.width = w;
         canvas.height = h;
       }
+      if (caustic.width !== w || caustic.height !== h) {
+        caustic.width = w;
+        caustic.height = h;
+      }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, box.width, box.height);
+      cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cctx.clearRect(0, 0, box.width, box.height);
 
       // Light position in the section's own coordinates.
       const lightX = lx - box.left;
@@ -126,6 +138,34 @@ export function CastShadows() {
         ctx.fillStyle = beam;
         ctx.fillRect(0, 0, box.width, box.height);
         ctx.restore();
+
+        /*
+         * ---- And the light play, which is the other half of it ----
+         *
+         * Grime is not only opaque. A scratch is a groove in the surface, so
+         * it refracts rather than blocks: it gathers the light crossing it and
+         * throws it back out concentrated, which is why a scratched pane in
+         * sunlight prints bright filaments as well as dark smears. Dirt
+         * subtracts, scratches ADD, and a layer that can only multiply can
+         * only ever tell half the story.
+         *
+         * Isolated by crushing the midtones -- brightness and contrast on the
+         * same map leave the scratch highlights and drop the general grime, so
+         * one texture serves both passes. Thrown slightly further than the
+         * shadow, because a refracted ray bends away from the straight path
+         * the blocked light would have taken.
+         */
+        cctx.save();
+        cctx.filter = `blur(${((LIGHT_RADIUS * GRIME_GAP) / gDist / 1.6).toFixed(2)}px) brightness(2.3) contrast(3.6) saturate(1.3)`;
+        cctx.drawImage(grime, gOffX * 1.45, gOffY * 1.45, box.width, box.height);
+        cctx.filter = "none";
+        cctx.globalCompositeOperation = "destination-in";
+        const beamC = cctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, REACH * 0.42);
+        beamC.addColorStop(0, `rgba(0,0,0,${(0.42 * charge * charge).toFixed(3)})`);
+        beamC.addColorStop(1, "rgba(0,0,0,0)");
+        cctx.fillStyle = beamC;
+        cctx.fillRect(0, 0, box.width, box.height);
+        cctx.restore();
       }
 
       /* ---- The things sitting on the glass ---- */
@@ -160,5 +200,10 @@ export function CastShadows() {
     };
   }, []);
 
-  return <canvas ref={hostRef} aria-hidden="true" className="cast-shadows" />;
+  return (
+    <>
+      <canvas ref={hostRef} aria-hidden="true" className="cast-shadows" />
+      <canvas ref={causticRef} aria-hidden="true" className="cast-caustics" />
+    </>
+  );
 }
