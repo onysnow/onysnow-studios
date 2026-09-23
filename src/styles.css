@@ -278,8 +278,9 @@
 }
 
 .custom-cursor__ring {
-  width: 28px;
-  height: 28px;
+  /* Measured off bryanminear.com: .circle-outer is 30x30, 1px solid #fff. */
+  width: var(--tune-ring, 30px);
+  height: var(--tune-ring, 30px);
   border: 1px solid #fff;
 }
 
@@ -288,8 +289,9 @@
  * else. Matched to bryanminear.com, which is the reference for this.
  */
 .custom-cursor__dot {
-  width: 4px;
-  height: 4px;
+  /* Measured: .circle-inner is 6x6, solid white. */
+  width: var(--tune-dot, 6px);
+  height: var(--tune-dot, 6px);
   background-color: #fff;
 }
 
@@ -633,7 +635,7 @@
      * than a gaussian, done in linear light before tonemapping, which is why
      * the lamps come out as hard-rimmed bokeh circles instead of smudges.
      */
-    background-size: auto 210vh;
+    background-size: auto var(--tune-reflect-zoom, 210vh);
     /*
      * Anchored in viewport space, then pulled back by the pane's own offset.
      * That is what makes the reflection continuous: two bands stacked above
@@ -647,8 +649,10 @@
      * The parallax is added once, identically for every pane: one viewer, one
      * reflection moving.
      */
-    background-position: calc(-330vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1100px)
-      calc(-72vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -750px);
+    background-position: calc(
+        -330vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1 * var(--tune-reflect-x, 1100px)
+      )
+      calc(-72vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -1 * var(--tune-reflect-y, 750px));
     /*
      * 420vh was too far: the rooms are mostly black with a few lights in them,
      * so at ten times magnification most panes landed on an empty patch and
@@ -656,7 +660,7 @@
      * something is in frame. Base opacity up too -- 0.05 was not "subtle", it
      * was invisible, which is removing the feature rather than restraining it.
      */
-    opacity: calc(0.16 + 0.5 * var(--wind, 0));
+    opacity: calc(var(--tune-reflect-base, 0.16) + var(--tune-reflect-lit, 0.5) * var(--wind, 0));
   }
 
   /*
@@ -981,12 +985,29 @@
  * you are looking THROUGH, so it sits in front of everything in the scene,
  * but it cannot be brighter than the source that caused it.
  */
+/*
+ * The blend belongs HERE, on the container, not on the clips inside it.
+ *
+ * This element is `position: fixed` with a z-index, which makes it a stacking
+ * context -- and a stacking context is an isolation group for blending. So
+ * `mix-blend-mode: screen` on a child screened against THIS element's
+ * contents, which are empty, rather than against the page. Screen against
+ * nothing returns the clip untouched, black background and all, and the
+ * container then composited that over the photographs normally: a black
+ * rectangle darkening everything under it with its edges plainly visible.
+ *
+ * Screen is 1-(1-a)(1-b), so black is the identity and a black-backed overlay
+ * disappears into the page -- but only if it is actually blending with the
+ * page. Moving the mode to the container is what puts the page in its
+ * backdrop.
+ */
 .flare-overlay {
   position: fixed;
   inset: 0;
   z-index: 9998;
   pointer-events: none;
   overflow: hidden;
+  mix-blend-mode: screen;
 }
 
 .flare-clip {
@@ -997,7 +1018,7 @@
      aspect can never leave an edge on screen. */
   object-fit: cover;
   opacity: 0;
-  mix-blend-mode: screen;
+  /* Composited normally inside the overlay; the overlay does the screening. */
   will-change: transform, opacity;
 }
 
@@ -1227,8 +1248,17 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 34px;
-  height: 34px;
+  /*
+   * Flush with the ring, and DERIVED from it rather than a second number to
+   * keep in sync.
+   *
+   * The housing circle in the SVG has radius 46 in a 100-unit viewBox, so it
+   * covers 92% of the element's width. Scaling the element by 100/92 therefore
+   * lands the blades' housing exactly on the ring's own circle -- and it stays
+   * there if the ring size is tuned, which a hard-coded 34px did not.
+   */
+  width: calc(var(--tune-ring, 30px) * 100 / 92);
+  height: calc(var(--tune-ring, 30px) * 100 / 92);
   translate: -50% -50%;
   opacity: 0;
   pointer-events: none;

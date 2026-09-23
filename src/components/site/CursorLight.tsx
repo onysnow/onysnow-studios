@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
+import { t } from "@/lib/tuning";
 
 /**
  * The cursor light, rendered in WebGL.
@@ -126,6 +127,17 @@ export function CursorLight({
     const uViewport = gl.getUniformLocation(program, "uViewport");
     const uScale = gl.getUniformLocation(program, "uScale");
     const uLight = gl.getUniformLocation(program, "uLight");
+    /*
+     * The tunables. Read from the shared store each frame rather than baked in,
+     * so the panel at /lab can move them while the page is running. Six extra
+     * uniform writes a frame is nothing next to the fill they control.
+     */
+    const uGain = gl.getUniformLocation(program, "uGain");
+    const uFalloff = gl.getUniformLocation(program, "uFalloff");
+    const uAperture = gl.getUniformLocation(program, "uAperture");
+    const uSpread = gl.getUniformLocation(program, "uSpread");
+    const uGhostGain = gl.getUniformLocation(program, "uGhostGain");
+    const uHaloGain = gl.getUniformLocation(program, "uHaloGain");
 
     let scale = 1;
     const resize = () => {
@@ -203,6 +215,12 @@ export function CursorLight({
       gl.uniform1f(uCharge, charge);
       gl.uniform1f(uClosed, closed);
       gl.uniform1f(uTime, (now - start) / 1000);
+      gl.uniform1f(uGain, t("coreGain"));
+      gl.uniform1f(uFalloff, t("coreFalloff"));
+      gl.uniform1f(uAperture, t("aperture"));
+      gl.uniform1f(uSpread, t("spread"));
+      gl.uniform1f(uGhostGain, t("ghostGain"));
+      gl.uniform1f(uHaloGain, t("haloGain"));
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

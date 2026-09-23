@@ -29,6 +29,12 @@ uniform vec2  uLight;      // CSS pixels, viewport-relative
 uniform float uCharge;     // 0 to 1, how wound the shutter is
 uniform float uClosed;     // 0 to 1, how far the iris has stopped down
 uniform float uTime;
+uniform float uGain;       // tunable: how far emission exceeds white
+uniform float uFalloff;    // tunable: core tightness
+uniform float uAperture;   // tunable: hexagon radius
+uniform float uSpread;     // tunable: size at zero charge relative to full
+uniform float uGhostGain;  // tunable
+uniform float uHaloGain;   // tunable
 uniform vec3  uWarm;       // the amber, linear
 uniform vec3  uCool;       // the teal, linear
 uniform sampler2D uGrit;   // photographed surface, for the ghosts' insides
@@ -99,7 +105,7 @@ void main() {
    * every feature measured against it -- core, halo, spikes, aperture --
    * contracts together.
    */
-  float spread = mix(0.30, 1.0, uCharge * uCharge);
+  float spread = mix(uSpread, 1.0, uCharge * uCharge);
   float unit = min(res.x, res.y) * 0.5 * spread;
   vec2 p = (frag - uLight) / unit;
   float r = length(p);
@@ -126,8 +132,8 @@ void main() {
    * Gain 8 puts the crossing at r = 0.088, about 66px, and a tighter falloff
    * pulls it in further.
    */
-  float falloff = 1.0 / (1.0 + 1500.0 * r * r);
-  float gain = 8.0 * uCharge;
+  float falloff = 1.0 / (1.0 + uFalloff * r * r);
+  float gain = uGain * uCharge;
   float core = falloff * gain;
 
   // Two wider lobes. Real bloom sums several kernel sizes; a single falloff
@@ -311,7 +317,7 @@ void main() {
      */
     float pairEfficiency =
       (0.3 + 0.7 * fract(fi * 0.83 + 0.27)) * mix(1.1, 0.45, fi / float(GHOSTS));
-    colour += gt * shape * grit * 1.85 * pairEfficiency * uCharge;
+    colour += gt * shape * grit * uGhostGain * pairEfficiency * uCharge;
   }
 
   /*
@@ -328,7 +334,7 @@ void main() {
   vec2 fromAxis = (frag - centre) / unit;
   float axisR = length(fromAxis);
   float haloR = 0.30 + 0.22 * length(axis);
-  float halo1 = exp(-pow((axisR - haloR) / 0.045, 2.0)) * 0.9
+  float halo1 = exp(-pow((axisR - haloR) / 0.045, 2.0)) * 0.9 * uHaloGain
               + exp(-pow((axisR - haloR * 1.48) / 0.09, 2.0)) * 0.35;
   colour += spectrum(axisR * 3.4 + 0.12) * halo1 * 0.85 * uCharge;
 
@@ -378,7 +384,7 @@ void main() {
    * at all — what changes is how hard the blades cut, not how small the
    * opening is, so the hexagon stays legible across the whole wind.
    */
-  float apertureRadius = mix(0.062, 0.053, uClosed);
+  float apertureRadius = mix(uAperture, uAperture * 0.855, uClosed);
   float d = apertureDistance(p, mix(0.42, 0.14, uClosed));
   float blades = smoothstep(apertureRadius - 0.0018, apertureRadius + 0.0018, d);
   float occlusion = 1.0 - blades * (0.25 + uClosed * 0.5);

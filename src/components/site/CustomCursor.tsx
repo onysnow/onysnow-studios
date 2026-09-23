@@ -1,4 +1,5 @@
 import { reportCharge } from "@/lib/edge-glow";
+import { t } from "@/lib/tuning";
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
@@ -156,14 +157,25 @@ export function CustomCursor() {
      *
      * The loop only ever writes `transform`, so it stays on the compositor.
      */
-    const RING_EASE = 0.13;
-    const DOT_EASE = 0.55;
+    /*
+     * Measured off the reference rather than chosen.
+     *
+     * bryanminear.com moves both circles with CSS transitions -- 0.125s ease
+     * on the ring, 0.1s on the dot. That is a 1.25x difference, not the 4x I
+     * had, which is the whole reason his never looks off-centre and mine did:
+     * at 0.13 and 0.55 the dot ran four times ahead of the ring and the light,
+     * and the faster you moved the further they came apart.
+     *
+     * Converted to per-frame lerps that settle in about the same time.
+     */
 
     const tick = () => {
-      ringX += (targetX - ringX) * RING_EASE;
-      ringY += (targetY - ringY) * RING_EASE;
-      dotX += (targetX - dotX) * DOT_EASE;
-      dotY += (targetY - dotY) * DOT_EASE;
+      const ringEase = t("ringEase");
+      const dotEase = t("dotEase");
+      ringX += (targetX - ringX) * ringEase;
+      ringY += (targetY - ringY) * ringEase;
+      dotX += (targetX - dotX) * dotEase;
+      dotY += (targetY - dotY) * dotEase;
 
       el.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
       dot.style.transform = `translate3d(${dotX}px, ${dotY}px, 0) translate(-50%, -50%)`;
