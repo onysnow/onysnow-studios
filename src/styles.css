@@ -1229,21 +1229,32 @@
   fill: #000;
   transform-box: view-box;
   /* Open: swung back against the housing, out of the way. */
-  transform: rotate(-58deg);
+  transform: rotate(-64deg);
 }
 
 @keyframes cursor-iris-snap {
   0% {
-    transform: rotate(-58deg);
+    transform: rotate(-64deg);
   }
-  26% {
-    transform: rotate(2deg);
+  /*
+   * Past zero, so it shuts COMPLETELY. The blades' inner vertices sit a few
+   * pixels off centre, which is what leaves a hexagon of negative space on the
+   * way down rather than a circular pinhole -- but it also means stopping at
+   * zero would leave the hole open. Carrying them past each other closes it.
+   *
+   * That matters more than it sounds: the charge is drawn at the centre of the
+   * cursor, so the hole IS where the light gets out. Blades that never quite
+   * meet would leave it leaking at the moment the shutter is supposed to have
+   * cut it off.
+   */
+  30% {
+    transform: rotate(9deg);
   }
-  38% {
-    transform: rotate(0deg);
+  42% {
+    transform: rotate(7deg);
   }
   100% {
-    transform: rotate(-58deg);
+    transform: rotate(-64deg);
   }
 }
 

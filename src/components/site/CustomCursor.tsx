@@ -342,37 +342,37 @@ export function CustomCursor() {
             <path
               key={0}
               className="custom-cursor__blade"
-              d="M 96.00,50.00 A 46.0,46.0 0 0,1 60.50,94.78 L 50,50 Z"
+              d="M 96.00,50.00 A 46.0,46.0 0 0,1 57.67,95.36 L 44.65,45.48 Z"
               style={{ transformOrigin: "96.00px 50.00px" }}
             />
             <path
               key={1}
               className="custom-cursor__blade"
-              d="M 73.00,89.84 A 46.0,46.0 0 0,1 16.47,81.49 L 50,50 Z"
+              d="M 73.00,89.84 A 46.0,46.0 0 0,1 14.56,79.32 L 51.24,43.11 Z"
               style={{ transformOrigin: "73.00px 89.84px" }}
             />
             <path
               key={2}
               className="custom-cursor__blade"
-              d="M 27.00,89.84 A 46.0,46.0 0 0,1 5.96,36.70 L 50,50 Z"
+              d="M 27.00,89.84 A 46.0,46.0 0 0,1 6.89,33.97 L 56.59,47.63 Z"
               style={{ transformOrigin: "27.00px 89.84px" }}
             />
             <path
               key={3}
               className="custom-cursor__blade"
-              d="M 4.00,50.00 A 46.0,46.0 0 0,1 39.50,5.22 L 50,50 Z"
+              d="M 4.00,50.00 A 46.0,46.0 0 0,1 42.33,4.64 L 55.35,54.52 Z"
               style={{ transformOrigin: "4.00px 50.00px" }}
             />
             <path
               key={4}
               className="custom-cursor__blade"
-              d="M 27.00,10.16 A 46.0,46.0 0 0,1 83.53,18.51 L 50,50 Z"
+              d="M 27.00,10.16 A 46.0,46.0 0 0,1 85.44,20.68 L 48.76,56.89 Z"
               style={{ transformOrigin: "27.00px 10.16px" }}
             />
             <path
               key={5}
               className="custom-cursor__blade"
-              d="M 73.00,10.16 A 46.0,46.0 0 0,1 94.04,63.30 L 50,50 Z"
+              d="M 73.00,10.16 A 46.0,46.0 0 0,1 93.11,66.03 L 43.41,52.37 Z"
               style={{ transformOrigin: "73.00px 10.16px" }}
             />
           </g>
