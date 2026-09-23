@@ -172,3 +172,13 @@ test("the expensive effect layer is off on a coarse pointer", async ({ browser }
 
   await context.close();
 });
+
+test("an unknown journal slug is a real 404, not an indexable apology", async ({ request }) => {
+  /*
+   * This used to return 200 with a <title> and og:title built from the slug
+   * itself, so any made-up URL was an indexable page on this domain carrying
+   * whatever text the URL contained.
+   */
+  const response = await request.get("/journal/no-such-post-anywhere");
+  expect(response.status()).toBe(404);
+});

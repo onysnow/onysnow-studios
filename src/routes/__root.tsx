@@ -57,15 +57,30 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    /*
+      `suppressHydrationWarning` on the <html> element, and it is not papering
+      over anything.
+
+      The comment below used to claim that setting a CSS custom property gives
+      React "no markup to disagree with at hydration". That is the bug.
+      `style.setProperty` on `document.documentElement` MATERIALISES a style
+      attribute on <html>, and <html> is rendered by this component, so React
+      diffs its attributes and finds one the server never sent. The result was
+      a hydration error on every route of the site, and it is the error that
+      has been in the dev console this whole time.
+
+      The script has to stay where it is — it picks the room before anything
+      paints, and moving it after hydration would paint one room and swap it on
+      every load — so the honest fix is to tell React that this element's
+      attributes are set outside it.
+    */
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
         {/*
           Picks the room the glass reflects, before anything paints. Inline and
-          synchronous on purpose: it only sets a CSS custom property, so there
-          is no markup for React to disagree with at hydration, and running it
-          after hydration instead would paint one room and then swap it on
-          every load.
+          synchronous on purpose, which means it writes a style attribute onto
+          <html> before React hydrates — see the note above.
         */}
         <script dangerouslySetInnerHTML={{ __html: roomScript() }} />
       </head>

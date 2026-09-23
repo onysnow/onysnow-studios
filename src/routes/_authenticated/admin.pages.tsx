@@ -124,7 +124,15 @@ function PagesPage() {
                       value={value}
                       onChange={(html) => setDrafts((d) => ({ ...d, [row.id]: html }))}
                     />
-                  ) : value.length > 90 ? (
+                  ) : /*
+                   * Branched on the SAVED value, not the draft.
+                   *
+                   * This read `value`, which is what is being typed — so
+                   * crossing 90 characters changed the rendered component from
+                   * an <input> to a <textarea>, React unmounted one and mounted
+                   * the other, and the caret vanished mid-word.
+                   */
+                  row.value.length > 90 ? (
                     <Textarea
                       rows={3}
                       value={value}

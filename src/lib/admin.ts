@@ -175,5 +175,12 @@ export const CONTENT_KEYS = [
   ["page_content"],
   ["site_settings"],
   ["posts"],
+  /*
+   * The per-post query is keyed ["post", slug], singular, and ["posts"] does
+   * not prefix-match it. Editing a post's title refreshed the journal index
+   * and left the post's own page showing the old one for the whole 60s
+   * staleTime.
+   */
+  ["post"],
   ["subscribers"],
 ];
