@@ -264,8 +264,10 @@ void main() {
    * term being wrong; it was the drawing buffer being sized from a viewport
    * width that included the scrollbar.
    */
-  float facing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
-  vec3 rim = vec3(filament * uArris * arrisWear + flare * 4.6 + haze * 0.34) * reach * facing;
+  // Distinct from the Fresnel 'facing' above: that is how square-on you are
+  // to the pane, this is how square-on the EDGE is to the light.
+  float edgeFacing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
+  vec3 rim = vec3(filament * uArris * arrisWear + flare * 4.6 + haze * 0.34) * reach * edgeFacing;
 
   /*
    * ---- Light piped through the pane ----
@@ -296,7 +298,7 @@ void main() {
    * light coming straight through the air, the edge stops reading as glass
    * and starts reading as a neon outline.
    */
-  rim += pipedTint * (filament * 1.7 * arrisWear + flare * 0.8) * piped * facing;
+  rim += pipedTint * (filament * 1.7 * arrisWear + flare * 0.8) * piped * edgeFacing;
 
   /*
    * ---- The side faces ----
@@ -334,7 +336,7 @@ void main() {
    * highlight along the entire band instead of putting it where the source is.
    */
   float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
-  rim += vec3(sideGlare) * 11.0 * direct * facing;
+  rim += vec3(sideGlare) * 11.0 * direct * edgeFacing;
   rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 5.0 * direct;
 
   /*
