@@ -271,6 +271,16 @@ export const tuning: Record<string, Knob> = {
   },
 
   // ---- What the flash leaves on the retina ----
+  grimeFloor: {
+    label: "Grime clarity",
+    group: "Glass",
+    value: 0.46,
+    min: 0,
+    max: 0.9,
+    step: 0.01,
+    hint: "Everything in the surface map below this is cleaned off entirely. Higher is clearer glass with fewer, more distinct marks — it removes marks rather than dimming them.",
+  },
+
   afterStrength: {
     label: "Afterimage",
     group: "Afterimage",

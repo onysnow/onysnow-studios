@@ -45,6 +45,7 @@ uniform float uTilt;          // -1 looking up at it, 1 looking down at it
 uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
+uniform float uGrimeFloor;  // tunable
 uniform float uSheen;       // tunable
 uniform float uSheenReach;  // tunable
 uniform float uArris;       // tunable
@@ -233,8 +234,24 @@ void main() {
   // ---- The surface ----
   vec3 surf = surfaceAt((frag - uRect.xy) / 340.0, uSeed) * uHasSurface;
   float handled = 0.35 + 0.95 * surf.b;
-  float glint = surf.r * 2.6 * handled;
-  float smear = surf.g * 0.85 * handled;
+
+  /*
+   * Marks, not a film.
+   *
+   * These were the raw texture values scaled, and the map has signal almost
+   * everywhere -- so every pixel of every pane carried a little something and
+   * the whole panel read as dusty rather than as glass somebody had touched.
+   * A wiped pane is CLEAR across most of its face and dirty in specific
+   * places.
+   *
+   * smoothstep is the clarity control: everything below uGrimeFloor goes to
+   * zero and stays there, which is what opens the pane back up, while what is
+   * above it survives at close to full strength. Raising the floor removes
+   * marks rather than dimming them, which is the difference between cleaning
+   * glass and looking at it in worse light.
+   */
+  float glint = smoothstep(uGrimeFloor, uGrimeFloor + 0.42, surf.r) * 3.4 * handled;
+  float smear = smoothstep(uGrimeFloor * 0.85, uGrimeFloor * 0.85 + 0.5, surf.g) * 1.25 * handled;
 
   // ---- The lit arris ----
   float ad = abs(d);

@@ -1,5 +1,6 @@
 import { useCallback, useRef, type ElementType, type ReactNode } from "react";
 import { registerEdgeGlow } from "@/lib/edge-glow";
+import { requestBevelFilter } from "@/lib/bevel-filters";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,7 +52,40 @@ export function Glass({
   const release = useRef<(() => void) | null>(null);
   const attach = useCallback((el: HTMLElement | null) => {
     release.current?.();
-    release.current = el ? registerEdgeGlow(el) : null;
+    if (!el) {
+      release.current = null;
+      return;
+    }
+
+    const unregister = registerEdgeGlow(el);
+
+    /*
+     * The bevel map depends on the pane's size and corner radius.
+     *
+     * It used to be one baked PNG stretched over every pane, which meant a
+     * 64px bar and a 400px band were bent by the same profile -- so the bevel
+     * was a different physical depth on each, which is the one thing a bevel
+     * is not. The map is computed per geometry now (lib/bevel-map.ts), so the
+     * pane has to ask for the filter that matches it and point its refraction
+     * layer at it. Until that resolves, the CSS fallback in styles.css stands.
+     */
+    const refract = el.querySelector<HTMLElement>(".glass__refract");
+    const fit = () => {
+      if (!refract) return;
+      const rect = el.getBoundingClientRect();
+      const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+      const id = requestBevelFilter({ width: rect.width, height: rect.height, radius });
+      if (id) refract.style.backdropFilter = `url("#${id}")`;
+    };
+
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+
+    release.current = () => {
+      observer.disconnect();
+      unregister();
+    };
   }, []);
 
   return (
