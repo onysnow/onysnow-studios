@@ -269,6 +269,39 @@ export const tuning: Record<string, Knob> = {
     step: 0.01,
     hint: "Keep this near the ring's, or the two separate as you move.",
   },
+
+  // ---- What the flash leaves on the retina ----
+  afterStrength: {
+    label: "Afterimage",
+    group: "Afterimage",
+    value: 1,
+    min: 0,
+    max: 2.5,
+    step: 0.05,
+    cssVar: "--tune-after",
+    hint: "Scales both ghosts together. 0 turns them off and leaves the veil.",
+  },
+  afterDwell: {
+    label: "Afterimage dwell",
+    group: "Afterimage",
+    value: 2.6,
+    min: 0.8,
+    max: 6,
+    step: 0.1,
+    cssVar: "--tune-after-dwell",
+    cssUnit: "s",
+    hint: "How long the negative takes to fade. The decay stays exponential — this stretches the whole curve.",
+  },
+  afterVeil: {
+    label: "Vision washout",
+    group: "Afterimage",
+    value: 0.34,
+    min: 0,
+    max: 0.85,
+    step: 0.01,
+    cssVar: "--tune-after-veil",
+    hint: "Peak veiling luminance at the point of discharge. This is contrast loss, not a second flash.",
+  },
 };
 
 /** Shorthand for the loops: `t("coreGain")`. */
