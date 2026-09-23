@@ -68,18 +68,20 @@ export const tuning: Record<string, Knob> = {
   ghostGain: {
     label: "Ghost strength",
     group: "Light",
-    value: 1.85,
+    value: 2.78,
     min: 0,
-    max: 5,
+    max: 6,
     step: 0.05,
+    hint: "The chain of aperture images thrown back along the optical axis. Up half again from 1.85 — they were reading as an artefact rather than as part of the flare.",
   },
   haloGain: {
     label: "Halo strength",
     group: "Light",
-    value: 1,
+    value: 1.5,
     min: 0,
-    max: 3,
+    max: 4,
     step: 0.05,
+    hint: "The ring of scatter around the source, from the coating rather than the elements.",
   },
 
   // ---- The glass surface ----
@@ -103,9 +105,9 @@ export const tuning: Record<string, Knob> = {
   sheen: {
     label: "Surface sheen",
     group: "Glass",
-    value: 2.6,
+    value: 3.9,
     min: 0,
-    max: 8,
+    max: 10,
     step: 0.1,
     hint: "The broad glare across the face, as opposed to the point reflection.",
   },
@@ -120,10 +122,11 @@ export const tuning: Record<string, Knob> = {
   arris: {
     label: "Edge glow",
     group: "Glass",
-    value: 6.5,
+    value: 9.75,
     min: 0,
-    max: 16,
+    max: 20,
     step: 0.25,
+    hint: "The lit arris — the bright line along the pane's edge where the light catches the corner between the face and the side.",
   },
 
   // ---- CSS-side ----
@@ -271,6 +274,28 @@ export const tuning: Record<string, Knob> = {
   },
 
   // ---- What the flash leaves on the retina ----
+  grimeAmount: {
+    label: "Grime amount",
+    group: "Glass",
+    value: 0.5,
+    min: 0,
+    max: 1.5,
+    step: 0.02,
+    cssVar: "--tune-grime",
+    hint: "How strongly the marks on the pane's face read once the light rakes them.",
+  },
+  grimeReach: {
+    label: "Grime reach",
+    group: "Glass",
+    value: 520,
+    min: 120,
+    max: 1400,
+    step: 20,
+    cssVar: "--tune-grime-reach",
+    cssUnit: "px",
+    hint: "How far from the light the raking still picks marks out. Dust is invisible until something catches it at a shallow angle.",
+  },
+
   grimeFloor: {
     label: "Grime clarity",
     group: "Glass",

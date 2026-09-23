@@ -101,6 +101,17 @@ export function Glass({
       {/* Bright points behind the glass, thrown out of focus into discs. */}
       <span aria-hidden="true" className="glass__bokeh" />
       {/*
+        What the pane has been touched with.
+
+        A layer of the PANE, not of the page, which is the whole point. The
+        shared light canvas that draws everything else is above all content, so
+        drawing smears there put them on top of the photographs and the copy --
+        and those sit ON the glass, so nothing on the surface can be over them.
+        This sits under them instead, and stops short of the side face, which
+        is a different surface at a different angle and carries its own.
+      */}
+      <span aria-hidden="true" className="glass__grime" />
+      {/*
         The bezel, bending and dispersing what is behind it. One layer over the
         whole pane: the displacement map carries the profile, pushing at the
         edges and neutral through the middle, which is what a bevel IS.

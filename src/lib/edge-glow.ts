@@ -276,6 +276,19 @@ function measure(el: HTMLElement) {
    */
   el.style.setProperty("--pane-x", `${Math.round(r.left)}px`);
   el.style.setProperty("--pane-y", `${Math.round(r.top)}px`);
+
+  /*
+   * Where the light is standing, in the pane's own coordinates.
+   *
+   * The grime layer needs this. It is a surface effect that belongs to the
+   * pane -- under the photographs and the copy, which sit ON the glass -- so
+   * it cannot be drawn by the shared canvas the way the rest of the lighting
+   * is; that canvas is above everything on the page, which is why smears were
+   * landing on the pictures and on the text. A per-pane layer can be put in
+   * the right place in the stack, and this is what tells it where to rake.
+   */
+  el.style.setProperty("--lit-x", `${Math.round(pointerX - r.left)}px`);
+  el.style.setProperty("--lit-y", `${Math.round(pointerY - r.top)}px`);
 }
 
 function apply() {

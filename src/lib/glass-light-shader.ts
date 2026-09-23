@@ -414,14 +414,29 @@ void main() {
    * The smears carry most of it now rather than the specks: a wiped pane is
    * mostly broad films with a few bright points in them, not an even dusting.
    */
-  face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks));
+  /*
+   * The grime is NOT drawn here any more.
+   *
+   * This canvas is fixed to the viewport above all content, so anything it
+   * paints inside a pane's footprint lands on top of whatever is standing in
+   * that footprint -- the photographs and the copy, which sit ON the glass.
+   * Marks on a surface cannot be in front of the things resting on it, and no
+   * amount of weighting fixes that; it is the wrong layer.
+   *
+   * It moved to '.glass__grime', a span inside each pane at a negative
+   * z-index, where the document does the layering. See styles.css.
+   *
+   * 'smear' and 'glint' stay because the specular below still reads them: a
+   * mark catches the tight reflection of the source differently from clean
+   * glass, and that IS this pass's job.
+   */
 
   /*
    * And some of it shows without the light raking it at all, because grime
    * scatters whatever is passing through the pane, not only what grazes it.
    * Small, but it stops the surface vanishing entirely between sweeps.
    */
-  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2));
+
 
   /*
    * ---- The reflected source ----
