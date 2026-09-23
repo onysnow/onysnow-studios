@@ -243,6 +243,21 @@ export function CustomCursor() {
        */
       if (!charger.isArmed() || !atPhoto) {
         playShutterClick();
+        /*
+         * And the blades move, because they do on a real camera.
+         *
+         * The sound was already firing on every click -- the mechanism
+         * answering is what tells you the thing in your hand is a camera --
+         * but the cursor sat there unmoved, so the click read as a sound
+         * effect bolted onto a pointer rather than as a shutter.
+         *
+         * Removed and re-set around a forced reflow, which is what restarts a
+         * CSS animation; without it a second click inside the same 170ms does
+         * nothing, and rapid clicking is exactly when you notice.
+         */
+        el.removeAttribute("data-click");
+        void el.offsetWidth;
+        el.setAttribute("data-click", "");
         return;
       }
       /*

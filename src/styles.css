@@ -1188,3 +1188,64 @@
   opacity: 0;
   transition: opacity 0.25s ease;
 }
+
+/*
+ * The shutter firing with no flash behind it.
+ *
+ * A camera's blades close on every release whether or not the flash is
+ * charged, so an uncharged click still gets the mechanism — just none of the
+ * light. The inset spread is the blades sweeping shut across the opening; the
+ * scale is the whole assembly taking up the shock.
+ *
+ * Short on purpose. A real leaf shutter at a hand-holdable speed is open for
+ * a few milliseconds, and anything slow enough to watch reads as a UI
+ * animation rather than as a mechanism.
+ */
+@keyframes cursor-shutter {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 3px oklch(1 0 0 / 0.5);
+  }
+  28% {
+    transform: scale(0.6);
+    box-shadow:
+      0 0 7px oklch(1 0 0 / 0.85),
+      inset 0 0 0 11px #000;
+  }
+  55% {
+    transform: scale(0.88);
+    box-shadow:
+      0 0 5px oklch(1 0 0 / 0.6),
+      inset 0 0 0 2px #000;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 3px oklch(1 0 0 / 0.5);
+  }
+}
+
+.custom-cursor[data-click] .custom-cursor__ring {
+  animation: cursor-shutter 170ms cubic-bezier(0.32, 0, 0.22, 1);
+}
+
+/* The dot takes the same knock, a beat behind the blades. */
+@keyframes cursor-shutter-dot {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(2.1);
+  }
+}
+
+.custom-cursor[data-click] .custom-cursor__dot {
+  animation: cursor-shutter-dot 170ms cubic-bezier(0.32, 0, 0.22, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-cursor[data-click] .custom-cursor__ring,
+  .custom-cursor[data-click] .custom-cursor__dot {
+    animation: none;
+  }
+}
