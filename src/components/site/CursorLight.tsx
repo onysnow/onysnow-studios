@@ -41,7 +41,6 @@ const MAX_SCALE = 1.5;
 const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth;
 const viewportHeight = () => document.documentElement.clientHeight || window.innerHeight;
 
-
 export function CursorLight({
   chargeRef,
   closedRef,
@@ -127,7 +126,6 @@ export function CursorLight({
     const uViewport = gl.getUniformLocation(program, "uViewport");
     const uScale = gl.getUniformLocation(program, "uScale");
     const uLight = gl.getUniformLocation(program, "uLight");
-    const uScroll = gl.getUniformLocation(program, "uScroll");
 
     let scale = 1;
     const resize = () => {
@@ -205,8 +203,6 @@ export function CursorLight({
       gl.uniform1f(uCharge, charge);
       gl.uniform1f(uClosed, closed);
       gl.uniform1f(uTime, (now - start) / 1000);
-      // Grime belongs to the page, so it has to know where the page is.
-      gl.uniform1f(uScroll, window.scrollY);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
