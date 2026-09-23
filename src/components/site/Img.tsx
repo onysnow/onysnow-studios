@@ -1,6 +1,7 @@
-import { useState, type CSSProperties } from "react";
+import { useCallback, useRef, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { photoSrcSet, photoUrl, type PhotoSources } from "@/lib/photo-url";
+import { registerLitSurface } from "@/lib/edge-glow";
 
 /** Minimal shape needed to render a stored photograph. */
 export type ImgSource = {
@@ -36,6 +37,21 @@ export function Img({
   alt,
 }: ImgProps) {
   const [loaded, setLoaded] = useState(false);
+
+  /*
+   * The photograph is a surface in its own right.
+   *
+   * It rests ON the glass, so it takes none of the pane's bevel, reflection or
+   * grime -- those belong to a sheet it is lying on. What it has instead is
+   * photographic paper: a broad, soft, warm gloss rather than glass's tight
+   * white specular, and a much fainter view of the same room. Registering it
+   * publishes where the light is standing over it; styles.css does the rest.
+   */
+  const release = useRef<(() => void) | null>(null);
+  const surface = useCallback((el: HTMLElement | null) => {
+    release.current?.();
+    release.current = el ? registerLitSurface(el) : null;
+  }, []);
   const width = image?.width ?? 1600;
   const height = image?.height ?? 1067;
   const src = photoUrl(image?.storage_path);
@@ -50,6 +66,7 @@ export function Img({
 
   return (
     <span
+      ref={surface}
       className={cn("relative block overflow-hidden bg-muted", className)}
       {...(style ? { style } : {})}
     >
@@ -96,6 +113,11 @@ export function Img({
           )}
         />
       ) : null}
+      {/*
+        Paper gloss and a trace of the room. Above the photograph, below
+        nothing -- anything laid over the picture itself belongs here.
+      */}
+      <span aria-hidden="true" className="photo-surface" />
     </span>
   );
 }

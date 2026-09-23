@@ -15,6 +15,17 @@
  */
 const panels = new Set<HTMLElement>();
 
+/**
+ * Surfaces that only want to know where the light is standing on them.
+ *
+ * Photographs, mostly. They are not glass and get none of the bevel, the
+ * reflection or the grime -- they are photographic paper resting ON the pane,
+ * with a surface of their own -- but what decides where their gloss picks up
+ * is the same light, so they are measured in the same pass rather than by a
+ * second loop that could drift out of step with it.
+ */
+const litSurfaces = new Set<HTMLElement>();
+
 /** How far outside a panel the cursor can be and still light its edge. */
 const REACH = 320;
 
@@ -318,6 +329,7 @@ function apply() {
   glassGeometry(now);
 
   for (const el of panels) measure(el);
+  for (const el of litSurfaces) litSurface(el);
 }
 
 function onMove(event: PointerEvent) {
@@ -330,6 +342,46 @@ function onLeave() {
   pointerX = -9999;
   pointerY = -9999;
   if (!frame) frame = requestAnimationFrame(apply);
+}
+
+/**
+ * Publish `--lit-x` / `--lit-y` on an element: where the light is standing
+ * over it, in its own coordinates, plus `--lit-near` for how close it is.
+ * What the surface does with that is the stylesheet's business.
+ */
+export function registerLitSurface(el: HTMLElement) {
+  litSurfaces.add(el);
+  litSurface(el);
+  if (frame) cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(apply);
+  return () => litSurfaces.delete(el);
+}
+
+function litSurface(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return;
+
+  el.style.setProperty("--lit-x", `${Math.round(pointerX - r.left)}px`);
+  el.style.setProperty("--lit-y", `${Math.round(pointerY - r.top)}px`);
+
+  // Eased nearness, so a gloss comes up as the light approaches rather than
+  // switching on at a boundary.
+  const dx = Math.max(r.left - pointerX, 0, pointerX - r.right);
+  const dy = Math.max(r.top - pointerY, 0, pointerY - r.bottom);
+  const near = Math.max(0, 1 - Math.hypot(dx, dy) / 420);
+  el.style.setProperty("--lit-near", (near * near).toFixed(3));
+
+  /*
+   * The room reflection, offset for height.
+   *
+   * A photograph resting on the pane is a few millimetres nearer the eye than
+   * the glass is, so it sees the same room from a slightly different place --
+   * the reflection in it is shifted against the one in the pane rather than
+   * continuous with it. That offset is what makes it read as sitting ON the
+   * glass instead of being printed into it.
+   */
+  el.style.setProperty("--surface-x", `${Math.round(r.left)}px`);
+  el.style.setProperty("--surface-y", `${Math.round(r.top)}px`);
 }
 
 export function registerEdgeGlow(el: HTMLElement) {

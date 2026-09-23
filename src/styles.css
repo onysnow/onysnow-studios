@@ -799,6 +799,83 @@
   }
 }
 
+/* ---- Photographic paper ---- */
+
+/*
+ * A photograph is not glass, and this is where that stops being true only in
+ * the comments.
+ *
+ * It rests ON the pane, so it takes none of the bevel, none of the pane's
+ * reflection and none of its grime -- those belong to the sheet underneath it.
+ * What it has instead is the surface of photographic paper, which differs from
+ * glass in every way that matters here:
+ *
+ *   - the gloss is BROAD and SOFT. Glass gives a tight, near-white, almost
+ *     mirror-sharp specular because its surface is optically flat. Paper has a
+ *     coating with structure in it, so the same light spreads into a wide
+ *     lobe with no hard centre.
+ *   - it is WARM. The emulsion and its coating are not neutral, and a
+ *     highlight coming off a print carries that -- which is the one detail
+ *     most fake gloss effects get wrong by reaching for white.
+ *   - it is DIM. Paper reflects a few percent where glass reflects far more,
+ *     so this has to sit well below the pane's own highlight or the
+ *     photographs start looking laminated.
+ */
+.photo-surface {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: var(--lit-near, 0);
+  transition: opacity 0.35s ease;
+}
+
+/* The gloss: broad, soft, warm, and nowhere near white. */
+.photo-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    circle var(--tune-paper-reach, 300px) at var(--lit-x, 50%) var(--lit-y, 50%),
+    rgba(255, 246, 232, var(--tune-paper, 0.26)) 0%,
+    rgba(255, 238, 214, calc(var(--tune-paper, 0.26) * 0.42)) 34%,
+    rgba(255, 255, 255, 0) 72%
+  );
+}
+
+/*
+ * The room, far fainter than the pane's and shifted against it.
+ *
+ * A print lying on the glass is a few millimetres nearer the eye, so it sees
+ * the same room from a slightly different place. The reflection in it should
+ * NOT line up with the reflection in the pane around it -- that offset is what
+ * makes it read as resting on the glass rather than as printed into it.
+ *
+ * Same viewport anchoring as the pane's reflection so it stays one continuous
+ * room, with the height difference added on top; and much smaller zoom, so
+ * what it catches is a different fragment again.
+ */
+.photo-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+  opacity: var(--tune-paper-room, 0.12);
+  background-image: var(--room, url("/rooms/metro.jpg"));
+  background-repeat: no-repeat;
+  background-size: auto var(--tune-paper-room-zoom, 150vh);
+  background-position:
+    calc(-1 * var(--surface-x, 0px) + var(--reflect-x, 0) * -1 * 240px + 90px)
+    calc(-1 * var(--surface-y, 0px) + var(--reflect-y, 0) * -1 * 160px + 40px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo-surface {
+    display: none;
+  }
+}
+
 /* ---- What the pane has been touched with ---- */
 
 /*

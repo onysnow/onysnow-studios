@@ -274,6 +274,38 @@ export const tuning: Record<string, Knob> = {
   },
 
   // ---- What the flash leaves on the retina ----
+  paperGloss: {
+    label: "Paper gloss",
+    group: "Glass",
+    value: 0.26,
+    min: 0,
+    max: 1,
+    step: 0.02,
+    cssVar: "--tune-paper",
+    hint: "The photograph's own highlight. Broad, soft and warm — paper, not glass. Keep it well under the pane's or the prints start looking laminated.",
+  },
+  paperReach: {
+    label: "Paper gloss spread",
+    group: "Glass",
+    value: 300,
+    min: 80,
+    max: 900,
+    step: 10,
+    cssVar: "--tune-paper-reach",
+    cssUnit: "px",
+    hint: "How wide the lobe is. Paper has structure in its coating, so this is much broader than a specular off glass.",
+  },
+  paperRoom: {
+    label: "Paper reflection",
+    group: "Glass",
+    value: 0.12,
+    min: 0,
+    max: 0.5,
+    step: 0.01,
+    cssVar: "--tune-paper-room",
+    hint: "How much of the room a print catches. Far less than the pane, and offset from it, because it sits a little nearer the eye.",
+  },
+
   grimeAmount: {
     label: "Grime amount",
     group: "Glass",
