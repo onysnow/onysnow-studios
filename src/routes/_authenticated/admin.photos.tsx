@@ -11,6 +11,7 @@ import {
   adminCategoriesQuery,
   adminPhotosQuery,
   deleteRow,
+  orderWithinSlots,
   saveOrder,
   updateRow,
 } from "@/lib/admin";
@@ -64,7 +65,10 @@ function PhotosPage() {
     );
     if (!order) return list;
     const rank = new Map(order.map((id, i) => [id, i]));
-    return [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    // Anything absent from the optimistic list was uploaded after the drag;
+    // it belongs at the end, not ahead of everything (`?? 0` put it first).
+    const last = Number.MAX_SAFE_INTEGER;
+    return [...list].sort((a, b) => (rank.get(a.id) ?? last) - (rank.get(b.id) ?? last));
   }, [photos.data, filter, order]);
 
   const onDrop = useCallback(
@@ -112,13 +116,22 @@ function PhotosPage() {
     }
   }
 
+  /**
+   * `ids` is only ever the photographs the category filter left on screen, so
+   * this permutes them within the positions they already hold rather than
+   * renumbering them 1..N. Anything the filter hid keeps its place.
+   */
   async function reorder(ids: string[]) {
     setOrder(ids);
     try {
-      await saveOrder("photos", ids);
+      await saveOrder("photos", orderWithinSlots(ids, photos.data ?? []));
       refresh();
+      // The server order is authoritative once written; keeping the optimistic
+      // list past that point only lets the two disagree.
+      setOrder(null);
     } catch {
       toast.error("Could not save the new order");
+      setOrder(null);
     }
   }
 

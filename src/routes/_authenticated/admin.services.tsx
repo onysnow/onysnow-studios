@@ -5,7 +5,14 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { AdminHeading } from "@/components/admin/AdminHeading";
 import { SortableItem, SortableList } from "@/components/admin/SortableList";
-import { adminServicesQuery, deleteRow, insertRow, saveOrder, updateRow } from "@/lib/admin";
+import {
+  adminServicesQuery,
+  deleteRow,
+  insertRow,
+  orderWithinSlots,
+  saveOrder,
+  updateRow,
+} from "@/lib/admin";
 import { useContentRefresh } from "@/hooks/use-admin";
 import type { Service } from "@/lib/content";
 import { Button } from "@/components/ui/button";
@@ -75,10 +82,14 @@ function ServicesPage() {
   async function reorder(ids: string[]) {
     setOrder(ids);
     try {
-      await saveOrder("services", ids);
+      await saveOrder("services", orderWithinSlots(ids, services.data ?? []));
       refresh();
+      // The server order is authoritative once it has been written; keeping the
+      // optimistic list alive past that point only lets the two disagree.
+      setOrder(null);
     } catch {
       toast.error("Could not save the new order");
+      setOrder(null);
     }
   }
 
