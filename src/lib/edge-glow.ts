@@ -331,8 +331,15 @@ function apply() {
   // frame is free.
   glassGeometry(now);
 
+  // Occlusion is gathered fresh each pass: it follows the light, so a value
+  // left over from the last frame would keep a pane dimmed after the thing
+  // casting it had moved out of the way.
+  for (const el of panels) el.dataset["occluders"] = "0";
   for (const el of panels) measure(el);
   for (const el of litSurfaces) litSurface(el);
+  for (const el of panels) {
+    el.style.setProperty("--occluded", Number(el.dataset["occluders"] ?? 0).toFixed(3));
+  }
 }
 
 function onMove(event: PointerEvent) {
@@ -406,7 +413,29 @@ function litSurface(el: HTMLElement) {
   el.style.setProperty("--cast-blur", `${cast.blur.toFixed(1)}px`);
 
   // Only while the light is on it, and weaker the further away it is.
-  el.style.setProperty("--cast-alpha", (near * near * t("shadowStrength")).toFixed(3));
+  const alpha = near * near * t("shadowStrength");
+  el.style.setProperty("--cast-alpha", alpha.toFixed(3));
+
+  /*
+   * Tell the pane underneath that something is standing on it.
+   *
+   * The two systems are not independent: a photograph throwing a shadow across
+   * the glass is also stopping that light reaching the grime under it, so the
+   * smears there should not be raked. Without this they are drawn as though
+   * the pane were bare, and you get a lit smear sitting inside a shadow.
+   *
+   * Approximate, and knowingly so: one number per pane rather than per pixel,
+   * so what it does is dim the whole rake in proportion to how much is
+   * standing in the light rather than cut a hole in exactly the right shape.
+   * Doing it properly means one canvas per pane computing the whole light
+   * field, which is a bigger change than this is worth until this one is seen
+   * to read.
+   */
+  const pane = el.closest<HTMLElement>(".glass");
+  if (pane && alpha > 0.01) {
+    const previous = Number(pane.dataset["occluders"] ?? 0);
+    pane.dataset["occluders"] = String(Math.max(previous, alpha));
+  }
 
   /*
    * The room reflection, offset for height.

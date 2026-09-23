@@ -274,6 +274,38 @@ export const tuning: Record<string, Knob> = {
   },
 
   // ---- What the flash leaves on the retina ----
+  transmit: {
+    label: "Light through the glass",
+    group: "Glass",
+    value: 0.34,
+    min: 0,
+    max: 1.2,
+    step: 0.02,
+    cssVar: "--tune-transmit",
+    hint: "How much of the light makes it through the pane onto what is behind it, mottled by the same marks you can see on the face.",
+  },
+  transmitReach: {
+    label: "Transmitted spread",
+    group: "Glass",
+    value: 640,
+    min: 160,
+    max: 1600,
+    step: 20,
+    cssVar: "--tune-transmit-reach",
+    cssUnit: "px",
+  },
+  transmitCore: {
+    label: "Caustic core",
+    group: "Glass",
+    value: 210,
+    min: 40,
+    max: 700,
+    step: 10,
+    cssVar: "--tune-transmit-core",
+    cssUnit: "px",
+    hint: "The bright middle where the bevel gathered the light instead of spreading it — the line a glass of water throws inside its own shadow.",
+  },
+
   paperGloss: {
     label: "Paper gloss",
     group: "Glass",

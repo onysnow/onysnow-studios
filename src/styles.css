@@ -799,6 +799,87 @@
   }
 }
 
+/* ---- The light that gets through ---- */
+
+/*
+ * Light does not arrive from behind a pane of glass clean, and that is the
+ * whole of this layer.
+ *
+ * It sits between the photograph and the pane, so what it lands on is what the
+ * pane is standing over, and it spills past the pane's own edges the way
+ * transmitted light does.
+ *
+ * Two things happen to it on the way through, and both are in register with
+ * what you can see on the face of the glass:
+ *
+ *   SCATTER. The pool is multiplied by the same surface map the grime is drawn
+ *   from, so it is bright where the pane is clear and hazy where it is marked.
+ *   That is the light being "there and not there" -- a dirty window throws a
+ *   mottled patch, not a clean one, and the mottling lines up with the smears.
+ *
+ *   REFRACTION. The mask leaves a gap at the rim and the `.transmitted__rim`
+ *   layer fills it more brightly: light crossing the rounded-over edge is
+ *   thrown sideways and piles up just outside the shadow. It is why a glass of
+ *   water casts a bright line INSIDE its own shadow, and why the edge of this
+ *   reads brighter than its middle rather than fading out.
+ */
+.transmitted {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: var(--lit-near, 0);
+  transition: opacity 0.4s ease;
+  mix-blend-mode: screen;
+}
+
+.transmitted::before,
+.transmitted::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* The pool itself, mottled by what it passed through. */
+.transmitted::before {
+  background-image: var(--glass-surface, url("/glass-surface.jpg"));
+  background-repeat: repeat;
+  background-position: calc(-1 * var(--surface-x, 0px)) calc(-1 * var(--surface-y, 0px));
+  filter: grayscale(1) brightness(2.1) contrast(1.9);
+  opacity: var(--tune-transmit, 0.34);
+
+  --pool: radial-gradient(
+    circle var(--tune-transmit-reach, 640px) at var(--lit-x, 50%) var(--lit-y, 50%),
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.5) 42%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-image: var(--pool);
+  mask-image: var(--pool);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+/*
+ * The caustic: a tighter, brighter core where the bevel has gathered the light
+ * rather than spread it.
+ */
+.transmitted::after {
+  background: radial-gradient(
+    circle var(--tune-transmit-core, 210px) at var(--lit-x, 50%) var(--lit-y, 50%),
+    color-mix(in oklab, var(--amber) 30%, oklch(1 0 0 / 0.5)) 0%,
+    color-mix(in oklab, var(--amber) 55%, oklch(1 0 0 / 0.16)) 40%,
+    transparent 78%
+  );
+  opacity: calc(var(--tune-transmit, 0.34) * 1.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transmitted {
+    display: none;
+  }
+}
+
 /* ---- What sits on the glass, and what that throws across it ---- */
 
 /*
@@ -989,7 +1070,15 @@ span:has(> .photo-surface) {
   mask-repeat: no-repeat;
 
   mix-blend-mode: plus-lighter;
-  opacity: calc(var(--glow-on, 0) * var(--tune-grime, 0.5));
+  /*
+   * Dimmed by whatever is standing on the pane.
+   *
+   * A photograph throwing a shadow across the glass is also stopping that
+   * light reaching the grime beneath it, so a lit smear inside a shadow is
+   * wrong. `--occluded` is how much is in the way, gathered per pass in
+   * lib/edge-glow.ts.
+   */
+  opacity: calc(var(--glow-on, 0) * var(--tune-grime, 0.5) * (1 - var(--occluded, 0) * 0.7));
 
   /*
    * Contrast, not brightness.
