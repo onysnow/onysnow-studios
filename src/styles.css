@@ -271,8 +271,8 @@
 }
 
 .custom-cursor__ring {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   border: 1px solid #000;
 }
 
@@ -281,8 +281,8 @@
  * else. Matched to bryanminear.com, which is the reference for this.
  */
 .custom-cursor__dot {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   background-color: #000;
   /* Black, with a faint light halo rather than a dark one -- a black dot on a
      dark photograph is invisible without something to separate it. */
