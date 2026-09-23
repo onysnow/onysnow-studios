@@ -47,7 +47,7 @@ uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
 uniform float uSheen;       // tunable
 uniform float uSheenReach;  // tunable
-uniform float uArris;       // tunable          // which atlas cell this pane wears
+uniform float uArris;       // tunable
 
 uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
@@ -205,7 +205,21 @@ void main() {
   float spill = exp(-dl / 280.0);
   float reach = direct + spill * 0.11;
   float ambient = direct + spill * 0.14;
-  float rake = direct + spill * 0.035;
+  /*
+   * Grime rides the BROAD falloff, not the core.
+   *
+   * This was direct + spill * 0.035 -- so almost entirely the direct term,
+   * which is half strength at 60px and 2% by 400px. The smears therefore existed only
+   * in a tight pool directly under the cursor, which is precisely where the
+   * blown core whites everything out. Raising their strength could never fix
+   * that: the problem was reach, not amount.
+   *
+   * A smear catches any light crossing it, and at any distance the light
+   * reaching it is the wide scatter rather than the hot centre. So the spill
+   * term carries most of this now, and the direct term is pulled back so the
+   * area around the pointer stops blowing out.
+   */
+  float rake = direct * 0.55 + spill * 0.6;
 
   /*
    * ---- Blinn-Phong specular ----
