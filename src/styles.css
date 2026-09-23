@@ -985,12 +985,29 @@
  * you are looking THROUGH, so it sits in front of everything in the scene,
  * but it cannot be brighter than the source that caused it.
  */
+/*
+ * The blend belongs HERE, on the container, not on the clips inside it.
+ *
+ * This element is `position: fixed` with a z-index, which makes it a stacking
+ * context -- and a stacking context is an isolation group for blending. So
+ * `mix-blend-mode: screen` on a child screened against THIS element's
+ * contents, which are empty, rather than against the page. Screen against
+ * nothing returns the clip untouched, black background and all, and the
+ * container then composited that over the photographs normally: a black
+ * rectangle darkening everything under it with its edges plainly visible.
+ *
+ * Screen is 1-(1-a)(1-b), so black is the identity and a black-backed overlay
+ * disappears into the page -- but only if it is actually blending with the
+ * page. Moving the mode to the container is what puts the page in its
+ * backdrop.
+ */
 .flare-overlay {
   position: fixed;
   inset: 0;
   z-index: 9998;
   pointer-events: none;
   overflow: hidden;
+  mix-blend-mode: screen;
 }
 
 .flare-clip {
@@ -1001,7 +1018,7 @@
      aspect can never leave an edge on screen. */
   object-fit: cover;
   opacity: 0;
-  mix-blend-mode: screen;
+  /* Composited normally inside the overlay; the overlay does the screening. */
   will-change: transform, opacity;
 }
 
