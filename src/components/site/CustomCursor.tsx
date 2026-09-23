@@ -1,3 +1,4 @@
+import { reportCharge } from "@/lib/edge-glow";
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
@@ -207,6 +208,7 @@ export function CustomCursor() {
          */
         document.documentElement.style.setProperty("--wind", charge.toFixed(2));
         chargeRef.current = charge;
+        reportCharge(charge);
         setShutterCharge(charge);
         // Blades close over the back half, once it's clearly deliberate.
         const closed = Math.max(0, (charge - 0.5) / 0.5);
@@ -241,6 +243,21 @@ export function CustomCursor() {
        */
       if (!charger.isArmed() || !atPhoto) {
         playShutterClick();
+        /*
+         * And the blades move, because they do on a real camera.
+         *
+         * The sound was already firing on every click -- the mechanism
+         * answering is what tells you the thing in your hand is a camera --
+         * but the cursor sat there unmoved, so the click read as a sound
+         * effect bolted onto a pointer rather than as a shutter.
+         *
+         * Removed and re-set around a forced reflow, which is what restarts a
+         * CSS animation; without it a second click inside the same 170ms does
+         * nothing, and rapid clicking is exactly when you notice.
+         */
+        el.removeAttribute("data-click");
+        void el.offsetWidth;
+        el.setAttribute("data-click", "");
         return;
       }
       /*
@@ -299,6 +316,55 @@ export function CustomCursor() {
       </div>
       <div ref={dotRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__dot" />
+        {/*
+        A real six-blade iris, for the click.
+
+        Each blade pivots about a point ON THE HOUSING RING and swings
+        inward -- that is what a leaf shutter does, and it is why the
+        opening is a hexagon: six straight inner edges sweeping across one
+        another. Rotating blades about the CENTRE instead, which is what
+        every snippet of this going around does, spins a pinwheel and
+        never produces the polygon.
+
+        All six share one rotation, so one keyframe animates the lot; only
+        the pivot differs, and that is static per blade.
+      */}
+        <svg
+          className="custom-cursor__iris"
+          viewBox="0 0 100 100"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <clipPath id="cursor-iris-housing">
+            <circle cx="50" cy="50" r="46" />
+          </clipPath>
+          <g clipPath="url(#cursor-iris-housing)">
+            <g key={0} transform="rotate(0 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={1} transform="rotate(45 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={2} transform="rotate(90 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={3} transform="rotate(135 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={4} transform="rotate(180 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={5} transform="rotate(225 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={6} transform="rotate(270 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={7} transform="rotate(315 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+          </g>
+        </svg>
       </div>
     </>
   );

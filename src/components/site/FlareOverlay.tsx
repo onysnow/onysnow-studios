@@ -105,7 +105,11 @@ export function FlareOverlay({
         video.className = "flare-clip";
         video.muted = true;
         video.loop = true;
-        video.autoplay = true;
+        /*
+         * Not autoplaying. The clip advances only when the pointer moves --
+         * see the tick below.
+         */
+        video.autoplay = false;
         video.playsInline = true;
         video.preload = "auto";
         // WebM first; the MP4 is there for Safari, which came to VP9 late and
@@ -123,11 +127,14 @@ export function FlareOverlay({
         videos.push(video);
         // Autoplay can still be refused; a flare that will not play just does
         // not appear, rather than throwing on every frame.
-        void video.play().catch(() => {});
+        video.pause();
       }
     };
 
     let frame = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let smoothSpeed = 0;
     const tick = () => {
       frame = requestAnimationFrame(tick);
       const charge = chargeRef.current;
@@ -138,24 +145,83 @@ export function FlareOverlay({
       start();
 
       const { x, y } = positionRef.current;
-      const unit = Math.min(window.innerWidth, window.innerHeight);
+      const vw = document.documentElement.clientWidth || window.innerWidth;
+      const vh = document.documentElement.clientHeight || window.innerHeight;
+      const unit = Math.min(vw, vh);
       // Eased, so the noise floor of a drifting pointer stays dark.
       const lit = charge * charge * (3 - 2 * charge);
+
+      /*
+       * The footage advances WITH the light, not on its own clock.
+       *
+       * Left looping, a clip animated while the pointer sat still and ignored
+       * it while it moved -- the opposite of what a flare does. A real flare
+       * changes because the source moved relative to the lens; nothing about
+       * it is on a timer. So pointer speed drives playback: a still pointer
+       * freezes the frame, and how fast it moves is how fast the flare
+       * evolves. Driving `playbackRate` rather than seeking `currentTime`
+       * keeps it smooth -- seeking every frame lands on keyframes and judders.
+       */
+      const speed = Math.hypot(x - lastX, y - lastY);
+      lastX = x;
+      lastY = y;
+      smoothSpeed += (speed - smoothSpeed) * 0.25;
+
+      /*
+       * And the whole layer rotates to the optical axis. A flare's streaks and
+       * ghosts lie along the line from the source through the centre of the
+       * frame, so that line -- not the clip's baked-in orientation -- is what
+       * decides which way they point.
+       */
+      const axis = (Math.atan2(y - vh / 2, x - vw / 2) * 180) / Math.PI;
 
       for (let i = 0; i < videos.length; i += 1) {
         const video = videos[i];
         const flare = ACTIVE[i];
         if (!video || !flare) continue;
-        const w = unit * flare.scale;
-        // The clip's own aspect, once it is known; 16:9 until then.
+
+        /*
+         * The clip fills the WINDOW. It does not follow the pointer.
+         *
+         * A flare belongs to the camera, not to the light: the streaks and
+         * ghosts are reflections between elements that are bolted in place, so
+         * they live in frame coordinates. The footage was shot with a fixed
+         * camera, which means the clip's frame IS the camera's frame. Sliding
+         * the whole clip to put its light source on the pointer was dragging
+         * the camera around after the light, which is why they read as
+         * stickers rather than as something happening inside the lens.
+         *
+         * What the light's position actually controls is the AXIS -- and that
+         * is a rotation about the centre of the frame, below.
+         *
+         * Sized to the diagonal so rotation never swings a corner into view,
+         * which also retires the edge-feathering: the clip's own edges are
+         * off-screen now, so there is no box to hide.
+         */
         const ratio = video.videoWidth > 0 ? video.videoHeight / video.videoWidth : 0.5625;
-        const h = w * ratio;
-        // Put the clip's light source on the pointer.
-        const left = x - w * flare.anchor.x;
-        const top = y - h * flare.anchor.y;
+        const diag = Math.hypot(vw, vh);
+        const w = (diag / Math.min(1, ratio)) * 1.06;
         video.style.width = `${w}px`;
-        video.style.transform = `translate3d(${left}px, ${top}px, 0)`;
-        video.style.opacity = (lit * flare.opacity).toFixed(3);
+        video.style.transformOrigin = "50% 50%";
+        video.style.transform =
+          `translate3d(${(vw / 2 - w / 2).toFixed(1)}px, ${(vh / 2 - (w * ratio) / 2).toFixed(1)}px, 0) ` +
+          `rotate(${axis.toFixed(1)}deg)`;
+
+        /*
+         * Off-axis is what drives it. A flare is strongest when the source is
+         * near the middle of the frame and shooting straight down the barrel;
+         * push it toward a corner and the reflections walk out of the picture.
+         */
+        const offAxis = Math.hypot(x - vw / 2, y - vh / 2) / (diag / 2);
+        const presence = 1 - 0.55 * Math.min(1, offAxis);
+        video.style.opacity = (lit * flare.opacity * presence).toFixed(3);
+
+        if (smoothSpeed < 0.4) {
+          if (!video.paused) video.pause();
+        } else {
+          video.playbackRate = Math.min(4, 0.3 + smoothSpeed / 9);
+          if (video.paused) void video.play().catch(() => {});
+        }
       }
     };
     frame = requestAnimationFrame(tick);

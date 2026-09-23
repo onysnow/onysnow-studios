@@ -21,6 +21,21 @@ const REACH = 320;
 let frame = 0;
 let pointerX = -9999;
 let pointerY = -9999;
+
+/**
+ * Where the light is, and how hard it is burning.
+ *
+ * Shared rather than passed down: the shadow canvases live inside PhotoSection,
+ * which has no idea the cursor exists, and threading a ref through every band
+ * to reach them would put the gesture in the layout's vocabulary for no gain.
+ * One pointer listener already runs here; this is the same reading.
+ */
+export const lightState = { x: -9999, y: -9999, charge: 0 };
+
+/** Called by whoever owns the shutter gesture. */
+export function reportCharge(charge: number) {
+  lightState.charge = charge;
+}
 let bound = false;
 
 export type GlassRect = {
@@ -275,8 +290,10 @@ function apply() {
    * on the root rather than onto each panel.
    */
   const root = document.documentElement.style;
-  root.setProperty("--reflect-x", (pointerX / window.innerWidth - 0.5).toFixed(3));
-  root.setProperty("--reflect-y", (pointerY / window.innerHeight - 0.5).toFixed(3));
+  lightState.x = pointerX;
+  lightState.y = pointerY;
+  root.setProperty("--reflect-x", (pointerX / (document.documentElement.clientWidth || window.innerWidth) - 0.5).toFixed(3));
+  root.setProperty("--reflect-y", (pointerY / (document.documentElement.clientHeight || window.innerHeight) - 0.5).toFixed(3));
   // Refreshes the shared cache as a side effect, so the shader's call this
   // frame is free.
   glassGeometry(now);

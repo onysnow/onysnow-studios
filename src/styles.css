@@ -271,9 +271,9 @@
 }
 
 .custom-cursor__ring {
-  width: 28px;
-  height: 28px;
-  border: 1px solid #fff;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #000;
 }
 
 /*
@@ -281,10 +281,12 @@
  * else. Matched to bryanminear.com, which is the reference for this.
  */
 .custom-cursor__dot {
-  width: 5px;
-  height: 5px;
-  background-color: #fff;
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.6);
+  width: 4px;
+  height: 4px;
+  background-color: #000;
+  /* Black, with a faint light halo rather than a dark one -- a black dot on a
+     dark photograph is invisible without something to separate it. */
+  box-shadow: 0 0 3px oklch(1 0 0 / 0.55);
 }
 
 /* Over a link or button: a filled disc big enough to sit behind a nav item. */
@@ -617,7 +619,7 @@
      * than a gaussian, done in linear light before tonemapping, which is why
      * the lamps come out as hard-rimmed bokeh circles instead of smudges.
      */
-    background-size: auto 420vh;
+    background-size: auto 210vh;
     /*
      * Anchored in viewport space, then pulled back by the pane's own offset.
      * That is what makes the reflection continuous: two bands stacked above
@@ -631,9 +633,16 @@
      * The parallax is added once, identically for every pane: one viewer, one
      * reflection moving.
      */
-    background-position: calc(-700vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1100px)
-      calc(-160vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -750px);
-    opacity: calc(0.05 + 0.6 * var(--wind, 0));
+    background-position: calc(-330vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1100px)
+      calc(-72vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -750px);
+    /*
+     * 420vh was too far: the rooms are mostly black with a few lights in them,
+     * so at ten times magnification most panes landed on an empty patch and
+     * showed nothing at all. 210vh still reads as a fragment but guarantees
+     * something is in frame. Base opacity up too -- 0.05 was not "subtle", it
+     * was invisible, which is removing the feature rather than restraining it.
+     */
+    opacity: calc(0.16 + 0.5 * var(--wind, 0));
   }
 
   /*
@@ -885,7 +894,9 @@
  * only ever competed with both.
  */
 .custom-cursor__ring {
-  box-shadow: 0 1px 3px oklch(0 0 0 / 0.55);
+  box-shadow:
+    0 0 3px oklch(1 0 0 / 0.5),
+    inset 0 0 2px oklch(1 0 0 / 0.35);
 }
 
 /* The ring itself thickens and warms as it winds. */
@@ -1137,5 +1148,168 @@
     );
     mix-blend-mode: plus-lighter;
     opacity: 0.85;
+  }
+}
+
+/*
+ * The shadow layer, between the photograph and the glass.
+ *
+ * `multiply` because a shadow is subtraction and nothing else in the effect
+ * layer can subtract — the WebGL passes composite `plus-lighter` and can only
+ * ever add light, which is why the refraction had to move to a backdrop-filter
+ * and why this had to become its own canvas.
+ */
+.cast-shadows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+/*
+ * The other half of what the grime does. Dirt subtracts and scratches add, so
+ * the darkening pass above cannot carry both — `multiply` has no way to make
+ * anything brighter. This one composites `plus-lighter` and draws only the
+ * scratch highlights.
+ */
+.cast-caustics {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+/*
+ * The shutter firing with no flash behind it.
+ *
+ * A camera's blades close on every release whether or not the flash is
+ * charged, so an uncharged click still gets the mechanism — just none of the
+ * light. The inset spread is the blades sweeping shut across the opening; the
+ * scale is the whole assembly taking up the shock.
+ *
+ * Short on purpose. A real leaf shutter at a hand-holdable speed is open for
+ * a few milliseconds, and anything slow enough to watch reads as a UI
+ * animation rather than as a mechanism.
+ */
+/*
+ * The shutter firing with no flash behind it.
+ *
+ * A camera's blades close on every release whether or not the flash is
+ * charged, so an uncharged click gets the mechanism and none of the light.
+ * Hidden at rest -- what you normally see is the ring and the dot.
+ *
+ * Short on purpose. A leaf shutter at a hand-holdable speed is open for a few
+ * milliseconds; anything slow enough to sit and watch stops reading as a
+ * mechanism and starts reading as a UI animation. The close is faster than
+ * the reopen, which is also true of the real thing: a spring drives it shut
+ * and the mechanism lets it back.
+ */
+.custom-cursor__iris {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  translate: -50% -50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.custom-cursor__blade {
+  fill: #000;
+  transform-box: view-box;
+  /*
+   * Hinged at its OWN pivot on the housing -- 50,4 is where this blade meets
+   * the barrel -- not scaled about the centre of the iris.
+   *
+   * That one line is the whole difference. Rotate these about `50 50` and
+   * scale them down, which is what every recipe for this does, and at rest
+   * the eight wedges all meet in the middle: a solid disc with no aperture at
+   * all, which then scatters into loose triangles as it "closes". Hinge them
+   * and they sweep across one another, which is what leaves the polygon.
+   */
+  transform-origin: 50px 4px;
+  transform: rotate(-40deg);
+}
+
+@keyframes cursor-iris-snap {
+  0% {
+    transform: rotate(-40deg);
+  }
+  /*
+   * Past zero, so it shuts COMPLETELY. The blades' inner vertices sit a few
+   * pixels off centre, which is what leaves a hexagon of negative space on the
+   * way down rather than a circular pinhole -- but it also means stopping at
+   * zero would leave the hole open. Carrying them past each other closes it.
+   *
+   * That matters more than it sounds: the charge is drawn at the centre of the
+   * cursor, so the hole IS where the light gets out. Blades that never quite
+   * meet would leave it leaking at the moment the shutter is supposed to have
+   * cut it off.
+   */
+  30% {
+    transform: rotate(2deg);
+  }
+  42% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(-40deg);
+  }
+}
+
+@keyframes cursor-iris-show {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  15%,
+  55% {
+    opacity: 1;
+  }
+}
+
+.custom-cursor[data-click] .custom-cursor__iris {
+  animation: cursor-iris-show 230ms linear;
+}
+
+.custom-cursor[data-click] .custom-cursor__blade {
+  animation: cursor-iris-snap 230ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+/* The ring takes the shock of the blades slamming. */
+@keyframes cursor-shutter-ring {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  28% {
+    transform: scale(0.82);
+  }
+}
+
+.custom-cursor[data-click] .custom-cursor__ring {
+  animation: cursor-shutter-ring 230ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+.custom-cursor[data-click] .custom-cursor__dot {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-cursor[data-click] .custom-cursor__iris,
+  .custom-cursor[data-click] .custom-cursor__blade,
+  .custom-cursor[data-click] .custom-cursor__ring {
+    animation: none;
   }
 }

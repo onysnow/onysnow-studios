@@ -31,6 +31,22 @@ import { glassGeometry } from "@/lib/edge-glow";
  */
 const MAX_SCALE = 1.5;
 
+/*
+ * The LAYOUT viewport, not `window.innerWidth`.
+ *
+ * These canvases are CSS-sized `position: fixed; inset: 0`, which resolves
+ * against the initial containing block and EXCLUDES the classic scrollbar.
+ * `window.innerWidth` includes it. Sizing the drawing buffer from the wrong
+ * one stretches a buffer ~17px too wide into a box that narrow, squeezing
+ * everything the shader draws by about 1.3%: no error at the left edge,
+ * seventeen pixels of it by the right. That is why every pane had a bright
+ * line inboard of its right edge while the top and bottom sat correctly --
+ * there is no horizontal scrollbar to introduce the same error vertically.
+ */
+const viewportWidth = () => document.documentElement.clientWidth || window.innerWidth;
+const viewportHeight = () => document.documentElement.clientHeight || window.innerHeight;
+
+
 /** How far outside a pane the bloom still has something to contribute. */
 const BLEED = 90;
 
@@ -124,8 +140,8 @@ export function GlassLight({
     let scale = 1;
     const resize = () => {
       scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
-      const w = Math.round(window.innerWidth * scale);
-      const h = Math.round(window.innerHeight * scale);
+      const w = Math.round(viewportWidth() * scale);
+      const h = Math.round(viewportHeight() * scale);
       if (canvas.width === w && canvas.height === h) return;
       canvas.width = w;
       canvas.height = h;
@@ -229,7 +245,7 @@ export function GlassLight({
 
       for (const pane of panes) {
         // Offscreen panes cost nothing but a rectangle test.
-        if (pane.y + pane.h < -BLEED || pane.y > window.innerHeight + BLEED) continue;
+        if (pane.y + pane.h < -BLEED || pane.y > viewportHeight() + BLEED) continue;
 
         const texture = pane.src ? requestBackdrop(pane.src) : null;
         gl.activeTexture(gl.TEXTURE1);
@@ -246,7 +262,7 @@ export function GlassLight({
         // Scissor in device pixels, y counted from the bottom.
         const sx = Math.floor((pane.x - BLEED) * scale);
         const sw = Math.ceil((pane.w + BLEED * 2) * scale);
-        const sy = Math.floor((window.innerHeight - (pane.y + pane.h) - BLEED) * scale);
+        const sy = Math.floor((viewportHeight() - (pane.y + pane.h) - BLEED) * scale);
         const sh = Math.ceil((pane.h + BLEED * 2) * scale);
         gl.scissor(sx, sy, sw, sh);
         gl.drawArrays(gl.TRIANGLES, 0, 3);

@@ -90,7 +90,17 @@ void main() {
   vec2 res = uViewport / uScale;
 
   // Normalised so the flare geometry does not change with window shape.
-  float unit = min(res.x, res.y) * 0.5;
+  /*
+   * The flare GROWS as it winds; it does not merely brighten.
+   *
+   * Scaling intensity alone meant a barely-touched pointer still threw a
+   * full-size flare at low opacity, which reads as a big dim light rather than
+   * a small one starting up. Shrinking the unit at low charge expands p, and
+   * every feature measured against it -- core, halo, spikes, aperture --
+   * contracts together.
+   */
+  float spread = mix(0.30, 1.0, uCharge * uCharge);
+  float unit = min(res.x, res.y) * 0.5 * spread;
   vec2 p = (frag - uLight) / unit;
   float r = length(p);
 
@@ -173,7 +183,16 @@ void main() {
     float cut = dot(gp, clipDir);
 
     float radius = 0.045 + 0.075 * fract(fi * 0.62 + 0.2);
-    float thickness = radius * (0.16 + 0.14 * fract(fi * 0.37));
+    /*
+     * How far THIS pair of surfaces sits from focus.
+     *
+     * Every ghost is formed by a different pair of elements, so each one comes
+     * to focus in a different place and none of them at the sensor. Treating
+     * them as one defocus made a set of identical stamps; giving each its own
+     * is what turns them into separate reflections.
+     */
+    float defocus = fract(fi * 0.53 + 0.11);
+    float thickness = radius * (0.16 + 0.14 * fract(fi * 0.37)) * (1.0 + 2.2 * defocus);
 
     /*
      * A ghost is an IMAGE OF THE APERTURE, not a disc.
@@ -195,8 +214,35 @@ void main() {
      * even from a spherical lens. Kept mild: it should read as imperfection,
      * not as a different aperture.
      */
-    float roundness = mix(0.55, 0.18, uClosed);
-    float d2 = apertureDistance(gp / vec2(1.0, 0.88), roundness);
+    /*
+     * A badly defocused polygon loses its corners. The blades are sharp at the
+     * iris, but the further a ghost is from focus the more its edges wash into
+     * one another, so the hexagon relaxes toward a disc. Real ghost chains
+     * show both in the same frame, which is a large part of why they do not
+     * read as repeats.
+     */
+    float roundness = mix(mix(0.55, 0.18, uClosed), 0.95, defocus * 0.8);
+
+    /*
+     * And each arrives at its own ORIENTATION. The aperture is one hexagon,
+     * but each ghost reaches the sensor by a different path through the
+     * group, so its image lands rotated. Without this they are the same
+     * hexagon stamped down the axis, which the eye reads as a pattern rather
+     * than as optics.
+     */
+    float ga = fi * 2.39 + 0.7;
+    float cs = cos(ga);
+    float sn = sin(ga);
+    vec2 gr = vec2(gp.x * cs - gp.y * sn, gp.x * sn + gp.y * cs);
+
+    /*
+     * Stretched tangentially as it leaves the centre. Coma and astigmatism
+     * pull an off-axis image out perpendicular to the optical axis, so a ghost
+     * near the edge of frame is not the same shape as one near the middle.
+     */
+    vec2 tangent = vec2(-clipDir.y, clipDir.x);
+    vec2 gs = vec2(dot(gr, clipDir) / (1.0 + 0.5 * offAxis), dot(gr, tangent));
+    float d2 = apertureDistance(gs / vec2(1.0, 0.88), roundness);
 
     /*
      * Sampled three times at slightly different scales, per channel. In a
@@ -245,7 +291,16 @@ void main() {
     vec3 grit = mix(vec3(1.0), 0.72 + 1.1 * gritRGB, uHasGrit);
 
     vec3 gt = spectrum(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
-    colour += gt * shape * grit * 1.5 * uCharge;
+    /*
+     * Not all equally bright. A ghost's energy is the product of the
+     * reflectances of the two surfaces that made it, and coatings differ
+     * element to element -- so a real chain has a couple of bright ones and a
+     * lot of faint ones, not a uniform row. The decay is the later pairs
+     * having gone through more glass to get there.
+     */
+    float pairEfficiency =
+      (0.3 + 0.7 * fract(fi * 0.83 + 0.27)) * mix(1.1, 0.45, fi / float(GHOSTS));
+    colour += gt * shape * grit * 1.85 * pairEfficiency * uCharge;
   }
 
   /*
@@ -286,10 +341,17 @@ void main() {
    * Screen coordinates for that reason. Move the pointer and the flare
    * travels; the dirt does not, because the dirt is on the lens.
    */
-  vec2 dirtUv = frag / (res * 0.55);
-  float dirt = mix(0.0, texture2D(uGrit, fract(dirtUv) * 0.49 + 0.5).g, uHasGrit);
-  float flareEnergy = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
-  colour += colour * dirt * 2.6 * flareEnergy;
+  /*
+   * No lens dirt.
+   *
+   * There was a full-screen grime pass here, multiplying the flare by a
+   * texture so the light picked out smears on the glass. It is a real effect
+   * and the screen-space flare references all include it, but it is a
+   * photograph of somebody's dirty lens laid over photographs that are the
+   * point of the page. The mottling INSIDE the ghosts stays -- that is what
+   * separates a photographed ghost from a drawn one -- but nothing is smeared
+   * across the frame any more.
+   */
 
   // ---- The aperture, silhouetted against its own light ----
   /*
@@ -305,7 +367,7 @@ void main() {
    * at all — what changes is how hard the blades cut, not how small the
    * opening is, so the hexagon stays legible across the whole wind.
    */
-  float apertureRadius = mix(0.115, 0.098, uClosed);
+  float apertureRadius = mix(0.062, 0.053, uClosed);
   float d = apertureDistance(p, mix(0.42, 0.14, uClosed));
   float blades = smoothstep(apertureRadius - 0.0018, apertureRadius + 0.0018, d);
   float occlusion = 1.0 - blades * (0.25 + uClosed * 0.5);
