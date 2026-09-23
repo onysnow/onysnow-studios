@@ -313,9 +313,6 @@ export function CustomCursor() {
       <CursorLight chargeRef={chargeRef} closedRef={closedRef} positionRef={lightPos} />
       <div ref={ringRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__ring" />
-      </div>
-      <div ref={dotRef} aria-hidden="true" className="custom-cursor" data-state="default">
-        <span className="custom-cursor__dot" />
         {/*
         A real six-blade iris, for the click.
 
@@ -365,6 +362,9 @@ export function CustomCursor() {
             </g>
           </g>
         </svg>
+      </div>
+      <div ref={dotRef} aria-hidden="true" className="custom-cursor" data-state="default">
+        <span className="custom-cursor__dot" />
       </div>
     </>
   );

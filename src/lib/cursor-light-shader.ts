@@ -115,8 +115,19 @@ void main() {
    * lens looking at a light. The blades and the diffraction they throw ARE
    * the effect; the white disc is just where the sensor gave up.
    */
-  float falloff = 1.0 / (1.0 + 900.0 * r * r);
-  float gain = 22.0 * uCharge;
+  /*
+   * The blown region is what you actually SEE as the hexagon, and its size is
+   * set by the gain, not by the aperture.
+   *
+   * The tonemap clips everything above 1.0 to white, so the white core reaches
+   * out to wherever the emission crosses 1. At gain 22 that is
+   * r = sqrt(21/900) = 0.153, which on a 746px-tall window is a 114px hexagon
+   * -- the aperture ring underneath it was always small, it was drowned.
+   * Gain 8 puts the crossing at r = 0.088, about 66px, and a tighter falloff
+   * pulls it in further.
+   */
+  float falloff = 1.0 / (1.0 + 1500.0 * r * r);
+  float gain = 8.0 * uCharge;
   float core = falloff * gain;
 
   // Two wider lobes. Real bloom sums several kernel sizes; a single falloff

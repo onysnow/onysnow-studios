@@ -1002,7 +1002,9 @@
   position: absolute;
   top: 0;
   left: 0;
-  height: auto;
+  /* Square and oversized; object-fit does the fitting, so the clip's own
+     aspect can never leave an edge on screen. */
+  object-fit: cover;
   opacity: 0;
   mix-blend-mode: screen;
   will-change: transform, opacity;
@@ -1175,7 +1177,13 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  /*
+   * No z-index. These sit before .glass in the DOM and the pane is z-index
+   * auto, so document order already puts them above the photograph and below
+   * the glass -- which is the whole point. Promoting them to 1 put them ABOVE
+   * the pane, so the multiply darkened the glass and the content sitting on
+   * it rather than the picture behind.
+   */
   pointer-events: none;
   mix-blend-mode: multiply;
   opacity: 0;
@@ -1193,7 +1201,6 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
   pointer-events: none;
   mix-blend-mode: plus-lighter;
   opacity: 0;
