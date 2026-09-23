@@ -46,6 +46,7 @@ uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
 uniform float uGrimeFloor;  // tunable
+uniform float uSideReach;   // tunable
 uniform float uSheen;       // tunable
 uniform float uSheenReach;  // tunable
 uniform float uArris;       // tunable
@@ -205,6 +206,27 @@ void main() {
   float direct = 1.0 / (1.0 + (dl * dl) / 3600.0);
   float spill = exp(-dl / 280.0);
   float reach = direct + spill * 0.11;
+
+  /*
+   * ---- Grazing reach ----
+   *
+   * The side faces hold their highlight far longer than the flat face does,
+   * and the falloff they ride has to say so.
+   *
+   * Fresnel at near-normal incidence is a tight lobe: the face only throws the
+   * source back at you when the geometry lines up, so its specular dies
+   * quickly as the light moves off. At grazing incidence reflectance is close
+   * to 1 across a wide spread of angles -- which is why a pane of glass seen
+   * edge-on is a mirror at almost any angle, and why the last thing you see as
+   * a light leaves a sheet of glass is its edges still lit.
+   *
+   * The sides were riding the direct term, which is half strength at 60px and
+   * 2% by 400px. That is the face's lobe, and on the sides it made the edges
+   * go out at the same moment the face did. Weighted toward the broad term,
+   * they keep about eight times the reach at 400px for the same brightness
+   * directly under the light.
+   */
+  float grazing = direct * 0.3 + spill * uSideReach;
   float ambient = direct + spill * 0.14;
   /*
    * Grime rides the BROAD falloff, not the core.
@@ -353,7 +375,7 @@ void main() {
    * highlight along the entire band instead of putting it where the source is.
    */
   float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
-  rim += vec3(sideGlare) * 11.0 * direct * edgeFacing;
+  rim += vec3(sideGlare) * 11.0 * grazing * edgeFacing;
   rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 5.0 * direct;
 
   /*

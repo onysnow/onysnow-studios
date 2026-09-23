@@ -119,6 +119,16 @@ export const tuning: Record<string, Knob> = {
     max: 1600,
     step: 20,
   },
+  sideReach: {
+    label: "Side reach",
+    group: "Glass",
+    value: 0.7,
+    min: 0,
+    max: 2,
+    step: 0.05,
+    hint: "How far the light has to travel before the pane's edges stop catching it. Grazing surfaces hold their reflectance over a much wider range of angles than a face-on one, so this is deliberately broader than the face's falloff.",
+  },
+
   arris: {
     label: "Edge glow",
     group: "Glass",
