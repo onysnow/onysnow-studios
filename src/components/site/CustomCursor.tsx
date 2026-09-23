@@ -156,8 +156,19 @@ export function CustomCursor() {
      *
      * The loop only ever writes `transform`, so it stays on the compositor.
      */
-    const RING_EASE = 0.13;
-    const DOT_EASE = 0.55;
+    /*
+     * Measured off the reference rather than chosen.
+     *
+     * bryanminear.com moves both circles with CSS transitions -- 0.125s ease
+     * on the ring, 0.1s on the dot. That is a 1.25x difference, not the 4x I
+     * had, which is the whole reason his never looks off-centre and mine did:
+     * at 0.13 and 0.55 the dot ran four times ahead of the ring and the light,
+     * and the faster you moved the further they came apart.
+     *
+     * Converted to per-frame lerps that settle in about the same time.
+     */
+    const RING_EASE = 0.38;
+    const DOT_EASE = 0.46;
 
     const tick = () => {
       ringX += (targetX - ringX) * RING_EASE;

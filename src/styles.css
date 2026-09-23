@@ -278,8 +278,9 @@
 }
 
 .custom-cursor__ring {
-  width: 20px;
-  height: 20px;
+  /* Measured off bryanminear.com: .circle-outer is 30x30, 1px solid #fff. */
+  width: 30px;
+  height: 30px;
   border: 1px solid #fff;
 }
 
@@ -288,8 +289,9 @@
  * else. Matched to bryanminear.com, which is the reference for this.
  */
 .custom-cursor__dot {
-  width: 4px;
-  height: 4px;
+  /* Measured: .circle-inner is 6x6, solid white. */
+  width: 6px;
+  height: 6px;
   background-color: #fff;
 }
 
