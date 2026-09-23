@@ -123,21 +123,6 @@ export function FlareOverlay({
           source.type = type;
           video.appendChild(source);
         }
-        /*
-         * Feathered, or the clip's own rectangle is visible.
-         *
-         * Footage is a rectangle of pixels and `screen` only lightens, so
-         * wherever the frame is not black its straight edge shows as a box
-         * sitting on the page. The mask is centred on the clip's LIGHT SOURCE
-         * rather than the middle of its frame, because that is the point the
-         * layer is positioned by -- centring on the frame would fade out the
-         * side the flare actually occupies.
-         */
-        const mask =
-          `radial-gradient(ellipse 62% 62% at ${(flare.anchor.x * 100).toFixed(1)}% ` +
-          `${(flare.anchor.y * 100).toFixed(1)}%, #000 18%, rgba(0,0,0,0.55) 46%, transparent 74%)`;
-        video.style.maskImage = mask;
-        video.style.webkitMaskImage = mask;
         host.appendChild(video);
         videos.push(video);
         // Autoplay can still be refused; a flare that will not play just does
@@ -194,19 +179,42 @@ export function FlareOverlay({
         const video = videos[i];
         const flare = ACTIVE[i];
         if (!video || !flare) continue;
-        const w = unit * flare.scale;
-        // The clip's own aspect, once it is known; 16:9 until then.
+
+        /*
+         * The clip fills the WINDOW. It does not follow the pointer.
+         *
+         * A flare belongs to the camera, not to the light: the streaks and
+         * ghosts are reflections between elements that are bolted in place, so
+         * they live in frame coordinates. The footage was shot with a fixed
+         * camera, which means the clip's frame IS the camera's frame. Sliding
+         * the whole clip to put its light source on the pointer was dragging
+         * the camera around after the light, which is why they read as
+         * stickers rather than as something happening inside the lens.
+         *
+         * What the light's position actually controls is the AXIS -- and that
+         * is a rotation about the centre of the frame, below.
+         *
+         * Sized to the diagonal so rotation never swings a corner into view,
+         * which also retires the edge-feathering: the clip's own edges are
+         * off-screen now, so there is no box to hide.
+         */
         const ratio = video.videoWidth > 0 ? video.videoHeight / video.videoWidth : 0.5625;
-        const h = w * ratio;
-        // Put the clip's light source on the pointer.
-        const left = x - w * flare.anchor.x;
-        const top = y - h * flare.anchor.y;
+        const diag = Math.hypot(vw, vh);
+        const w = (diag / Math.min(1, ratio)) * 1.06;
         video.style.width = `${w}px`;
-        // Rotated about the clip's own light source, so the source stays put
-        // on the pointer while everything downstream of it swings.
-        video.style.transformOrigin = `${(flare.anchor.x * 100).toFixed(1)}% ${(flare.anchor.y * 100).toFixed(1)}%`;
-        video.style.transform = `translate3d(${left}px, ${top}px, 0) rotate(${axis.toFixed(1)}deg)`;
-        video.style.opacity = (lit * flare.opacity).toFixed(3);
+        video.style.transformOrigin = "50% 50%";
+        video.style.transform =
+          `translate3d(${(vw / 2 - w / 2).toFixed(1)}px, ${(vh / 2 - (w * ratio) / 2).toFixed(1)}px, 0) ` +
+          `rotate(${axis.toFixed(1)}deg)`;
+
+        /*
+         * Off-axis is what drives it. A flare is strongest when the source is
+         * near the middle of the frame and shooting straight down the barrel;
+         * push it toward a corner and the reflections walk out of the picture.
+         */
+        const offAxis = Math.hypot(x - vw / 2, y - vh / 2) / (diag / 2);
+        const presence = 1 - 0.55 * Math.min(1, offAxis);
+        video.style.opacity = (lit * flare.opacity * presence).toFixed(3);
 
         if (smoothSpeed < 0.4) {
           if (!video.paused) video.pause();
