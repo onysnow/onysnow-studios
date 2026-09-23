@@ -1201,51 +1201,94 @@
  * a few milliseconds, and anything slow enough to watch reads as a UI
  * animation rather than as a mechanism.
  */
-@keyframes cursor-shutter {
+/*
+ * The shutter firing with no flash behind it.
+ *
+ * A camera's blades close on every release whether or not the flash is
+ * charged, so an uncharged click gets the mechanism and none of the light.
+ * Hidden at rest -- what you normally see is the ring and the dot.
+ *
+ * Short on purpose. A leaf shutter at a hand-holdable speed is open for a few
+ * milliseconds; anything slow enough to sit and watch stops reading as a
+ * mechanism and starts reading as a UI animation. The close is faster than
+ * the reopen, which is also true of the real thing: a spring drives it shut
+ * and the mechanism lets it back.
+ */
+.custom-cursor__iris {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  translate: -50% -50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.custom-cursor__blade {
+  fill: #000;
+  transform-box: view-box;
+  /* Open: swung back against the housing, out of the way. */
+  transform: rotate(-58deg);
+}
+
+@keyframes cursor-iris-snap {
   0% {
-    transform: scale(1);
-    box-shadow: 0 0 3px oklch(1 0 0 / 0.5);
+    transform: rotate(-58deg);
   }
-  28% {
-    transform: scale(0.6);
-    box-shadow:
-      0 0 7px oklch(1 0 0 / 0.85),
-      inset 0 0 0 11px #000;
+  26% {
+    transform: rotate(2deg);
   }
-  55% {
-    transform: scale(0.88);
-    box-shadow:
-      0 0 5px oklch(1 0 0 / 0.6),
-      inset 0 0 0 2px #000;
+  38% {
+    transform: rotate(0deg);
   }
   100% {
-    transform: scale(1);
-    box-shadow: 0 0 3px oklch(1 0 0 / 0.5);
+    transform: rotate(-58deg);
   }
 }
 
-.custom-cursor[data-click] .custom-cursor__ring {
-  animation: cursor-shutter 170ms cubic-bezier(0.32, 0, 0.22, 1);
+@keyframes cursor-iris-show {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  15%,
+  55% {
+    opacity: 1;
+  }
 }
 
-/* The dot takes the same knock, a beat behind the blades. */
-@keyframes cursor-shutter-dot {
+.custom-cursor[data-click] .custom-cursor__iris {
+  animation: cursor-iris-show 230ms linear;
+}
+
+.custom-cursor[data-click] .custom-cursor__blade {
+  animation: cursor-iris-snap 230ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
+/* The ring takes the shock of the blades slamming. */
+@keyframes cursor-shutter-ring {
   0%,
   100% {
     transform: scale(1);
   }
-  30% {
-    transform: scale(2.1);
+  28% {
+    transform: scale(0.82);
   }
 }
 
+.custom-cursor[data-click] .custom-cursor__ring {
+  animation: cursor-shutter-ring 230ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+
 .custom-cursor[data-click] .custom-cursor__dot {
-  animation: cursor-shutter-dot 170ms cubic-bezier(0.32, 0, 0.22, 1);
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .custom-cursor[data-click] .custom-cursor__ring,
-  .custom-cursor[data-click] .custom-cursor__dot {
+  .custom-cursor[data-click] .custom-cursor__iris,
+  .custom-cursor[data-click] .custom-cursor__blade,
+  .custom-cursor[data-click] .custom-cursor__ring {
     animation: none;
   }
 }

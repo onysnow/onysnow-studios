@@ -316,6 +316,67 @@ export function CustomCursor() {
       </div>
       <div ref={dotRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__dot" />
+        {/*
+        A real six-blade iris, for the click.
+
+        Each blade pivots about a point ON THE HOUSING RING and swings
+        inward -- that is what a leaf shutter does, and it is why the
+        opening is a hexagon: six straight inner edges sweeping across one
+        another. Rotating blades about the CENTRE instead, which is what
+        every snippet of this going around does, spins a pinwheel and
+        never produces the polygon.
+
+        All six share one rotation, so one keyframe animates the lot; only
+        the pivot differs, and that is static per blade.
+      */}
+        <svg
+          className="custom-cursor__iris"
+          viewBox="0 0 100 100"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <clipPath id="cursor-iris-housing">
+            <circle cx="50" cy="50" r="46" />
+          </clipPath>
+          <g clipPath="url(#cursor-iris-housing)">
+            <path
+              key={0}
+              className="custom-cursor__blade"
+              d="M 96.00,50.00 A 46.0,46.0 0 0,1 60.50,94.78 L 50,50 Z"
+              style={{ transformOrigin: "96.00px 50.00px" }}
+            />
+            <path
+              key={1}
+              className="custom-cursor__blade"
+              d="M 73.00,89.84 A 46.0,46.0 0 0,1 16.47,81.49 L 50,50 Z"
+              style={{ transformOrigin: "73.00px 89.84px" }}
+            />
+            <path
+              key={2}
+              className="custom-cursor__blade"
+              d="M 27.00,89.84 A 46.0,46.0 0 0,1 5.96,36.70 L 50,50 Z"
+              style={{ transformOrigin: "27.00px 89.84px" }}
+            />
+            <path
+              key={3}
+              className="custom-cursor__blade"
+              d="M 4.00,50.00 A 46.0,46.0 0 0,1 39.50,5.22 L 50,50 Z"
+              style={{ transformOrigin: "4.00px 50.00px" }}
+            />
+            <path
+              key={4}
+              className="custom-cursor__blade"
+              d="M 27.00,10.16 A 46.0,46.0 0 0,1 83.53,18.51 L 50,50 Z"
+              style={{ transformOrigin: "27.00px 10.16px" }}
+            />
+            <path
+              key={5}
+              className="custom-cursor__blade"
+              d="M 73.00,10.16 A 46.0,46.0 0 0,1 94.04,63.30 L 50,50 Z"
+              style={{ transformOrigin: "73.00px 10.16px" }}
+            />
+          </g>
+        </svg>
       </div>
     </>
   );
