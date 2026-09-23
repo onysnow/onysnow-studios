@@ -196,6 +196,7 @@ function HomePage() {
                         to="/portfolio"
                         search={{ category: cat.slug }}
                         key={cat.id}
+                        data-cast
                         className="group relative block overflow-hidden"
                       >
                         <Img
@@ -275,6 +276,7 @@ function HomePage() {
                         <Link
                           to="/portfolio"
                           search={{ category: cat.slug }}
+                          data-cast
                           className="group flex h-full flex-col"
                         >
                           {/* Fixed 3:2 box keeps every frame the same height whatever the

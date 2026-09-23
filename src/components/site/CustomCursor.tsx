@@ -1,3 +1,4 @@
+import { reportCharge } from "@/lib/edge-glow";
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
@@ -207,6 +208,7 @@ export function CustomCursor() {
          */
         document.documentElement.style.setProperty("--wind", charge.toFixed(2));
         chargeRef.current = charge;
+        reportCharge(charge);
         setShutterCharge(charge);
         // Blades close over the back half, once it's clearly deliberate.
         const closed = Math.max(0, (charge - 0.5) / 0.5);

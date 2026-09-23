@@ -1150,3 +1150,23 @@
     opacity: 0.85;
   }
 }
+
+/*
+ * The shadow layer, between the photograph and the glass.
+ *
+ * `multiply` because a shadow is subtraction and nothing else in the effect
+ * layer can subtract — the WebGL passes composite `plus-lighter` and can only
+ * ever add light, which is why the refraction had to move to a backdrop-filter
+ * and why this had to become its own canvas.
+ */
+.cast-shadows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
