@@ -240,14 +240,21 @@
   pointer-events: none;
   opacity: 0;
   /*
-   * NOT `difference`.
+   * `difference`, as it was originally, because that is what the reference
+   * actually does.
    *
-   * Inverting was a neat way to stay legible on any background, and over a
-   * photograph it is exactly wrong: it turns the follower into a negative of
-   * somebody's picture. A white ring with a dark shadow under it reads on
-   * anything and leaves the photograph alone, which on a photography site is
-   * the only requirement that actually matters.
+   * bryanminear's cursor is not black. It INVERTS: dark on his white header,
+   * light over his photographs, always legible and never a chosen colour.
+   * White is difference's identity, so a white ring comes out as a true
+   * inversion of the pixels underneath rather than a tint. Painting it black
+   * instead, which is what I did after taking this out, gets the header right
+   * and then disappears against every dark photograph on the page.
+   *
+   * It comes back off over photographs -- see the media state -- because
+   * inverting somebody's picture is the one place this is genuinely wrong,
+   * and that was the original complaint. Everywhere else it is the effect.
    */
+  mix-blend-mode: difference;
   transition: opacity 0.25s ease;
   will-change: transform;
 }
@@ -271,9 +278,9 @@
 }
 
 .custom-cursor__ring {
-  width: 20px;
-  height: 20px;
-  border: 1px solid #000;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #fff;
 }
 
 /*
@@ -283,10 +290,7 @@
 .custom-cursor__dot {
   width: 4px;
   height: 4px;
-  background-color: #000;
-  /* Black, with a faint light halo rather than a dark one -- a black dot on a
-     dark photograph is invisible without something to separate it. */
-  box-shadow: 0 0 3px oklch(1 0 0 / 0.55);
+  background-color: #fff;
 }
 
 /* Over a link or button: a filled disc big enough to sit behind a nav item. */
@@ -315,6 +319,16 @@
  * still reads on any background because a 1px inversion is legible against
  * anything, and it leaves the picture alone.
  */
+/*
+ * Over a photograph, inverting is the one case where this is wrong -- it turns
+ * the follower into a negative of the picture. Composite normally there and
+ * let the white carry it, which the photographs on this site are dark enough
+ * for.
+ */
+.custom-cursor[data-state="media"] {
+  mix-blend-mode: normal;
+}
+
 .custom-cursor[data-state="media"] .custom-cursor__ring {
   width: 96px;
   height: 96px;
@@ -894,9 +908,6 @@
  * only ever competed with both.
  */
 .custom-cursor__ring {
-  box-shadow:
-    0 0 3px oklch(1 0 0 / 0.5),
-    inset 0 0 2px oklch(1 0 0 / 0.35);
 }
 
 /* The ring itself thickens and warms as it winds. */
