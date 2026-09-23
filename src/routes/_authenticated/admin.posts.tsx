@@ -2,11 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ExternalLink, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, Plus, Save, Trash2 } from "lucide-react";
 import { AdminHeading } from "@/components/admin/AdminHeading";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
 import { adminPhotosQuery, adminPostsQuery, deleteRow, insertRow, updateRow } from "@/lib/admin";
 import { useContentRefresh } from "@/hooks/use-admin";
+import { safeHtml } from "@/lib/safe-html";
 import type { Post, PostBlock } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,38 @@ function PostsPage() {
   const photos = useQuery(adminPhotosQuery);
   const refresh = useContentRefresh();
   const [openId, setOpenId] = useState<string | null>(null);
+  /*
+   * Block edits are buffered here and written on Save, the way the page-copy
+   * editor already works.
+   *
+   * They used to go straight to the database: `onChange` reached `updateRow`,
+   * and `RichTextEditor` fires `onChange` on every ProseMirror transaction, so
+   * a 200-character paragraph was ~200 PATCH round trips and ~1,600 query
+   * invalidations. It was also a write race -- each edit was computed from the
+   * `blocks` array of the currently rendered query data, which those refetches
+   * were replacing underneath it, so text visibly reverted while being typed.
+   */
+  const [drafts, setDrafts] = useState<Record<string, PostBlock[]>>({});
+  const [savingBlocks, setSavingBlocks] = useState<string | null>(null);
+
+  async function saveBlocks(id: string, blocks: PostBlock[]) {
+    setSavingBlocks(id);
+    try {
+      // Cleaned on the way in rather than on the way out: the public pages
+      // render this raw, and a parser on every visit is a steep price for
+      // something only the studio can write. See lib/safe-html.ts.
+      const clean = blocks.map((b) => (b.type === "prose" ? { ...b, html: safeHtml(b.html) } : b));
+      await updateRow("posts", id, { blocks: clean });
+      setDrafts(({ [id]: _dropped, ...rest }) => rest);
+      refresh();
+      toast.success("Saved");
+    } catch (error) {
+      toast.error("Could not save", {
+        description: error instanceof Error ? error.message : undefined,
+      });
+    }
+    setSavingBlocks(null);
+  }
 
   async function patch(id: string, values: Partial<Post> | Record<string, unknown>) {
     try {
@@ -116,10 +149,12 @@ function PostsPage() {
       ) : (
         <div className="space-y-4">
           {list.map((post) => {
-            const blocks: PostBlock[] = Array.isArray(post.blocks) ? post.blocks : [];
+            const saved: PostBlock[] = Array.isArray(post.blocks) ? post.blocks : [];
+            const blocks = drafts[post.id] ?? saved;
+            const blocksDirty = drafts[post.id] !== undefined;
             const isOpen = openId === post.id;
 
-            const setBlocks = (next: PostBlock[]) => patch(post.id, { blocks: next });
+            const setBlocks = (next: PostBlock[]) => setDrafts((d) => ({ ...d, [post.id]: next }));
 
             return (
               <div key={post.id} className="rounded-lg border border-border bg-card p-4">
@@ -243,11 +278,36 @@ function PostsPage() {
                 </div>
 
                 {isOpen ? (
-                  <BlockEditor
-                    blocks={blocks}
-                    photos={photoList.map((p) => ({ id: p.id, label: p.title || p.storage_path }))}
-                    onChange={setBlocks}
-                  />
+                  <>
+                    <BlockEditor
+                      blocks={blocks}
+                      photos={photoList.map((p) => ({
+                        id: p.id,
+                        label: p.title || p.storage_path,
+                      }))}
+                      onChange={setBlocks}
+                    />
+                    <div className="mt-4 flex items-center justify-end gap-3 border-t border-border pt-4">
+                      {blocksDirty ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={savingBlocks === post.id}
+                          onClick={() => setDrafts(({ [post.id]: _dropped, ...rest }) => rest)}
+                        >
+                          Discard changes
+                        </Button>
+                      ) : null}
+                      <Button
+                        size="sm"
+                        variant={blocksDirty ? "cinematic" : "ghost"}
+                        disabled={!blocksDirty || savingBlocks === post.id}
+                        onClick={() => void saveBlocks(post.id, blocks)}
+                      >
+                        <Save /> {blocksDirty ? "Save blocks" : "Saved"}
+                      </Button>
+                    </div>
+                  </>
                 ) : null}
               </div>
             );
@@ -311,6 +371,18 @@ function BlockEditor({
 
   return (
     <div className="mt-5 space-y-4 border-t border-border pt-5">
+      {/*
+       * Every field here is controlled on purpose.
+       *
+       * They were uncontrolled (`defaultValue` + `onBlur`) over index keys,
+       * and `defaultValue` does nothing after mount. Moving a block up changed
+       * which block sat at index `i` while React reused the same DOM node, so
+       * the input kept displaying the PREVIOUS block's text -- and the next
+       * blur wrote that stale text over whichever block now lived there.
+       * Blocks A, B, C, move B up, touch the first field: B's heading silently
+       * became A's. Controlled values make the index key harmless, because the
+       * rendered value always follows the array.
+       */}
       {blocks.map((block, i) => (
         <div key={i} className="rounded-md border border-border/70 bg-background p-4">
           <div className="flex items-center justify-between gap-3">
@@ -343,9 +415,9 @@ function BlockEditor({
           <div className="mt-4 space-y-3">
             {block.type === "heading" ? (
               <Input
-                defaultValue={block.text}
+                value={block.text}
                 placeholder="Section heading"
-                onBlur={(e) => update(i, { type: "heading", text: e.target.value })}
+                onChange={(e) => update(i, { type: "heading", text: e.target.value })}
               />
             ) : null}
 
@@ -360,14 +432,16 @@ function BlockEditor({
               <>
                 <Textarea
                   rows={2}
-                  defaultValue={block.text}
+                  value={block.text}
                   placeholder="The line worth pulling out"
-                  onBlur={(e) => update(i, { ...block, type: "pull_quote", text: e.target.value })}
+                  onChange={(e) =>
+                    update(i, { ...block, type: "pull_quote", text: e.target.value })
+                  }
                 />
                 <Input
-                  defaultValue={block.attribution ?? ""}
+                  value={block.attribution ?? ""}
                   placeholder="Attribution (optional)"
-                  onBlur={(e) =>
+                  onChange={(e) =>
                     update(i, { ...block, type: "pull_quote", attribution: e.target.value })
                   }
                 />
@@ -381,9 +455,9 @@ function BlockEditor({
                   onPick={(id) => update(i, { ...block, photo_id: id })}
                 />
                 <Input
-                  defaultValue={block.caption ?? ""}
+                  value={block.caption ?? ""}
                   placeholder="Caption (optional)"
-                  onBlur={(e) => update(i, { ...block, caption: e.target.value })}
+                  onChange={(e) => update(i, { ...block, caption: e.target.value })}
                 />
               </>
             ) : null}

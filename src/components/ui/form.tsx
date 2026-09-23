@@ -150,6 +150,16 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
+      /*
+       * Announced, not merely displayed.
+       *
+       * This was a plain paragraph. Submitting with an empty required field
+       * put the message on screen and told a screen reader nothing at all —
+       * react-hook-form moves focus to the first invalid field, which rescues
+       * a sighted keyboard user and leaves everyone else with a form that
+       * silently refused. `role="alert"` is the one attribute that fixes it.
+       */
+      role="alert"
       className={cn("text-[0.8rem] font-medium text-destructive", className)}
       {...props}
     >

@@ -71,7 +71,7 @@ export function ShutterFlash() {
           // Each host needs its own copy: appending one node to two parents
           // moves it, and the second ghost would silently steal the first's.
           dressGhost(host, capture, at);
-          restart(host, 3200);
+          restart(host, 20_000);
         }
       }
 
@@ -213,15 +213,19 @@ function dressGhost(host: HTMLElement, capture: Capture, at: { x: number; y: num
    * point of discharge -- so the ghost is strongest there and dies out around
    * it.
    *
-   * Sized against the VIEWPORT, not the subject. The first version used 0.78
-   * of the subject's long edge, which for a full-bleed hero is its whole
-   * diagonal: the burn covered the screen and read as a wash rather than as a
-   * mark left where the camera was pointed. How far a flash bleaches is a
-   * property of the flash. A subject smaller than the burn is simply inside
-   * it, which is correct -- point a camera at a thumbnail and all of it goes.
+   * Sized against the VIEWPORT, not the subject: how far a flash bleaches is a
+   * property of the flash, not of how big the photograph happened to be. A
+   * subject smaller than the burn is simply inside it, which is correct --
+   * point a camera at a thumbnail and all of it goes.
+   *
+   * It reaches the far corner, because the flash does. An earlier pass held
+   * this to 0.42 of the short edge while the burst itself faded out at 72%,
+   * and the pair read as a spotlight: a pool of light near the pointer and a
+   * small stain afterwards. Both now fill the frame, with the falloff carrying
+   * the sense of where it fired rather than the edge of a circle.
    */
-  const reach = Math.min(viewportWidth(), viewportHeight()) * 0.42;
-  const mask = `radial-gradient(circle ${reach}px at ${at.x - rect.left}px ${at.y - rect.top}px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0) 100%)`;
+  const reach = Math.hypot(viewportWidth(), viewportHeight());
+  const mask = `radial-gradient(circle ${reach}px at ${at.x - rect.left}px ${at.y - rect.top}px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.92) 30%, rgba(0,0,0,0.6) 62%, rgba(0,0,0,0.28) 100%)`;
   host.style.setProperty("-webkit-mask-image", mask);
   host.style.setProperty("mask-image", mask);
 
@@ -240,22 +244,44 @@ function viewportHeight() {
 /**
  * Re-applying a running animation is a no-op unless the browser sees a change.
  *
- * The clear-down is per element and cancels its own predecessor, because
- * clicking twice inside one decay is exactly when a stale timer would strip
- * `data-firing` off a ghost that had only just started.
+ * The clear-down waits for the animation to end rather than for a number.
+ * Hard-coded milliseconds were wrong twice: first too short, so `data-firing`
+ * was stripped mid-decay and the burn snapped out instead of fading; then set
+ * long enough for the dwell knob's maximum, which left the attribute sitting
+ * there for eighteen seconds after a two-second effect. `animationend` is
+ * exact at every setting, and the fallback only exists for the case where no
+ * animation runs at all and the event therefore never arrives.
  */
-const clearTimers = new WeakMap<HTMLElement, number>();
+type Pending = { timer: number; done: (e: AnimationEvent) => void };
+const pending = new WeakMap<HTMLElement, Pending>();
 
-function restart(el: HTMLElement, clearAfter: number) {
-  const pending = clearTimers.get(el);
-  if (pending) window.clearTimeout(pending);
+function restart(el: HTMLElement, fallbackMs: number) {
+  const previous = pending.get(el);
+  if (previous) {
+    window.clearTimeout(previous.timer);
+    el.removeEventListener("animationend", previous.done);
+  }
 
   el.removeAttribute("data-firing");
   void el.offsetWidth;
   el.setAttribute("data-firing", "");
 
-  clearTimers.set(
-    el,
-    window.setTimeout(() => el.removeAttribute("data-firing"), clearAfter),
-  );
+  const clear = () => {
+    const current = pending.get(el);
+    if (current) {
+      window.clearTimeout(current.timer);
+      el.removeEventListener("animationend", current.done);
+      pending.delete(el);
+    }
+    el.removeAttribute("data-firing");
+  };
+
+  // Several layers animate at once; the element is done when its own longest
+  // one is, so anything earlier is ignored.
+  const done = (event: AnimationEvent) => {
+    if (event.target === el) clear();
+  };
+
+  el.addEventListener("animationend", done);
+  pending.set(el, { timer: window.setTimeout(clear, fallbackMs), done });
 }

@@ -1,5 +1,7 @@
 import { useCallback, useRef, type ElementType, type ReactNode } from "react";
 import { registerEdgeGlow } from "@/lib/edge-glow";
+import { requestBevelFilter } from "@/lib/bevel-filters";
+import { registerLitSurface } from "@/lib/edge-glow";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,7 +53,53 @@ export function Glass({
   const release = useRef<(() => void) | null>(null);
   const attach = useCallback((el: HTMLElement | null) => {
     release.current?.();
-    release.current = el ? registerEdgeGlow(el) : null;
+    if (!el) {
+      release.current = null;
+      return;
+    }
+
+    const unregister = registerEdgeGlow(el);
+
+    /*
+     * The bevel map depends on the pane's size and corner radius.
+     *
+     * It used to be one baked PNG stretched over every pane, which meant a
+     * 64px bar and a 400px band were bent by the same profile -- so the bevel
+     * was a different physical depth on each, which is the one thing a bevel
+     * is not. The map is computed per geometry now (lib/bevel-map.ts), so the
+     * pane has to ask for the filter that matches it and point its refraction
+     * layer at it. Until that resolves, the CSS fallback in styles.css stands.
+     */
+    const refract = el.querySelector<HTMLElement>(".glass__refract");
+    const fit = () => {
+      if (!refract) return;
+      const rect = el.getBoundingClientRect();
+      const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+      const id = requestBevelFilter({ width: rect.width, height: rect.height, radius });
+      if (id) refract.style.backdropFilter = `url("#${id}")`;
+    };
+
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+
+    /*
+     * The copy resting on the pane casts a shadow too.
+     *
+     * Registered per block rather than once for the whole panel: the light is
+     * a cursor a few hundred pixels away, not the sun, so the direction it
+     * throws a heading at one end of a full-width band is visibly not the
+     * direction it throws a paragraph at the other. Done here so no call site
+     * has to know about it.
+     */
+    const copy = [...el.querySelectorAll<HTMLElement>("h1, h2, h3, h4, p, blockquote")];
+    const letGo = copy.map((node) => registerLitSurface(node));
+
+    release.current = () => {
+      observer.disconnect();
+      for (const stop of letGo) stop();
+      unregister();
+    };
   }, []);
 
   return (
@@ -66,6 +114,17 @@ export function Glass({
     >
       {/* Bright points behind the glass, thrown out of focus into discs. */}
       <span aria-hidden="true" className="glass__bokeh" />
+      {/*
+        What the pane has been touched with.
+
+        A layer of the PANE, not of the page, which is the whole point. The
+        shared light canvas that draws everything else is above all content, so
+        drawing smears there put them on top of the photographs and the copy --
+        and those sit ON the glass, so nothing on the surface can be over them.
+        This sits under them instead, and stops short of the side face, which
+        is a different surface at a different angle and carries its own.
+      */}
+      <span aria-hidden="true" className="glass__grime" />
       {/*
         The bezel, bending and dispersing what is behind it. One layer over the
         whole pane: the displacement map carries the profile, pushing at the

@@ -23,10 +23,22 @@ import { Slider } from "@/components/ui/slider";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({ component: SettingsPage });
 
+/**
+ * The display faces, by the slug `CustomCss` and styles.css actually match on.
+ *
+ * These used to be human-readable names -- "Barlow Condensed" -- which no
+ * consumer could match: `CustomCss` lowercases and tests against a hyphenated
+ * set, so "barlow condensed" never hit, and styles.css only defines rules for
+ * the hyphenated form. Choosing a font did nothing, forever, including the
+ * value the database was seeded with.
+ *
+ * Anton and Oswald are gone. Neither is in the Google Fonts request in
+ * __root.tsx, so offering them was the same lie in a different place.
+ */
 const DISPLAY_FONTS = [
-  { value: "Barlow Condensed", label: "Barlow Condensed — condensed film titling" },
-  { value: "Anton", label: "Anton — heavy poster condensed" },
-  { value: "Oswald", label: "Oswald — condensed, a little softer" },
+  { value: "jost", label: "Jost — the studio default" },
+  { value: "inter-tight", label: "Inter Tight — tighter, more neutral" },
+  { value: "barlow-condensed", label: "Barlow Condensed — condensed film titling" },
 ];
 
 function SettingsPage() {
@@ -40,7 +52,14 @@ function SettingsPage() {
     if (!entries.length) return;
     setSaving(true);
     try {
-      for (const [key, value] of entries) await updateRow("site_settings", key, { value });
+      /*
+       * Together, not one round trip at a time.
+       *
+       * Saving fifteen settings was fifteen sequential requests, so the button
+       * sat spinning for as long as the network took times fifteen. They are
+       * independent rows; nothing needs the previous one to have landed.
+       */
+      await Promise.all(entries.map(([key, value]) => updateRow("site_settings", key, { value })));
       setDrafts({});
       refresh();
       toast.success("Settings saved");

@@ -10,6 +10,7 @@ import {
   adminPhotosQuery,
   deleteRow,
   insertRow,
+  orderWithinSlots,
   saveOrder,
   updateRow,
 } from "@/lib/admin";
@@ -92,10 +93,14 @@ function CategoriesPage() {
   async function reorder(ids: string[]) {
     setOrder(ids);
     try {
-      await saveOrder("categories", ids);
+      await saveOrder("categories", orderWithinSlots(ids, categories.data ?? []));
       refresh();
+      // The server order is authoritative once it has been written; keeping the
+      // optimistic list alive past that point only lets the two disagree.
+      setOrder(null);
     } catch {
       toast.error("Could not save the new order");
+      setOrder(null);
     }
   }
 

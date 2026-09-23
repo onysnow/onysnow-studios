@@ -17,7 +17,18 @@ export function CodeEditor({
   const extensions = useMemo(() => [language === "json" ? json() : css()], [language]);
   return (
     <div className="overflow-hidden rounded-md border border-border bg-card font-mono text-sm">
+      {/*
+        Tab must not be captured.
+
+        `@uiw/react-codemirror` defaults `indentWithTab` to true, so Tab
+        indents and Shift+Tab dedents, and nothing binds Escape to blur — a
+        keyboard user who tabs in cannot get back out to Apply or Discard,
+        which sit immediately below. That is a WCAG 2.1.2 keyboard trap, the
+        one Level A failure in the codebase. Losing tab-indentation in a CSS
+        box is a small price.
+      */}
       <CodeMirror
+        indentWithTab={false}
         value={value}
         height={height}
         theme="dark"

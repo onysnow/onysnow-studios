@@ -10,7 +10,17 @@ const BASE =
   (import.meta.env["VITE_SUPABASE_URL"] as string | undefined)?.replace(/\/+$/, "") ?? "";
 
 /** The widths we generate at upload time. Keep in sync with lib/image-upload.ts. */
-export const VARIANT_WIDTHS = [640, 1280, 2560] as const;
+/*
+ * The renditions an upload produces.
+ *
+ * 320 and 480 are here because the smallest was 640 and the footer strip draws
+ * eight tiles at roughly 180 CSS pixels each, on every page of the site — so
+ * every visit fetched eight 640px files for 180px boxes. 2560 is dropped: the
+ * base is already capped at 2560, so `w < bitmap.width` could never be true
+ * for it and it has never once been generated. The original is appended to the
+ * srcset separately when it is genuinely larger.
+ */
+export const VARIANT_WIDTHS = [320, 480, 640, 1280] as const;
 
 /** Stable public URL for a stored object. */
 export function photoUrl(storagePath: string | null | undefined): string {

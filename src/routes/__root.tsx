@@ -17,6 +17,7 @@ import { GlassFilters } from "@/components/site/GlassFilters";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
+import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 function NotFoundComponent() {
   return (
@@ -33,6 +34,25 @@ function NotFoundComponent() {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  /**
+   * The shell's own data, fetched once for every route.
+   *
+   * The header, the footer, its nav columns, the eight-photo strip and the
+   * custom CSS all need these, and they are on every page — but there was no
+   * root loader, so each leaf route had to remember to prime them and several
+   * did not. /terms and /privacy missed all three: the header and the entire
+   * footer server-rendered empty, then three requests fired on hydration and
+   * the footer popped in and reflowed.
+   *
+   * Priming here means the shell is in the server HTML on every route, and the
+   * leaves can stop listing queries that were never really theirs.
+   */
+  loader: ({ context: { queryClient } }) =>
+    Promise.all([
+      queryClient.ensureQueryData(settingsQuery),
+      queryClient.ensureQueryData(categoriesQuery),
+      queryClient.ensureQueryData(coverPhotosQuery),
+    ]),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -57,15 +77,30 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    /*
+      `suppressHydrationWarning` on the <html> element, and it is not papering
+      over anything.
+
+      The comment below used to claim that setting a CSS custom property gives
+      React "no markup to disagree with at hydration". That is the bug.
+      `style.setProperty` on `document.documentElement` MATERIALISES a style
+      attribute on <html>, and <html> is rendered by this component, so React
+      diffs its attributes and finds one the server never sent. The result was
+      a hydration error on every route of the site, and it is the error that
+      has been in the dev console this whole time.
+
+      The script has to stay where it is — it picks the room before anything
+      paints, and moving it after hydration would paint one room and swap it on
+      every load — so the honest fix is to tell React that this element's
+      attributes are set outside it.
+    */
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
         {/*
           Picks the room the glass reflects, before anything paints. Inline and
-          synchronous on purpose: it only sets a CSS custom property, so there
-          is no markup for React to disagree with at hydration, and running it
-          after hydration instead would paint one room and then swap it on
-          every load.
+          synchronous on purpose, which means it writes a style attribute onto
+          <html> before React hydrates — see the note above.
         */}
         <script dangerouslySetInnerHTML={{ __html: roomScript() }} />
       </head>

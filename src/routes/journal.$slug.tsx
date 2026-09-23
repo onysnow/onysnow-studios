@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { ParallaxScene } from "@/components/site/ParallaxScene";
@@ -24,7 +24,16 @@ export const Route = createFileRoute("/journal/$slug")({
    */
   loader: async ({ context: { queryClient }, params }) => {
     const post = await queryClient.ensureQueryData(postQuery(params.slug));
-    if (!post) return { post: null, ogImage: "" };
+    /*
+     * A real 404, not a 200 that says "not here".
+     *
+     * This returned null and let the component render an apology inside a 200
+     * response — so every made-up slug was an indexable page whose <title> and
+     * og:title were built from the slug itself, by `titleFromSlug`. Anyone
+     * could put arbitrary text in the title of a page on this domain. The root
+     * route has wired `notFoundComponent` all along; nothing ever threw to it.
+     */
+    if (!post) throw notFound();
 
     const referenced = ((post.blocks ?? []) as PostBlock[]).flatMap((b) =>
       b.type === "full_bleed"
@@ -59,10 +68,20 @@ export const Route = createFileRoute("/journal/$slug")({
 
 function formatDate(value: string | null) {
   if (!value) return "";
+  /*
+   * Pinned to UTC.
+   *
+   * These routes are server-rendered, and `toLocaleDateString` resolves
+   * against whichever timezone is running it — UTC in the Worker, the
+   * visitor's in the browser. A post published at 02:00Z therefore rendered as
+   * one day on the server and the day before for a US reader, which is both a
+   * hydration mismatch and simply the wrong date.
+   */
   return new Date(value).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 

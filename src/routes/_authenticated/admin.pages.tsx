@@ -7,6 +7,7 @@ import { AdminHeading } from "@/components/admin/AdminHeading";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
 import { adminPageContentQuery, updateRow } from "@/lib/admin";
 import { useContentRefresh } from "@/hooks/use-admin";
+import { safeHtml } from "@/lib/safe-html";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,10 +47,15 @@ function PagesPage() {
   const slugs = Object.keys(grouped);
 
   async function save(id: string) {
-    const value = drafts[id];
-    if (value === undefined) return;
+    const draft = drafts[id];
+    if (draft === undefined) return;
     setSaving(id);
     try {
+      // Only the `html` rows are markup; the rest are plain copy and are left
+      // exactly as typed. Cleaned on save -- see lib/safe-html.ts for why not
+      // on render.
+      const row = (content.data ?? []).find((r) => r.id === id);
+      const value = row?.format === "html" ? safeHtml(draft) : draft;
       await updateRow("page_content", id, { value });
       setDrafts((d) => {
         const next = { ...d };
@@ -118,7 +124,15 @@ function PagesPage() {
                       value={value}
                       onChange={(html) => setDrafts((d) => ({ ...d, [row.id]: html }))}
                     />
-                  ) : value.length > 90 ? (
+                  ) : /*
+                   * Branched on the SAVED value, not the draft.
+                   *
+                   * This read `value`, which is what is being typed — so
+                   * crossing 90 characters changed the rendered component from
+                   * an <input> to a <textarea>, React unmounted one and mounted
+                   * the other, and the caret vanished mid-word.
+                   */
+                  row.value.length > 90 ? (
                     <Textarea
                       rows={3}
                       value={value}

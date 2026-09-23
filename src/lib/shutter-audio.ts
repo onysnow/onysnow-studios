@@ -3,9 +3,11 @@
  *
  * Three cues, cut from recordings of a real film camera:
  *
- *   flash-charge   the capacitor winding. Looped, and both its level and its
- *                  pitch follow the charge, so it rises as you wind and sags
- *                  the moment you stop — the same curve the light follows.
+ *   flash-charge   the capacitor winding. Flattened and then looped, so the
+ *                  only thing that moves its level is the charge — the
+ *                  recording is of a capacitor actually winding up and swells
+ *                  and dies across its own length, which looped straight made
+ *                  the whine pulse every 1.87 seconds. See `steady`.
  *                  Played backwards and faster while the charge is draining,
  *                  since a rise reversed IS a fall: the same recording read
  *                  the other way is a capacitor dumping what it had.
@@ -56,6 +58,98 @@ let lastAt = 0;
  * every shutter fire.
  */
 let spent = false;
+
+/**
+ * Flatten a recording's own loudness so it can be looped without pumping.
+ *
+ * The charge recording is a capacitor actually winding up, which means it
+ * SWELLS: measured, its RMS runs 0.28 at the start, up to 1.00 two thirds
+ * through, and back down to 0.25 by the end of its 1.87 seconds. Looping that
+ * replays the swell every 1.87 seconds, so the whine picks up and drops away
+ * over and over instead of holding -- which is what you hear, and which the
+ * old comment about the loop being seamless missed entirely. The loop is
+ * seamless in PHASE; the fault is in the envelope.
+ *
+ * Dividing the signal by a smoothed version of its own envelope leaves the
+ * timbre alone and takes the swell out: the same measurement afterwards runs
+ * 0.93 to 1.00, and the dominant partial stays at 18 kHz. The level is then
+ * free to follow the charge, which is the only thing that should be moving it.
+ *
+ * The floor stops near-silent passages being multiplied up into noise, and the
+ * final trim ends the loop on a sample that matches the first in both value
+ * and slope, so the join has no step in it.
+ */
+export function steady(buffer: AudioBuffer, ctx: AudioContext) {
+  const window = Math.max(1, Math.round(buffer.sampleRate * 0.06));
+  const half = window >> 1;
+
+  const channels: Float32Array[] = [];
+  let peakOut = 0;
+  let peakIn = 0;
+
+  for (let c = 0; c < buffer.numberOfChannels; c += 1) {
+    const from = buffer.getChannelData(c);
+    const n = from.length;
+
+    // Running sum of squares, so the envelope costs one pass rather than one
+    // convolution per sample.
+    const cumulative = new Float64Array(n + 1);
+    for (let i = 0; i < n; i += 1) {
+      const v = from[i] ?? 0;
+      cumulative[i + 1] = (cumulative[i] ?? 0) + v * v;
+      if (Math.abs(v) > peakIn) peakIn = Math.abs(v);
+    }
+
+    const envelope = new Float64Array(n);
+    let loudest = 0;
+    for (let i = 0; i < n; i += 1) {
+      const lo = Math.max(0, i - half);
+      const hi = Math.min(n, i + half);
+      const rms = Math.sqrt(((cumulative[hi] ?? 0) - (cumulative[lo] ?? 0)) / (hi - lo));
+      envelope[i] = rms;
+      if (rms > loudest) loudest = rms;
+    }
+
+    const floor = loudest * 0.08;
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i += 1) {
+      const level = Math.max(envelope[i] ?? 0, floor);
+      const v = (from[i] ?? 0) / (level || 1);
+      out[i] = v;
+      if (Math.abs(v) > peakOut) peakOut = Math.abs(v);
+    }
+    channels.push(out);
+  }
+
+  // Back to the level it arrived at, so nothing downstream has to be retuned.
+  const gain = peakOut > 0 ? peakIn / peakOut : 1;
+
+  // End on a sample that matches the first in value and slope.
+  const first = channels[0];
+  let length = buffer.length;
+  if (first && first.length > 600) {
+    const v0 = first[0] ?? 0;
+    const slope0 = (first[1] ?? 0) - v0;
+    const scale = peakOut || 1;
+    let best = Infinity;
+    for (let j = first.length - 400; j < first.length; j += 1) {
+      const v = first[j] ?? 0;
+      const cost = Math.abs(v - v0) / scale + Math.abs(v - (first[j - 1] ?? 0) - slope0) / scale;
+      if (cost < best) {
+        best = cost;
+        length = j;
+      }
+    }
+  }
+
+  const copy = ctx.createBuffer(buffer.numberOfChannels, length, buffer.sampleRate);
+  for (let c = 0; c < channels.length; c += 1) {
+    const to = copy.getChannelData(c);
+    const from = channels[c];
+    for (let i = 0; i < length; i += 1) to[i] = (from?.[i] ?? 0) * gain;
+  }
+  return copy;
+}
 
 function reversed(buffer: AudioBuffer, ctx: AudioContext) {
   const copy = ctx.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
@@ -145,15 +239,19 @@ function startWhine() {
   whineFilter.frequency.value = 22000;
   whineFilter.Q.value = 0.7;
 
+  // Flattened first: the raw recording swells and dies across its 1.87
+  // seconds, and looping that is what made the whine pulse.
+  const bed = steady(buffer, context);
+
   whine = context.createBufferSource();
-  whine.buffer = buffer;
+  whine.buffer = bed;
   whine.loop = true;
   whine.connect(whineGain);
   whineGain.connect(whineFilter);
 
-  // The loop is seamless forwards, so it is seamless backwards too.
+  // A rise reversed is a fall, and a flat bed reversed is still flat.
   dump = context.createBufferSource();
-  dump.buffer = reversed(buffer, context);
+  dump.buffer = reversed(bed, context);
   dump.loop = true;
   dump.connect(dumpGain);
   dumpGain.connect(whineFilter);
@@ -168,8 +266,15 @@ function applyCharge() {
   if (!context || !whine || !whineGain || !dump || !dumpGain || !whineFilter) return;
   const now = context.currentTime;
 
-  // Eased in, so the noise floor of a drifting pointer stays silent.
-  const level = Math.pow(charge, 1.6) * 0.16;
+  /*
+   * Eased in, so the noise floor of a drifting pointer stays silent.
+   *
+   * Halved from 0.16. A capacitor winding is a background noise you notice
+   * rather than a sound that asks for attention, and at full charge this sat
+   * on top of everything on a page whose subject is photographs. The curve is
+   * unchanged -- this is level, not shape, so the rise still tracks the wind.
+   */
+  const level = Math.pow(charge, 1.6) * 0.08;
 
   /*
    * Winding and draining are the same recording read in opposite directions,

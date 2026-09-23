@@ -45,6 +45,8 @@ uniform float uTilt;          // -1 looking up at it, 1 looking down at it
 uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
+uniform float uGrimeFloor;  // tunable
+uniform float uSideReach;   // tunable
 uniform float uSheen;       // tunable
 uniform float uSheenReach;  // tunable
 uniform float uArris;       // tunable
@@ -204,6 +206,27 @@ void main() {
   float direct = 1.0 / (1.0 + (dl * dl) / 3600.0);
   float spill = exp(-dl / 280.0);
   float reach = direct + spill * 0.11;
+
+  /*
+   * ---- Grazing reach ----
+   *
+   * The side faces hold their highlight far longer than the flat face does,
+   * and the falloff they ride has to say so.
+   *
+   * Fresnel at near-normal incidence is a tight lobe: the face only throws the
+   * source back at you when the geometry lines up, so its specular dies
+   * quickly as the light moves off. At grazing incidence reflectance is close
+   * to 1 across a wide spread of angles -- which is why a pane of glass seen
+   * edge-on is a mirror at almost any angle, and why the last thing you see as
+   * a light leaves a sheet of glass is its edges still lit.
+   *
+   * The sides were riding the direct term, which is half strength at 60px and
+   * 2% by 400px. That is the face's lobe, and on the sides it made the edges
+   * go out at the same moment the face did. Weighted toward the broad term,
+   * they keep about eight times the reach at 400px for the same brightness
+   * directly under the light.
+   */
+  float grazing = direct * 0.3 + spill * uSideReach;
   float ambient = direct + spill * 0.14;
   /*
    * Grime rides the BROAD falloff, not the core.
@@ -233,8 +256,24 @@ void main() {
   // ---- The surface ----
   vec3 surf = surfaceAt((frag - uRect.xy) / 340.0, uSeed) * uHasSurface;
   float handled = 0.35 + 0.95 * surf.b;
-  float glint = surf.r * 2.6 * handled;
-  float smear = surf.g * 0.85 * handled;
+
+  /*
+   * Marks, not a film.
+   *
+   * These were the raw texture values scaled, and the map has signal almost
+   * everywhere -- so every pixel of every pane carried a little something and
+   * the whole panel read as dusty rather than as glass somebody had touched.
+   * A wiped pane is CLEAR across most of its face and dirty in specific
+   * places.
+   *
+   * smoothstep is the clarity control: everything below uGrimeFloor goes to
+   * zero and stays there, which is what opens the pane back up, while what is
+   * above it survives at close to full strength. Raising the floor removes
+   * marks rather than dimming them, which is the difference between cleaning
+   * glass and looking at it in worse light.
+   */
+  float glint = smoothstep(uGrimeFloor, uGrimeFloor + 0.42, surf.r) * 3.4 * handled;
+  float smear = smoothstep(uGrimeFloor * 0.85, uGrimeFloor * 0.85 + 0.5, surf.g) * 1.25 * handled;
 
   // ---- The lit arris ----
   float ad = abs(d);
@@ -336,7 +375,7 @@ void main() {
    * highlight along the entire band instead of putting it where the source is.
    */
   float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
-  rim += vec3(sideGlare) * 11.0 * direct * edgeFacing;
+  rim += vec3(sideGlare) * 11.0 * grazing * edgeFacing;
   rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 5.0 * direct;
 
   /*
@@ -397,14 +436,29 @@ void main() {
    * The smears carry most of it now rather than the specks: a wiped pane is
    * mostly broad films with a few bright points in them, not an even dusting.
    */
-  face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks));
+  /*
+   * The grime is NOT drawn here any more.
+   *
+   * This canvas is fixed to the viewport above all content, so anything it
+   * paints inside a pane's footprint lands on top of whatever is standing in
+   * that footprint -- the photographs and the copy, which sit ON the glass.
+   * Marks on a surface cannot be in front of the things resting on it, and no
+   * amount of weighting fixes that; it is the wrong layer.
+   *
+   * It moved to '.glass__grime', a span inside each pane at a negative
+   * z-index, where the document does the layering. See styles.css.
+   *
+   * 'smear' and 'glint' stay because the specular below still reads them: a
+   * mark catches the tight reflection of the source differently from clean
+   * glass, and that IS this pass's job.
+   */
 
   /*
    * And some of it shows without the light raking it at all, because grime
    * scatters whatever is passing through the pane, not only what grazes it.
    * Small, but it stops the surface vanishing entirely between sweeps.
    */
-  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2));
+
 
   /*
    * ---- The reflected source ----

@@ -6,6 +6,8 @@ import { Instagram, Mail, MapPin, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { reportWriteError } from "@/lib/form-errors";
+import { safeHref } from "@/lib/safe-content";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -72,10 +74,15 @@ function Contact() {
       toast.success("Message sent", { description: "Thank you — I’ll reply personally." });
       form.reset();
     },
-    onError: () =>
-      toast.error("That didn’t send", {
-        description: "Please try again, or email the studio directly.",
-      }),
+    /*
+     * The throttle raises its own message, and it is the useful one.
+     *
+     * This said "please try again", which will fail identically until the
+     * window rolls. `reportWriteError` exists to surface what the database
+     * actually said and the other inquiry form on the site already used it, so
+     * the two behaved differently for the same error.
+     */
+    onError: (error) => reportWriteError(error, "That didn’t send"),
   });
 
   return (
@@ -125,7 +132,7 @@ function Contact() {
                 <Instagram className="size-5 text-primary" />
                 <div>
                   <p className="text-xs uppercase tracking-widest text-muted-foreground">Social</p>
-                  <a className="mt-2 block" href={settings["instagram_url"]}>
+                  <a className="mt-2 block" href={safeHref(settings["instagram_url"])}>
                     Instagram
                   </a>
                 </div>

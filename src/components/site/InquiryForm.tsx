@@ -87,31 +87,52 @@ export function InquiryForm({ kind, successNote }: { kind: string; successNote: 
       <div className="grid gap-6 sm:grid-cols-2">
         <div>
           <Label htmlFor={`${kind}-name`}>Your name</Label>
-          <Input id={`${kind}-name`} className={field} autoComplete="name" {...register("name")} />
+          <Input
+            id={`${kind}-name`}
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby={errors.name ? `${kind}-name-error` : undefined}
+            className={field}
+            autoComplete="name"
+            {...register("name")}
+          />
           {errors.name ? (
-            <p className="mt-2 text-sm text-destructive">{errors.name.message}</p>
+            <p id={`${kind}-name-error`} role="alert" className="mt-2 text-sm text-destructive">
+              {errors.name.message}
+            </p>
           ) : null}
         </div>
         <div>
           <Label htmlFor={`${kind}-email`}>Email</Label>
           <Input
             id={`${kind}-email`}
+            aria-invalid={errors.email ? true : undefined}
+            aria-describedby={errors.email ? `${kind}-email-error` : undefined}
             type="email"
             className={field}
             autoComplete="email"
             {...register("email")}
           />
           {errors.email ? (
-            <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
+            <p id={`${kind}-email-error`} role="alert" className="mt-2 text-sm text-destructive">
+              {errors.email.message}
+            </p>
           ) : null}
         </div>
       </div>
 
       <div>
         <Label htmlFor={`${kind}-org`}>Company, brand or organisation</Label>
-        <Input id={`${kind}-org`} className={field} {...register("organisation")} />
+        <Input
+          id={`${kind}-org`}
+          aria-invalid={errors.organisation ? true : undefined}
+          aria-describedby={errors.organisation ? `${kind}-org-error` : undefined}
+          className={field}
+          {...register("organisation")}
+        />
         {errors.organisation ? (
-          <p className="mt-2 text-sm text-destructive">{errors.organisation.message}</p>
+          <p id={`${kind}-org-error`} role="alert" className="mt-2 text-sm text-destructive">
+            {errors.organisation.message}
+          </p>
         ) : null}
       </div>
 
@@ -119,28 +140,49 @@ export function InquiryForm({ kind, successNote }: { kind: string; successNote: 
         <Label htmlFor={`${kind}-usage`}>Where would the images be used?</Label>
         <Input
           id={`${kind}-usage`}
+          aria-invalid={errors.usage ? true : undefined}
+          aria-describedby={errors.usage ? `${kind}-usage-error` : undefined}
           className={field}
           placeholder="Product listing, campaign, social, print…"
           {...register("usage")}
         />
         {errors.usage ? (
-          <p className="mt-2 text-sm text-destructive">{errors.usage.message}</p>
+          <p id={`${kind}-usage-error`} role="alert" className="mt-2 text-sm text-destructive">
+            {errors.usage.message}
+          </p>
         ) : null}
       </div>
 
       <div>
         <Label htmlFor={`${kind}-region`}>City or region</Label>
-        <Input id={`${kind}-region`} className={field} {...register("region")} />
+        <Input
+          id={`${kind}-region`}
+          aria-invalid={errors.region ? true : undefined}
+          aria-describedby={errors.region ? `${kind}-region-error` : undefined}
+          className={field}
+          {...register("region")}
+        />
         {errors.region ? (
-          <p className="mt-2 text-sm text-destructive">{errors.region.message}</p>
+          <p id={`${kind}-region-error`} role="alert" className="mt-2 text-sm text-destructive">
+            {errors.region.message}
+          </p>
         ) : null}
       </div>
 
       <div>
         <Label htmlFor={`${kind}-message`}>Tell me about the shoot</Label>
-        <Textarea id={`${kind}-message`} rows={5} className="mt-2" {...register("message")} />
+        <Textarea
+          id={`${kind}-message`}
+          aria-invalid={errors.message ? true : undefined}
+          aria-describedby={errors.message ? `${kind}-message-error` : undefined}
+          rows={5}
+          className="mt-2"
+          {...register("message")}
+        />
         {errors.message ? (
-          <p className="mt-2 text-sm text-destructive">{errors.message.message}</p>
+          <p id={`${kind}-message-error`} role="alert" className="mt-2 text-sm text-destructive">
+            {errors.message.message}
+          </p>
         ) : null}
       </div>
 

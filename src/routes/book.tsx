@@ -4,6 +4,7 @@ import { BookingEmbed } from "@/components/site/BookingEmbed";
 import { PageIntro } from "@/components/site/PageIntro";
 import { copy, pageCopyQuery, settingsQuery } from "@/lib/content";
 import { Button } from "@/components/ui/button";
+import { safeHref } from "@/lib/safe-content";
 
 export const Route = createFileRoute("/book")({
   // Server-rendered so the page is indexable rather than a skeleton.
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/book")({
 function Book() {
   const { data: text, isPending } = useQuery(pageCopyQuery("book"));
   const { data: settings } = useQuery(settingsQuery);
-  const bookingUrl = settings?.["booking_url"];
+  const bookingUrl = safeHref(settings?.["booking_url"]);
   return (
     <>
       <PageIntro

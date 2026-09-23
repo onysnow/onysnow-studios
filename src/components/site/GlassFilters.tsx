@@ -1,5 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { t } from "@/lib/tuning";
+import { bevelFilterSnapshot, subscribeBevelFilters, type BevelEntry } from "@/lib/bevel-filters";
+
+/** Stable empty array: the server renders no computed maps. */
+const EMPTY_BEVELS: BevelEntry[] = [];
 /**
  * The SVG filter the glass rim refracts through.
  *
@@ -50,60 +54,38 @@ const DISPLACEMENT_MAP =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAACACAIAAAC5jr9pAAAAWUlEQVR42u3XuwkAIAxF0SgO7lrOZG8h/hbwCQExFi/tIalvXJyynSAJQUZQEFQEDUFXw0Aw7cCL3Np4cYpAIBAIBALhezDNKNOyPPSuPp2butuL+jcA38QCkx8fvd8YKf8AAAAASUVORK5CYII=";
 
 /**
- * Peak displacement, in pixels.
+ * The fallback map's displacement, in pixels.
  *
- * `feDisplacementMap`'s scale converts the map's normalised [-1, 1] back into
- * real pixels, so this is literally how far the outermost row of the bevel
- * drags the backdrop. Matched to the strip height: bending it further than the
- * bevel is deep would pull in content from outside the glass.
+ * Only the baked map still needs a figure chosen by hand. Every computed map
+ * carries its own, because Snell gives the bend in real pixels once the glass
+ * has a thickness and an index -- see lib/bevel-map.ts.
  */
-const MAX_DISPLACEMENT = 40;
+const FALLBACK_DISPLACEMENT = 40;
 
-export function GlassFilters() {
-  /*
-   * The displacement scale is an SVG attribute, not a CSS property, so the
-   * panel cannot reach it with a custom property. Written directly instead,
-   * and only when it actually differs -- setting an attribute every frame
-   * invalidates the filter and re-rasterises every pane behind it.
-   */
-  const maps = useRef<SVGFEDisplacementMapElement[]>([]);
-  useEffect(() => {
-    let frame = 0;
-    let last = -1;
-    const tick = () => {
-      frame = requestAnimationFrame(tick);
-      const want = t("displacement");
-      if (want === last) return;
-      last = want;
-      const mult = [0.94, 1, 1.07];
-      maps.current.forEach((m, i) => m?.setAttribute("scale", String(want * (mult[i] ?? 1))));
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
+/**
+ * One refraction filter. The only thing that differs between panes is the map.
+ *
+ * Everything below -- the waviness, the three-scale dispersion, the recombine
+ * -- is identical for every geometry, so it is written once here and emitted
+ * per map rather than duplicated per pane.
+ */
+function RefractionFilter({
+  id,
+  href,
+  scale,
+}: {
+  id: string;
+  href: string;
+  /** Snell's answer for this geometry, in CSS pixels. */
+  scale: number;
+}) {
   return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      width="0"
-      height="0"
-      style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
-    >
-      <defs>
-        <filter
-          id="glass-refraction"
-          colorInterpolationFilters="sRGB"
-          x="-20%"
-          y="-20%"
-          width="140%"
-          height="140%"
-        >
-          {/* The lens profile: neutral through the middle, bending at the rim. */}
-          <feImage href={DISPLACEMENT_MAP} preserveAspectRatio="none" result="lens" />
+    <filter id={id} colorInterpolationFilters="sRGB" x="-20%" y="-20%" width="140%" height="140%">
+      {/* The lens profile: neutral through the middle, bending at the rim. */}
+      <feImage href={href} preserveAspectRatio="none" result="lens" />
 
-          {/* Imperfection, at low amplitude — a flawless edge looks synthetic. */}
-          {/*
+      {/* Imperfection, at low amplitude — a flawless edge looks synthetic. */}
+      {/*
             Waviness, and it is not decoration.
  
             Float glass is not optically flat. It is poured, and it cools with
@@ -116,25 +98,25 @@ export function GlassFilters() {
             This is what gives the BODY of the pane its distortion. The map
             underneath it handles the edges.
           */}
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency="0.004 0.009"
-            numOctaves={2}
-            seed={9}
-            result="flaw"
-          />
-          <feComposite
-            in="flaw"
-            in2="lens"
-            operator="arithmetic"
-            k1="0"
-            k2="0.16"
-            k3="0.84"
-            k4="0"
-            result="profile"
-          />
+      <feTurbulence
+        type="fractalNoise"
+        baseFrequency="0.004 0.009"
+        numOctaves={2}
+        seed={9}
+        result="flaw"
+      />
+      <feComposite
+        in="flaw"
+        in2="lens"
+        operator="arithmetic"
+        k1="0"
+        k2="0.16"
+        k3="0.84"
+        k4="0"
+        result="profile"
+      />
 
-          {/*
+      {/*
             Three displacements, not one — the channels are bent by slightly
             different amounts rather than bent together and then shoved apart.
 
@@ -146,55 +128,140 @@ export function GlassFilters() {
             where the glass is flat and grows with the bending, which is
             exactly what falls out of scaling the same map per channel.
           */}
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="profile"
-            scale={MAX_DISPLACEMENT * 0.94}
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="bentR"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="profile"
-            scale={MAX_DISPLACEMENT}
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="bentG"
-          />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="profile"
-            scale={MAX_DISPLACEMENT * 1.07}
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="bentB"
-          />
+      <feDisplacementMap
+        in="SourceGraphic"
+        in2="profile"
+        scale={scale * 0.94}
+        xChannelSelector="R"
+        yChannelSelector="G"
+        result="bentR"
+      />
+      <feDisplacementMap
+        in="SourceGraphic"
+        in2="profile"
+        scale={scale}
+        xChannelSelector="R"
+        yChannelSelector="G"
+        result="bentG"
+      />
+      <feDisplacementMap
+        in="SourceGraphic"
+        in2="profile"
+        scale={scale * 1.07}
+        xChannelSelector="R"
+        yChannelSelector="G"
+        result="bentB"
+      />
 
-          {/* Recombined: red from the least-bent pass, blue from the most. */}
-          <feColorMatrix
-            in="bentR"
-            type="matrix"
-            values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
-            result="onlyR"
-          />
-          <feColorMatrix
-            in="bentG"
-            type="matrix"
-            values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
-            result="onlyG"
-          />
-          <feColorMatrix
-            in="bentB"
-            type="matrix"
-            values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
-            result="onlyB"
-          />
-          <feBlend in="onlyR" in2="onlyG" mode="screen" result="rg" />
-          <feBlend in="rg" in2="onlyB" mode="screen" result="dispersed" />
+      {/* Recombined: red from the least-bent pass, blue from the most. */}
+      <feColorMatrix
+        in="bentR"
+        type="matrix"
+        values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+        result="onlyR"
+      />
+      <feColorMatrix
+        in="bentG"
+        type="matrix"
+        values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+        result="onlyG"
+      />
+      <feColorMatrix
+        in="bentB"
+        type="matrix"
+        values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
+        result="onlyB"
+      />
+      <feBlend in="onlyR" in2="onlyG" mode="screen" result="rg" />
+      <feBlend in="rg" in2="onlyB" mode="screen" result="dispersed" />
 
-          <feColorMatrix in="dispersed" type="saturate" values="1.12" />
-        </filter>
+      <feColorMatrix in="dispersed" type="saturate" values="1.12" />
+    </filter>
+  );
+}
+
+export function GlassFilters() {
+  /*
+   * The computed maps, one per pane geometry on the page. `useSyncExternalStore`
+   * because panes register as they mount and as they resize, from outside
+   * React -- the alternative is a context every `Glass` has to thread through.
+   */
+  const bevels = useSyncExternalStore(
+    subscribeBevelFilters,
+    bevelFilterSnapshot,
+    () => EMPTY_BEVELS,
+  );
+  /*
+   * The displacement scale is an SVG attribute, not a CSS property, so the
+   * panel cannot reach it with a custom property. Written directly instead,
+   * and only when it actually differs -- setting an attribute every frame
+   * invalidates the filter and re-rasterises every pane behind it.
+   */
+  const host = useRef<SVGSVGElement>(null);
+  useEffect(() => {
+    let frame = 0;
+    let last = -1;
+    let seen = -1;
+    /*
+     * Queried rather than held in refs.
+     *
+     * There is no longer one filter: there is one per pane geometry, created
+     * as panes mount and resize, so a fixed array of three refs cannot reach
+     * them. The scale within each filter still runs 0.94 / 1.00 / 1.07 -- the
+     * same map read three times at slightly different strengths, which is what
+     * makes the dispersion follow the surface normal instead of a fixed axis.
+     */
+    const mult = [0.94, 1, 1.07];
+    const tick = () => {
+      frame = requestAnimationFrame(tick);
+      const want = t("displacement");
+      // Also when a pane has just added a filter: a new one renders with its
+      // own scale but not the knob's multiplier, and an early return on the
+      // knob alone left it uncorrected.
+      const count = host.current?.querySelectorAll("filter").length ?? 0;
+      if (want === last && count === seen) return;
+      last = want;
+      seen = count;
+      /*
+       * The physical scale comes from the registry rather than off the DOM.
+       *
+       * Each map encodes its offsets as a fraction of its own largest one, and
+       * Snell gives that largest one in real pixels -- so the scale belongs to
+       * the glass, not to a number somebody picked, and the knob multiplies it.
+       * Reading it back from a `data-` attribute meant it had to survive React
+       * putting it on an SVG element, which it did not; the registry already
+       * knows it.
+       */
+      const physical = new Map(bevelFilterSnapshot().map((b) => [b.id, b.scale]));
+      host.current?.querySelectorAll("filter").forEach((filter) => {
+        const base = physical.get(filter.id) ?? FALLBACK_DISPLACEMENT;
+        filter.querySelectorAll("feDisplacementMap").forEach((node, i) => {
+          node.setAttribute("scale", String(base * want * (mult[i] ?? 1)));
+        });
+      });
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  return (
+    <svg
+      ref={host}
+      aria-hidden="true"
+      focusable="false"
+      width="0"
+      height="0"
+      style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
+    >
+      <defs>
+        <RefractionFilter
+          id="glass-refraction"
+          href={DISPLACEMENT_MAP}
+          scale={FALLBACK_DISPLACEMENT}
+        />
+        {bevels.map((b) => (
+          <RefractionFilter key={b.id} id={b.id} href={b.href} scale={b.scale} />
+        ))}
       </defs>
     </svg>
   );

@@ -1,6 +1,7 @@
 import { Facebook, Instagram, Mail, Music2, Twitter, Youtube, Palette } from "lucide-react";
 import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";
+import { safeHref } from "@/lib/safe-content";
 
 type Platform = {
   key: string;
@@ -34,7 +35,12 @@ export function resolveSocialLinks(settings: Record<string, string> | undefined)
   return PLATFORMS.map((p) => {
     const raw = settings?.[p.key]?.trim();
     if (!raw) return null;
-    return { ...p, href: p.mailto ? `mailto:${raw}` : raw };
+    // These come from the settings table and go straight into `href`, where a
+    // `javascript:` URL is one click from running as the visitor. A link whose
+    // scheme doesn't survive is dropped rather than rendered dead.
+    const href = safeHref(p.mailto ? `mailto:${raw}` : raw);
+    if (!href) return null;
+    return { ...p, href };
   }).filter((p): p is SocialLink => p !== null);
 }
 

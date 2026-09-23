@@ -17,6 +17,14 @@ export type PreparedImage = {
 const MAX_EDGE = 2560;
 const QUALITY = 0.82;
 
+/** The real pixel width of an encoded image. */
+async function widthOf(file: Blob): Promise<number> {
+  const bitmap = await createImageBitmap(file);
+  const width = bitmap.width;
+  bitmap.close();
+  return width;
+}
+
 async function loadBitmap(file: Blob): Promise<ImageBitmap> {
   return createImageBitmap(file);
 }
@@ -52,7 +60,15 @@ export async function prepareImage(input: File): Promise<PreparedImage> {
   const blurDataUrl = blurPlaceholder(bitmap);
   const stem = input.name.replace(/\.[^.]+$/, "") || "photo";
 
-  // Only generate widths smaller than the image itself — upscaling helps nobody.
+  /*
+   * Only widths smaller than the image itself — upscaling helps nobody.
+   *
+   * `bitmap` is the already-resized base, so its long edge is at most
+   * MAX_EDGE. That is why the 2560 entry never produced anything: for a
+   * landscape photograph the width IS 2560 and `2560 < 2560` is false. The
+   * lightbox therefore topped out at a 1280w candidate on any display, and
+   * photo-url.ts advertised a size that did not exist.
+   */
   const targets = VARIANT_WIDTHS.filter((w) => w < bitmap.width);
   const variants: PreparedVariant[] = [];
   for (const width of targets) {
@@ -62,9 +78,20 @@ export async function prepareImage(input: File): Promise<PreparedImage> {
       fileType: "image/webp",
       useWebWorker: true,
     });
+
+    /*
+     * Named by what came out, not by what was asked for.
+     *
+     * `maxWidthOrHeight` constrains the LONGER edge, so a 2:3 portrait asked
+     * for 1280 comes back 853 wide. Labelling that file `1280w` tells the
+     * browser it is half again as wide as it is, so it picks a candidate too
+     * small for the slot — a visible upscale on a photography site. Measuring
+     * the result costs one decode and makes the descriptor true.
+     */
+    const actual = await widthOf(resized).catch(() => width);
     variants.push({
-      width,
-      file: new File([resized], `${stem}-${width}.webp`, { type: "image/webp" }),
+      width: actual,
+      file: new File([resized], `${stem}-${actual}.webp`, { type: "image/webp" }),
     });
   }
 
@@ -121,14 +148,57 @@ export async function uploadPhoto(input: File, categoryId: string | null, sortOr
     height: prepared.height,
     blur_data_url: prepared.blurDataUrl,
     sources,
-    alt: "",
+    /*
+     * Not published, and not silently without a description.
+     *
+     * Every upload used to land `alt: ""` AND `published: true`, so the
+     * default outcome was a photograph live on the site that a screen reader
+     * announces as nothing at all. In the gallery that is a row of buttons
+     * reading "button, button, button"; in the footer strip it is a link with
+     * no accessible name whatsoever.
+     *
+     * The alt is seeded from the filename, which is not a description but is
+     * at least something, and is the same thing the title already did. The row
+     * stays unpublished until the studio has looked at it, which is a better
+     * default for a photography site regardless of accessibility — a
+     * photograph should reach the public because someone chose it.
+     */
+    alt: describeFrom(input.name),
     title: input.name.replace(/\.[^.]+$/, ""),
     category_id: categoryId,
     sort_order: sortOrder,
-    published: true,
+    published: false,
   });
   if (error) throw error;
   return path;
+}
+
+/**
+ * A first pass at a description, from the filename.
+ *
+ * `DSC_0413.jpg` yields nothing worth saying, so it yields nothing; a name
+ * somebody actually typed usually does. Either way the studio is expected to
+ * replace it — this only exists so the failure mode is a weak description
+ * rather than none.
+ */
+export function describeFrom(filename: string): string {
+  const stem = filename
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  /*
+   * Camera output: a prefix and some counters, which describes nothing.
+   *
+   * The separators are already collapsed to spaces by this point, so
+   * `PXL_20260101_120000` arrives as `PXL 20260101 120000` — the pattern has
+   * to allow several number groups, not one.
+   */
+  if (/^(dsc|dscf|img|imgp|p|pxl|gopr|mvi|photo|image)[\s\d-]*$/i.test(stem)) return "";
+  if (/^[\s\d-]+$/.test(stem)) return "";
+
+  return stem.length > 2 ? stem.charAt(0).toUpperCase() + stem.slice(1) : "";
 }
 
 export async function deletePhoto(
@@ -137,7 +207,15 @@ export async function deletePhoto(
   sources?: Record<string, string> | null,
 ) {
   const paths = [storagePath, ...Object.values(sources ?? {})].filter(Boolean);
-  await supabase.storage.from("photos").remove(paths);
+
+  // The row is what the site reads, so its delete is the one that decides
+  // whether this succeeded. A storage failure leaves orphaned objects, which is
+  // worth knowing about but is not worth keeping the photograph on the site
+  // over -- so it is reported rather than thrown.
+  const removed = await supabase.storage.from("photos").remove(paths);
+
   const { error } = await supabase.from("photos").delete().eq("id", id);
   if (error) throw error;
+
+  return { orphanedFiles: removed.error ? paths.length : 0 };
 }

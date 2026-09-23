@@ -265,7 +265,17 @@ export function FlareOverlay({
         }
       }
     };
-    frame = requestAnimationFrame(tick);
+    /*
+     * No clips, no loop.
+     *
+     * `ACTIVE` is empty by design — the footage is switched off — and this
+     * still armed a 60Hz callback for the life of every page, doing nothing.
+     * A tab with a live rAF loop never lets the browser idle its compositor,
+     * so it was paid for in battery on a page that was visually static. This
+     * is the cost lib/gl-loop.ts exists to avoid; the shaders adopted it and
+     * this never did.
+     */
+    if (ACTIVE.length > 0) frame = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(frame);

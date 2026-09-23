@@ -7,15 +7,22 @@ import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "./cursor-light-shade
  * including inside a comment, which is where it always happens -- terminates
  * the string early and turns the rest of the file into a syntax error.
  *
- * This has now happened six times in this project. It is invisible on review
+ * This has now happened EIGHT times in this project. It is invisible on review
  * because a backtick around an identifier is the natural way to write prose
  * about code, and the failure surfaces as a TypeScript parse error tens of
  * lines away from the cause.
  *
  * These tests do not check the shaders compile on a GPU -- CI has none. They
  * check the things that can be checked cheaply and that have actually broken:
- * the sources exist, they are complete, and every uniform the source reads is
- * declared.
+ * the sources exist, they are complete, every uniform the source reads is
+ * declared, and -- read from the file as TEXT rather than imported -- that no
+ * stray backtick has got into one in the first place.
+ *
+ * That last one matters because of how this fails. Importing a module whose
+ * template literal was terminated early does not give you a useful error; it
+ * gives you a parse error at some unrelated line, and every other test in the
+ * file disappears with it. Reading the source as text cannot be broken by its
+ * own contents, so it can say what actually happened.
  */
 
 const SOURCES = {

@@ -125,6 +125,8 @@ export function GlassLight({
     const uHasSurface = U("uHasSurface");
     const uGrimeRake = U("uGrimeRake");
     const uGrimeSpecks = U("uGrimeSpecks");
+    const uGrimeFloor = U("uGrimeFloor");
+    const uSideReach = U("uSideReach");
     const uSheen = U("uSheen");
     const uSheenReach = U("uSheenReach");
     const uArris = U("uArris");
@@ -247,6 +249,8 @@ export function GlassLight({
       gl.uniform1f(uCharge, charge);
       gl.uniform1f(uGrimeRake, t("grimeRake"));
       gl.uniform1f(uGrimeSpecks, t("grimeSpecks"));
+      gl.uniform1f(uGrimeFloor, t("grimeFloor"));
+      gl.uniform1f(uSideReach, t("sideReach"));
       gl.uniform1f(uSheen, t("sheen"));
       gl.uniform1f(uSheenReach, t("sheenFalloff"));
       gl.uniform1f(uArris, t("arris"));

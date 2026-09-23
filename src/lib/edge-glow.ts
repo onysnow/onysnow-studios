@@ -15,6 +15,17 @@
  */
 const panels = new Set<HTMLElement>();
 
+/**
+ * Surfaces that only want to know where the light is standing on them.
+ *
+ * Photographs, mostly. They are not glass and get none of the bevel, the
+ * reflection or the grime -- they are photographic paper resting ON the pane,
+ * with a surface of their own -- but what decides where their gloss picks up
+ * is the same light, so they are measured in the same pass rather than by a
+ * second loop that could drift out of step with it.
+ */
+const litSurfaces = new Set<HTMLElement>();
+
 /** How far outside a panel the cursor can be and still light its edge. */
 const REACH = 320;
 
@@ -30,6 +41,9 @@ let pointerY = -9999;
  * to reach them would put the gesture in the layout's vocabulary for no gain.
  * One pointer listener already runs here; this is the same reading.
  */
+import { t } from "./tuning";
+import { castShadow } from "./cast-shadow";
+
 export const lightState = { x: -9999, y: -9999, charge: 0 };
 
 /** Called by whoever owns the shutter gesture. */
@@ -276,6 +290,19 @@ function measure(el: HTMLElement) {
    */
   el.style.setProperty("--pane-x", `${Math.round(r.left)}px`);
   el.style.setProperty("--pane-y", `${Math.round(r.top)}px`);
+
+  /*
+   * Where the light is standing, in the pane's own coordinates.
+   *
+   * The grime layer needs this. It is a surface effect that belongs to the
+   * pane -- under the photographs and the copy, which sit ON the glass -- so
+   * it cannot be drawn by the shared canvas the way the rest of the lighting
+   * is; that canvas is above everything on the page, which is why smears were
+   * landing on the pictures and on the text. A per-pane layer can be put in
+   * the right place in the stack, and this is what tells it where to rake.
+   */
+  el.style.setProperty("--lit-x", `${Math.round(pointerX - r.left)}px`);
+  el.style.setProperty("--lit-y", `${Math.round(pointerY - r.top)}px`);
 }
 
 function apply() {
@@ -304,7 +331,15 @@ function apply() {
   // frame is free.
   glassGeometry(now);
 
+  // Occlusion is gathered fresh each pass: it follows the light, so a value
+  // left over from the last frame would keep a pane dimmed after the thing
+  // casting it had moved out of the way.
+  for (const el of panels) el.dataset["occluders"] = "0";
   for (const el of panels) measure(el);
+  for (const el of litSurfaces) litSurface(el);
+  for (const el of panels) {
+    el.style.setProperty("--occluded", Number(el.dataset["occluders"] ?? 0).toFixed(3));
+  }
 }
 
 function onMove(event: PointerEvent) {
@@ -317,6 +352,102 @@ function onLeave() {
   pointerX = -9999;
   pointerY = -9999;
   if (!frame) frame = requestAnimationFrame(apply);
+}
+
+/**
+ * Publish `--lit-x` / `--lit-y` on an element: where the light is standing
+ * over it, in its own coordinates, plus `--lit-near` for how close it is.
+ * What the surface does with that is the stylesheet's business.
+ */
+export function registerLitSurface(el: HTMLElement) {
+  litSurfaces.add(el);
+  litSurface(el);
+  if (frame) cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(apply);
+  return () => litSurfaces.delete(el);
+}
+
+function litSurface(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return;
+
+  el.style.setProperty("--lit-x", `${Math.round(pointerX - r.left)}px`);
+  el.style.setProperty("--lit-y", `${Math.round(pointerY - r.top)}px`);
+
+  // Eased nearness, so a gloss comes up as the light approaches rather than
+  // switching on at a boundary.
+  const dx = Math.max(r.left - pointerX, 0, pointerX - r.right);
+  const dy = Math.max(r.top - pointerY, 0, pointerY - r.bottom);
+  const near = Math.max(0, 1 - Math.hypot(dx, dy) / 420);
+  el.style.setProperty("--lit-near", (near * near).toFixed(3));
+
+  /*
+   * The shadow this surface casts onto whatever it is resting on.
+   *
+   * A photograph and a line of type both sit ON the glass, a small distance
+   * above it, so a light off to one side throws them across it. Three numbers
+   * decide what that looks like, and all three are geometry rather than taste:
+   *
+   *   offset   = gap * lateral / height
+   *   penumbra = lightRadius * gap / distance
+   *   strength falls off with distance, like any real source
+   *
+   * The second one is the one everybody gets backwards, including every
+   * tutorial I have read on this: a shadow gets SHARPER as the light retreats,
+   * not softer. The sun is ninety-three million miles away and casts the
+   * crispest shadow you will ever see; move a desk lamp closer and the edges
+   * go to mush. `distance` on the bottom is what says so.
+   */
+  const centreX = r.left + r.width / 2;
+  const centreY = r.top + r.height / 2;
+  const cast = castShadow({
+    gap: t("shadowGap"),
+    height: t("shadowHeight"),
+    lightRadius: t("shadowSoftness"),
+    lateralX: centreX - pointerX,
+    lateralY: centreY - pointerY,
+  });
+
+  el.style.setProperty("--cast-x", `${cast.x.toFixed(1)}px`);
+  el.style.setProperty("--cast-y", `${cast.y.toFixed(1)}px`);
+  el.style.setProperty("--cast-blur", `${cast.blur.toFixed(1)}px`);
+
+  // Only while the light is on it, and weaker the further away it is.
+  const alpha = near * near * t("shadowStrength");
+  el.style.setProperty("--cast-alpha", alpha.toFixed(3));
+
+  /*
+   * Tell the pane underneath that something is standing on it.
+   *
+   * The two systems are not independent: a photograph throwing a shadow across
+   * the glass is also stopping that light reaching the grime under it, so the
+   * smears there should not be raked. Without this they are drawn as though
+   * the pane were bare, and you get a lit smear sitting inside a shadow.
+   *
+   * Approximate, and knowingly so: one number per pane rather than per pixel,
+   * so what it does is dim the whole rake in proportion to how much is
+   * standing in the light rather than cut a hole in exactly the right shape.
+   * Doing it properly means one canvas per pane computing the whole light
+   * field, which is a bigger change than this is worth until this one is seen
+   * to read.
+   */
+  const pane = el.closest<HTMLElement>(".glass");
+  if (pane && alpha > 0.01) {
+    const previous = Number(pane.dataset["occluders"] ?? 0);
+    pane.dataset["occluders"] = String(Math.max(previous, alpha));
+  }
+
+  /*
+   * The room reflection, offset for height.
+   *
+   * A photograph resting on the pane is a few millimetres nearer the eye than
+   * the glass is, so it sees the same room from a slightly different place --
+   * the reflection in it is shifted against the one in the pane rather than
+   * continuous with it. That offset is what makes it read as sitting ON the
+   * glass instead of being printed into it.
+   */
+  el.style.setProperty("--surface-x", `${Math.round(r.left)}px`);
+  el.style.setProperty("--surface-y", `${Math.round(r.top)}px`);
 }
 
 export function registerEdgeGlow(el: HTMLElement) {

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { ParallaxScene } from "./ParallaxScene";
 import { GlassSection } from "./GlassSection";
 import { BokehField } from "./BokehField";
-import { CastShadows } from "./CastShadows";
+import { TransmittedLight } from "./TransmittedLight";
 import type { ImgSource } from "./Img";
 
 /**
@@ -39,8 +39,11 @@ export function PhotoSection({
     >
       {/* Behind the glass, so the panel's blur is what turns these into bokeh. */}
       <BokehField />
-      {/* Between the photograph and the glass: what the pane and its contents block. */}
-      <CastShadows />
+      {/*
+        Between the photograph and the glass: the light that made it through,
+        scattered by the pane's grime and piled up at its bevel.
+      */}
+      <TransmittedLight />
       <GlassSection overlap={false}>{children}</GlassSection>
     </ParallaxScene>
   );

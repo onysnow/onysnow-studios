@@ -40,10 +40,20 @@ export const Route = createFileRoute("/journal/")({
 
 function formatDate(value: string | null) {
   if (!value) return "";
+  /*
+   * Pinned to UTC.
+   *
+   * These routes are server-rendered, and `toLocaleDateString` resolves
+   * against whichever timezone is running it — UTC in the Worker, the
+   * visitor's in the browser. A post published at 02:00Z therefore rendered as
+   * one day on the server and the day before for a US reader, which is both a
+   * hydration mismatch and simply the wrong date.
+   */
   return new Date(value).toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 

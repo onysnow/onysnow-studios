@@ -173,7 +173,15 @@ function Services() {
 
   const list = services ?? [];
   // Undecided for now, so it's a portal switch rather than a code change.
-  const showPrice = (settings?.["services_show_prices"] ?? "true").toLowerCase() === "true";
+  /*
+   * `!== "false"` rather than `=== "true"`.
+   *
+   * `site_settings.value` is TEXT NOT NULL DEFAULT '', so a row that exists
+   * with a blank value yields "" — which is not nullish, so `?? "true"` never
+   * fired and every price vanished from the page with no way to tell that
+   * from the switch being deliberately off.
+   */
+  const showPrice = (settings?.["services_show_prices"] ?? "").toLowerCase() !== "false";
 
   return (
     <>

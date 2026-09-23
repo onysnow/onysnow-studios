@@ -136,3 +136,49 @@ test("photographs are actually visible, not left behind their placeholders", asy
     expect(hidden, `loaded photographs stuck transparent on ${path}`).toEqual([]);
   }
 });
+
+test("the expensive effect layer is off on a coarse pointer", async ({ browser }) => {
+  /*
+   * The JS pieces all check `(pointer: fine)` and always did. The stylesheet
+   * checked nothing, which left the costly half running on phones: three
+   * stacked backdrop-filters per panel, six panels, over thirty animating
+   * layers behind them invalidating every blur every frame — for effects that
+   * exist to respond to a pointer the device does not have.
+   */
+  const context = await browser.newContext({
+    hasTouch: true,
+    isMobile: true,
+    viewport: { width: 390, height: 844 },
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+
+  const hidden = await page.evaluate(() =>
+    [".glass__bokeh", ".glass__refract", ".glass__grime", ".transmitted", ".photo-surface"].map(
+      (sel) => {
+        const el = document.querySelector(sel);
+        return el ? getComputedStyle(el).display : "absent";
+      },
+    ),
+  );
+  for (const display of hidden) expect(["none", "absent"]).toContain(display);
+
+  // The pane still reads as glass, just for a great deal less.
+  const pane = await page.evaluate(
+    () => getComputedStyle(document.querySelector(".glass")!).backdropFilter,
+  );
+  expect(pane).toMatch(/blur/);
+
+  await context.close();
+});
+
+test("an unknown journal slug is a real 404, not an indexable apology", async ({ request }) => {
+  /*
+   * This used to return 200 with a <title> and og:title built from the slug
+   * itself, so any made-up URL was an indexable page on this domain carrying
+   * whatever text the URL contained.
+   */
+  const response = await request.get("/journal/no-such-post-anywhere");
+  expect(response.status()).toBe(404);
+});
