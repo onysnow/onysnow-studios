@@ -54,14 +54,13 @@ const DISPLACEMENT_MAP =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAACACAIAAAC5jr9pAAAAWUlEQVR42u3XuwkAIAxF0SgO7lrOZG8h/hbwCQExFi/tIalvXJyynSAJQUZQEFQEDUFXw0Aw7cCL3Np4cYpAIBAIBALhezDNKNOyPPSuPp2butuL+jcA38QCkx8fvd8YKf8AAAAASUVORK5CYII=";
 
 /**
- * Peak displacement, in pixels.
+ * The fallback map's displacement, in pixels.
  *
- * `feDisplacementMap`'s scale converts the map's normalised [-1, 1] back into
- * real pixels, so this is literally how far the outermost row of the bevel
- * drags the backdrop. Matched to the strip height: bending it further than the
- * bevel is deep would pull in content from outside the glass.
+ * Only the baked map still needs a figure chosen by hand. Every computed map
+ * carries its own, because Snell gives the bend in real pixels once the glass
+ * has a thickness and an index -- see lib/bevel-map.ts.
  */
-const MAX_DISPLACEMENT = 40;
+const FALLBACK_DISPLACEMENT = 40;
 
 /**
  * One refraction filter. The only thing that differs between panes is the map.
@@ -70,7 +69,16 @@ const MAX_DISPLACEMENT = 40;
  * -- is identical for every geometry, so it is written once here and emitted
  * per map rather than duplicated per pane.
  */
-function RefractionFilter({ id, href }: { id: string; href: string }) {
+function RefractionFilter({
+  id,
+  href,
+  scale,
+}: {
+  id: string;
+  href: string;
+  /** Snell's answer for this geometry, in CSS pixels. */
+  scale: number;
+}) {
   return (
     <filter id={id} colorInterpolationFilters="sRGB" x="-20%" y="-20%" width="140%" height="140%">
       {/* The lens profile: neutral through the middle, bending at the rim. */}
@@ -123,7 +131,7 @@ function RefractionFilter({ id, href }: { id: string; href: string }) {
       <feDisplacementMap
         in="SourceGraphic"
         in2="profile"
-        scale={MAX_DISPLACEMENT * 0.94}
+        scale={scale * 0.94}
         xChannelSelector="R"
         yChannelSelector="G"
         result="bentR"
@@ -131,7 +139,7 @@ function RefractionFilter({ id, href }: { id: string; href: string }) {
       <feDisplacementMap
         in="SourceGraphic"
         in2="profile"
-        scale={MAX_DISPLACEMENT}
+        scale={scale}
         xChannelSelector="R"
         yChannelSelector="G"
         result="bentG"
@@ -139,7 +147,7 @@ function RefractionFilter({ id, href }: { id: string; href: string }) {
       <feDisplacementMap
         in="SourceGraphic"
         in2="profile"
-        scale={MAX_DISPLACEMENT * 1.07}
+        scale={scale * 1.07}
         xChannelSelector="R"
         yChannelSelector="G"
         result="bentB"
@@ -193,6 +201,7 @@ export function GlassFilters() {
   useEffect(() => {
     let frame = 0;
     let last = -1;
+    let seen = -1;
     /*
      * Queried rather than held in refs.
      *
@@ -206,10 +215,30 @@ export function GlassFilters() {
     const tick = () => {
       frame = requestAnimationFrame(tick);
       const want = t("displacement");
-      if (want === last) return;
+      // Also when a pane has just added a filter: a new one renders with its
+      // own scale but not the knob's multiplier, and an early return on the
+      // knob alone left it uncorrected.
+      const count = host.current?.querySelectorAll("filter").length ?? 0;
+      if (want === last && count === seen) return;
       last = want;
-      const nodes = host.current?.querySelectorAll("feDisplacementMap");
-      nodes?.forEach((node, i) => node.setAttribute("scale", String(want * (mult[i % 3] ?? 1))));
+      seen = count;
+      /*
+       * The physical scale comes from the registry rather than off the DOM.
+       *
+       * Each map encodes its offsets as a fraction of its own largest one, and
+       * Snell gives that largest one in real pixels -- so the scale belongs to
+       * the glass, not to a number somebody picked, and the knob multiplies it.
+       * Reading it back from a `data-` attribute meant it had to survive React
+       * putting it on an SVG element, which it did not; the registry already
+       * knows it.
+       */
+      const physical = new Map(bevelFilterSnapshot().map((b) => [b.id, b.scale]));
+      host.current?.querySelectorAll("filter").forEach((filter) => {
+        const base = physical.get(filter.id) ?? FALLBACK_DISPLACEMENT;
+        filter.querySelectorAll("feDisplacementMap").forEach((node, i) => {
+          node.setAttribute("scale", String(base * want * (mult[i] ?? 1)));
+        });
+      });
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
@@ -225,9 +254,13 @@ export function GlassFilters() {
       style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
     >
       <defs>
-        <RefractionFilter id="glass-refraction" href={DISPLACEMENT_MAP} />
+        <RefractionFilter
+          id="glass-refraction"
+          href={DISPLACEMENT_MAP}
+          scale={FALLBACK_DISPLACEMENT}
+        />
         {bevels.map((b) => (
-          <RefractionFilter key={b.id} id={b.id} href={b.href} />
+          <RefractionFilter key={b.id} id={b.id} href={b.href} scale={b.scale} />
         ))}
       </defs>
     </svg>

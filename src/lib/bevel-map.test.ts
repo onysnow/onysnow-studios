@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bevelField, bevelHeight, interiorIsNeutral, roundedRectSDF } from "./bevel-map";
+import {
+  bevelField,
+  interiorIsNeutral,
+  refractionOffset,
+  roundedRectSDF,
+  surfaceHeight,
+} from "./bevel-map";
 
 describe("roundedRectSDF", () => {
   it("is zero on the edge, negative inside, positive outside", () => {
@@ -17,30 +23,63 @@ describe("roundedRectSDF", () => {
   });
 });
 
-describe("bevelHeight", () => {
-  it("is a circular arc: flat past the bevel, steep at the rim", () => {
-    expect(bevelHeight(0, 20)).toBe(0);
-    expect(bevelHeight(20, 20)).toBe(20);
-    expect(bevelHeight(40, 20)).toBe(20);
-    // At the halfway point a circle of radius R stands at sqrt(3)/2 of R,
-    // which a straight ramp would put at half. That difference IS the bend.
-    expect(bevelHeight(10, 20)).toBeCloseTo((20 * Math.sqrt(3)) / 2, 5);
+describe("surfaceHeight", () => {
+  it("is a circular arc across the bevel", () => {
+    expect(surfaceHeight(0)).toBe(0);
+    expect(surfaceHeight(1)).toBe(1);
+    // Halfway across, a circle stands at sqrt(3)/2 where a ramp would be at a
+    // half. That difference IS the bend.
+    expect(surfaceHeight(0.5)).toBeCloseTo(Math.sqrt(3) / 2, 5);
   });
 
-  it("rises faster than linearly near the edge", () => {
-    const slopeAtRim = bevelHeight(1, 20) - bevelHeight(0, 20);
-    const slopeAtMiddle = bevelHeight(11, 20) - bevelHeight(10, 20);
-    expect(slopeAtRim).toBeGreaterThan(slopeAtMiddle * 3);
+  it("rises faster than linearly at the rim", () => {
+    const atRim = surfaceHeight(0.05) - surfaceHeight(0);
+    const atInnerEdge = surfaceHeight(1) - surfaceHeight(0.95);
+    expect(atRim).toBeGreaterThan(atInnerEdge * 3);
+  });
+
+  it("offers the flatter squircle as an alternative", () => {
+    expect(surfaceHeight(0.5, "squircle")).toBeGreaterThan(surfaceHeight(0.5, "circle"));
+  });
+});
+
+describe("refractionOffset", () => {
+  const at = (x: number) => refractionOffset(x, 26, 18, 1.5);
+
+  it("is zero where the glass is flat", () => {
+    // At the inner end of the bevel the surface is parallel to the face, so
+    // the ray passes straight through and nothing moves.
+    expect(Math.abs(at(1))).toBeLessThan(0.5);
+  });
+
+  it("grows toward the rim, where the surface is steepest", () => {
+    expect(Math.abs(at(0.1))).toBeGreaterThan(Math.abs(at(0.5)));
+    expect(Math.abs(at(0.5))).toBeGreaterThan(Math.abs(at(0.9)));
+  });
+
+  it("bends further through thicker glass and through a denser medium", () => {
+    expect(Math.abs(refractionOffset(0.3, 26, 40, 1.5))).toBeGreaterThan(
+      Math.abs(refractionOffset(0.3, 26, 4, 1.5)),
+    );
+    expect(Math.abs(refractionOffset(0.3, 26, 18, 1.9))).toBeGreaterThan(
+      Math.abs(refractionOffset(0.3, 26, 18, 1.5)),
+    );
+  });
+
+  it("does not bend at all when there is nothing to refract into", () => {
+    // An index of 1 is air: no interface, no deflection.
+    expect(Math.abs(refractionOffset(0.3, 26, 18, 1))).toBeLessThan(1e-6);
   });
 });
 
 describe("bevelField", () => {
-  const field = bevelField(120, 80, 6, 14);
+  const GLASS = { bezelWidth: 14, thickness: 10, ior: 1.5 } as const;
+  const field = bevelField(120, 80, 6, GLASS);
 
   it("leaves the body of the pane exactly neutral", () => {
     // 128 means "do not move this pixel". Any drift here shifts the whole
     // backdrop behind the glass, which is what smeared the photographs before.
-    expect(interiorIsNeutral(field, 14)).toBe(true);
+    expect(interiorIsNeutral(field, GLASS.bezelWidth)).toBe(true);
   });
 
   it("displaces at the rim and not in the middle", () => {
@@ -81,13 +120,13 @@ describe("bevelField", () => {
   });
 
   it("stays within the encodable range at any geometry", () => {
-    for (const [w, h, rad, z] of [
+    for (const [w, h, rad, bezel] of [
       [64, 64, 0, 10],
       [400, 60, 4, 30],
       [40, 400, 20, 18],
       [30, 30, 15, 15],
     ] as const) {
-      const f = bevelField(w, h, rad, z);
+      const f = bevelField(w, h, rad, { bezelWidth: bezel, thickness: 12, ior: 1.5 });
       for (let i = 0; i < f.data.length; i += 4) {
         expect(f.data[i]).toBeGreaterThanOrEqual(1);
         expect(f.data[i]).toBeLessThanOrEqual(255);
@@ -96,7 +135,8 @@ describe("bevelField", () => {
   });
 
   it("does not blow up when the bevel is deeper than the pane", () => {
-    expect(() => bevelField(20, 20, 4, 200)).not.toThrow();
-    expect(interiorIsNeutral(bevelField(20, 20, 4, 200), 200)).toBe(true);
+    const huge = { bezelWidth: 200, thickness: 80, ior: 1.5 };
+    expect(() => bevelField(20, 20, 4, huge)).not.toThrow();
+    expect(interiorIsNeutral(bevelField(20, 20, 4, huge), 200)).toBe(true);
   });
 });

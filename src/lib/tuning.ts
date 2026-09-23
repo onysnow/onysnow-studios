@@ -178,11 +178,11 @@ export const tuning: Record<string, Knob> = {
   displacement: {
     label: "Refraction",
     group: "Reflection",
-    value: 40,
+    value: 1,
     min: 0,
-    max: 120,
-    step: 2,
-    hint: "Peak bevel displacement, in pixels. Chromium only.",
+    max: 3,
+    step: 0.05,
+    hint: "Multiplies the bend. 1 is what Snell's law gives for the glass's own thickness and index — it used to be an absolute pixel figure, which had to be re-picked whenever anything else changed. Chromium only.",
   },
 
   // ---- Shadows ----

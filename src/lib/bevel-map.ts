@@ -50,16 +50,76 @@ export function roundedRectSDF(
 }
 
 /**
- * Height of the bevel at `d` pixels in from the edge.
+ * The bevel's cross-section, as a height in [0, 1] across its width.
  *
- * A circle of radius `zRadius` rolled along the edge: flat once you are past
- * it, rising steeply right at the rim. This is the shape the old squircle ramp
- * was approximating.
+ * `x` is 0 at the outer edge and 1 where the bevel meets the flat face. The
+ * circular profile is the default and is what a rounded-over edge is; the
+ * squircle is the shape this used to approximate the circle with, kept because
+ * it is a flatter, more industrial edge and worth having as a choice.
+ *
+ * Profiles from jeantimex/glass-effect-webgpu (ISC).
  */
-export function bevelHeight(d: number, zRadius: number): number {
-  if (d <= 0) return 0;
-  if (d >= zRadius) return zRadius;
-  return Math.sqrt(d * (2 * zRadius - d));
+export type SurfaceProfile = "circle" | "squircle";
+
+export function surfaceHeight(x: number, profile: SurfaceProfile = "circle"): number {
+  const t = Math.min(1, Math.max(0, x));
+  if (profile === "squircle") return Math.pow(1 - Math.pow(1 - t, 4), 0.25);
+  return Math.sqrt(1 - Math.pow(1 - t, 2));
+}
+
+function surfaceDerivative(x: number, profile: SurfaceProfile): number {
+  const dx = 0.001;
+  const a = Math.max(x - dx, 0);
+  const b = Math.min(x + dx, 1);
+  return (surfaceHeight(b, profile) - surfaceHeight(a, profile)) / Math.max(b - a, 1e-6);
+}
+
+/**
+ * How far the backdrop moves under a point on the bevel, in pixels.
+ *
+ * This is the part the first version faked. It took the gradient of the height
+ * field, normalised it against the steepest slope on the pane and multiplied
+ * by a chosen 40px -- so the displacement was a shape scaled by a number
+ * somebody picked, and the number had to be re-picked whenever anything else
+ * changed.
+ *
+ * Snell's law instead: refract the viewing ray at the surface, then follow it
+ * through the glass it still has to cross and see where it comes out. The
+ * answer falls out of the two quantities that actually determine it -- how
+ * thick the glass is and what it is made of -- and is in real pixels, so
+ * nothing needs scaling to taste.
+ *
+ * Method from jeantimex/glass-effect-webgpu (ISC).
+ */
+export function refractionOffset(
+  x: number,
+  bezelWidth: number,
+  thickness: number,
+  ior: number,
+  profile: SurfaceProfile = "circle",
+): number {
+  const eta = 1 / ior;
+  const height = surfaceHeight(x, profile);
+  const slope = surfaceDerivative(x, profile);
+
+  // Surface normal, pointing back out of the glass.
+  const magnitude = Math.hypot(slope, 1);
+  const nx = -slope / magnitude;
+  const ny = -1 / magnitude;
+
+  const dotNI = ny;
+  const k = 1 - eta * eta * (1 - dotNI * dotNI);
+  // Total internal reflection: nothing gets through along this ray.
+  if (k < 0) return 0;
+
+  const kSqrt = Math.sqrt(k);
+  const rx = -(eta * dotNI + kSqrt) * nx;
+  const ry = eta - (eta * dotNI + kSqrt) * ny;
+  if (Math.abs(ry) < 1e-3) return 0;
+
+  // The ray still has the bevel's own height plus the slab to cross.
+  const remaining = height * bezelWidth + thickness;
+  return rx * (remaining / ry);
 }
 
 export type BevelField = {
@@ -67,8 +127,24 @@ export type BevelField = {
   height: number;
   /** RGBA, 4 bytes per pixel, ready for `putImageData`. */
   data: Uint8ClampedArray;
-  /** The largest slope in the field, so the caller can scale to real pixels. */
-  peakSlope: number;
+  /**
+   * The largest offset anywhere in the field, in map pixels.
+   *
+   * The map encodes each offset as a fraction of this, so the filter's `scale`
+   * has to be set to it for the result to come out in real pixels. That is the
+   * number that used to be a chosen 40.
+   */
+  maxOffset: number;
+};
+
+export type BevelOptions = {
+  /** How wide the rounded-over edge is, in map pixels. */
+  bezelWidth: number;
+  /** How thick the slab is behind the bevel, in map pixels. */
+  thickness: number;
+  /** Index of refraction. 1.5 is ordinary glass. */
+  ior: number;
+  profile?: SurfaceProfile;
 };
 
 /**
@@ -82,19 +158,17 @@ export function bevelField(
   width: number,
   height: number,
   radius: number,
-  zRadius: number,
+  options: BevelOptions,
 ): BevelField {
+  const { bezelWidth, thickness, ior, profile = "circle" } = options;
   const data = new Uint8ClampedArray(width * height * 4);
   const halfW = width / 2;
   const halfH = height / 2;
   const e = 1;
 
-  // Two passes: the slopes first, so they can be normalised against the real
-  // peak rather than a guessed clamp. The old map clamped an unbounded
-  // derivative, which is why its outermost row was arbitrary.
-  const gx = new Float32Array(width * height);
-  const gy = new Float32Array(width * height);
-  let peak = 0;
+  const ox = new Float32Array(width * height);
+  const oy = new Float32Array(width * height);
+  let maxOffset = 0;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -102,49 +176,57 @@ export function bevelField(
       const py = y + 0.5 - halfH;
 
       const inside = -roundedRectSDF(px, py, halfW, halfH, radius);
-      const i = y * width + x;
+      if (inside <= 0) continue;
+      // Past the bevel the face is flat, so the ray goes straight through.
+      if (inside >= bezelWidth) continue;
 
-      if (inside <= 0) {
-        // Outside the pane: nothing to displace.
-        continue;
-      }
-
+      /*
+       * The direction is the SDF's own gradient, which points straight in from
+       * the nearest edge -- along the top it is downward, at a corner it is
+       * diagonal, and it follows the corner radius without being told about
+       * it. The magnitude is Snell. Separating the two is what lets one
+       * one-dimensional profile wrap correctly around a two-dimensional pane.
+       */
       const dR = -roundedRectSDF(px + e, py, halfW, halfH, radius);
       const dL = -roundedRectSDF(px - e, py, halfW, halfH, radius);
       const dD = -roundedRectSDF(px, py + e, halfW, halfH, radius);
       const dU = -roundedRectSDF(px, py - e, halfW, halfH, radius);
 
-      // Central differences of the height field give the surface gradient;
-      // the normal is (-grad, 1) normalised, and the displacement follows the
-      // gradient directly.
-      const sx = (bevelHeight(dR, zRadius) - bevelHeight(dL, zRadius)) / (2 * e);
-      const sy = (bevelHeight(dD, zRadius) - bevelHeight(dU, zRadius)) / (2 * e);
+      let gx = (dR - dL) / (2 * e);
+      let gy = (dD - dU) / (2 * e);
+      const len = Math.hypot(gx, gy);
+      if (len < 1e-6) continue;
+      gx /= len;
+      gy /= len;
 
-      gx[i] = sx;
-      gy[i] = sy;
-      const mag = Math.hypot(sx, sy);
-      if (mag > peak) peak = mag;
+      const offset = refractionOffset(inside / bezelWidth, bezelWidth, thickness, ior, profile);
+
+      const i = y * width + x;
+      ox[i] = gx * offset;
+      oy[i] = gy * offset;
+      const mag = Math.abs(offset);
+      if (mag > maxOffset) maxOffset = mag;
     }
   }
 
-  const norm = peak > 0 ? 1 / peak : 0;
+  const norm = maxOffset > 0 ? 1 / maxOffset : 0;
 
   for (let i = 0; i < width * height; i++) {
     const o = i * 4;
     // 128 exactly, not 127.5 rounded: a pixel in the body of the pane must not
     // move at all, and a half-step bias across the whole interior is a visible
     // shift of the entire backdrop.
-    data[o] = 128 + Math.round(gx[i]! * norm * 127);
-    data[o + 1] = 128 + Math.round(gy[i]! * norm * 127);
+    data[o] = 128 + Math.round(ox[i]! * norm * 127);
+    data[o + 1] = 128 + Math.round(oy[i]! * norm * 127);
     data[o + 2] = 0;
     data[o + 3] = 255;
   }
 
-  return { width, height, data, peakSlope: peak };
+  return { width, height, data, maxOffset };
 }
 
 /** True when nothing in the flat middle of the pane is displaced. */
-export function interiorIsNeutral(field: BevelField, zRadius: number): boolean {
+export function interiorIsNeutral(field: BevelField, bezelWidth: number): boolean {
   const { width, height, data } = field;
   const halfW = width / 2;
   const halfH = height / 2;
@@ -152,8 +234,7 @@ export function interiorIsNeutral(field: BevelField, zRadius: number): boolean {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const inside = -roundedRectSDF(x + 0.5 - halfW, y + 0.5 - halfH, halfW, halfH, 0);
-      // Well past the bevel, so the height field is flat and the slope zero.
-      if (inside <= zRadius + 2) continue;
+      if (inside <= bezelWidth + 2) continue;
       const o = (y * width + x) * 4;
       if (data[o] !== 128 || data[o + 1] !== 128) return false;
     }

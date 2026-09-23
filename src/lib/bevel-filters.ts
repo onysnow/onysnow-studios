@@ -19,12 +19,27 @@ import { bevelField } from "./bevel-map";
 /** The map is smooth, so it can be computed small and stretched back up. */
 const MAX_EDGE = 320;
 
-/** How deep the rounded-over edge is, in CSS pixels. */
-export const BEVEL_DEPTH = 26;
+/** How wide the rounded-over edge is, in CSS pixels. */
+export const BEZEL_WIDTH = 26;
+
+/** How thick the slab is behind that edge, in CSS pixels. */
+export const GLASS_THICKNESS = 18;
+
+/** Ordinary soda-lime glass. */
+export const GLASS_IOR = 1.5;
 
 export type PaneGeometry = { width: number; height: number; radius: number };
 
-export type BevelEntry = { id: string; href: string };
+export type BevelEntry = {
+  id: string;
+  href: string;
+  /**
+   * What `feDisplacementMap`'s `scale` must be for this map to displace by the
+   * number of pixels Snell actually gives. The map stores each offset as a
+   * fraction of the largest one, so this is that largest one in CSS pixels.
+   */
+  scale: number;
+};
 
 const cache = new Map<string, BevelEntry>();
 const listeners = new Set<() => void>();
@@ -39,7 +54,11 @@ function keyFor(g: PaneGeometry): string {
   return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}`;
 }
 
-function encode(width: number, height: number, radius: number): string | null {
+function encode(
+  width: number,
+  height: number,
+  radius: number,
+): { href: string; scale: number } | null {
   if (typeof document === "undefined") return null;
 
   // Uniform downscale: the bevel has to stay in proportion when the map is
@@ -48,7 +67,11 @@ function encode(width: number, height: number, radius: number): string | null {
   const w = Math.max(8, Math.round(width * scale));
   const h = Math.max(8, Math.round(height * scale));
 
-  const field = bevelField(w, h, radius * scale, BEVEL_DEPTH * scale);
+  const field = bevelField(w, h, radius * scale, {
+    bezelWidth: BEZEL_WIDTH * scale,
+    thickness: GLASS_THICKNESS * scale,
+    ior: GLASS_IOR,
+  });
 
   const canvas = document.createElement("canvas");
   canvas.width = w;
@@ -61,7 +84,9 @@ function encode(width: number, height: number, radius: number): string | null {
   const image = ctx.createImageData(w, h);
   image.data.set(field.data);
   ctx.putImageData(image, 0, 0);
-  return canvas.toDataURL("image/png");
+  // The field is computed in map pixels; the map is stretched back up, so the
+  // displacement it asks for has to come back up with it.
+  return { href: canvas.toDataURL("image/png"), scale: field.maxOffset / scale };
 }
 
 /**
@@ -77,10 +102,10 @@ export function requestBevelFilter(g: PaneGeometry): string | null {
   const existing = cache.get(key);
   if (existing) return existing.id;
 
-  const href = encode(bucket(g.width), bucket(g.height), g.radius);
-  if (!href) return null;
+  const encoded = encode(bucket(g.width), bucket(g.height), g.radius);
+  if (!encoded) return null;
 
-  const entry: BevelEntry = { id: `glass-bevel-${key}`, href };
+  const entry: BevelEntry = { id: `glass-bevel-${key}`, ...encoded };
   cache.set(key, entry);
   snapshot = [...cache.values()];
   for (const notify of listeners) notify();
