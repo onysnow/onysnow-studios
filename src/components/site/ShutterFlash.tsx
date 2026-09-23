@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 import { flashPanels } from "@/lib/edge-glow";
 
 /**
- * The shutter firing: one flash across the page, corner frame lines, and the
- * frosted panels answering the light with a glare and a rim flare.
+ * The shutter firing: one flash across the page, corner frame lines, the
+ * frosted panels answering the light with a glare and a rim flare, and then
+ * the eye recovering from it.
  *
  * Exposed through a window event rather than props so the cursor — which owns
  * the gesture that triggers this — doesn't need a reference to it. Anything
@@ -20,9 +21,16 @@ export function fireShutter(at?: { x: number; y: number }) {
   window.dispatchEvent(new CustomEvent(SHUTTER_EVENT, { detail: at }));
 }
 
+/** A photographic surface worth leaving an afterimage of. */
+const SUBJECT = "img, video, picture, .gallery-frame, [data-photo]";
+
 export function ShutterFlash() {
   const flashRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  const veilRef = useRef<HTMLDivElement>(null);
+  const positiveRef = useRef<HTMLDivElement>(null);
+  const negativeRef = useRef<HTMLDivElement>(null);
+  const residueRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
@@ -31,17 +39,41 @@ export function ShutterFlash() {
       const at = (event as CustomEvent<{ x: number; y: number } | undefined>).detail;
       const flash = flashRef.current;
       const frame = frameRef.current;
+      const veil = veilRef.current;
+
+      // The burst originates where the gesture was made rather than always at
+      // the centre of the screen, and the bleaching is strongest there too.
+      const fx = at ? (at.x / viewportWidth()) * 100 : 50;
+      const fy = at ? (at.y / viewportHeight()) * 100 : 50;
 
       if (flash) {
-        // The burst originates where the gesture was made rather than always
-        // at the centre of the screen.
-        if (at) {
-          flash.style.setProperty("--flash-x", `${(at.x / window.innerWidth) * 100}%`);
-          flash.style.setProperty("--flash-y", `${(at.y / window.innerHeight) * 100}%`);
-        }
-        restart(flash);
+        flash.style.setProperty("--flash-x", `${fx}%`);
+        flash.style.setProperty("--flash-y", `${fy}%`);
+        restart(flash, 1000);
       }
-      if (frame) restart(frame);
+      if (frame) restart(frame, 1000);
+      if (veil) {
+        veil.style.setProperty("--flash-x", `${fx}%`);
+        veil.style.setProperty("--flash-y", `${fy}%`);
+        restart(veil, 2600);
+      }
+
+      // The ghost of whatever the flash was pointed at. Both polarities are
+      // built from the same capture; only the blend and the timing differ.
+      if (at) {
+        const capture = captureSubject(at);
+        for (const host of [positiveRef.current, negativeRef.current, residueRef.current]) {
+          if (!host) continue;
+          if (!capture) {
+            host.removeAttribute("data-firing");
+            continue;
+          }
+          // Each host needs its own copy: appending one node to two parents
+          // moves it, and the second ghost would silently steal the first's.
+          dressGhost(host, capture, at);
+          restart(host, 3200);
+        }
+      }
 
       // The glass reacts to the same light.
       flashPanels();
@@ -53,6 +85,14 @@ export function ShutterFlash() {
 
   return (
     <>
+      {/*
+       * Order matters and is the order light reaches you: the discharge, then
+       * the ghost of the scene it lit, then the veil of bleached receptors
+       * over everything. The two ghosts sit above the cursor because an
+       * afterimage is on the retina — it is in front of the whole world,
+       * including the pointer. The negative is split in two: detail that goes
+       * quickly and a coarse residue that outlives it.
+       */}
       <div ref={flashRef} aria-hidden="true" className="shutter-flash" />
       <div ref={frameRef} aria-hidden="true" className="shutter-frame">
         <span />
@@ -60,14 +100,162 @@ export function ShutterFlash() {
         <span />
         <span />
       </div>
+      <div ref={residueRef} aria-hidden="true" className="afterimage afterimage--residue" />
+      <div ref={negativeRef} aria-hidden="true" className="afterimage afterimage--negative" />
+      <div ref={positiveRef} aria-hidden="true" className="afterimage afterimage--positive" />
+      <div ref={veilRef} aria-hidden="true" className="afterimage-veil" />
     </>
   );
 }
 
-/** Re-applying a running animation is a no-op unless the browser sees a change. */
-function restart(el: HTMLElement) {
+/**
+ * The picture inside a photographic band, and specifically not its stand-in.
+ *
+ * `Img` renders a blurred base64 placeholder *and* the photograph, in that
+ * order, so taking the first child would burn the placeholder into the retina
+ * every time. Prefer whichever candidate is decoded and drawn largest; fall
+ * back to the placeholder only if nothing real has arrived yet, where a blurred
+ * low-resolution stand-in is a perfectly good afterimage anyway.
+ */
+function pickMedia(scene: HTMLElement): HTMLImageElement | HTMLVideoElement | null {
+  if (scene instanceof HTMLImageElement || scene instanceof HTMLVideoElement) return scene;
+
+  const candidates = [...scene.querySelectorAll<HTMLImageElement | HTMLVideoElement>("img, video")];
+  const area = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return r.width * r.height;
+  };
+  const decoded = candidates.filter(
+    (el) =>
+      el.getAttribute("aria-hidden") !== "true" &&
+      (el instanceof HTMLVideoElement ? el.videoWidth > 0 : el.complete && el.naturalWidth > 32),
+  );
+
+  const pool = decoded.length ? decoded : candidates;
+  return pool.sort((a, b) => area(b) - area(a))[0] ?? null;
+}
+
+type Capture = {
+  rect: DOMRect;
+  /** A detached node that paints the subject, already sized to fill the host. */
+  paint: HTMLElement;
+};
+
+/**
+ * What the eye was actually looking at when the flash went off.
+ *
+ * Hit-testing rather than guessing: the cursor arms itself on the same test,
+ * so if it decided there was a photograph under the pointer, this finds the
+ * same element.
+ */
+function captureSubject(at: { x: number; y: number }): Capture | null {
+  const under = document.elementFromPoint(at.x, at.y);
+  const scene = under?.closest<HTMLElement>(SUBJECT);
+  if (!scene) return null;
+
+  const media = pickMedia(scene);
+
+  if (media instanceof HTMLImageElement) {
+    const src = media.currentSrc || media.src;
+    if (!src) return null;
+    const style = getComputedStyle(media);
+    const clone = document.createElement("img");
+    clone.src = src;
+    clone.decoding = "sync";
+    clone.style.cssText = `width:100%;height:100%;object-fit:${style.objectFit};object-position:${style.objectPosition};`;
+    return { rect: media.getBoundingClientRect(), paint: clone };
+  }
+
+  if (media instanceof HTMLVideoElement && media.videoWidth > 0) {
+    // A cloned <video> would start from nothing, so freeze the frame that was
+    // on screen when the shutter fired.
+    const frame = document.createElement("canvas");
+    frame.width = media.videoWidth;
+    frame.height = media.videoHeight;
+    frame.getContext("2d")?.drawImage(media, 0, 0);
+    const style = getComputedStyle(media);
+    frame.style.cssText = `width:100%;height:100%;object-fit:${style.objectFit};object-position:${style.objectPosition};`;
+    return { rect: media.getBoundingClientRect(), paint: frame };
+  }
+
+  // Last case: the picture is a CSS background on the band itself.
+  const style = getComputedStyle(scene);
+  if (style.backgroundImage && style.backgroundImage !== "none") {
+    const fill = document.createElement("div");
+    fill.style.cssText =
+      `width:100%;height:100%;` +
+      `background-image:${style.backgroundImage};` +
+      `background-size:${style.backgroundSize};` +
+      `background-position:${style.backgroundPosition};` +
+      `background-repeat:${style.backgroundRepeat};`;
+    return { rect: scene.getBoundingClientRect(), paint: fill };
+  }
+
+  return null;
+}
+
+/**
+ * Pin a ghost over where its subject was.
+ *
+ * Fixed, not absolute, and the rect is frozen at the moment of firing: this
+ * image is burned into the retina, so it stays where you were looking even
+ * after the page scrolls out from under it.
+ */
+function dressGhost(host: HTMLElement, capture: Capture, at: { x: number; y: number }) {
+  const { rect, paint } = capture;
+  host.style.left = `${rect.left}px`;
+  host.style.top = `${rect.top}px`;
+  host.style.width = `${rect.width}px`;
+  host.style.height = `${rect.height}px`;
+
+  /*
+   * Bleaching follows the light, and the light fell off radially from the
+   * point of discharge -- so the ghost is strongest there and dies out around
+   * it.
+   *
+   * Sized against the VIEWPORT, not the subject. The first version used 0.78
+   * of the subject's long edge, which for a full-bleed hero is its whole
+   * diagonal: the burn covered the screen and read as a wash rather than as a
+   * mark left where the camera was pointed. How far a flash bleaches is a
+   * property of the flash. A subject smaller than the burn is simply inside
+   * it, which is correct -- point a camera at a thumbnail and all of it goes.
+   */
+  const reach = Math.min(viewportWidth(), viewportHeight()) * 0.42;
+  const mask = `radial-gradient(circle ${reach}px at ${at.x - rect.left}px ${at.y - rect.top}px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0) 100%)`;
+  host.style.setProperty("-webkit-mask-image", mask);
+  host.style.setProperty("mask-image", mask);
+
+  host.replaceChildren(paint.cloneNode(true));
+}
+
+/** `position: fixed; inset: 0` excludes the scrollbar; `innerWidth` includes it. */
+function viewportWidth() {
+  return document.documentElement.clientWidth || window.innerWidth;
+}
+
+function viewportHeight() {
+  return document.documentElement.clientHeight || window.innerHeight;
+}
+
+/**
+ * Re-applying a running animation is a no-op unless the browser sees a change.
+ *
+ * The clear-down is per element and cancels its own predecessor, because
+ * clicking twice inside one decay is exactly when a stale timer would strip
+ * `data-firing` off a ghost that had only just started.
+ */
+const clearTimers = new WeakMap<HTMLElement, number>();
+
+function restart(el: HTMLElement, clearAfter: number) {
+  const pending = clearTimers.get(el);
+  if (pending) window.clearTimeout(pending);
+
   el.removeAttribute("data-firing");
   void el.offsetWidth;
   el.setAttribute("data-firing", "");
-  window.setTimeout(() => el.removeAttribute("data-firing"), 1000);
+
+  clearTimers.set(
+    el,
+    window.setTimeout(() => el.removeAttribute("data-firing"), clearAfter),
+  );
 }
