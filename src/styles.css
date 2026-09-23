@@ -233,6 +233,14 @@
  * keep their own pointer and never meet this at all.
  */
 .custom-cursor {
+  /*
+   * The ring's diameter, inherited by the aperture.
+   *
+   * Declared HERE and not on the ring, because the blades are the ring's
+   * sibling rather than its child -- setting it on the ring meant the
+   * aperture never saw it and stayed at its own size.
+   */
+  --ring-size: var(--tune-ring, 30px);
   position: fixed;
   top: 0;
   left: 0;
@@ -277,10 +285,19 @@
     opacity 0.2s ease;
 }
 
+/*
+ * `--ring-size` is the one number the ring and the aperture both read.
+ *
+ * They used to be set independently -- the ring hard-coded per state, the iris
+ * derived from `--tune-ring` -- so over a photograph the ring grew to 96px
+ * while the aperture stayed at 33px and the two had visibly nothing to do with
+ * each other. Every state below re-points this variable instead of setting a
+ * width, so the blades follow the ring wherever it goes.
+ */
 .custom-cursor__ring {
   /* Measured off bryanminear.com: .circle-outer is 30x30, 1px solid #fff. */
-  width: var(--tune-ring, 30px);
-  height: var(--tune-ring, 30px);
+  width: var(--ring-size);
+  height: var(--ring-size);
   border: 1px solid #fff;
 }
 
@@ -301,9 +318,10 @@
  * because it was being inverted; painted straight it simply covers the thing
  * you are pointing at.
  */
+.custom-cursor[data-state="link"] {
+  --ring-size: 56px;
+}
 .custom-cursor[data-state="link"] .custom-cursor__ring {
-  width: 56px;
-  height: 56px;
   background-color: oklch(1 0 0 / 0.14);
   border-color: #fff;
 }
@@ -331,9 +349,10 @@
   mix-blend-mode: normal;
 }
 
+.custom-cursor[data-state="media"] {
+  --ring-size: 96px;
+}
 .custom-cursor[data-state="media"] .custom-cursor__ring {
-  width: 96px;
-  height: 96px;
   background-color: transparent;
   border-color: #fff;
   border-width: 1px;
@@ -1113,31 +1132,6 @@
  * blades over the warm emitter inverted to blue. Blades are dark metal; the
  * light comes through the opening.
  */
-.cursor-iris {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 9997;
-  width: 4.5rem;
-  height: 4.5rem;
-  /* No centring margin: the transform copied from the ring already carries
-     translate(-50%, -50%), and doing it twice offset the aperture from its
-     own light by half its size. */
-  pointer-events: none;
-  overflow: visible;
-  opacity: calc(var(--iris, 0) * 0.98);
-  will-change: transform;
-}
-
-.cursor-iris__blades {
-  fill: oklch(0.12 0.008 55 / 0.92);
-}
-
-.cursor-iris__seams {
-  stroke: oklch(1 0 0 / 0.42);
-  stroke-width: 0.7;
-  fill: none;
-}
 
 /* While winding, the plain ring steps back so the blades are what reads. */
 .custom-cursor[data-winding] .custom-cursor__ring {
@@ -1191,10 +1185,15 @@
   scale: 1.12;
 }
 
-/* Blades sit fully closed while armed — the aperture is cocked. */
-.custom-cursor[data-armed] .custom-cursor__iris {
-  opacity: 0.95;
-}
+/*
+ * The aperture is not shown while armed.
+ *
+ * It used to sit visible and closed as a "cocked" state, which meant the
+ * default cursor over a photograph was a ring with a black hexagon parked
+ * inside it. A shutter you can see is a shutter that is doing something: the
+ * blades belong to the firing animation and nothing else, so the only rule
+ * that reveals them is the one on [data-click].
+ */
 
 /* ===================== The light =====================
  *
@@ -1507,11 +1506,12 @@
    *
    * The housing circle in the SVG has radius 46 in a 100-unit viewBox, so it
    * covers 92% of the element's width. Scaling the element by 100/92 therefore
-   * lands the blades' housing exactly on the ring's own circle -- and it stays
-   * there if the ring size is tuned, which a hard-coded 34px did not.
+   * lands the blades' housing exactly on the ring's own circle -- and because
+   * it reads `--ring-size`, it stays there in every state, including the wider
+   * ring over a photograph and the wider one over a link.
    */
-  width: calc(var(--tune-ring, 30px) * 100 / 92);
-  height: calc(var(--tune-ring, 30px) * 100 / 92);
+  width: calc(var(--ring-size, var(--tune-ring, 30px)) * 100 / 92);
+  height: calc(var(--ring-size, var(--tune-ring, 30px)) * 100 / 92);
   translate: -50% -50%;
   opacity: 0;
   pointer-events: none;

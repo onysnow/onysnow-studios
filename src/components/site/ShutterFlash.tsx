@@ -24,17 +24,6 @@ export function fireShutter(at?: { x: number; y: number }) {
 /** A photographic surface worth leaving an afterimage of. */
 const SUBJECT = "img, video, picture, .gallery-frame, [data-photo]";
 
-/**
- * How long `data-firing` stays on a ghost.
- *
- * It has to outlast the longest animation the stylesheet gives them, or the
- * clear-down strips the attribute mid-decay and the burn snaps out instead of
- * fading. The residue runs `--tune-after-dwell * 1.25`, so this is that at the
- * knob's maximum plus a margin -- the cost of being generous is one attribute
- * sitting on a hidden element.
- */
-const GHOST_MS = 18_000;
-
 export function ShutterFlash() {
   const flashRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -82,7 +71,7 @@ export function ShutterFlash() {
           // Each host needs its own copy: appending one node to two parents
           // moves it, and the second ghost would silently steal the first's.
           dressGhost(host, capture, at);
-          restart(host, GHOST_MS);
+          restart(host, 20_000);
         }
       }
 
@@ -255,22 +244,44 @@ function viewportHeight() {
 /**
  * Re-applying a running animation is a no-op unless the browser sees a change.
  *
- * The clear-down is per element and cancels its own predecessor, because
- * clicking twice inside one decay is exactly when a stale timer would strip
- * `data-firing` off a ghost that had only just started.
+ * The clear-down waits for the animation to end rather than for a number.
+ * Hard-coded milliseconds were wrong twice: first too short, so `data-firing`
+ * was stripped mid-decay and the burn snapped out instead of fading; then set
+ * long enough for the dwell knob's maximum, which left the attribute sitting
+ * there for eighteen seconds after a two-second effect. `animationend` is
+ * exact at every setting, and the fallback only exists for the case where no
+ * animation runs at all and the event therefore never arrives.
  */
-const clearTimers = new WeakMap<HTMLElement, number>();
+type Pending = { timer: number; done: (e: AnimationEvent) => void };
+const pending = new WeakMap<HTMLElement, Pending>();
 
-function restart(el: HTMLElement, clearAfter: number) {
-  const pending = clearTimers.get(el);
-  if (pending) window.clearTimeout(pending);
+function restart(el: HTMLElement, fallbackMs: number) {
+  const previous = pending.get(el);
+  if (previous) {
+    window.clearTimeout(previous.timer);
+    el.removeEventListener("animationend", previous.done);
+  }
 
   el.removeAttribute("data-firing");
   void el.offsetWidth;
   el.setAttribute("data-firing", "");
 
-  clearTimers.set(
-    el,
-    window.setTimeout(() => el.removeAttribute("data-firing"), clearAfter),
-  );
+  const clear = () => {
+    const current = pending.get(el);
+    if (current) {
+      window.clearTimeout(current.timer);
+      el.removeEventListener("animationend", current.done);
+      pending.delete(el);
+    }
+    el.removeAttribute("data-firing");
+  };
+
+  // Several layers animate at once; the element is done when its own longest
+  // one is, so anything earlier is ignored.
+  const done = (event: AnimationEvent) => {
+    if (event.target === el) clear();
+  };
+
+  el.addEventListener("animationend", done);
+  pending.set(el, { timer: window.setTimeout(clear, fallbackMs), done });
 }
