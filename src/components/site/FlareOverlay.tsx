@@ -64,12 +64,27 @@ const CHROMA: Flare = { name: "chroma", anchor: { x: 0.78, y: 0.2 }, scale: 0.75
 void STREAK_GREEN;
 
 /*
- * The footage leads. What the shader keeps is the core, the aperture and the
- * diffraction spikes — the parts that must be pin-sharp and exactly on the
- * pointer, and which a scaled, resampled video frame cannot give. Everything
- * that should look photographed comes from here.
+ * OFF.
+ *
+ * The computed flare carries it -- the core, the aperture, the diffraction
+ * spikes and the ghost chain, all of which respond to the light because they
+ * are derived from it. The footage never did. Three attempts at making it read
+ * as something happening inside a lens rather than as a video laid over the
+ * page: translated to follow the cursor (it dragged the camera around after
+ * the light), looped (it animated while the pointer sat still and ignored it
+ * while it moved), scrubbed and locked to the frame (better, still a rectangle
+ * of somebody else's footage with its own grain and its own colour).
+ *
+ * Nothing is fetched and no decoder starts while this list is empty, so the
+ * cost is zero rather than hidden. The clips stay in public/flares and the
+ * anchors and scales stay below, so turning it back on is putting names in
+ * this array -- worth doing only with a clear idea of what the footage is
+ * meant to add that the shader cannot compute.
  */
-const ACTIVE: Flare[] = [STREAK_BLUE, CHROMA, BEAM];
+const ACTIVE: Flare[] = [];
+void STREAK_BLUE;
+void CHROMA;
+void BEAM;
 
 export function FlareOverlay({
   chargeRef,
