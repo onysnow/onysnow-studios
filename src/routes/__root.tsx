@@ -17,6 +17,7 @@ import { GlassFilters } from "@/components/site/GlassFilters";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
+import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 function NotFoundComponent() {
   return (
@@ -33,6 +34,25 @@ function NotFoundComponent() {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  /**
+   * The shell's own data, fetched once for every route.
+   *
+   * The header, the footer, its nav columns, the eight-photo strip and the
+   * custom CSS all need these, and they are on every page — but there was no
+   * root loader, so each leaf route had to remember to prime them and several
+   * did not. /terms and /privacy missed all three: the header and the entire
+   * footer server-rendered empty, then three requests fired on hydration and
+   * the footer popped in and reflowed.
+   *
+   * Priming here means the shell is in the server HTML on every route, and the
+   * leaves can stop listing queries that were never really theirs.
+   */
+  loader: ({ context: { queryClient } }) =>
+    Promise.all([
+      queryClient.ensureQueryData(settingsQuery),
+      queryClient.ensureQueryData(categoriesQuery),
+      queryClient.ensureQueryData(coverPhotosQuery),
+    ]),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
