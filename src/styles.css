@@ -606,10 +606,18 @@
     background-repeat: no-repeat;
     /*
      * Sized against the viewport's HEIGHT, so every pane shares one
-     * magnification whatever shape it is. Large, because a pane is a small
-     * mirror held close: a fragment of the room, magnified.
+     * magnification whatever shape it is. 420vh is about ten times the
+     * source's own width, so what any pane shows is a fragment -- a couple
+     * of lights and an edge of something -- rather than a legible picture of
+     * a room, which is all you ever actually catch in a dark window.
+     *
+     * The defocus is baked into the images, not applied here. `filter:
+     * blur()` on this layer would blur its own clipped boundary as well and
+     * ring every pane with a soft halo. It is also a DISC convolution rather
+     * than a gaussian, done in linear light before tonemapping, which is why
+     * the lamps come out as hard-rimmed bokeh circles instead of smudges.
      */
-    background-size: auto 160vh;
+    background-size: auto 420vh;
     /*
      * Anchored in viewport space, then pulled back by the pane's own offset.
      * That is what makes the reflection continuous: two bands stacked above
@@ -623,8 +631,8 @@
      * The parallax is added once, identically for every pane: one viewer, one
      * reflection moving.
      */
-    background-position: calc(-120vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -260px)
-      calc(-30vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -170px);
+    background-position: calc(-700vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1100px)
+      calc(-160vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -750px);
     opacity: calc(0.05 + 0.6 * var(--wind, 0));
   }
 
