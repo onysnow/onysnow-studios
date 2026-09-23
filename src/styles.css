@@ -1228,13 +1228,23 @@
 .custom-cursor__blade {
   fill: #000;
   transform-box: view-box;
-  /* Open: swung back against the housing, out of the way. */
-  transform: rotate(-64deg);
+  /*
+   * Hinged at its OWN pivot on the housing -- 50,4 is where this blade meets
+   * the barrel -- not scaled about the centre of the iris.
+   *
+   * That one line is the whole difference. Rotate these about `50 50` and
+   * scale them down, which is what every recipe for this does, and at rest
+   * the eight wedges all meet in the middle: a solid disc with no aperture at
+   * all, which then scatters into loose triangles as it "closes". Hinge them
+   * and they sweep across one another, which is what leaves the polygon.
+   */
+  transform-origin: 50px 4px;
+  transform: rotate(-40deg);
 }
 
 @keyframes cursor-iris-snap {
   0% {
-    transform: rotate(-64deg);
+    transform: rotate(-40deg);
   }
   /*
    * Past zero, so it shuts COMPLETELY. The blades' inner vertices sit a few
@@ -1248,13 +1258,13 @@
    * cut it off.
    */
   30% {
-    transform: rotate(9deg);
+    transform: rotate(2deg);
   }
   42% {
-    transform: rotate(7deg);
+    transform: rotate(0deg);
   }
   100% {
-    transform: rotate(-64deg);
+    transform: rotate(-40deg);
   }
 }
 

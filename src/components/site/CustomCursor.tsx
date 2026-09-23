@@ -339,42 +339,30 @@ export function CustomCursor() {
             <circle cx="50" cy="50" r="46" />
           </clipPath>
           <g clipPath="url(#cursor-iris-housing)">
-            <path
-              key={0}
-              className="custom-cursor__blade"
-              d="M 96.00,50.00 A 46.0,46.0 0 0,1 57.67,95.36 L 44.65,45.48 Z"
-              style={{ transformOrigin: "96.00px 50.00px" }}
-            />
-            <path
-              key={1}
-              className="custom-cursor__blade"
-              d="M 73.00,89.84 A 46.0,46.0 0 0,1 14.56,79.32 L 51.24,43.11 Z"
-              style={{ transformOrigin: "73.00px 89.84px" }}
-            />
-            <path
-              key={2}
-              className="custom-cursor__blade"
-              d="M 27.00,89.84 A 46.0,46.0 0 0,1 6.89,33.97 L 56.59,47.63 Z"
-              style={{ transformOrigin: "27.00px 89.84px" }}
-            />
-            <path
-              key={3}
-              className="custom-cursor__blade"
-              d="M 4.00,50.00 A 46.0,46.0 0 0,1 42.33,4.64 L 55.35,54.52 Z"
-              style={{ transformOrigin: "4.00px 50.00px" }}
-            />
-            <path
-              key={4}
-              className="custom-cursor__blade"
-              d="M 27.00,10.16 A 46.0,46.0 0 0,1 85.44,20.68 L 48.76,56.89 Z"
-              style={{ transformOrigin: "27.00px 10.16px" }}
-            />
-            <path
-              key={5}
-              className="custom-cursor__blade"
-              d="M 73.00,10.16 A 46.0,46.0 0 0,1 93.11,66.03 L 43.41,52.37 Z"
-              style={{ transformOrigin: "73.00px 10.16px" }}
-            />
+            <g key={0} transform="rotate(0 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={1} transform="rotate(45 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={2} transform="rotate(90 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={3} transform="rotate(135 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={4} transform="rotate(180 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={5} transform="rotate(225 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={6} transform="rotate(270 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
+            <g key={7} transform="rotate(315 50 50)">
+              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
+            </g>
           </g>
         </svg>
       </div>
