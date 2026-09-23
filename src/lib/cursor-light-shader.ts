@@ -27,6 +27,7 @@ uniform vec2  uViewport;   // device pixels
 uniform float uScale;      // device pixels per CSS pixel
 uniform vec2  uLight;      // CSS pixels, viewport-relative
 uniform float uCharge;     // 0 to 1, how wound the shutter is
+uniform float uScroll;     // page scroll, so grime sticks to the page not the lens
 uniform float uClosed;     // 0 to 1, how far the iris has stopped down
 uniform float uTime;
 uniform vec3  uWarm;       // the amber, linear
@@ -296,10 +297,19 @@ void main() {
    * Screen coordinates for that reason. Move the pointer and the flare
    * travels; the dirt does not, because the dirt is on the lens.
    */
-  vec2 dirtUv = frag / (res * 0.55);
+  /*
+   * Anchored to the PAGE, not the viewport.
+   *
+   * Screen-space is the textbook-correct space for lens dirt, because dirt on
+   * a lens sits still while the world moves past it. But on this site the
+   * thing between you and the photograph is a sheet of glass, not a lens, and
+   * grime on glass scrolls with the glass. Left in screen space it read as a
+   * smudge hovering over the page and sliding across it.
+   */
+  vec2 dirtUv = (frag + vec2(0.0, uScroll)) / (res * 0.55);
   float dirt = mix(0.0, texture2D(uGrit, fract(dirtUv) * 0.49 + 0.5).g, uHasGrit);
   float flareEnergy = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
-  colour += colour * dirt * 2.6 * flareEnergy;
+  colour += colour * dirt * 1.7 * flareEnergy;
 
   // ---- The aperture, silhouetted against its own light ----
   /*
