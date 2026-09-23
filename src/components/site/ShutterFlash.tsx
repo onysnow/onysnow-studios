@@ -24,6 +24,17 @@ export function fireShutter(at?: { x: number; y: number }) {
 /** A photographic surface worth leaving an afterimage of. */
 const SUBJECT = "img, video, picture, .gallery-frame, [data-photo]";
 
+/**
+ * How long `data-firing` stays on a ghost.
+ *
+ * It has to outlast the longest animation the stylesheet gives them, or the
+ * clear-down strips the attribute mid-decay and the burn snaps out instead of
+ * fading. The residue runs `--tune-after-dwell * 1.25`, so this is that at the
+ * knob's maximum plus a margin -- the cost of being generous is one attribute
+ * sitting on a hidden element.
+ */
+const GHOST_MS = 18_000;
+
 export function ShutterFlash() {
   const flashRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -71,7 +82,7 @@ export function ShutterFlash() {
           // Each host needs its own copy: appending one node to two parents
           // moves it, and the second ghost would silently steal the first's.
           dressGhost(host, capture, at);
-          restart(host, 3200);
+          restart(host, GHOST_MS);
         }
       }
 
@@ -213,15 +224,19 @@ function dressGhost(host: HTMLElement, capture: Capture, at: { x: number; y: num
    * point of discharge -- so the ghost is strongest there and dies out around
    * it.
    *
-   * Sized against the VIEWPORT, not the subject. The first version used 0.78
-   * of the subject's long edge, which for a full-bleed hero is its whole
-   * diagonal: the burn covered the screen and read as a wash rather than as a
-   * mark left where the camera was pointed. How far a flash bleaches is a
-   * property of the flash. A subject smaller than the burn is simply inside
-   * it, which is correct -- point a camera at a thumbnail and all of it goes.
+   * Sized against the VIEWPORT, not the subject: how far a flash bleaches is a
+   * property of the flash, not of how big the photograph happened to be. A
+   * subject smaller than the burn is simply inside it, which is correct --
+   * point a camera at a thumbnail and all of it goes.
+   *
+   * It reaches the far corner, because the flash does. An earlier pass held
+   * this to 0.42 of the short edge while the burst itself faded out at 72%,
+   * and the pair read as a spotlight: a pool of light near the pointer and a
+   * small stain afterwards. Both now fill the frame, with the falloff carrying
+   * the sense of where it fired rather than the edge of a circle.
    */
-  const reach = Math.min(viewportWidth(), viewportHeight()) * 0.42;
-  const mask = `radial-gradient(circle ${reach}px at ${at.x - rect.left}px ${at.y - rect.top}px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0) 100%)`;
+  const reach = Math.hypot(viewportWidth(), viewportHeight());
+  const mask = `radial-gradient(circle ${reach}px at ${at.x - rect.left}px ${at.y - rect.top}px, rgba(0,0,0,1) 0%, rgba(0,0,0,0.92) 30%, rgba(0,0,0,0.6) 62%, rgba(0,0,0,0.28) 100%)`;
   host.style.setProperty("-webkit-mask-image", mask);
   host.style.setProperty("mask-image", mask);
 

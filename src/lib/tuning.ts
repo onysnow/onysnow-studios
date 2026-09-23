@@ -284,9 +284,9 @@ export const tuning: Record<string, Knob> = {
   afterDwell: {
     label: "Afterimage dwell",
     group: "Afterimage",
-    value: 2.6,
+    value: 6.4,
     min: 0.8,
-    max: 6,
+    max: 14,
     step: 0.1,
     cssVar: "--tune-after-dwell",
     cssUnit: "s",
