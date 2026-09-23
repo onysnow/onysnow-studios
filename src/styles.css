@@ -1466,6 +1466,27 @@
   }
 }
 
+/*
+ * Screen, not plus-lighter, and this is why the flare only ever showed itself
+ * over the footer.
+ *
+ * `plus-lighter` is a straight sum that clips. Work it through with the
+ * hexagon's core at 0.90 and the field just outside it at 0.28:
+ *
+ *   over the footer   (backdrop 0.04)  ->  0.94 vs 0.32   contrast 0.620
+ *   over a photograph (backdrop 0.82)  ->  1.00 vs 1.00   contrast 0.000
+ *
+ * Not dimmer over the photograph. GONE -- the core and its surround both hit
+ * the ceiling, so there is no shape left to see. The one place on the site
+ * dark enough for it to survive is the footer, which is exactly where it kept
+ * turning up.
+ *
+ * `screen` is 1-(1-b)(1-s), which approaches white without ever reaching it,
+ * so the same pair lands at 0.112 of contrast over that photograph instead of
+ * nothing. It costs almost nothing where it already worked -- 0.595 against
+ * 0.620 over the footer -- and it is the difference between an effect that
+ * exists on one section and one that exists on the page.
+ */
 .cursor-light {
   position: fixed;
   inset: 0;
@@ -1473,7 +1494,7 @@
   height: 100%;
   z-index: 9999;
   pointer-events: none;
-  mix-blend-mode: plus-lighter;
+  mix-blend-mode: screen;
   opacity: 0;
   transition: opacity 0.25s ease;
 }
