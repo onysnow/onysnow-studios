@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { settingsQuery } from "@/lib/content";
+import { safeCustomCss } from "@/lib/safe-content";
 
 /** Display faces the portal can switch between. */
 const FONTS = new Set(["jost", "inter-tight", "barlow-condensed"]);
@@ -12,9 +13,11 @@ const SCALES: Record<string, string> = { small: "0.9", default: "1", large: "1.1
  * Applies the studio's saved theme settings: the display font, the headline
  * scale, and any custom CSS.
  *
- * The CSS is capped and stripped of anything that could break out of the style
- * element or pull in remote resources. It's admin-authored, so the risk is low,
- * but an unbounded injection point deserves a bound.
+ * The CSS is capped and filtered on the way in -- see `safeCustomCss`, which
+ * explains what it removes and why the previous filter did not actually do
+ * what its comment claimed. It is admin-authored, so the risk is low, but this
+ * renders on every page of the public site, which makes it the widest blast
+ * radius in the codebase and worth bounding properly.
  */
 export function CustomCss() {
   const { data } = useQuery(settingsQuery);
@@ -30,13 +33,8 @@ export function CustomCss() {
     root.style.setProperty("--display-scale", SCALES[scale] ?? "1");
   }, [font, scale]);
 
-  const raw = data?.["custom_css"];
-  if (!raw || !raw.trim()) return null;
-
-  const css = raw
-    .slice(0, 20_000)
-    .replace(/<\/?(style|script)/gi, "")
-    .replace(/@import[^;]*;?/gi, "");
+  const css = safeCustomCss(data?.["custom_css"]);
+  if (!css.trim()) return null;
 
   return <style data-custom-css="true" dangerouslySetInnerHTML={{ __html: css }} />;
 }

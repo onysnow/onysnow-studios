@@ -6,6 +6,7 @@ import { Instagram, Mail, MapPin, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { safeHref } from "@/lib/safe-content";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -125,7 +126,7 @@ function Contact() {
                 <Instagram className="size-5 text-primary" />
                 <div>
                   <p className="text-xs uppercase tracking-widest text-muted-foreground">Social</p>
-                  <a className="mt-2 block" href={settings["instagram_url"]}>
+                  <a className="mt-2 block" href={safeHref(settings["instagram_url"])}>
                     Instagram
                   </a>
                 </div>

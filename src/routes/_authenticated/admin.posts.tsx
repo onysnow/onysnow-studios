@@ -7,6 +7,7 @@ import { AdminHeading } from "@/components/admin/AdminHeading";
 import { RichTextEditor } from "@/components/admin/RichTextEditor";
 import { adminPhotosQuery, adminPostsQuery, deleteRow, insertRow, updateRow } from "@/lib/admin";
 import { useContentRefresh } from "@/hooks/use-admin";
+import { safeHtml } from "@/lib/safe-html";
 import type { Post, PostBlock } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,7 +77,11 @@ function PostsPage() {
   async function saveBlocks(id: string, blocks: PostBlock[]) {
     setSavingBlocks(id);
     try {
-      await updateRow("posts", id, { blocks });
+      // Cleaned on the way in rather than on the way out: the public pages
+      // render this raw, and a parser on every visit is a steep price for
+      // something only the studio can write. See lib/safe-html.ts.
+      const clean = blocks.map((b) => (b.type === "prose" ? { ...b, html: safeHtml(b.html) } : b));
+      await updateRow("posts", id, { blocks: clean });
       setDrafts(({ [id]: _dropped, ...rest }) => rest);
       refresh();
       toast.success("Saved");
