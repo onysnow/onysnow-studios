@@ -2453,3 +2453,224 @@ span:has(> .photo-surface) {
     box-shadow: none;
   }
 }
+
+/* ---- The loading screen: the shutter winding ---- */
+
+/*
+ * `--wind` has to be REGISTERED to animate.
+ *
+ * An unregistered custom property is a string as far as the cascade is
+ * concerned, so it animates discretely -- it would jump 0 to 1 with nothing in
+ * between, and everything derived from it would jump too. Declaring its type
+ * makes it a real number the engine can interpolate, which is what turns one
+ * keyframe on one variable into the whole charge sequence.
+ *
+ * Registering it globally is safe for the cursor, which writes it imperatively
+ * every frame with no transition declared: an animation only happens where one
+ * is asked for, and the initial value matches the resting state it already had.
+ */
+@property --wind {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.site-loader {
+  position: fixed;
+  inset: 0;
+  /*
+   * BELOW the effect layer, deliberately.
+   *
+   * The cursor and its light canvases sit at 9997-9999. Putting the loader
+   * above them would leave the panes on it unlit and the pointer invisible --
+   * a picture of the effect instead of the effect. Under them, the real light
+   * falls on the real glass while the page loads behind it.
+   */
+  z-index: 9990;
+  display: grid;
+  place-items: center;
+  background: var(--background, oklch(0.145 0.011 55));
+  opacity: 1;
+  transition: opacity 0.55s ease;
+}
+
+.site-loader[data-state="leaving"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
+ * The rig carries the charge, and everything inside reads it.
+ *
+ * Up and back down, slowly. The rise is longer than the fall because that is
+ * what the real thing does -- a capacitor takes its time filling and dumps
+ * faster than it filled -- and because a symmetrical pulse reads as a UI
+ * animation rather than as a mechanism.
+ */
+.site-loader__rig {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 120px;
+  --ring-base: 34px;
+  --wind-sq: calc(var(--wind) * var(--wind));
+  --ring-size: calc(var(--ring-base) * (1 + var(--wind-sq) * 2.4));
+  animation: loader-wind 2.9s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+
+@keyframes loader-wind {
+  0% {
+    --wind: 0;
+  }
+  62% {
+    --wind: 1;
+  }
+  100% {
+    --wind: 0;
+  }
+}
+
+.site-loader__ring {
+  position: absolute;
+  width: var(--ring-size);
+  height: var(--ring-size);
+  border: 1px solid oklch(1 0 0 / calc(0.45 + var(--wind) * 0.55));
+  border-radius: 9999px;
+}
+
+/*
+ * Derived from the ring exactly as the cursor's is: the housing circle is
+ * radius 46 in a 100-unit viewBox, so 100/92 seats the blades on the ring's
+ * own circle at whatever size it currently is.
+ */
+.site-loader__iris {
+  position: absolute;
+  width: calc(var(--ring-size) * 100 / 92);
+  height: calc(var(--ring-size) * 100 / 92);
+  opacity: calc(0.25 + var(--wind) * 0.6);
+}
+
+/* The flash-ready lamp, same behaviour as the cursor's pilot. */
+.site-loader__lamp {
+  position: absolute;
+  width: calc(7px * (1 + var(--wind) * 0.5));
+  height: calc(7px * (1 + var(--wind) * 0.5));
+  border-radius: 9999px;
+  background-color: color-mix(in oklab, oklch(0.72 0.23 27) calc(var(--wind) * 100%), #fff);
+  box-shadow:
+    0 0 calc(var(--wind) * 6px) calc(var(--wind) * 1.5px)
+      oklch(0.72 0.23 27 / calc(var(--wind) * 0.95)),
+    0 0 calc(var(--wind) * 14px) calc(var(--wind) * 3px)
+      oklch(0.62 0.21 27 / calc(var(--wind) * 0.45));
+}
+
+/*
+ * Reduced motion never sees this at all -- SiteLoader returns early and the
+ * page is revealed immediately -- so there is no animation to disable here.
+ */
+
+/*
+ * The backdrop the panes have something to do to.
+ *
+ * Glass is only visible by what it does to what is behind it, so a pane over
+ * a flat colour is invisible no matter how good the shader is. This is the
+ * minimum that gives refraction and blur something to bend: two wide, soft
+ * pools in the site's own palette, so it reads as the room lights rather than
+ * as decoration.
+ */
+.site-loader__field {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 55% at 22% 32%, oklch(0.42 0.09 240 / 0.5), transparent 70%),
+    radial-gradient(60% 50% at 78% 70%, oklch(0.5 0.12 55 / 0.42), transparent 72%);
+}
+
+.site-loader__stage {
+  position: absolute;
+  /*
+   * Centred by the inset, not by margins. `inset: 0` plus a width and `margin:
+   * 0 auto` looks like it should centre and does not once the grid's columns
+   * size to content -- the track widths win and the whole stage drifts left.
+   * A fixed pair of equal columns removes the ambiguity.
+   */
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-content: center;
+  gap: 14px;
+  grid-template-columns: repeat(2, min(340px, 41vw));
+}
+
+.site-loader__pane {
+  height: clamp(90px, 15vh, 140px);
+  border-radius: 14px;
+}
+
+/*
+ * The wide one sits UNDER the pair rather than between them.
+ *
+ * Ordered pane, pane, wide: two on the top row and one spanning beneath. With
+ * the wide one in the middle the right column was empty above and below it,
+ * which read as a layout that had failed rather than one that was arranged.
+ */
+.site-loader__pane--wide {
+  grid-column: span 2;
+}
+
+.site-loader__readout {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.site-loader__word {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.4rem, 3.4vw, 2.1rem);
+  letter-spacing: 0.02em;
+  color: oklch(1 0 0 / 0.92);
+}
+
+.site-loader__hint {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(1 0 0 / 0.42);
+}
+
+/*
+ * The way in. Amber, in the site's own eyebrow treatment, because that is
+ * what this page uses for "do this next" everywhere else.
+ */
+.site-loader__enter {
+  padding: 8px 4px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  animation: loader-enter-in 0.5s ease both;
+}
+
+.site-loader__enter:focus-visible {
+  outline: 1px solid var(--color-primary);
+  outline-offset: 6px;
+}
+
+@keyframes loader-enter-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Ready: the rig stops winding and holds open -- the charge is complete. */
+.site-loader[data-state="ready"] .site-loader__rig {
+  animation: none;
+  --wind: 1;
+}

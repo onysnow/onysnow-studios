@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { CustomCursor } from "@/components/site/CustomCursor";
+import { SiteLoader } from "@/components/site/SiteLoader";
 import { ShutterFlash } from "@/components/site/ShutterFlash";
 import { GlassFilters } from "@/components/site/GlassFilters";
 import { RasterGlass } from "@/components/site/RasterGlass";
@@ -137,6 +138,16 @@ function RootComponent() {
           <SiteFooter />
           <CustomCursor />
           <ShutterFlash />
+          {/*
+            Last in the tree, first on the screen.
+
+            It is `position: fixed` at the top of the stack, so document order
+            only decides what paints above what among equals -- putting it here
+            keeps it out of the way of the layout while still covering
+            everything, including the cursor and the flash overlays, which
+            should not be visible over a page that has not been revealed yet.
+          */}
+          <SiteLoader />
           <GlassFilters />
           {/*
             The rasterised glass, off unless asked for.

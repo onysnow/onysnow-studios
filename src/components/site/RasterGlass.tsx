@@ -74,7 +74,8 @@ import { applyGlassConfig } from "@/lib/tuning";
  * appeared over the circular button. Refracting through a 32px disc gains
  * nothing and costs a capture and a GL context.
  */
-const RASTER_PANES = ".glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu)";
+const RASTER_PANES =
+  ".glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu):not(.site-loader__pane)";
 
 type Instance = { destroy: () => void };
 
