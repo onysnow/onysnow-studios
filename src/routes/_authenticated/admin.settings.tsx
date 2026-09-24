@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Save } from "lucide-react";
 import { AdminHeading } from "@/components/admin/AdminHeading";
 import { adminSettingsQuery, updateRow } from "@/lib/admin";
+import { uploadSiteAsset } from "@/lib/image-upload";
 import { useContentRefresh } from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,84 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+
+/**
+ * A settings row that holds the URL of an uploaded file.
+ *
+ * Kept in this file rather than shared, because nothing else renders one yet.
+ * It exists so the pieces of the effect layer that were hardcoded file paths
+ * -- the glass smudge and scratch texture, the room reflections -- become
+ * things that can be changed by uploading a picture instead of by editing
+ * source and redeploying.
+ *
+ * The preview matters more than it looks: these are textures, and the only
+ * way to know you have uploaded the right one is to see it. Checked against
+ * a mid-grey so a mostly-dark scratch map is actually visible.
+ */
+function AssetField({
+  id,
+  slug,
+  value,
+  onChange,
+}: {
+  id: string;
+  slug: string;
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="space-y-3">
+      <div
+        className="h-28 w-full max-w-sm rounded-md border border-border bg-[repeating-conic-gradient(#808080_0_25%,#606060_0_50%)] bg-[length:16px_16px]"
+        style={
+          value
+            ? {
+                backgroundImage: `url("${value}")`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
+      />
+      <div className="flex items-center gap-3">
+        <Input
+          id={id}
+          type="file"
+          accept="image/*"
+          disabled={busy}
+          className="max-w-sm"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setBusy(true);
+            try {
+              onChange(await uploadSiteAsset(file, slug));
+              toast.success("Uploaded — remember to save");
+            } catch (error) {
+              toast.error("Could not upload that file", {
+                description: error instanceof Error ? error.message : undefined,
+              });
+            } finally {
+              setBusy(false);
+              // Let the same file be chosen again after a failure.
+              e.target.value = "";
+            }
+          }}
+        />
+        {value ? (
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => onChange("")}>
+            Reset to default
+          </Button>
+        ) : null}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {value ? "Custom file in use." : "Empty — the file shipped with the site is used."}
+      </p>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({ component: SettingsPage });
 
@@ -144,6 +223,13 @@ function SettingsPage() {
                     {Number(value || 1).toFixed(2)}×
                   </span>
                 </div>
+              ) : row.kind === "image" ? (
+                <AssetField
+                  id={`setting-${row.key}`}
+                  slug={row.key.replace(/_url$/, "")}
+                  value={value}
+                  onChange={set}
+                />
               ) : row.kind === "longtext" ? (
                 <Textarea
                   id={`setting-${row.key}`}

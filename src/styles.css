@@ -984,6 +984,42 @@
   }
 }
 
+/*
+ * A pane the rasterised glass has taken over stops being CSS glass.
+ *
+ * Set by RasterGlass only once a pane's liquidglass instance is actually up,
+ * so a pane whose capture failed keeps its backdrop-filter and still reads as
+ * glass instead of becoming a transparent hole.
+ *
+ * WHY THIS MATTERS MORE THAN IT LOOKS
+ *
+ * Without it the two glass systems run stacked. The CSS blur flattens the
+ * backdrop to an even wash before the shader ever sees it, and since
+ * html-to-image does not reproduce backdrop-filter, the shader refracts the
+ * sharp page and composites it over the blurred one. What you see is mostly
+ * the CSS glass -- which is exactly why the liquid mode felt like the CSS
+ * mode and why its knobs seemed dead.
+ *
+ * The background goes too. It is a translucent fill tuned to sit on top of a
+ * blur; over a refracted backdrop it is a second veil doing the same job
+ * twice. The shader has its own tint and opacity for this -- and with the
+ * blur gone, those two finally have something visible to act on.
+ */
+.glass[data-liquid] {
+  /*
+   * ONE property, unprefixed. Do not add `-webkit-backdrop-filter` here.
+   *
+   * Writing both made Lightning CSS collapse the pair and emit ONLY the
+   * -webkit- one, which Chrome ignores in favour of the standard property
+   * that `.glass` still sets -- so the rule compiled away to nothing and the
+   * blur stayed on. It cost a long time to find, because the source file, the
+   * served file and the matched-rule list all looked correct; only the
+   * COMPILED stylesheet showed the missing line. The build adds the prefixes.
+   */
+  backdrop-filter: none;
+  background: transparent;
+}
+
 /* ---- What sits on the glass, and what that throws across it ---- */
 
 /*
@@ -2417,3 +2453,156 @@ span:has(> .photo-surface) {
     box-shadow: none;
   }
 }
+
+/* ---- The loading screen: the shutter winding ---- */
+
+/*
+ * `--wind` has to be REGISTERED to animate.
+ *
+ * An unregistered custom property is a string as far as the cascade is
+ * concerned, so it animates discretely -- it would jump 0 to 1 with nothing in
+ * between, and everything derived from it would jump too. Declaring its type
+ * makes it a real number the engine can interpolate, which is what turns one
+ * keyframe on one variable into the whole charge sequence.
+ *
+ * Registering it globally is safe for the cursor, which writes it imperatively
+ * every frame with no transition declared: an animation only happens where one
+ * is asked for, and the initial value matches the resting state it already had.
+ */
+@property --wind {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.site-loader {
+  position: fixed;
+  inset: 0;
+  /*
+   * BELOW the effect layer, deliberately.
+   *
+   * The cursor and its light canvases sit at 9997-9999. Putting the loader
+   * above them would leave the panes on it unlit and the pointer invisible --
+   * a picture of the effect instead of the effect. Under them, the real light
+   * falls on the real glass while the page loads behind it.
+   */
+  z-index: 9990;
+  display: grid;
+  place-items: center;
+  background: var(--background, oklch(0.145 0.011 55));
+  opacity: 1;
+  transition: opacity 0.55s ease;
+}
+
+.site-loader[data-state="leaving"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/*
+ * Reduced motion never sees this at all -- SiteLoader returns early and the
+ * page is revealed immediately -- so there is no animation to disable here.
+ */
+
+/*
+ * The backdrop the panes have something to do to.
+ *
+ * Glass is only visible by what it does to what is behind it, so a pane over
+ * a flat colour is invisible no matter how good the shader is. This is the
+ * minimum that gives refraction and blur something to bend: two wide, soft
+ * pools in the site's own palette, so it reads as the room lights rather than
+ * as decoration.
+ */
+.site-loader__field {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(70% 55% at 22% 32%, oklch(0.42 0.09 240 / 0.5), transparent 70%),
+    radial-gradient(60% 50% at 78% 70%, oklch(0.5 0.12 55 / 0.42), transparent 72%);
+}
+
+.site-loader__stage {
+  position: absolute;
+  /*
+   * Centred by the inset, not by margins. `inset: 0` plus a width and `margin:
+   * 0 auto` looks like it should centre and does not once the grid's columns
+   * size to content -- the track widths win and the whole stage drifts left.
+   * A fixed pair of equal columns removes the ambiguity.
+   */
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-content: center;
+  gap: 14px;
+  grid-template-columns: repeat(2, min(340px, 41vw));
+}
+
+.site-loader__pane {
+  position: relative;
+  height: clamp(90px, 15vh, 140px);
+  border-radius: 14px;
+}
+
+/*
+ * The wide one sits UNDER the pair rather than between them.
+ *
+ * Ordered pane, pane, wide: two on the top row and one spanning beneath. With
+ * the wide one in the middle the right column was empty above and below it,
+ * which read as a layout that had failed rather than one that was arranged.
+ */
+.site-loader__pane--wide {
+  grid-column: span 2;
+}
+
+/*
+ * Centred IN the pane it sits on, not in the viewport.
+ *
+ * Floating it at the centre of the screen put it in the gap between the two
+ * rows of glass, belonging to neither. Inside the wide pane it is content
+ * resting on a surface, which is what the rest of the site does with type.
+ */
+.site-loader__readout {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.site-loader__word {
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.4rem, 3.4vw, 2.1rem);
+  letter-spacing: 0.02em;
+  color: oklch(1 0 0 / 0.92);
+}
+
+/*
+ * The way in. Amber, in the site's own eyebrow treatment, because that is
+ * what this page uses for "do this next" everywhere else.
+ */
+.site-loader__enter {
+  padding: 8px 4px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  animation: loader-enter-in 0.5s ease both;
+}
+
+.site-loader__enter:focus-visible {
+  outline: 1px solid var(--color-primary);
+  outline-offset: 6px;
+}
+
+@keyframes loader-enter-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+

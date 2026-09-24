@@ -14,6 +14,17 @@ import { Link } from "@tanstack/react-router";
  * bookmarks, which is where undiscoverable routes actually end up.
  */
 const HIDDEN = [
+  /*
+   * The studio, first, because it is the only thing here that is WORK.
+   *
+   * Ten admin routes existed -- photographs, categories, posts, pages,
+   * services, settings, inquiries, subscribers, testimonials, advanced -- and
+   * nothing in the interface linked to any of them. The only way in was
+   * typing the URL, which is exactly the "undiscoverable route" this
+   * disclosure exists to stop. It leads to a sign-in for anyone who is not
+   * already an admin, so listing it costs nothing.
+   */
+  { to: "/admin", label: "Studio", note: "Photographs, pages, inquiries — everything editable" },
   { to: "/lab", label: "Lab", note: "Every knob in the effect layer, over the real thing" },
   { to: "/duo", label: "Duo", note: "Two-photographer page" },
   { to: "/privacy", label: "Privacy", note: "Policy" },

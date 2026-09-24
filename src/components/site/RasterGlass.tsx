@@ -74,7 +74,8 @@ import { applyGlassConfig } from "@/lib/tuning";
  * appeared over the circular button. Refracting through a 32px disc gains
  * nothing and costs a capture and a GL context.
  */
-const RASTER_PANES = ".glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu)";
+const RASTER_PANES =
+  ".glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu):not(.site-loader__pane)";
 
 type Instance = { destroy: () => void };
 
@@ -175,6 +176,32 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
             return;
           }
           instances.push(instance);
+
+          /*
+           * THE CSS GLASS COMES OFF THIS PANE NOW.
+           *
+           * This is the difference between liquid glass and something that
+           * merely sits where liquid glass should be.
+           *
+           * The pane carries `backdrop-filter: blur(26px) saturate(1.5)` for
+           * CSS mode. Left on underneath the shader, it blurs the backdrop to
+           * an even colour wash BEFORE anything refracts it -- and because
+           * liquidglass rasterises the page behind the pane itself, and
+           * html-to-image does not reproduce backdrop-filter, the shader is
+           * refracting the SHARP page and compositing that over the BLURRED
+           * one. Two glass systems stacked, and the CSS one wins the look,
+           * which is why every liquid knob felt like it was doing nothing.
+           *
+           * It is also pure waste: a full-width backdrop blur is among the
+           * most expensive things a compositor can be asked for, and in this
+           * mode its result is covered by the canvas.
+           *
+           * Marked only once init has SUCCEEDED, so a pane whose capture
+           * fails keeps its CSS glass and still looks like glass, rather than
+           * turning into a transparent hole.
+           */
+          pane.dataset["liquid"] = "on";
+
           /*
            * Hand the pane whatever the tuning panel currently holds.
            *
@@ -198,6 +225,7 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
           // One pane failing must not take the others with it, and must not
           // leave the page with no glass at all.
           console.warn("[RasterGlass] pane failed:", String(err).slice(0, 200));
+          delete pane.dataset["liquid"];
           started.delete(pane);
         }
       });
@@ -221,6 +249,16 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
         } catch {
           /* already gone */
         }
+      }
+      /*
+       * Give every pane its CSS glass back.
+       *
+       * Switching to CSS mode tears this down, and a pane left marked would
+       * keep its backdrop-filter suppressed -- a transparent hole where the
+       * glass should be, in the mode whose whole job is the CSS glass.
+       */
+      for (const pane of document.querySelectorAll<HTMLElement>("[data-liquid]")) {
+        delete pane.dataset["liquid"];
       }
       delete document.documentElement.dataset["glass"];
     };

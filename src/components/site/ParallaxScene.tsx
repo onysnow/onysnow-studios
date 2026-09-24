@@ -48,17 +48,43 @@ export function ParallaxScene({
      * edge, so a hit test from the pointer lands on a plain div and finds no
      * `img` above it. The marker is on the container they all share.
      */
-    <div ref={ref} data-photo className={cn("relative overflow-hidden", height, className)}>
-      <motion.div
-        className="absolute inset-0 max-md:!translate-y-0"
-        {...(reduced ? {} : { style: { y } })}
-        {...(children ? {} : { "aria-hidden": true })}
-      >
-        {/* Oversized so the translation never reveals an edge. */}
-        <Img image={image} className="h-[128%] w-full" sizes="100vw" imgClassName="object-cover" />
-      </motion.div>
-      {scrim === "none" ? null : <div className={cn("absolute inset-0", SCRIM[scrim])} />}
-      <div className="image-vignette pointer-events-none absolute inset-0" />
+    <div ref={ref} data-photo className={cn("relative", height, className)}>
+      {/*
+       * The clip wraps the PICTURE, not the section.
+       *
+       * It used to be on the container. It has to exist -- the parallax image
+       * is 128% tall and slides, so without a clip the oversized photograph
+       * spills out of the section -- but on the container it also cropped
+       * everything else, and the thing it cropped that matters is the glass.
+       *
+       * The pane's light layer sits at `inset: -90px` precisely so a lit edge
+       * can throw light OUT of the glass; that spill above the top edge is
+       * most of what says the edge is bright rather than merely pale. The
+       * container's clip cut it off dead at the boundary, which reads as a
+       * hard line where the softest part of the glow should be.
+       *
+       * Same fix as the photo anchor further up: move the clip in to the only
+       * thing that needs it, and let everything resting on the section escape.
+       * `rounded-[inherit]` so a section given a corner radius still rounds
+       * its picture.
+       */}
+      <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
+        <motion.div
+          className="absolute inset-0 max-md:!translate-y-0"
+          {...(reduced ? {} : { style: { y } })}
+          {...(children ? {} : { "aria-hidden": true })}
+        >
+          {/* Oversized so the translation never reveals an edge. */}
+          <Img
+            image={image}
+            className="h-[128%] w-full"
+            sizes="100vw"
+            imgClassName="object-cover"
+          />
+        </motion.div>
+        {scrim === "none" ? null : <div className={cn("absolute inset-0", SCRIM[scrim])} />}
+        <div className="image-vignette pointer-events-none absolute inset-0" />
+      </div>
       {children ? (
         <div className="relative flex h-full flex-col justify-end">{children}</div>
       ) : null}

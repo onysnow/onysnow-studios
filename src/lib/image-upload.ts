@@ -49,7 +49,41 @@ function blurPlaceholder(bitmap: ImageBitmap): string {
  * actually renders. Without these a gallery row 280px tall still downloads the
  * full 2560px file, which is the single largest cost on a photography site.
  */
+/**
+ * Does this look like a HEIC/HEIF the browser cannot decode?
+ *
+ * Checked by CONTENT, not extension: iOS often hands over a file called
+ * `image.jpg` that is HEIC inside, and a phone photo renamed by hand is not
+ * rare either. The ISO base-media box at bytes 4-8 is `ftyp`, and the brand
+ * that follows says which flavour -- `heic`, `heix`, `hevc`, `mif1`, `msf1`.
+ *
+ * Worth the twelve bytes because the failure without it is inscrutable:
+ * createImageBitmap rejects with a generic decode error, which surfaces as
+ * "Could not upload IMG_5742.jpg" and tells nobody anything.
+ */
+async function looksLikeHeic(file: File): Promise<boolean> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    if (head.length < 12) return false;
+    const tag = String.fromCharCode(...head.slice(4, 8));
+    if (tag !== "ftyp") return false;
+    const brand = String.fromCharCode(...head.slice(8, 12)).toLowerCase();
+    return ["heic", "heix", "hevc", "hevx", "mif1", "msf1", "heif"].includes(brand);
+  } catch {
+    // Unreadable header is not proof of anything; let the decoder decide.
+    return false;
+  }
+}
+
 export async function prepareImage(input: File): Promise<PreparedImage> {
+  if (await looksLikeHeic(input)) {
+    throw new Error(
+      "That is a HEIC photo, which browsers cannot open. On iPhone: Settings > " +
+        "Camera > Formats > Most Compatible, or share it to yourself first — " +
+        "either gives you a JPEG.",
+    );
+  }
+
   const base = await imageCompression(input, {
     maxWidthOrHeight: MAX_EDGE,
     initialQuality: QUALITY,
@@ -218,4 +252,51 @@ export async function deletePhoto(
   if (error) throw error;
 
   return { orphanedFiles: removed.error ? paths.length : 0 };
+}
+
+/**
+ * Upload a site ASSET -- a texture, a room reflection -- and return its URL.
+ *
+ * Separate from `uploadPhoto` because the two have almost nothing in common
+ * beyond touching storage. A photograph is a row in `photos` with categories,
+ * ordering, a blur placeholder and a set of responsive renditions; an asset is
+ * one file that some piece of the effect layer loads by URL and nothing else
+ * ever lists.
+ *
+ * NOT put through `prepareImage`. That pipeline exists to make photographs
+ * cheap to deliver -- 2560px long edge, WebP, smaller renditions -- and every
+ * one of those steps is wrong here:
+ *
+ *   - The glass texture is sampled by a shader as a tiled detail map. Resizing
+ *     it changes the scale of the scratches, and re-encoding a high-frequency
+ *     grey texture as lossy WebP is exactly the content that codec handles
+ *     worst; the blocking artefacts would show up as structure in the glass.
+ *   - A room reflection is an HDRI graded through its own pipeline. Putting it
+ *     through a second quality pass would undo that grading.
+ *
+ * So it is stored as given. These are files chosen once and looked at forever,
+ * not a gallery someone uploads thirty of on a phone.
+ */
+export async function uploadSiteAsset(input: File, slug: string): Promise<string> {
+  const extension = (input.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  /*
+   * Timestamped rather than fixed, so the new file has a new URL.
+   *
+   * Overwriting `assets/glass-surface.jpg` in place would leave every browser
+   * and CDN that already has it serving the old one -- these are uploaded with
+   * a year-long cache header, because they never change except when they do.
+   * A new path is the only reliable cache bust.
+   */
+  const path = `assets/${slug}-${Date.now()}.${extension}`;
+
+  const { error } = await supabase.storage.from("photos").upload(path, input, {
+    contentType: input.type || "image/jpeg",
+    cacheControl: "31536000",
+    upsert: false,
+  });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from("photos").getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error("Uploaded, but storage returned no public URL");
+  return data.publicUrl;
 }

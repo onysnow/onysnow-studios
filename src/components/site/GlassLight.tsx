@@ -4,6 +4,7 @@ import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
+import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
  * The glass itself: what it does to the photograph behind it, and what it does
@@ -200,7 +201,7 @@ export function GlassLight({
         gl.useProgram(program);
         gl.uniform1f(uHasSurface, 1);
       };
-      img.src = "/glass-surface.jpg";
+      img.src = assetUrl(SITE_ASSETS.glassSurface);
     };
 
     /*
@@ -401,9 +402,39 @@ export function GlassLight({
         const layer = surfaceFor(pane.el, pane.w + BLEED * 2, pane.h + BLEED * 2);
         const ctx = layer.getContext("2d");
         if (ctx) {
-          const syTop = Math.floor((pane.y - BLEED) * scale);
+          /*
+           * THE SOURCE RECTANGLE IS CLAMPED TO THE CANVAS.
+           *
+           * The layer is BLEED bigger than the pane on every side, so for any
+           * pane touching an edge of the viewport -- which is every full-width
+           * band on this site, where pane.x is 0 -- the rectangle this wants
+           * to read starts at -90 * scale and runs 180 * scale wider than the
+           * buffer. Those pixels do not exist. Asked for them, the browser
+           * smears the outermost row and column to fill the gap, which paints
+           * a torn streak of repeated pixels down the side of the pane.
+           *
+           * It is not new. It was invisible because the section wrapper had
+           * `overflow: hidden` and cropped the bleed away; moving that clip in
+           * so the bloom could escape stopped hiding it too.
+           *
+           * So: read only the part that exists, and put it at the matching
+           * offset in the layer rather than stretching it to fill. Source and
+           * destination stay 1:1 -- the layer is already the bleed size at the
+           * same scale -- so nothing is resampled and the missing margin is
+           * simply left transparent, which is what it should be. A pane
+           * entirely off-buffer yields no draw at all.
+           */
+          const srcX = (pane.x - BLEED) * scale;
+          const srcY = (pane.y - BLEED) * scale;
+          const cx = Math.max(0, Math.floor(srcX));
+          const cy = Math.max(0, Math.floor(srcY));
+          const cw = Math.min(canvas.width, Math.ceil(srcX + sw)) - cx;
+          const ch = Math.min(canvas.height, Math.ceil(srcY + sh)) - cy;
+
           ctx.clearRect(0, 0, layer.width, layer.height);
-          ctx.drawImage(canvas, sx, syTop, sw, sh, 0, 0, layer.width, layer.height);
+          if (cw > 0 && ch > 0) {
+            ctx.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
+          }
           drawn.add(layer);
           allLayers.add(layer);
         }

@@ -26,16 +26,29 @@ const KEY = "onysnow:room";
  * page would paint the CSS fallback and then visibly swap rooms on every
  * single load, which is precisely the thing worth avoiding.
  */
-export function roomScript() {
+export function roomScript(sources?: readonly string[]) {
+  /*
+   * The URLs are baked in at render time, not looked up by the script.
+   *
+   * This runs in the document head before anything paints, so it cannot read
+   * React Query, a settings row, or anything else that exists only after
+   * hydration. The server already has the settings -- the root route awaits
+   * them -- so the resolved list is passed in and serialised into the script
+   * itself. Same string on the server and the client, so nothing to mismatch.
+   *
+   * Falls back per slot rather than all-or-nothing: replacing one room should
+   * not require replacing six.
+   */
+  const urls = ROOMS.map((name, i) => sources?.[i] || `/rooms/${name}.jpg`);
   return (
     `(function(){try{` +
-    `var r=${JSON.stringify(ROOMS)};` +
+    `var r=${JSON.stringify(urls)};` +
     `var i=Math.floor(Math.random()*r.length);` +
     // localStorage throws outright in some privacy modes rather than
     // returning null, so the random pick above stands as the fallback.
     `try{var p=parseInt(localStorage.getItem(${JSON.stringify(KEY)}),10);` +
     `if(!isNaN(p))i=(p+1)%r.length;localStorage.setItem(${JSON.stringify(KEY)},String(i));}catch(e){}` +
-    `document.documentElement.style.setProperty("--room",'url("/rooms/'+r[i]+'.jpg")');` +
+    `document.documentElement.style.setProperty("--room",'url("'+r[i]+'")');` +
     `}catch(e){}})();`
   );
 }

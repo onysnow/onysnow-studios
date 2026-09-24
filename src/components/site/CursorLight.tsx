@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { t } from "@/lib/tuning";
+import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
  * The cursor light, rendered in WebGL.
@@ -179,7 +180,7 @@ export function CursorLight({
         gl.useProgram(program);
         gl.uniform1f(uHasGrit, 1);
       };
-      img.src = "/glass-surface.jpg";
+      img.src = assetUrl(SITE_ASSETS.glassSurface);
     };
 
     gl.enable(gl.BLEND);
