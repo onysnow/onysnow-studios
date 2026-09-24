@@ -1,5 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { roomScript } from "@/lib/rooms";
+import { ROOM_KEYS } from "@/lib/site-assets";
+import { safeHref } from "@/lib/safe-content";
 import {
   HeadContent,
   Link,
@@ -79,6 +82,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  /*
+   * The room URLs, resolved here so the pre-paint script can carry them.
+   *
+   * `useQuery` rather than a fetch: the root route already awaits
+   * `settingsQuery`, so this reads the cache the server dehydrated into the
+   * page and resolves synchronously on both sides. Server and client build
+   * the identical script string, which is what keeps this out of hydration
+   * trouble -- the one thing this element cannot afford more of.
+   *
+   * Every value goes through `safeHref` on its way into a string that becomes
+   * executable script. An empty result falls back inside `roomScript`.
+   */
+  const { data: settings } = useQuery(settingsQuery);
+  const roomSources = ROOM_KEYS.map((key) => safeHref(settings?.[key] ?? ""));
+
   return (
     /*
       `suppressHydrationWarning` on the <html> element, and it is not papering
@@ -105,7 +123,7 @@ function RootShell({ children }: { children: ReactNode }) {
           synchronous on purpose, which means it writes a style attribute onto
           <html> before React hydrates — see the note above.
         */}
-        <script dangerouslySetInnerHTML={{ __html: roomScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: roomScript(roomSources) }} />
       </head>
       <body>
         {children}

@@ -32,6 +32,25 @@ export const SITE_ASSETS = {
  * settings row cleared in the portal stores "", and treating that as a URL
  * would ask the browser to fetch the current page as an image.
  */
+/**
+ * The six room reflections, as settings keys.
+ *
+ * One row per slot rather than one row holding a list, because the upload
+ * control is per file and replacing a single room should not mean re-uploading
+ * the other five. The fallback is the graded HDRI that ships with the site.
+ *
+ * Their order matches ROOMS in `rooms.ts`, which is what the pre-paint script
+ * cycles through. Keep the two in step.
+ */
+export const ROOM_KEYS = [
+  "room_metro_url",
+  "room_aquarium_url",
+  "room_studio_url",
+  "room_lobby_url",
+  "room_fireplace_url",
+  "room_station_url",
+] as const;
+
 export function assetUrl(asset: (typeof SITE_ASSETS)[keyof typeof SITE_ASSETS]): string {
   if (typeof document === "undefined") return asset.fallback;
   const set = document.documentElement.dataset[asset.attr];

@@ -8,7 +8,8 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import { assetUrl, SITE_ASSETS } from "./site-assets";
+import { assetUrl, ROOM_KEYS, SITE_ASSETS } from "./site-assets";
+import { ROOMS, roomScript } from "./rooms";
 import { safeHref } from "./safe-content";
 
 /**
@@ -75,5 +76,62 @@ describe("uploaded URLs survive the safety filter", () => {
   it("still refuses a scheme that could execute", () => {
     expect(safeHref("javascript:alert(1)")).toBe("");
     expect(safeHref("data:text/html,<script>alert(1)</script>")).toBe("");
+  });
+});
+
+/**
+ * The room script, which is the awkward one.
+ *
+ * It is a STRING that becomes executable JavaScript in the document head
+ * before anything paints, built from studio-editable settings. Two things
+ * therefore have to hold: an unset slot must fall back rather than produce a
+ * broken url(), and nothing from a settings row may be able to close the
+ * string it is embedded in.
+ */
+describe("room reflections", () => {
+  it("falls back per slot, not all or nothing", () => {
+    const script = roomScript(["", "https://cdn.example/aqua.jpg", "", "", "", ""]);
+    expect(script).toContain("https://cdn.example/aqua.jpg");
+    // The five that were not overridden still point at the shipped files.
+    expect(script).toContain("/rooms/metro.jpg");
+    expect(script).toContain("/rooms/station.jpg");
+  });
+
+  it("uses every shipped room when nothing is configured at all", () => {
+    const script = roomScript();
+    for (const name of ROOMS) expect(script).toContain(`/rooms/${name}.jpg`);
+  });
+
+  it("has a key for every room, in the same order", () => {
+    // These two lists are edited in different files and cycled by index, so a
+    // mismatch would silently apply one room's upload to another room.
+    expect(ROOM_KEYS).toHaveLength(ROOMS.length);
+    ROOMS.forEach((name, i) => expect(ROOM_KEYS[i]).toBe(`room_${name}_url`));
+  });
+
+  it("cannot be broken out of by a quote in a stored value", () => {
+    /*
+     * Proved by RUNNING it, not by looking at it.
+     *
+     * The first version of this test asserted the payload text was absent
+     * from the script, which fails for the right reason: the text IS there,
+     * escaped, sitting harmlessly inside a string literal. Reading the output
+     * cannot distinguish that from a real break-out. Executing it can.
+     */
+    const nasty = '"];globalThis.__pwned=1;var x=["';
+    const script = roomScript([nasty, "", "", "", "", ""]);
+
+    delete (globalThis as Record<string, unknown>)["__pwned"];
+    // Forces slot 0, so the injected value is the one that gets used.
+    try {
+      localStorage.setItem("onysnow:room", "-1");
+    } catch {
+      /* storage blocked; the script's own fallback covers it */
+    }
+    new Function(script)();
+
+    expect((globalThis as Record<string, unknown>)["__pwned"]).toBeUndefined();
+    // And it was used as a URL, exactly as stored.
+    expect(document.documentElement.style.getPropertyValue("--room")).toContain(nasty);
   });
 });
