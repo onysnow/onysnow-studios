@@ -957,6 +957,24 @@
  * and correct stacking all come free, and nothing has to be measured per frame
  * beyond the four numbers above.
  */
+/*
+ * The card's own clip would eat the shadow its photograph throws.
+ *
+ * A box-shadow paints OUTSIDE the border box, so with a 22px gap and a light
+ * off to one side only a ~19px sliver of it ever escapes from behind the
+ * opaque photograph -- and that sliver falls inside the card's anchor, which
+ * is `overflow: hidden`. Measured: the shadow was rendering correctly and
+ * being clipped to nothing.
+ *
+ * The anchor's clip is redundant anyway. What it is there to contain is the
+ * `scale-110` zoom on hover, and the wrapper span inside it already has
+ * `overflow: hidden` doing exactly that. Opening the anchor lets the shadow
+ * land on the glass without letting the zoom escape.
+ */
+.glass a:has(> span > .photo-surface) {
+  overflow: visible;
+}
+
 /* The photograph's own frame, thrown across the pane under it. */
 span:has(> .photo-surface) {
   box-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px)

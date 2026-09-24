@@ -202,7 +202,7 @@ export const tuning: Record<string, Knob> = {
   shadowStrength: {
     label: "Shadow strength",
     group: "Shadows",
-    value: 0.5,
+    value: 0.8,
     min: 0,
     max: 1,
     step: 0.02,
