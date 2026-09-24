@@ -40,8 +40,32 @@ import { useEffect } from "react";
  * That is a real split and worth naming rather than discovering later.
  */
 
-/** Panes the rasteriser takes over. The fixed header is not one of them. */
-const RASTER_PANES = ".glass:not(.glass--bar)";
+/**
+ * What the rasteriser takes over.
+ *
+ * THE HEADER IS THE POINT, AND THE BANDS MAY NOT BE.
+ *
+ * Measured, on the scene canvas the shader actually samples behind a section
+ * band: 1480x382, mean luma 13.1, max luma 54 out of 255. Six soft bokeh
+ * discs on black and nothing else. That is not a tuning problem and no
+ * parameter fixes it -- refraction is a LENS, and a lens over a black field
+ * shows black however good the lens is.
+ *
+ * The reason is structural. These bands CONTAIN their photographs; the
+ * pictures are children of the pane, so they are correctly excluded from the
+ * capture and correctly drawn on top of the shader output. There is nothing
+ * behind the glass because the glass is a container, not an overlay.
+ *
+ * The header is the opposite and is the case this effect exists for: a bar
+ * floating over the whole scrolling document, with the photography passing
+ * underneath it. That is where a lens has something to bend.
+ *
+ * Its root is the body, which is expensive -- the capture is the full
+ * document -- but it is cached and only re-taken when the content changes,
+ * and scrolling does not change it. Scrolling moves the sample WINDOW, not
+ * the scene.
+ */
+const RASTER_PANES = ".glass";
 
 type Instance = { destroy: () => void };
 
@@ -129,6 +153,14 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
             return;
           }
           instances.push(instance);
+          /*
+           * A handle in dev, so the scene the shader samples can actually be
+           * looked at. Debugging this blind is how the white-scene bug
+           * survived three rounds of guessing at parameters.
+           */
+          if (import.meta.env.DEV) {
+            (window as unknown as { __liquidglass?: unknown[] }).__liquidglass = instances;
+          }
         } catch (err) {
           // One pane failing must not take the others with it, and must not
           // leave the page with no glass at all.
