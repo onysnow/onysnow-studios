@@ -2500,72 +2500,6 @@ span:has(> .photo-surface) {
 }
 
 /*
- * The rig carries the charge, and everything inside reads it.
- *
- * Up and back down, slowly. The rise is longer than the fall because that is
- * what the real thing does -- a capacitor takes its time filling and dumps
- * faster than it filled -- and because a symmetrical pulse reads as a UI
- * animation rather than as a mechanism.
- */
-.site-loader__rig {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 120px;
-  height: 120px;
-  --ring-base: 34px;
-  --wind-sq: calc(var(--wind) * var(--wind));
-  --ring-size: calc(var(--ring-base) * (1 + var(--wind-sq) * 2.4));
-  animation: loader-wind 2.9s cubic-bezier(0.45, 0, 0.35, 1) infinite;
-}
-
-@keyframes loader-wind {
-  0% {
-    --wind: 0;
-  }
-  62% {
-    --wind: 1;
-  }
-  100% {
-    --wind: 0;
-  }
-}
-
-.site-loader__ring {
-  position: absolute;
-  width: var(--ring-size);
-  height: var(--ring-size);
-  border: 1px solid oklch(1 0 0 / calc(0.45 + var(--wind) * 0.55));
-  border-radius: 9999px;
-}
-
-/*
- * Derived from the ring exactly as the cursor's is: the housing circle is
- * radius 46 in a 100-unit viewBox, so 100/92 seats the blades on the ring's
- * own circle at whatever size it currently is.
- */
-.site-loader__iris {
-  position: absolute;
-  width: calc(var(--ring-size) * 100 / 92);
-  height: calc(var(--ring-size) * 100 / 92);
-  opacity: calc(0.25 + var(--wind) * 0.6);
-}
-
-/* The flash-ready lamp, same behaviour as the cursor's pilot. */
-.site-loader__lamp {
-  position: absolute;
-  width: calc(7px * (1 + var(--wind) * 0.5));
-  height: calc(7px * (1 + var(--wind) * 0.5));
-  border-radius: 9999px;
-  background-color: color-mix(in oklab, oklch(0.72 0.23 27) calc(var(--wind) * 100%), #fff);
-  box-shadow:
-    0 0 calc(var(--wind) * 6px) calc(var(--wind) * 1.5px)
-      oklch(0.72 0.23 27 / calc(var(--wind) * 0.95)),
-    0 0 calc(var(--wind) * 14px) calc(var(--wind) * 3px)
-      oklch(0.62 0.21 27 / calc(var(--wind) * 0.45));
-}
-
-/*
  * Reduced motion never sees this at all -- SiteLoader returns early and the
  * page is revealed immediately -- so there is no animation to disable here.
  */
@@ -2604,6 +2538,7 @@ span:has(> .photo-surface) {
 }
 
 .site-loader__pane {
+  position: relative;
   height: clamp(90px, 15vh, 140px);
   border-radius: 14px;
 }
@@ -2619,11 +2554,20 @@ span:has(> .photo-surface) {
   grid-column: span 2;
 }
 
+/*
+ * Centred IN the pane it sits on, not in the viewport.
+ *
+ * Floating it at the centre of the screen put it in the gap between the two
+ * rows of glass, belonging to neither. Inside the wide pane it is content
+ * resting on a surface, which is what the rest of the site does with type.
+ */
 .site-loader__readout {
-  position: relative;
+  position: absolute;
+  inset: 0;
   display: grid;
+  place-content: center;
   justify-items: center;
-  gap: 10px;
+  gap: 12px;
   text-align: center;
 }
 
@@ -2632,13 +2576,6 @@ span:has(> .photo-surface) {
   font-size: clamp(1.4rem, 3.4vw, 2.1rem);
   letter-spacing: 0.02em;
   color: oklch(1 0 0 / 0.92);
-}
-
-.site-loader__hint {
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: oklch(1 0 0 / 0.42);
 }
 
 /*
@@ -2669,8 +2606,3 @@ span:has(> .photo-surface) {
   }
 }
 
-/* Ready: the rig stops winding and holds open -- the charge is complete. */
-.site-loader[data-state="ready"] .site-loader__rig {
-  animation: none;
-  --wind: 1;
-}

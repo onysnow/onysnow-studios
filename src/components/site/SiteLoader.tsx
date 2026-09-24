@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-import { CameraIris } from "./CameraIris";
 import { ScrambleText } from "./ScrambleText";
 import { whenFirstScreenReady } from "@/lib/page-ready";
 
@@ -152,45 +151,54 @@ export function SiteLoader() {
       */}
       <div className="site-loader__field" aria-hidden="true" />
 
-      <div className="site-loader__stage" aria-hidden="true">
-        <div className="glass site-loader__pane" />
-        <div className="glass site-loader__pane" />
-        <div className="glass site-loader__pane site-loader__pane--wide" />
-      </div>
+      <div className="site-loader__stage">
+        {/*
+          Real panes, not a picture of them: `.glass` is the same class the
+          site's own panels use, so the pane-light registers these and the
+          cursor lights them exactly as it lights the page underneath.
 
-      <div className="site-loader__readout">
-        <div className="site-loader__rig" aria-hidden="true">
-          <span className="site-loader__ring" />
-          <CameraIris className="site-loader__iris" />
-          <span className="site-loader__lamp" />
+          No instructions anywhere. Anyone who moves the pointer finds the
+          light on their own, and being told to is worse than not finding it
+          -- a caption explaining an effect is an admission the effect did
+          not carry itself.
+        */}
+        <div className="glass site-loader__pane" aria-hidden="true" />
+        <div className="glass site-loader__pane" aria-hidden="true" />
+
+        {/* The word lives ON the glass, centred in the pane it sits on. */}
+        <div className="glass site-loader__pane site-loader__pane--wide">
+          <div className="site-loader__readout">
+            {/*
+              Keyed on the word so React remounts it: ScrambleText runs its
+              sequence on mount, and without a new key it would swap the text
+              without ever scrambling it.
+            */}
+            <p className="site-loader__word">
+              <ScrambleText
+                key={state === "holding" ? WORDS[word] : "ready"}
+                text={state === "holding" ? (WORDS[word] ?? "Loading") : "Ready"}
+                startOnView={false}
+                totalMs={900}
+              />
+            </p>
+
+            {/*
+              A real <button>, not a click handler on the overlay: this is the
+              only way past the loader, so it has to be reachable by keyboard
+              and announced as the control it is.
+            */}
+            {state === "ready" ? (
+              <button
+                type="button"
+                className="site-loader__enter eyebrow"
+                onClick={enter}
+                autoFocus
+              >
+                Click to enter
+              </button>
+            ) : null}
+          </div>
         </div>
-
-        {/*
-          Keyed on the word so React remounts it: ScrambleText runs its
-          sequence on mount, and without a new key it would swap the text
-          without ever scrambling it.
-        */}
-        <p className="site-loader__word">
-          <ScrambleText
-            key={state === "holding" ? WORDS[word] : "ready"}
-            text={state === "holding" ? (WORDS[word] ?? "Loading") : "Ready"}
-            startOnView={false}
-            totalMs={900}
-          />
-        </p>
-
-        {/*
-          A real button, not a click handler on the overlay: this is the only
-          way past the loader, so it has to be reachable by keyboard and
-          announced as the control it is.
-        */}
-        {state === "holding" ? (
-          <p className="site-loader__hint">Move your pointer across the glass</p>
-        ) : (
-          <button type="button" className="site-loader__enter eyebrow" onClick={enter} autoFocus>
-            Click to enter
-          </button>
-        )}
       </div>
     </div>
   );
