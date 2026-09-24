@@ -1165,8 +1165,42 @@ export class LiquidGlass {
 		} else {
 			this._sceneCtx.clearRect(0, 0, width, height);
 		}
-		this._sceneCtx.fillStyle = '#ffffff';
+		// LOCAL: the scene's floor is the ROOT's own background, not white.
+		//
+		// Upstream hardcodes '#ffffff' here, which is a fair assumption for the
+		// light UI this was built against and completely wrong on a dark page.
+		// The scene canvas is what every glass element samples, and the flat
+		// face of a pane is nothing BUT that sample -- the shader's refraction,
+		// fresnel and specular all live on the bevel, where the normal tilts,
+		// and contribute exactly zero across the face where N = (0,0,1). So a
+		// white floor is not a subtle tint, it is the entire pane rendering
+		// white with a thin glass edge drawn around it.
+		//
+		// It cannot come from the capture either: the library composites root's
+		// CHILDREN into the scene, and the page's background is painted by the
+		// root itself (and above it, by body), so it is never a child and never
+		// gets captured. Reading it off the root is the only place it can come
+		// from.
+		this._sceneCtx.fillStyle = this._sceneFloorColour();
 		this._sceneCtx.fillRect(0, 0, width, height);
+	}
+
+	// LOCAL: see _prepareSceneCanvas.
+	//
+	// Walks up from the root for the first element that actually paints a
+	// background, because the root of a glass section is usually transparent
+	// and the colour lives further up on body or html. Falls back to upstream's
+	// white so a page that genuinely has no background behaves as before.
+	private _sceneFloorColour(): string {
+		let node: HTMLElement | null = this.root;
+		while (node) {
+			const colour = window.getComputedStyle(node).backgroundColor;
+			if (colour && colour !== 'transparent' && !/rgba\(0,\s*0,\s*0,\s*0\)/.test(colour)) {
+				return colour;
+			}
+			node = node.parentElement;
+		}
+		return '#ffffff';
 	}
 
 	private _glassHasDynamicContributors(

@@ -2083,19 +2083,8 @@ span:has(> .photo-surface) {
 }
 
 /*
- * The scene the shader samples needs a floor.
- *
- * liquidglass captures each non-glass DIRECT CHILD of the root and composites
- * those into the scene the pane refracts. The root here is the section
- * wrapper, and this page's background colour is set on `body` -- which is not
- * a child of that wrapper, so the capture had nothing behind the section's own
- * content and every pane refracted white. It looked like the glass had been
- * lit from behind by a lightbox.
- *
- * Giving the wrapper the page's own background is the honest fix: it is the
- * colour that is actually behind the pane, it just was not reachable from
- * inside the root the capture works in.
+ * (The scene's floor is handled in the library now -- see the LOCAL note in
+ * LiquidGlass._prepareSceneCanvas. It reads the page background off the root
+ * instead of upstream's hardcoded white, which is where the problem actually
+ * was; giving the wrapper a background here only ever masked it.)
  */
-:root[data-glass="raster"] :is(div, section):has(> .glass:not(.glass--bar)) {
-  background-color: var(--color-background);
-}

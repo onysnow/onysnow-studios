@@ -81,11 +81,7 @@ export function Img({
         through. As its own element it can be filtered out of the capture and
         still do its job here.
       */}
-      <span
-        aria-hidden="true"
-        data-raster-skip
-        className="absolute inset-0 bg-muted"
-      />
+      <span aria-hidden="true" data-raster-skip className="absolute inset-0 bg-muted" />
       {blur ? (
         <img
           aria-hidden="true"

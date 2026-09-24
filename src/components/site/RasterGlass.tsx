@@ -46,30 +46,23 @@ const RASTER_PANES = ".glass:not(.glass--bar)";
 type Instance = { destroy: () => void };
 
 /*
- * The starting point, not the answer.
+ * NO configuration. Upstream's defaults, exactly as the library ships them.
  *
- * These are the library's defaults with four changes, and every one is a guess
- * until it has been looked at next to real glass:
+ * The first two attempts passed a `defaults` object of my own -- cornerRadius
+ * 18, zRadius 14, a blur amount -- reasoning about what these panes "should"
+ * want. That was the wrong move twice over. It is wrong as a method, because
+ * the whole point of vendoring this was to get it RUNNING as itself before
+ * changing anything, and it is wrong in fact: upstream's 65/40 are sized so
+ * the bevel is a large fraction of the element, and every term that makes
+ * this read as glass lives on the bevel. Across the flat face the surface
+ * normal is exactly (0, 0, 1), so refraction, fresnel and all four speculars
+ * evaluate to zero. A 14px bevel on a 1440px band is 1% glass and 99%
+ * blurred rectangle, which is precisely what it looked like.
  *
- *   cornerRadius  the library defaults to 65, which is an iOS pill. These are
- *                 full-width bands with a much sharper radius, and the shader
- *                 derives the entire bevel from this number, so wrong here is
- *                 wrong everywhere.
- *   zRadius       the bevel's depth, held near the side-face depth the CSS
- *                 version already uses so the two can be compared honestly.
- *   blurAmount    the library ships 0. These panes have always been frosted;
- *                 a perfectly clear pane over photographs is a different
- *                 design, not a better-implemented version of this one.
- *   chromAberration  left at the default. It is the single strongest cue that
- *                 something is glass rather than a blur.
+ * So: nothing is passed. What renders is what the library renders. Tuning
+ * comes after it is known to work, and against what it actually looks like
+ * rather than against an argument about what it ought to look like.
  */
-const GLASS_DEFAULTS = {
-  cornerRadius: 18,
-  zRadius: 14,
-  refraction: 0.69,
-  chromAberration: 0.05,
-  blurAmount: 0.18,
-} as const;
 
 export function RasterGlass({ enabled }: { enabled: boolean }) {
   useEffect(() => {
@@ -130,7 +123,6 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
           const instance = await LiquidGlass.init({
             root,
             glassElements: [pane],
-            defaults: GLASS_DEFAULTS,
           });
           if (!live) {
             instance.destroy();
