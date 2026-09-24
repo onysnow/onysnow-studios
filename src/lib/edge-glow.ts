@@ -53,6 +53,15 @@ export function reportCharge(charge: number) {
 let bound = false;
 
 export type GlassRect = {
+  /**
+   * The pane element, so the light pass can reach its own surface layer.
+   *
+   * The grime is a mark ON the glass, so it belongs under the photographs and
+   * the copy resting on it. That means drawing it into a canvas inside the
+   * pane -- the shared viewport canvas is above all content by construction,
+   * and no weighting changes what it lands on.
+   */
+  el: HTMLElement;
   /** Top-left corner and size, in CSS pixels, viewport-relative. */
   x: number;
   y: number;
@@ -212,6 +221,14 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
     const img = backdropOf(el);
     const b = img?.getBoundingClientRect();
     geometry.push({
+      /*
+       * The element itself, so the light pass can find the pane's own surface
+       * canvas. The grime belongs UNDER the photographs and the copy, which
+       * means it has to be drawn into a layer inside the pane rather than
+       * onto the shared viewport canvas -- that one is above all content by
+       * construction, and no amount of weighting changes what it lands on.
+       */
+      el,
       x: r.left,
       y: r.top,
       w: r.width,

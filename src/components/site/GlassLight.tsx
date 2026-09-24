@@ -217,6 +217,57 @@ export function GlassLight({
       return null;
     };
 
+    /*
+     * ---- The pane's own surface layer ----
+     *
+     * The grime is a mark ON the glass. The photographs and the copy REST on
+     * that glass. So the marks have to be behind them, and the shared canvas
+     * cannot do it: it is fixed to the viewport at z-index 9997, above every
+     * piece of content on the page, and a mask to a pane's footprint does not
+     * help because a footprint contains whatever is standing in it. Reported
+     * five times; deferred five times; this is the fix.
+     *
+     * Each pane gets its own canvas at z-index -1 -- above the bevel and the
+     * reflection at -2 and below, under everything in normal flow. The shared
+     * WebGL canvas becomes an offscreen buffer that nothing displays, and each
+     * pane's scissored region is blitted out of it into that pane's layer.
+     *
+     * The layer is BLEED larger than the pane on every side, because the rim
+     * bloom genuinely escapes the glass and would otherwise be cut off square
+     * at the edge. `.glass` is position:relative with no overflow rule, so it
+     * spills correctly.
+     */
+    const surfaces = new WeakMap<HTMLElement, HTMLCanvasElement>();
+
+    const surfaceFor = (el: HTMLElement, cssW: number, cssH: number) => {
+      let layer = surfaces.get(el);
+      if (!layer) {
+        layer = document.createElement("canvas");
+        layer.className = "glass__surface";
+        layer.setAttribute("aria-hidden", "true");
+        el.insertBefore(layer, el.firstChild);
+        surfaces.set(el, layer);
+      }
+      const w = Math.max(1, Math.round(cssW * scale));
+      const h = Math.max(1, Math.round(cssH * scale));
+      if (layer.width !== w || layer.height !== h) {
+        layer.width = w;
+        layer.height = h;
+      }
+      return layer;
+    };
+
+    /** Every pane layer this pass touched, so the rest can be cleared. */
+    const drawn = new Set<HTMLCanvasElement>();
+    const allLayers = new Set<HTMLCanvasElement>();
+
+    const clearLayers = () => {
+      for (const layer of allLayers) {
+        const ctx = layer.getContext("2d");
+        ctx?.clearRect(0, 0, layer.width, layer.height);
+      }
+    };
+
     let wasLit = false;
     canvas.style.opacity = "0";
 
@@ -228,14 +279,15 @@ export function GlassLight({
         if (wasLit) {
           gl.disable(gl.SCISSOR_TEST);
           gl.clear(gl.COLOR_BUFFER_BIT);
-          canvas.style.opacity = "0";
+          // The pane layers are real elements, so they hold their last frame
+          // until something wipes them. Nothing else will.
+          clearLayers();
           wasLit = false;
         }
         return false;
       }
       if (!wasLit) {
         requestSurface();
-        canvas.style.opacity = "1";
         wasLit = true;
       }
 
@@ -280,8 +332,34 @@ export function GlassLight({
         const sh = Math.ceil((pane.h + BLEED * 2) * scale);
         gl.scissor(sx, sy, sw, sh);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        /*
+         * Out of the shared buffer and into the pane.
+         *
+         * drawImage reads top-down while the scissor counts from the bottom,
+         * so the source y is computed separately rather than reused -- getting
+         * that wrong mirrors every pane vertically, which looks like a shader
+         * bug and is not one.
+         */
+        const layer = surfaceFor(pane.el, pane.w + BLEED * 2, pane.h + BLEED * 2);
+        const ctx = layer.getContext("2d");
+        if (ctx) {
+          const syTop = Math.floor((pane.y - BLEED) * scale);
+          ctx.clearRect(0, 0, layer.width, layer.height);
+          ctx.drawImage(canvas, sx, syTop, sw, sh, 0, 0, layer.width, layer.height);
+          drawn.add(layer);
+          allLayers.add(layer);
+        }
       }
       gl.disable(gl.SCISSOR_TEST);
+
+      // A pane that scrolled out of range this frame keeps its last image
+      // otherwise, frozen, while the light moves on without it.
+      for (const layer of allLayers) {
+        if (drawn.has(layer)) continue;
+        layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
+      }
+      drawn.clear();
       return true;
     };
 

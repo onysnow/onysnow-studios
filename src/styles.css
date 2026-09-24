@@ -2250,3 +2250,51 @@ span:has(> .photo-surface) {
   line-height: 1.4;
   color: var(--color-muted-foreground);
 }
+
+/* ===================== The pane's own surface =====================
+ *
+ * Where the grime actually lives now.
+ *
+ * It used to be drawn by the shared light canvas, which is fixed to the
+ * viewport at z-index 9997 -- above every piece of content on the page. The
+ * shader masked each pane's footprint perfectly correctly, and it did not
+ * matter: a footprint contains whatever is STANDING in it, so every mark
+ * landed on top of the photographs and the copy. Those rest ON the glass.
+ * Nothing on the surface of a pane can be in front of the things lying on it,
+ * and no weighting fixes that -- it was the wrong layer, reported five times.
+ *
+ * This is a canvas inside each pane at z-index -1: above the bevel, the
+ * refraction and the reflection (which sit at -2 and below), and under
+ * everything in normal flow. The layering stops being something to get right
+ * and becomes something the document does.
+ *
+ * It is inset NEGATIVELY by the same bleed the renderer uses, because the rim
+ * bloom genuinely escapes the glass -- that spill above a lit edge is most of
+ * what tells you the edge is bright rather than merely pale -- and clipping it
+ * to the pane would draw a hard line exactly where the glow should be softest.
+ * `.glass` is position: relative with no overflow rule, so it spills.
+ */
+.glass > .glass__surface {
+  position: absolute;
+  inset: -90px;
+  z-index: -1;
+  width: calc(100% + 180px);
+  height: calc(100% + 180px);
+  pointer-events: none;
+  /* ADDS to the pane the way light does, matching the shared canvas it
+     replaces. The shader has already tonemapped; this only places it. */
+  mix-blend-mode: plus-lighter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass > .glass__surface {
+    display: none;
+  }
+}
+
+/* Phones skip the whole effect layer; a canvas per pane is more, not less. */
+@media (pointer: coarse), (hover: none) {
+  .glass > .glass__surface {
+    display: none;
+  }
+}
