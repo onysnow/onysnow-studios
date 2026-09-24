@@ -262,8 +262,17 @@
    * the blades stay seated on the ring's circle however wide the ring gets --
    * which is right, because the blades come OUT of the lens.
    */
+  /*
+   * `--ring-base` is the resting diameter BEFORE the charge opens it. States
+   * below re-point it, and CustomCursor writes it inline when the ring has to
+   * be capped to the size of the control under the pointer. Everything then
+   * goes through the one wind formula, so no state can accidentally opt out
+   * of the charge growth -- which is what the old per-state `--ring-size`
+   * override did over every link on the site.
+   */
+  --ring-base: var(--tune-ring, 30px);
   --wind-sq: calc(var(--wind, 0) * var(--wind, 0));
-  --ring-size: calc(var(--tune-ring, 30px) * (1 + var(--wind-sq, 0) * var(--tune-ring-open, 2.4)));
+  --ring-size: calc(var(--ring-base) * (1 + var(--wind-sq, 0) * var(--tune-ring-open, 2.4)));
   position: fixed;
   top: 0;
   left: 0;
@@ -341,8 +350,14 @@
  * because it was being inverted; painted straight it simply covers the thing
  * you are pointing at.
  */
+/*
+ * The fallback for a clickable thing big enough not to need capping.
+ * CustomCursor overrides this inline with the fitted size whenever the
+ * control's larger axis is under 56px, so the ring hugs a knob instead of
+ * engulfing it -- keep the two numbers in step (LINK_RING).
+ */
 .custom-cursor[data-state="link"] {
-  --ring-size: 56px;
+  --ring-base: 56px;
 }
 .custom-cursor[data-state="link"] .custom-cursor__ring {
   background-color: oklch(1 0 0 / 0.14);
@@ -981,9 +996,11 @@
  * passes, and SHARPENS as the light moves away rather than softening, which is
  * the way round that every recipe for this gets wrong.
  *
- * `--cast-alpha` carries the gate: it is the eased nearness times the strength
- * knob, so there is no shadow at all until the light is on it, and it fades in
- * rather than switching.
+ * `--cast-alpha` carries the gate: eased nearness times the shutter's charge
+ * (on the same smoothstep the shader lights with) times the strength knob. So
+ * there is no shadow at all until the light is actually lit -- proximity on
+ * its own used to be enough, which threw shadows from an unlit source -- and
+ * it fades in rather than switching.
  *
  * Done with box-shadow and text-shadow on the real elements instead of drawn
  * on a canvas, which was the first plan. Rounded corners, exact glyph outlines

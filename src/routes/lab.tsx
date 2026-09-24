@@ -2,19 +2,71 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { RotateCcw, ClipboardCopy } from "lucide-react";
+import { RotateCcw, ClipboardCopy, Copy, Layers } from "lucide-react";
 import { coverPhotosQuery } from "@/lib/content";
 import { PhotoSection } from "@/components/site/PhotoSection";
 import { Img } from "@/components/site/Img";
 import {
   applyTuning,
+  isPerMode,
   resetTuning,
+  restoreTuning,
   serializeTuning,
+  setValueIn,
   tuning,
+  tuningMode,
+  tuningSnapshot,
+  valueIn,
   TUNING_DEFAULTS,
   type Knob,
+  type TuningMode,
 } from "@/lib/tuning";
+import { toggleGlassMode, useGlassMode } from "@/lib/glass-mode";
 import { Button } from "@/components/ui/button";
+
+/** One knob, bound to a given mode's copy of its value. */
+function KnobRow({
+  id,
+  knob,
+  value,
+  onChange,
+}: {
+  id: string;
+  knob: Knob;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-[16rem_1fr_6rem] sm:items-center">
+      <label htmlFor={id} className="text-sm">
+        {knob.label}
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={knob.min}
+        max={knob.max}
+        step={knob.step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-[var(--amber)]"
+      />
+      <input
+        type="number"
+        aria-label={`${knob.label} value`}
+        min={knob.min}
+        max={knob.max}
+        step={knob.step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full rounded border border-input bg-transparent px-2 py-1 text-right font-mono text-sm"
+      />
+      {knob.hint ? (
+        <p className="text-sm text-muted-foreground sm:col-span-3 sm:-mt-1">{knob.hint}</p>
+      ) : null}
+    </div>
+  );
+}
 
 const STORE = "onysnow:tuning";
 
@@ -61,8 +113,16 @@ function Lab() {
     try {
       const saved = localStorage.getItem(STORE);
       if (saved) {
-        for (const [key, value] of Object.entries(JSON.parse(saved) as Record<string, number>)) {
-          if (tuning[key] && typeof value === "number") tuning[key]!.value = value;
+        const parsed = JSON.parse(saved) as Record<string, unknown>;
+        if (parsed["css"] || parsed["raster"]) {
+          restoreTuning(parsed as Parameters<typeof restoreTuning>[0]);
+        } else {
+          // A store written before the sets were split. One set of numbers,
+          // which were tuned against whichever mode was up at the time --
+          // seed BOTH from it rather than guessing which, so nothing is lost
+          // and the two start out agreeing.
+          const flat = parsed as Record<string, number>;
+          restoreTuning({ css: flat, raster: flat });
         }
       }
     } catch {
@@ -82,20 +142,20 @@ function Lab() {
     return [...byGroup.entries()];
   }, []);
 
-  const set = useCallback((key: string, value: number) => {
+  const set = useCallback((key: string, value: number, mode?: TuningMode) => {
     const knob = tuning[key];
     if (!knob) return;
-    knob.value = value;
+    setValueIn(key, mode ?? tuningMode(), value);
     applyTuning();
     redraw((n) => n + 1);
     try {
-      const current = Object.fromEntries(Object.entries(tuning).map(([k, v]) => [k, v.value]));
-      localStorage.setItem(STORE, JSON.stringify(current));
+      localStorage.setItem(STORE, JSON.stringify(tuningSnapshot()));
     } catch {
       // Tuning still works without somewhere to remember it.
     }
   }, []);
 
+  const mode = useGlassMode();
   const photo = photos.data?.[0];
 
   return (
@@ -152,80 +212,153 @@ function Lab() {
           >
             <ClipboardCopy /> Copy values
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const next = toggleGlassMode();
+              redraw((n) => n + 1);
+              toast.success(next === "raster" ? "Liquid glass" : "CSS glass");
+            }}
+          >
+            <Layers /> {mode === "raster" ? "Liquid glass" : "CSS glass"}
+          </Button>
           <span className="text-sm text-muted-foreground">
-            Kept in this browser until you reset.
+            Kept in this browser until you reset. Groups that do nothing in the current mode are
+            folded away.
           </span>
         </div>
 
         {/*
-          The rasterised glass is kept apart from everything else, and the
-          separation is not cosmetic.
+          Nothing on this page shows you a knob that is not connected to what
+          you are looking at.
 
-          Every other group on this page drives the CSS-and-WebGL effect layer,
-          which is live on the site. These drive ybouane's shader, which only
-          runs under `?glass=raster`. Mixed into one list they look like knobs
-          that are not working -- they are not connected to what you are
-          looking at unless you are in that mode, and nothing on the slider
-          says so.
+          Two separate problems, and they are not the same problem:
+
+          1. DEAD IN THIS MODE. The Liquid glass group drives ybouane's
+             shader, which only runs under `?glass=raster`. In CSS mode those
+             sliders move and nothing happens. They are folded away rather
+             than deleted -- you can still open them, and the summary says why
+             they are shut.
+
+          2. LIVE IN BOTH, BUT NOT THE SAME NUMBER. The light pass, the cast
+             shadows, the reflection and the pane's own surface all run
+             whichever glass is in front of them, but they do not want the
+             same values in both: a sheen that sits right on a backdrop-filter
+             pane is wrong over a refracting one. Those groups keep a set per
+             mode. What you see is the ACTIVE set; the other one is folded
+             underneath so it is reachable without switching and, more to the
+             point, so it is obvious it exists.
         */}
-        {groups.map(([group, knobs]) => (
-          <section
-            key={group}
-            className={
-              group === "Liquid glass"
-                ? "mb-12 rounded-lg border border-[var(--amber)]/30 bg-[var(--amber)]/[0.03] p-6"
-                : "mb-12"
-            }
-          >
-            <h2 className="mb-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              {group}
-            </h2>
-            {group === "Liquid glass" ? (
-              <p className="mb-5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                The rasterised glass shader. These do nothing unless the page is in{" "}
-                <code className="text-[var(--amber)]">?glass=raster</code> — in CSS mode the panes
-                are backdrop-filter and an SVG displacement map, and none of this reaches them.
-                Bevel depth has the most leverage of anything here: across the flat face of a pane
-                the surface normal is (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular
-                are exactly zero there. All of the glass lives on the edge.
-              </p>
-            ) : null}
+        {groups.map(([group, knobs]) => {
+          const dead = knobs.every((entry) => entry[1].modes === "raster") && mode !== "raster";
+          const twinned = knobs.some((entry) => isPerMode(entry[1]));
+          const other: TuningMode = mode === "raster" ? "css" : "raster";
+
+          const rows = (
             <div className="space-y-6">
               {knobs.map(([key, knob]) => (
-                <div key={key} className="grid gap-2 sm:grid-cols-[16rem_1fr_6rem] sm:items-center">
-                  <label htmlFor={`knob-${key}`} className="text-sm">
-                    {knob.label}
-                  </label>
-                  <input
-                    id={`knob-${key}`}
-                    type="range"
-                    min={knob.min}
-                    max={knob.max}
-                    step={knob.step}
-                    value={knob.value}
-                    onChange={(e) => set(key, Number(e.target.value))}
-                    className="w-full accent-[var(--amber)]"
-                  />
-                  <input
-                    type="number"
-                    aria-label={`${knob.label} value`}
-                    min={knob.min}
-                    max={knob.max}
-                    step={knob.step}
-                    value={knob.value}
-                    onChange={(e) => set(key, Number(e.target.value))}
-                    className="w-full rounded border border-input bg-transparent px-2 py-1 text-right font-mono text-sm"
-                  />
-                  {knob.hint ? (
-                    <p className="text-sm text-muted-foreground sm:col-span-3 sm:-mt-1">
-                      {knob.hint}
-                    </p>
-                  ) : null}
-                </div>
+                <KnobRow
+                  key={key}
+                  id={`knob-${key}`}
+                  knob={knob}
+                  value={valueIn(key, mode)}
+                  onChange={(value) => set(key, value, mode)}
+                />
               ))}
             </div>
-          </section>
-        ))}
+          );
+
+          if (dead) {
+            return (
+              <details key={group} className="mb-6 rounded-lg border border-border/60 p-4">
+                <summary className="cursor-pointer text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  {group} — {knobs.length} knobs, nothing to see in CSS mode
+                </summary>
+                <p className="mt-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                  These drive the rasterised glass shader, which only runs in liquid mode. In CSS
+                  mode the panes are backdrop-filter and an SVG displacement map and none of this
+                  reaches them, so moving these does nothing to the preview above. Switch the glass
+                  to make them live. Bevel depth has the most leverage of anything here: across the
+                  flat face of a pane the surface normal is (0,&nbsp;0,&nbsp;1), so refraction,
+                  fresnel and every specular are exactly zero there. All of the glass lives on the
+                  edge.
+                </p>
+                <div className="mt-6 opacity-60">{rows}</div>
+              </details>
+            );
+          }
+
+          return (
+            <section
+              key={group}
+              className={
+                group === "Liquid glass"
+                  ? "mb-12 rounded-lg border border-[var(--amber)]/30 bg-[var(--amber)]/[0.03] p-6"
+                  : "mb-12"
+              }
+            >
+              <h2 className="mb-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                {group}{" "}
+                {twinned ? (
+                  <span className="ml-2 normal-case tracking-normal text-[var(--amber)]">
+                    {mode === "raster" ? "liquid" : "CSS"} set
+                  </span>
+                ) : null}
+              </h2>
+              {group === "Liquid glass" ? (
+                <p className="mb-5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                  The rasterised glass shader, live right now. Bevel depth has the most leverage of
+                  anything here: across the flat face of a pane the surface normal is
+                  (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular are exactly zero
+                  there. All of the glass lives on the edge.
+                </p>
+              ) : null}
+              {rows}
+              {twinned ? (
+                <details className="mt-6 rounded-lg border border-border/60 p-4">
+                  <summary className="cursor-pointer text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                    The {other === "raster" ? "liquid" : "CSS"} set — not in effect right now
+                  </summary>
+                  <p className="mt-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                    The same knobs, as they stand for the other glass. Editing them here changes
+                    nothing on screen until you switch; they are shown so it is clear the two are
+                    kept apart, and so one can be brought into line with the other without switching
+                    back and forth.
+                  </p>
+                  <div className="mt-4 mb-6">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        for (const [key, knob] of knobs) {
+                          if (isPerMode(knob)) setValueIn(key, other, valueIn(key, mode));
+                        }
+                        redraw((n) => n + 1);
+                        toast.success(
+                          `Copied this set to ${other === "raster" ? "liquid" : "CSS"}`,
+                        );
+                      }}
+                    >
+                      <Copy /> Copy the live set over these
+                    </Button>
+                  </div>
+                  <div className="space-y-6 opacity-70">
+                    {knobs.map(([key, knob]) => (
+                      <KnobRow
+                        key={key}
+                        id={`knob-${other}-${key}`}
+                        knob={knob}
+                        value={valueIn(key, other)}
+                        onChange={(value) => set(key, value, other)}
+                      />
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </section>
+          );
+        })}
       </div>
     </main>
   );

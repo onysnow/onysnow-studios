@@ -14,6 +14,8 @@
  * by `applyTuning`, because stylesheets cannot read a JS object.
  */
 
+import { getGlassMode, onGlassMode } from "./glass-mode";
+
 export type Knob = {
   label: string;
   group: string;
@@ -36,6 +38,20 @@ export type Knob = {
    */
   glassKey?: string;
   glassScope?: "band" | "bar";
+  /**
+   * The glass mode this knob has a visible effect in.
+   *
+   * Omitted means both. `"raster"` means it feeds ybouane's shader and does
+   * nothing at all in CSS mode.
+   *
+   * Declared rather than inferred from `glassKey` because the inverse is not
+   * true and it would be a lie to imply it: the CSS-side knobs are NOT dead
+   * in raster mode. Only the section bands are rasterised -- the fixed header
+   * stays backdrop-filter in both modes -- so `transmit`, the paper gloss and
+   * the reflection group still drive the bar when the bands are liquid. The
+   * lab says so on the group rather than hiding them.
+   */
+  modes?: "raster";
   hint?: string;
 };
 
@@ -83,6 +99,7 @@ export const tuning: Record<string, Knob> = {
     max: 2,
     step: 0.01,
     glassKey: "refraction",
+    modes: "raster",
     hint: "How far the bevel bends what is behind the pane. This is the effect; everything else is trim.",
   },
   glassChroma: {
@@ -93,6 +110,7 @@ export const tuning: Record<string, Knob> = {
     max: 0.4,
     step: 0.005,
     glassKey: "chromAberration",
+    modes: "raster",
     hint: "Chromatic aberration at the rim. Glass splits wavelengths by slightly different amounts, and this is the single strongest cue that something is glass rather than a blur.",
   },
   glassBlur: {
@@ -103,6 +121,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.01,
     glassKey: "blurAmount",
+    modes: "raster",
     hint: "How far from clear the body of the pane is. 0 is optical glass; the photographs read straight through it.",
   },
   glassSpecular: {
@@ -113,6 +132,7 @@ export const tuning: Record<string, Knob> = {
     max: 2,
     step: 0.02,
     glassKey: "specular",
+    modes: "raster",
     hint: "Strength of the hard highlights off the bevel. Four fixed lights, Blinn-Phong, exponents 90/50/6/120.",
   },
   glassDistortion: {
@@ -123,6 +143,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.01,
     glassKey: "distortion",
+    modes: "raster",
     hint: "Micro-distortion in the surface. Small amounts read as imperfect glass; large amounts read as water.",
   },
   glassFresnel: {
@@ -133,6 +154,7 @@ export const tuning: Record<string, Knob> = {
     max: 2,
     step: 0.02,
     glassKey: "fresnel",
+    modes: "raster",
     hint: "How much brighter the pane gets where you see it at a grazing angle. Lives on the bevel, since the face is dead flat.",
   },
   glassEdge: {
@@ -143,6 +165,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.01,
     glassKey: "edgeHighlight",
+    modes: "raster",
     hint: "The inner stroke and rim glow. Trim rather than optics.",
   },
   glassDepth: {
@@ -153,6 +176,7 @@ export const tuning: Record<string, Knob> = {
     max: 140,
     step: 2,
     glassKey: "zRadius",
+    modes: "raster",
     hint: "How far the edge rounds over. EVERY optical term lives here -- across the flat face the normal is (0,0,1) and refraction, fresnel and specular are all exactly zero. Too small and the pane is a blurred rectangle.",
   },
   glassCornerBand: {
@@ -163,6 +187,7 @@ export const tuning: Record<string, Knob> = {
     max: 140,
     step: 2,
     glassKey: "cornerRadius",
+    modes: "raster",
     glassScope: "band",
     hint: "0 runs them straight across, which is what a full-bleed band wants.",
   },
@@ -174,6 +199,7 @@ export const tuning: Record<string, Knob> = {
     max: 140,
     step: 2,
     glassKey: "cornerRadius",
+    modes: "raster",
     glassScope: "bar",
     hint: "The header is a floating bar, so it keeps a pill.",
   },
@@ -185,6 +211,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.01,
     glassKey: "tintStrength",
+    modes: "raster",
     hint: "Cool cast through the body, as thick glass has.",
   },
   glassSaturation: {
@@ -195,6 +222,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.02,
     glassKey: "saturation",
+    modes: "raster",
     hint: "Applied to what is seen THROUGH the pane, not to the page.",
   },
   glassSpecTight: {
@@ -205,6 +233,7 @@ export const tuning: Record<string, Knob> = {
     max: 4,
     step: 0.05,
     glassKey: "specularTightness",
+    modes: "raster",
     hint: "Scales all four specular exponents at once (90/50/6/120 at 1.0). Higher is a smaller, harder glint; lower spreads it into a sheen. This is the roughness of the surface in the optical sense.",
   },
   glassLightX: {
@@ -215,6 +244,7 @@ export const tuning: Record<string, Knob> = {
     max: 1.5,
     step: 0.05,
     glassKey: "lightX",
+    modes: "raster",
     hint: "Moves the two TIGHT speculars left and right. The two broad fill lights stay put — moving those muddies the face rather than lighting it.",
   },
   glassLightY: {
@@ -225,6 +255,7 @@ export const tuning: Record<string, Knob> = {
     max: 1.5,
     step: 0.05,
     glassKey: "lightY",
+    modes: "raster",
     hint: "Same, vertically. 0,0 is the rig the library ships with.",
   },
   glassBlurPasses: {
@@ -235,6 +266,7 @@ export const tuning: Record<string, Knob> = {
     max: 12,
     step: 1,
     glassKey: "blurPasses",
+    modes: "raster",
     hint: "Gaussian passes behind the frost. Each one costs two full-screen draws, so this is the knob to drop first if the panes are expensive.",
   },
   glassOpacity: {
@@ -245,6 +277,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.01,
     glassKey: "opacity",
+    modes: "raster",
     hint: "The whole shader output's alpha. Below 1 the unrefracted page shows through underneath, which reads as thin glass rather than as clear glass.",
   },
   glassBevelMode: {
@@ -255,6 +288,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 1,
     glassKey: "bevelMode",
+    modes: "raster",
     hint: "0 is a biconvex pill, curved from both faces. 1 is a dome: flat underneath, quarter-circle on top. Set 1 with bevel depth equal to the corner radius for a half-sphere magnifier.",
   },
   glassShadow: {
@@ -265,6 +299,7 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.01,
     glassKey: "shadowOpacity",
+    modes: "raster",
     hint: "The shadow the pane casts on the page. Drawn inside a 20px pad around the canvas, so a large spread gets clipped rather than growing.",
   },
   glassShadowSpread: {
@@ -275,6 +310,7 @@ export const tuning: Record<string, Knob> = {
     max: 20,
     step: 1,
     glassKey: "shadowSpread",
+    modes: "raster",
     hint: "Capped by the same 20px pad. Past that the shadow is cut off square, which looks worse than a smaller shadow.",
   },
   glassShadowY: {
@@ -285,6 +321,7 @@ export const tuning: Record<string, Knob> = {
     max: 20,
     step: 1,
     glassKey: "shadowOffsetY",
+    modes: "raster",
     hint: "Vertical only, which is upstream's choice — the implied light is directly above.",
   },
   glassBrightness: {
@@ -295,6 +332,7 @@ export const tuning: Record<string, Knob> = {
     max: 0.5,
     step: 0.01,
     glassKey: "brightness",
+    modes: "raster",
   },
 
   // ---- The light itself ----
@@ -503,14 +541,6 @@ export const tuning: Record<string, Knob> = {
     step: 1,
     hint: "The emitter's radius. This is what sets the penumbra.",
   },
-  causticStrength: {
-    label: "Scratch caustics",
-    group: "Shadows",
-    value: 0.42,
-    min: 0,
-    max: 1.5,
-    step: 0.02,
-  },
 
   // ---- Cursor ----
   ringSize: {
@@ -638,28 +668,6 @@ export const tuning: Record<string, Knob> = {
     hint: "How much of the room a print catches. Far less than the pane, and offset from it, because it sits a little nearer the eye.",
   },
 
-  grimeAmount: {
-    label: "Grime amount",
-    group: "Glass",
-    value: 0.5,
-    min: 0,
-    max: 1.5,
-    step: 0.02,
-    cssVar: "--tune-grime",
-    hint: "How strongly the marks on the pane's face read once the light rakes them.",
-  },
-  grimeReach: {
-    label: "Grime reach",
-    group: "Glass",
-    value: 520,
-    min: 120,
-    max: 1400,
-    step: 20,
-    cssVar: "--tune-grime-reach",
-    cssUnit: "px",
-    hint: "How far from the light the raking still picks marks out. Dust is invisible until something catches it at a shallow angle.",
-  },
-
   grimeFloor: {
     label: "Grime clarity",
     group: "Glass",
@@ -702,6 +710,123 @@ export const tuning: Record<string, Knob> = {
     hint: "Peak veiling luminance at the point of discharge. This is contrast loss, not a second flash.",
   },
 };
+
+/*
+ * ---- Two sets of values, one per glass mode ----
+ *
+ * WHY
+ *
+ * Most of this panel is NOT mode-specific in the sense of being dead in one
+ * mode -- the light pass, the cast shadows, the reflection and the pane's own
+ * CSS surface all run whichever glass is in front of them. But they do not
+ * want the SAME numbers in both. A sheen that sits right on a backdrop-filter
+ * pane is wrong over a refracting one, because the two surfaces return light
+ * differently; tuning one used to silently detune the other, and the only
+ * symptom was coming back later to find the other mode looked worse than you
+ * left it.
+ *
+ * So those knobs keep a value per mode. Switching the glass swaps the whole
+ * set over, live.
+ *
+ * HOW, AND WHY IT IS DONE THIS WAY
+ *
+ * `knob.value` stays a single number and stays the live one. Every reader --
+ * `t()` in four rAF loops, `applyTuning`, `applyGlassConfig` -- is unchanged
+ * and cannot get this wrong. The inactive mode's numbers sit in `stash` and
+ * are swapped in on the mode change. The alternative, making `value` a pair,
+ * would have put a mode lookup inside loops that run sixty times a second and
+ * would have touched every call site to save nothing.
+ */
+
+/**
+ * The groups whose knobs are live in both systems, and so are kept twice.
+ *
+ * Not Cursor or Afterimage: the pointer and the flash are in front of the
+ * glass rather than part of it, and doubling them would only create two
+ * places to set one number. Not Liquid glass either -- those are dead in CSS
+ * mode, which is a different thing and is marked with `modes` instead.
+ */
+const PER_MODE_GROUPS = new Set(["Glass", "Light", "Reflection", "Shadows"]);
+
+export function isPerMode(knob: Knob): boolean {
+  return PER_MODE_GROUPS.has(knob.group);
+}
+
+let activeMode: TuningMode = "css";
+const stash: Record<TuningMode, Record<string, number>> = { css: {}, raster: {} };
+
+export type TuningMode = "css" | "raster";
+
+/** Which set is currently loaded into `knob.value`. */
+export function tuningMode(): TuningMode {
+  return activeMode;
+}
+
+/** A knob's value in a given mode, whether or not that mode is loaded. */
+export function valueIn(key: string, mode: TuningMode): number {
+  const knob = tuning[key];
+  if (!knob) return 0;
+  if (mode === activeMode || !isPerMode(knob)) return knob.value;
+  return stash[mode][key] ?? knob.value;
+}
+
+/** Set a knob's value in a given mode, loaded or not. */
+export function setValueIn(key: string, mode: TuningMode, value: number) {
+  const knob = tuning[key];
+  if (!knob) return;
+  if (mode === activeMode || !isPerMode(knob)) {
+    knob.value = value;
+    applyTuning();
+    return;
+  }
+  stash[mode][key] = value;
+}
+
+/**
+ * Load a mode's set.
+ *
+ * An unset mode inherits what is on screen rather than snapping to the
+ * defaults. The first switch therefore copies the current tuning across,
+ * which is the only sane starting point for a comparison -- landing in the
+ * other mode with every number reset would make the two incomparable at
+ * exactly the moment you went to compare them.
+ */
+export function switchTuningMode(mode: TuningMode) {
+  if (mode === activeMode) return;
+  for (const [key, knob] of Object.entries(tuning)) {
+    if (!isPerMode(knob)) continue;
+    stash[activeMode][key] = knob.value;
+    knob.value = stash[mode][key] ?? knob.value;
+  }
+  activeMode = mode;
+  applyTuning();
+}
+
+/** Both sets, for persisting. */
+export function tuningSnapshot(): Record<TuningMode, Record<string, number>> {
+  const css: Record<string, number> = {};
+  const raster: Record<string, number> = {};
+  for (const key of Object.keys(tuning)) {
+    css[key] = valueIn(key, "css");
+    raster[key] = valueIn(key, "raster");
+  }
+  return { css, raster };
+}
+
+/** Restore both sets. */
+export function restoreTuning(saved: Partial<Record<TuningMode, Record<string, number>>>) {
+  for (const mode of ["css", "raster"] as const) {
+    for (const [key, value] of Object.entries(saved[mode] ?? {})) {
+      if (typeof value === "number") setValueIn(key, mode, value);
+    }
+  }
+  applyTuning();
+}
+
+if (typeof window !== "undefined") {
+  activeMode = getGlassMode();
+  onGlassMode(switchTuningMode);
+}
 
 /** Shorthand for the loops: `t("coreGain")`. */
 export const t = (key: keyof typeof tuning | string): number => tuning[key]?.value ?? 0;
@@ -749,7 +874,12 @@ export function applyGlassConfig() {
 export function serializeTuning() {
   const byGroup: Record<string, string[]> = {};
   for (const [key, knob] of Object.entries(tuning)) {
-    (byGroup[knob.group] ??= []).push(`  ${key}: ${knob.value},`);
+    // Both sets for anything kept twice, so pasting this back does not
+    // silently bake one mode's numbers into the other.
+    const line = isPerMode(knob)
+      ? `  ${key}: ${valueIn(key, "css")}, // raster: ${valueIn(key, "raster")}`
+      : `  ${key}: ${knob.value},`;
+    (byGroup[knob.group] ??= []).push(line);
   }
   return Object.entries(byGroup)
     .map(([group, lines]) => `// ${group}\n${lines.join("\n")}`)
@@ -760,6 +890,10 @@ export function resetTuning(defaults: Record<string, number>) {
   for (const [key, value] of Object.entries(defaults)) {
     if (tuning[key]) tuning[key]!.value = value;
   }
+  // Both sets, or reset would leave the other mode holding whatever it had
+  // and the next switch would bring it straight back.
+  stash.css = {};
+  stash.raster = {};
   applyTuning();
 }
 

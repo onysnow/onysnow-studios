@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { SHUTTER_EVENT } from "@/lib/shutter-event";
-import { flashPanels } from "@/lib/edge-glow";
+import { flashPanels, onCharge } from "@/lib/edge-glow";
+import { discardBurn, prepareBurn, takeBurn, type PageBurn } from "@/lib/page-burn";
 
 /**
  * The shutter firing: one flash across the page, corner frame lines, the
@@ -53,10 +54,19 @@ export function ShutterFlash() {
         restart(veil, 2600);
       }
 
-      // The ghost of whatever the flash was pointed at. Both polarities are
-      // built from the same capture; only the blend and the timing differ.
+      /*
+       * The ghost of the room the flash lit.
+       *
+       * A flash does not illuminate one photograph, it illuminates everything
+       * in front of it, so the afterimage is the WHOLE VIEWPORT -- header,
+       * type, glass and all -- not the <img> that happened to be under the
+       * pointer. `takeBurn` returns the capture taken while the shutter was
+       * winding; the subject clone is only the fallback for when the gesture
+       * was too short for one to finish, because a smaller ghost still beats
+       * none.
+       */
       if (at) {
-        const capture = captureSubject(at);
+        const capture = asCapture(takeBurn()) ?? captureSubject(at);
         for (const host of [positiveRef.current, negativeRef.current, residueRef.current]) {
           if (!host) continue;
           if (!capture) {
@@ -68,14 +78,45 @@ export function ShutterFlash() {
           dressGhost(host, capture, at);
           restart(host, 20_000);
         }
+        // Whatever it was, it has been used and the page will have moved on
+        // by the next release.
+        discardBurn();
       }
 
       // The glass reacts to the same light.
       flashPanels();
     };
 
+    /*
+     * Start photographing the page halfway up the meter.
+     *
+     * Rasterising the document is far too slow to do at the moment of
+     * release -- the ghost would arrive after the flash that is supposed to
+     * have caused it. The wind is two to three seconds of sustained movement,
+     * which is exactly the warning needed, and it is what a real camera is
+     * doing with that time too.
+     *
+     * Halfway rather than at the first flicker: below that the gesture is
+     * usually somebody moving the pointer across the page rather than winding
+     * anything, and capturing on every stray sweep would be the most expensive
+     * thing on the site.
+     */
+    const stopWatching = onCharge((charge) => {
+      if (charge > 0.5) prepareBurn();
+    });
+
+    // Anything that moves the page makes a held capture a lie.
+    const onShift = () => discardBurn();
+    window.addEventListener("scroll", onShift, { passive: true });
+    window.addEventListener("resize", onShift);
+
     window.addEventListener(SHUTTER_EVENT, onFire);
-    return () => window.removeEventListener(SHUTTER_EVENT, onFire);
+    return () => {
+      window.removeEventListener(SHUTTER_EVENT, onFire);
+      window.removeEventListener("scroll", onShift);
+      window.removeEventListener("resize", onShift);
+      stopWatching();
+    };
   }, []);
 
   return (
@@ -128,6 +169,26 @@ function pickMedia(scene: HTMLElement): HTMLImageElement | HTMLVideoElement | nu
 
   const pool = decoded.length ? decoded : candidates;
   return pool.sort((a, b) => area(b) - area(a))[0] ?? null;
+}
+
+/**
+ * A whole-page burn, in the shape the ghost machinery already speaks.
+ *
+ * Its rect is the viewport, pinned in fixed coordinates at the moment of
+ * firing -- which is the same rule the subject ghost follows and the same
+ * rule the retina follows. Scroll out from under it and the burn stays
+ * where you were looking.
+ */
+function asCapture(burn: PageBurn | null): Capture | null {
+  if (!burn) return null;
+  const paint = document.createElement("img");
+  paint.src = burn.src;
+  paint.decoding = "sync";
+  paint.style.cssText = "width:100%;height:100%;object-fit:fill;";
+  return {
+    rect: new DOMRect(0, 0, burn.width, burn.height),
+    paint,
+  };
 }
 
 type Capture = {
