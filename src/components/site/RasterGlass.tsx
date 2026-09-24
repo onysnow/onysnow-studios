@@ -43,31 +43,38 @@ import { applyGlassConfig } from "@/lib/tuning";
  */
 
 /**
- * What the rasteriser takes over.
+ * What the rasteriser takes over, and what it leaves alone.
  *
- * THE HEADER IS THE POINT, AND THE BANDS MAY NOT BE.
+ * THE SECTION BANDS, YES. They contain photographs and sit on a parallax
+ * scene, so there is something real behind them to bend. Measured on the
+ * scene canvas behind one: mean luma 30.2, max 221.7 out of 255.
  *
- * Measured, on the scene canvas the shader actually samples behind a section
- * band: 1480x382, mean luma 13.1, max luma 54 out of 255. Six soft bokeh
- * discs on black and nothing else. That is not a tuning problem and no
- * parameter fixes it -- refraction is a LENS, and a lens over a black field
- * shows black however good the lens is.
+ * THE FIXED HEADER, NO -- and this is a reversal.
  *
- * The reason is structural. These bands CONTAIN their photographs; the
- * pictures are children of the pane, so they are correctly excluded from the
- * capture and correctly drawn on top of the shader output. There is nothing
- * behind the glass because the glass is a container, not an overlay.
+ * I argued originally that a cached capture is the wrong shape for an element
+ * with the whole scrolling document behind it, then included it anyway
+ * because it was the one place the effect looked right in a screenshot. It
+ * does not survive scrolling: the bar smears, because it is refracting a
+ * picture of a page that has since moved. Three other complaints came from
+ * the same decision -- the pill corners it inherits from upstream's defaults,
+ * and the room reflection disappearing behind the injected canvas, which sits
+ * at z-index -1 above the reflection layer at -4.
  *
- * The header is the opposite and is the case this effect exists for: a bar
- * floating over the whole scrolling document, with the photography passing
- * underneath it. That is where a lens has something to bend.
+ * The CSS glass handles a fixed bar correctly and for nothing, because
+ * backdrop-filter gets its backdrop from the compositor every frame rather
+ * than from a snapshot. Doing this properly means re-capturing on scroll,
+ * which is a full-document rasterisation per scroll frame; that is not a
+ * tuning problem, it is the wrong architecture for this element.
  *
- * Its root is the body, which is expensive -- the capture is the full
- * document -- but it is cached and only re-taken when the content changes,
- * and scrolling does not change it. Scrolling moves the sample WINDOW, not
- * the scene.
+ * THE SMALL CONTROLS, NO. The switch is a 2rem circle and the menu is a
+ * dropdown. Both carry `.glass` so the CSS treatment applies, and I had
+ * reasoned that letting the shader take the switch over was a neat way to
+ * show the difference. In practice the library injects a SQUARE canvas as the
+ * first child, and `.glass` has no overflow rule to clip it -- so a square
+ * appeared over the circular button. Refracting through a 32px disc gains
+ * nothing and costs a capture and a GL context.
  */
-const RASTER_PANES = ".glass";
+const RASTER_PANES = ".glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu)";
 
 type Instance = { destroy: () => void };
 

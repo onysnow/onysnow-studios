@@ -45,6 +45,15 @@ export const tuning: Record<string, Knob> = {
   // These are the shader's own uniforms, not CSS. They only do anything in
   // `?glass=raster`; in CSS mode the panes are backdrop-filter and an SVG
   // displacement map, and none of this reaches them.
+  restEdge: {
+    label: "Edge at rest",
+    group: "Glass",
+    value: 0.1,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "How much of the bevel shows with nothing shining on it. Glass does not stop being glass in the dark, but at the old 0.35 this covered up to a third of the pane and read as dust rather than as an edge.",
+  },
   shutterTime: {
     label: "Shutter speed",
     group: "Cursor",

@@ -218,6 +218,18 @@ export function CustomCursor() {
         el.style.setProperty("--wind", charge.toFixed(2));
         dot.style.setProperty("--wind", charge.toFixed(2));
         /*
+         * The pilot lamp needs its own blend, so it needs its own flag.
+         *
+         * The dot lives in a second `.custom-cursor` element, which is
+         * `mix-blend-mode: difference` like the ring -- and a red thing
+         * inside a difference group comes out as whatever red inverted
+         * against the page happens to be, which is teal more often than not.
+         * The attribute lets the stylesheet composite it normally for exactly
+         * as long as it is lit, and leave the resting dot inverting the way
+         * it always has.
+         */
+        dot.toggleAttribute("data-pilot", charge > 0.01);
+        /*
          * And on the root, because the glass needs it too. At rest a pane
          * holds only the faintest reflection and its edge is a hairline; the
          * light is what reveals both. That has to be a CSS custom property,
