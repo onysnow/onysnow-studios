@@ -884,7 +884,22 @@
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: var(--lit-near, 0);
+  /*
+   * Gated on the charge, not merely on proximity.
+   *
+   * This was opacity: var(--lit-near, 0) -- pure distance from the pointer,
+   * with no idea whether anything is actually shining. So a soft bright patch
+   * followed the cursor across every photograph and every pane whether or not
+   * the shutter had been wound, which is the standing glow that got reported
+   * three times. Twice I went looking in CursorLight, whose every term is
+   * already multiplied by uCharge, and once in the glass shader, whose canvas
+   * is already opacity: 0 at rest. Both were innocent. It was here, in CSS.
+   *
+   * --wind is the wind-up, published on the root each frame by CustomCursor.
+   * A specular off paper and a pool of transmitted light are both the LIGHT;
+   * with no light there is nothing for them to be.
+   */
+  opacity: calc(var(--lit-near, 0) * var(--wind, 0));
   transition: opacity 0.4s ease;
   mix-blend-mode: screen;
 }
@@ -902,7 +917,7 @@
   background-repeat: repeat;
   background-position: calc(-1 * var(--surface-x, 0px)) calc(-1 * var(--surface-y, 0px));
   filter: grayscale(1) brightness(2.1) contrast(1.9);
-  opacity: var(--tune-transmit, 0.34);
+  opacity: calc(var(--tune-transmit, 0.34) * var(--wind, 0));
 
   --pool: radial-gradient(
     circle var(--tune-transmit-reach, 640px) at var(--lit-x, 50%) var(--lit-y, 50%),
@@ -927,7 +942,7 @@
     color-mix(in oklab, var(--amber) 55%, oklch(1 0 0 / 0.16)) 40%,
     transparent 78%
   );
-  opacity: calc(var(--tune-transmit, 0.34) * 1.5);
+  opacity: calc(var(--tune-transmit, 0.34) * 1.5 * var(--wind, 0));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1039,22 +1054,73 @@ span:has(> .photo-surface) {
   inset: 0;
   pointer-events: none;
   z-index: 2;
-  opacity: var(--lit-near, 0);
+  /*
+   * Gated on the charge, not merely on proximity.
+   *
+   * This was opacity: var(--lit-near, 0) -- pure distance from the pointer,
+   * with no idea whether anything is actually shining. So a soft bright patch
+   * followed the cursor across every photograph and every pane whether or not
+   * the shutter had been wound, which is the standing glow that got reported
+   * three times. Twice I went looking in CursorLight, whose every term is
+   * already multiplied by uCharge, and once in the glass shader, whose canvas
+   * is already opacity: 0 at rest. Both were innocent. It was here, in CSS.
+   *
+   * --wind is the wind-up, published on the root each frame by CustomCursor.
+   * A specular off paper and a pool of transmitted light are both the LIGHT;
+   * with no light there is nothing for them to be.
+   */
+  opacity: calc(var(--lit-near, 0) * var(--wind, 0));
   transition: opacity 0.35s ease;
 }
 
-/* The gloss: broad, soft, warm, and nowhere near white. */
+/*
+ * The gloss: a hard specular, and a faint wash around it.
+ *
+ * This was one 300px radial gradient at 0.26 alpha with a long soft tail, and
+ * the comment above it said "broad, soft, warm — paper, not glass". That is
+ * backwards, and it is why the prints read as matte card rather than as
+ * photographs.
+ *
+ * A glossy print's surface is a clear dielectric coating over the emulsion.
+ * It is SMOOTH, so its specular lobe is nearly as tight as the pane's: what
+ * you see is a small, hard, near-white image of the source itself, bright
+ * enough to blow out at the centre. The diffuse, scattered part is what
+ * happens BELOW the coating, in the emulsion, and that is faint. A broad soft
+ * lobe on its own is what matte paper does, and matte paper is the one thing
+ * this is not.
+ *
+ * So two terms rather than one, and the split is the whole point:
+ *
+ *   CORE. Small, sharp, essentially white. Held near full alpha out to a
+ *   third of its radius and then dropped hard, which is what makes it read as
+ *   a highlight with an EDGE rather than as a glow. It is barely tinted:
+ *   dielectric reflection carries the source's colour, not the pigment's, so
+ *   warming it toward amber paints the emulsion's colour onto a reflection
+ *   the emulsion had nothing to do with.
+ *
+ *   SHEEN. Wide, and deliberately weak -- an order of magnitude under the
+ *   core. This is the dull part, and it should stay dull; it is there so the
+ *   highlight has something to sit in rather than floating on black.
+ */
 .photo-surface::before {
   content: "";
   position: absolute;
   inset: 0;
   mix-blend-mode: screen;
-  background: radial-gradient(
-    circle var(--tune-paper-reach, 300px) at var(--lit-x, 50%) var(--lit-y, 50%),
-    rgba(255, 246, 232, var(--tune-paper, 0.26)) 0%,
-    rgba(255, 238, 214, calc(var(--tune-paper, 0.26) * 0.42)) 34%,
-    rgba(255, 255, 255, 0) 72%
-  );
+  background:
+    radial-gradient(
+      circle var(--tune-paper-core, 52px) at var(--lit-x, 50%) var(--lit-y, 50%),
+      rgba(255, 254, 250, var(--tune-paper, 0.92)) 0%,
+      rgba(255, 253, 247, calc(var(--tune-paper, 0.92) * 0.9)) 32%,
+      rgba(255, 250, 240, calc(var(--tune-paper, 0.92) * 0.26)) 62%,
+      rgba(255, 255, 255, 0) 100%
+    ),
+    radial-gradient(
+      circle var(--tune-paper-reach, 340px) at var(--lit-x, 50%) var(--lit-y, 50%),
+      rgba(255, 246, 232, var(--tune-paper-sheen, 0.06)) 0%,
+      rgba(255, 240, 220, calc(var(--tune-paper-sheen, 0.06) * 0.45)) 40%,
+      rgba(255, 255, 255, 0) 78%
+    );
 }
 
 /*

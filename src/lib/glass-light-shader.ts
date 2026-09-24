@@ -537,7 +537,23 @@ void main() {
    */
   vec3 colour = throughSide * onSide * uHasBackdrop * 2.6;
   colour += (tint * (rim + face) + mirror) * lit;
-  colour += vec3(specular + EDGE_HIGHLIGHT * bevel) * inside * (0.35 + 0.65 * lit);
+  /*
+   * The specular is the LIGHT, so it is gated on the light. The bevel's edge
+   * highlight is GEOMETRY, so it is not.
+   *
+   * These two were summed and put behind (0.35 + 0.65 * lit), which let 35%
+   * of a Blinn-Phong highlight through at zero charge -- a soft bright blob
+   * tracking the pointer across every pane whether or not anything was
+   * shining. Reported twice as a glow that should not be there before the
+   * charge, and both times I looked at CursorLight, which is innocent: every
+   * one of its terms is already multiplied by uCharge. It was this line.
+   *
+   * The edge highlight keeps its floor. It is the bevel catching the ambient
+   * room rather than the cursor, it does not move when the pointer moves, and
+   * without it the pane has no edge at all when idle.
+   */
+  colour += vec3(specular) * inside * lit;
+  colour += vec3(EDGE_HIGHLIGHT * bevel) * inside * (0.35 + 0.65 * lit);
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.
