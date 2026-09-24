@@ -45,6 +45,27 @@ export const tuning: Record<string, Knob> = {
   // These are the shader's own uniforms, not CSS. They only do anything in
   // `?glass=raster`; in CSS mode the panes are backdrop-filter and an SVG
   // displacement map, and none of this reaches them.
+  shutterTime: {
+    label: "Shutter speed",
+    group: "Cursor",
+    value: 520,
+    min: 120,
+    max: 1400,
+    step: 20,
+    cssVar: "--tune-shutter-time",
+    cssUnit: "ms",
+    hint: "How long the aperture takes to close and reopen. A real leaf shutter is nearer 230ms, which is too fast to read — this one is the whole feedback for a click, so it is deliberately slower than life. All three animations (blades, housing, ring recoil) run off this, so they stay one event.",
+  },
+  ringOpen: {
+    label: "Ring opens with charge",
+    group: "Cursor",
+    value: 2.4,
+    min: 0,
+    max: 6,
+    step: 0.1,
+    cssVar: "--tune-ring-open",
+    hint: "How far the ring widens as the flash winds, as a multiple of its resting size. The emitter's bloom widens with charge squared, so the ring has to open at least as fast or the light escapes it. The aperture follows automatically — it derives its size from the ring.",
+  },
   glassRefraction: {
     label: "Refraction",
     group: "Liquid glass",

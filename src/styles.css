@@ -245,7 +245,25 @@
    * sibling rather than its child -- setting it on the ring meant the
    * aperture never saw it and stayed at its own size.
    */
-  --ring-size: var(--tune-ring, 30px);
+  /*
+   * The ring is the lens, and it opens as the flash winds.
+   *
+   * The emitter's bloom widens with the charge -- the shader mixes its spread
+   * toward full at charge squared -- so a fixed ring gets swallowed by its own
+   * light about halfway up the meter. The ring has to open at least as fast
+   * as the thing it is supposed to contain.
+   *
+   * Squared, to match the shader rather than merely to move: a linear ring
+   * against a squared bloom is ahead of the light early and behind it late,
+   * which is worse than not tracking at all because it looks like a mistake
+   * only at full charge.
+   *
+   * The aperture needs no rule of its own. It derives its size from this, so
+   * the blades stay seated on the ring's circle however wide the ring gets --
+   * which is right, because the blades come OUT of the lens.
+   */
+  --wind-sq: calc(var(--wind, 0) * var(--wind, 0));
+  --ring-size: calc(var(--tune-ring, 30px) * (1 + var(--wind-sq, 0) * var(--tune-ring-open, 2.4)));
   position: fixed;
   top: 0;
   left: 0;
@@ -1164,8 +1182,7 @@ span:has(> .photo-surface) {
    * pull a 14000px-wide layer further across, so no edge can enter the frame.
    */
   background-size: auto var(--tune-paper-room-zoom, 420vh);
-  background-position:
-    calc(-1 * var(--surface-x, 0px) + var(--reflect-x, 0) * -1 * 240px - 90px)
+  background-position: calc(-1 * var(--surface-x, 0px) + var(--reflect-x, 0) * -1 * 240px - 90px)
     calc(-1 * var(--surface-y, 0px) + var(--reflect-y, 0) * -1 * 160px - 40px);
 }
 
@@ -1953,7 +1970,22 @@ span:has(> .photo-surface) {
 }
 
 .custom-cursor__blade {
-  fill: #000;
+  /*
+   * The same colour as the ring, always.
+   *
+   * These were #000 on a layer deliberately kept OUTSIDE the cursor's
+   * `difference` blend, on the reasoning that blades are dark metal and the
+   * light comes through the opening. True of a real shutter and wrong here:
+   * the ring inverts against whatever is behind it, so it reads white on a
+   * dark frame and black on a bright one, while fixed-black blades vanished
+   * completely against anything dark.
+   *
+   * White, inside the same blend as the ring, means both invert by the same
+   * amount against the same backdrop -- so they are the same colour as each
+   * other in every frame, and both are legible in all of them. That is the
+   * property worth having; the metal is not.
+   */
+  fill: #fff;
   transform-box: view-box;
   /*
    * Hinged at its OWN pivot on the housing -- 50,4 is where this blade meets
@@ -2007,11 +2039,26 @@ span:has(> .photo-surface) {
 }
 
 .custom-cursor[data-click] .custom-cursor__iris {
-  animation: cursor-iris-show 230ms linear;
+  /*
+ * The shutter fires at a speed you can actually watch.
+ *
+ * All three of these ran at 230ms, which is roughly the real thing -- a leaf
+ * shutter at a slow-ish speed -- and it is too fast to READ. A real shutter
+ * does not have to be legible; this one is the entire feedback for the click,
+ * and at 230ms the blades are open, shut and open again before the eye has
+ * settled on them. It registered as a flicker rather than as an aperture.
+ *
+ * 520ms, on one variable so the three stay locked. They are one event: the
+ * blades sweep, the housing shows for exactly the span they are moving, and
+ * the ring takes the shock. Drifting apart would show immediately -- the ring
+ * recoiling after the blades had already reopened looks like a bug, not like
+ * slow motion.
+ */
+  animation: cursor-iris-show var(--tune-shutter-time, 520ms) linear;
 }
 
 .custom-cursor[data-click] .custom-cursor__blade {
-  animation: cursor-iris-snap 230ms cubic-bezier(0.3, 0, 0.2, 1);
+  animation: cursor-iris-snap var(--tune-shutter-time, 520ms) cubic-bezier(0.3, 0, 0.2, 1);
 }
 
 /* The ring takes the shock of the blades slamming. */
@@ -2026,7 +2073,7 @@ span:has(> .photo-surface) {
 }
 
 .custom-cursor[data-click] .custom-cursor__ring {
-  animation: cursor-shutter-ring 230ms cubic-bezier(0.3, 0, 0.2, 1);
+  animation: cursor-shutter-ring var(--tune-shutter-time, 520ms) cubic-bezier(0.3, 0, 0.2, 1);
 }
 
 .custom-cursor[data-click] .custom-cursor__dot {
