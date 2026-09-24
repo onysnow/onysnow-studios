@@ -261,7 +261,6 @@ export function GlassLight({
     const drawn = new Set<HTMLCanvasElement>();
     const allLayers = new Set<HTMLCanvasElement>();
 
-
     let wasLit = false;
     canvas.style.opacity = "0";
 

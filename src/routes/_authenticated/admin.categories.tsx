@@ -19,7 +19,7 @@ import type { Category } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -129,54 +129,63 @@ function CategoriesPage() {
             return (
               <SortableItem key={c.id} id={c.id}>
                 <div className="grid gap-4 rounded-lg border border-border bg-card p-4 pl-12 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Name</Label>
-                    <Input
-                      defaultValue={c.name}
-                      onBlur={(e) =>
-                        e.target.value !== c.name && patch(c.id, { name: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Web address</Label>
-                    <Input
-                      defaultValue={c.slug}
-                      onBlur={(e) =>
-                        e.target.value !== c.slug && patch(c.id, { slug: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label>Description</Label>
-                    <Textarea
-                      defaultValue={c.description}
-                      rows={2}
-                      onBlur={(e) =>
-                        e.target.value !== c.description &&
-                        patch(c.id, { description: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Cover photograph</Label>
-                    <Select
-                      value={c.cover_photo_id ?? AUTO}
-                      onValueChange={(v) => patch(c.id, { cover_photo_id: v === AUTO ? null : v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={AUTO}>First in the category</SelectItem>
-                        {covers.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.title || p.storage_path}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <Field label="Name">
+                    {(id) => (
+                      <Input
+                        id={id}
+                        defaultValue={c.name}
+                        onBlur={(e) =>
+                          e.target.value !== c.name && patch(c.id, { name: e.target.value })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label="Web address">
+                    {(id) => (
+                      <Input
+                        id={id}
+                        defaultValue={c.slug}
+                        onBlur={(e) =>
+                          e.target.value !== c.slug && patch(c.id, { slug: e.target.value })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label="Description" className="sm:col-span-2">
+                    {(id) => (
+                      <Textarea
+                        id={id}
+                        defaultValue={c.description}
+                        rows={2}
+                        onBlur={(e) =>
+                          e.target.value !== c.description &&
+                          patch(c.id, { description: e.target.value })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label="Cover photograph">
+                    {(id) => (
+                      <Select
+                        value={c.cover_photo_id ?? AUTO}
+                        onValueChange={(v) =>
+                          patch(c.id, { cover_photo_id: v === AUTO ? null : v })
+                        }
+                      >
+                        <SelectTrigger id={id}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={AUTO}>First in the category</SelectItem>
+                          {covers.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.title || p.storage_path}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </Field>
                   <div className="flex items-end justify-between gap-4">
                     <label className="flex items-center gap-2 text-sm">
                       <Switch

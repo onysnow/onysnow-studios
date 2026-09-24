@@ -18,7 +18,7 @@ import type { Testimonial } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -115,34 +115,40 @@ function TestimonialsPage() {
           {list.map((t) => (
             <SortableItem key={t.id} id={t.id}>
               <div className="grid gap-4 rounded-lg border border-border bg-card p-4 pl-12 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
-                  <Label>Quote</Label>
-                  <Textarea
-                    defaultValue={t.quote}
-                    rows={3}
-                    onBlur={(e) =>
-                      e.target.value !== t.quote && patch(t.id, { quote: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Who said it</Label>
-                  <Input
-                    defaultValue={t.author}
-                    onBlur={(e) =>
-                      e.target.value !== t.author && patch(t.id, { author: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Context</Label>
-                  <Input
-                    defaultValue={t.context}
-                    onBlur={(e) =>
-                      e.target.value !== t.context && patch(t.id, { context: e.target.value })
-                    }
-                  />
-                </div>
+                <Field label="Quote" className="sm:col-span-2">
+                  {(id) => (
+                    <Textarea
+                      id={id}
+                      defaultValue={t.quote}
+                      rows={3}
+                      onBlur={(e) =>
+                        e.target.value !== t.quote && patch(t.id, { quote: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Who said it">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      defaultValue={t.author}
+                      onBlur={(e) =>
+                        e.target.value !== t.author && patch(t.id, { author: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Context">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      defaultValue={t.context}
+                      onBlur={(e) =>
+                        e.target.value !== t.context && patch(t.id, { context: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
                 <div className="flex items-end justify-between gap-4 sm:col-span-2">
                   <label className="flex items-center gap-2 text-sm">
                     <Switch

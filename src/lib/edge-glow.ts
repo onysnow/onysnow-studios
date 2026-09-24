@@ -521,7 +521,7 @@ export function registerEdgeGlow(el: HTMLElement) {
     const invalidate = () => {
       geometryAt = -1;
       geometryVersion += 1;
-  geometryVersion += 1;
+      geometryVersion += 1;
       if (!frame) frame = requestAnimationFrame(apply);
     };
     window.addEventListener("scroll", invalidate, { passive: true });
@@ -555,7 +555,7 @@ export function registerEdgeGlow(el: HTMLElement) {
   return () => {
     panels.delete(el);
     geometryAt = -1;
-  geometryVersion += 1;
+    geometryVersion += 1;
   };
 }
 

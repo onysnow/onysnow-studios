@@ -107,9 +107,20 @@ function PagesPage() {
               return (
                 <div key={row.id} className="rounded-lg border border-border bg-card p-4">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                    <Label className="text-xs uppercase tracking-widest text-muted-foreground">
+                    {/*
+                      A heading for the row, not a label for a control. It was
+                      a <Label> with no htmlFor, which is the worst of both:
+                      it announces itself as labelling something and labels
+                      nothing. The editor below is a whole region rather than
+                      one field, so it takes the name instead, via
+                      aria-labelledby.
+                    */}
+                    <span
+                      id={`section-${row.id}`}
+                      className="text-xs uppercase tracking-widest text-muted-foreground"
+                    >
                       {row.section_key.replace(/_/g, " ")}
-                    </Label>
+                    </span>
                     <Button
                       size="sm"
                       variant={dirty ? "cinematic" : "ghost"}
@@ -119,31 +130,33 @@ function PagesPage() {
                       <Save /> {dirty ? "Save" : "Saved"}
                     </Button>
                   </div>
-                  {row.format === "html" ? (
-                    <RichTextEditor
-                      value={value}
-                      onChange={(html) => setDrafts((d) => ({ ...d, [row.id]: html }))}
-                    />
-                  ) : /*
-                   * Branched on the SAVED value, not the draft.
-                   *
-                   * This read `value`, which is what is being typed — so
-                   * crossing 90 characters changed the rendered component from
-                   * an <input> to a <textarea>, React unmounted one and mounted
-                   * the other, and the caret vanished mid-word.
-                   */
-                  row.value.length > 90 ? (
-                    <Textarea
-                      rows={3}
-                      value={value}
-                      onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
-                    />
-                  ) : (
-                    <Input
-                      value={value}
-                      onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
-                    />
-                  )}
+                  <div role="group" aria-labelledby={`section-${row.id}`}>
+                    {row.format === "html" ? (
+                      <RichTextEditor
+                        value={value}
+                        onChange={(html) => setDrafts((d) => ({ ...d, [row.id]: html }))}
+                      />
+                    ) : /*
+                     * Branched on the SAVED value, not the draft.
+                     *
+                     * This read `value`, which is what is being typed — so
+                     * crossing 90 characters changed the rendered component from
+                     * an <input> to a <textarea>, React unmounted one and mounted
+                     * the other, and the caret vanished mid-word.
+                     */
+                    row.value.length > 90 ? (
+                      <Textarea
+                        rows={3}
+                        value={value}
+                        onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
+                      />
+                    ) : (
+                      <Input
+                        value={value}
+                        onChange={(e) => setDrafts((d) => ({ ...d, [row.id]: e.target.value }))}
+                      />
+                    )}
+                  </div>
                 </div>
               );
             })}

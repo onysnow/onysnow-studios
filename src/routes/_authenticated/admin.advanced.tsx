@@ -20,7 +20,7 @@ import {
 } from "@/lib/admin";
 import { useContentRefresh } from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
@@ -165,36 +165,38 @@ function JsonEditor() {
   return (
     <div className="max-w-4xl space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Table</Label>
-          <Select value={table} onValueChange={(v) => setTable(v as EditableTable)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {EDITABLE_TABLES.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t.replace(/_/g, " ")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>Record</Label>
-          <Select value={rowId} onValueChange={setRowId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose a record" />
-            </SelectTrigger>
-            <SelectContent>
-              {rows.map((r) => (
-                <SelectItem key={String(r[pk])} value={String(r[pk])}>
-                  {labelFor(r)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Field label="Table">
+          {(id) => (
+            <Select value={table} onValueChange={(v) => setTable(v as EditableTable)}>
+              <SelectTrigger id={id}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EDITABLE_TABLES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Field>
+        <Field label="Record">
+          {(id) => (
+            <Select value={rowId} onValueChange={setRowId}>
+              <SelectTrigger id={id}>
+                <SelectValue placeholder="Choose a record" />
+              </SelectTrigger>
+              <SelectContent>
+                {rows.map((r) => (
+                  <SelectItem key={String(r[pk])} value={String(r[pk])}>
+                    {labelFor(r)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Field>
       </div>
 
       {current ? (
