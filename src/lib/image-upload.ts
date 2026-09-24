@@ -253,3 +253,50 @@ export async function deletePhoto(
 
   return { orphanedFiles: removed.error ? paths.length : 0 };
 }
+
+/**
+ * Upload a site ASSET -- a texture, a room reflection -- and return its URL.
+ *
+ * Separate from `uploadPhoto` because the two have almost nothing in common
+ * beyond touching storage. A photograph is a row in `photos` with categories,
+ * ordering, a blur placeholder and a set of responsive renditions; an asset is
+ * one file that some piece of the effect layer loads by URL and nothing else
+ * ever lists.
+ *
+ * NOT put through `prepareImage`. That pipeline exists to make photographs
+ * cheap to deliver -- 2560px long edge, WebP, smaller renditions -- and every
+ * one of those steps is wrong here:
+ *
+ *   - The glass texture is sampled by a shader as a tiled detail map. Resizing
+ *     it changes the scale of the scratches, and re-encoding a high-frequency
+ *     grey texture as lossy WebP is exactly the content that codec handles
+ *     worst; the blocking artefacts would show up as structure in the glass.
+ *   - A room reflection is an HDRI graded through its own pipeline. Putting it
+ *     through a second quality pass would undo that grading.
+ *
+ * So it is stored as given. These are files chosen once and looked at forever,
+ * not a gallery someone uploads thirty of on a phone.
+ */
+export async function uploadSiteAsset(input: File, slug: string): Promise<string> {
+  const extension = (input.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+  /*
+   * Timestamped rather than fixed, so the new file has a new URL.
+   *
+   * Overwriting `assets/glass-surface.jpg` in place would leave every browser
+   * and CDN that already has it serving the old one -- these are uploaded with
+   * a year-long cache header, because they never change except when they do.
+   * A new path is the only reliable cache bust.
+   */
+  const path = `assets/${slug}-${Date.now()}.${extension}`;
+
+  const { error } = await supabase.storage.from("photos").upload(path, input, {
+    contentType: input.type || "image/jpeg",
+    cacheControl: "31536000",
+    upsert: false,
+  });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from("photos").getPublicUrl(path);
+  if (!data?.publicUrl) throw new Error("Uploaded, but storage returned no public URL");
+  return data.publicUrl;
+}

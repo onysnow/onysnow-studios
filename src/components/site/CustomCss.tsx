@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { settingsQuery } from "@/lib/content";
-import { safeCustomCss } from "@/lib/safe-content";
+import { safeCustomCss, safeHref } from "@/lib/safe-content";
+import { SITE_ASSETS } from "@/lib/site-assets";
 
 /** Display faces the portal can switch between. */
 const FONTS = new Set(["jost", "inter-tight", "barlow-condensed"]);
@@ -40,13 +41,31 @@ export function CustomCss() {
   const font = (data?.["display_font"] ?? "").trim().toLowerCase();
   const scale = (data?.["display_scale"] ?? "").trim().toLowerCase();
 
+  /*
+   * Asset URLs go on the document too.
+   *
+   * The pieces that load them -- the glass shader's surface map, the cursor
+   * light's -- are WebGL initialisers that run once and then own an rAF loop.
+   * They are not subscribed to anything and should not become so; publishing
+   * here keeps the effect layer ignorant of React Query, which is the
+   * arrangement everything else in it already has.
+   *
+   * Only `safeHref` values are written. A settings row is studio-editable
+   * text that ends up in an <img> src, so it gets the same treatment as any
+   * other URL out of the portal.
+   */
+  const glassSurface = safeHref(data?.[SITE_ASSETS.glassSurface.key] ?? "");
+
   useEffect(() => {
     const root = document.documentElement;
     if (FONTS.has(font) && font !== "jost") root.setAttribute("data-display-font", font);
     else root.removeAttribute("data-display-font");
 
     root.style.setProperty("--display-scale", displayScale(scale));
-  }, [font, scale]);
+
+    if (glassSurface) root.dataset[SITE_ASSETS.glassSurface.attr] = glassSurface;
+    else delete root.dataset[SITE_ASSETS.glassSurface.attr];
+  }, [font, scale, glassSurface]);
 
   const css = safeCustomCss(data?.["custom_css"]);
   if (!css.trim()) return null;

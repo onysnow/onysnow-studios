@@ -4,6 +4,7 @@ import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
+import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
  * The glass itself: what it does to the photograph behind it, and what it does
@@ -200,7 +201,7 @@ export function GlassLight({
         gl.useProgram(program);
         gl.uniform1f(uHasSurface, 1);
       };
-      img.src = "/glass-surface.jpg";
+      img.src = assetUrl(SITE_ASSETS.glassSurface);
     };
 
     /*
