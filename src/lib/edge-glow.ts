@@ -205,6 +205,21 @@ let geometry: GlassRect[] = [];
 let geometryAt = -1;
 
 /**
+ * Bumped whenever the pane geometry is invalidated -- scroll, resize, a panel
+ * registering or unregistering.
+ *
+ * The light pass needs it to know whether its RESTING frame is still valid.
+ * At zero charge the refraction and the side band still have to be drawn --
+ * glass does not stop being glass in the dark -- but they only change when a
+ * pane moves, so one frame is enough until this number does.
+ */
+let geometryVersion = 0;
+
+export function geometryStamp(): number {
+  return geometryVersion;
+}
+
+/**
  * Where the glass is, right now.
  *
  * Cached for the length of a frame so that the CSS pass and the shader pass
@@ -495,6 +510,7 @@ export function registerEdgeGlow(el: HTMLElement) {
   panels.add(el);
   radii.delete(el);
   geometryAt = -1;
+  geometryVersion += 1;
   // Measured at once, so this panel is never left on the fallback.
   measure(el);
   if (!bound) {
@@ -504,6 +520,8 @@ export function registerEdgeGlow(el: HTMLElement) {
     // be recomputed even when the pointer itself hasn't moved.
     const invalidate = () => {
       geometryAt = -1;
+      geometryVersion += 1;
+  geometryVersion += 1;
       if (!frame) frame = requestAnimationFrame(apply);
     };
     window.addEventListener("scroll", invalidate, { passive: true });
@@ -531,11 +549,13 @@ export function registerEdgeGlow(el: HTMLElement) {
    * Cancelling and re-arming puts the pass after the last arrival instead.
    */
   geometryAt = -1;
+  geometryVersion += 1;
   if (frame) cancelAnimationFrame(frame);
   frame = requestAnimationFrame(apply);
   return () => {
     panels.delete(el);
     geometryAt = -1;
+  geometryVersion += 1;
   };
 }
 

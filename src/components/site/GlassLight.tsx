@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry } from "@/lib/edge-glow";
+import { glassGeometry, geometryStamp } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
 
 /**
@@ -261,34 +261,47 @@ export function GlassLight({
     const drawn = new Set<HTMLCanvasElement>();
     const allLayers = new Set<HTMLCanvasElement>();
 
-    const clearLayers = () => {
-      for (const layer of allLayers) {
-        const ctx = layer.getContext("2d");
-        ctx?.clearRect(0, 0, layer.width, layer.height);
-      }
-    };
 
     let wasLit = false;
     canvas.style.opacity = "0";
 
     /* Returns whether there is still something to draw; false parks the loop. */
+    /*
+     * Glass does not stop being glass in the dark.
+     *
+     * This used to bail out entirely whenever the charge was zero -- clear the
+     * buffer, hide the canvas, park the loop. Which threw away the two things
+     * the shader deliberately keeps OUTSIDE the charge gate: the refracted
+     * backdrop and the side band you can genuinely see through. The shader's
+     * own comment says a pane bends what is behind it whether or not anybody
+     * is shining anything at it, and then this hid all of it anyway. That is
+     * why the panes went flat the moment the shutter was idle.
+     *
+     * Now the resting state is DRAWN, once, and then the loop parks. The
+     * refraction and the side band only change when a pane moves or its
+     * backdrop loads -- never with the cursor -- so one frame is enough until
+     * something invalidates the geometry, and scroll and resize already do
+     * that. Idle costs one frame, not sixty a second.
+     */
+    let restingDrawn = false;
+    let restingStamp = -1;
+
     const step = (now: number) => {
       const charge = chargeRef.current;
       const lit = charge > 0.002;
+
       if (!lit) {
-        if (wasLit) {
-          gl.disable(gl.SCISSOR_TEST);
-          gl.clear(gl.COLOR_BUFFER_BIT);
-          // The pane layers are real elements, so they hold their last frame
-          // until something wipes them. Nothing else will.
-          clearLayers();
-          wasLit = false;
+        // Already settled and nothing has moved: park without redrawing.
+        if (!wasLit && restingDrawn && geometryStamp() === restingStamp) return false;
+        wasLit = false;
+        restingDrawn = true;
+        restingStamp = geometryStamp();
+      } else {
+        restingDrawn = false;
+        if (!wasLit) {
+          requestSurface();
+          wasLit = true;
         }
-        return false;
-      }
-      if (!wasLit) {
-        requestSurface();
-        wasLit = true;
       }
 
       const panes = glassGeometry(now);
