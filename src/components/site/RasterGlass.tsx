@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 
+import { applyGlassConfig } from "@/lib/tuning";
+
 /**
  * The panes, refracting a rasterised copy of the page behind them.
  *
@@ -160,23 +162,23 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
           const instance = await LiquidGlass.init({
             root,
             glassElements: [pane],
-            /*
-             * The bands run straight across.
-             *
-             * Upstream's 65px corner is an iOS pill and it is right for the
-             * header, which is a floating bar. The section bands are
-             * full-bleed edge to edge, so a rounded corner there invents a
-             * shape the layout does not have. The BEVEL is untouched -- a
-             * square-edged slab of glass still has a rounded-over arris, and
-             * that arris is where every optical term in the shader lives.
-             */
-            ...(pane.classList.contains("glass--bar") ? {} : { defaults: { cornerRadius: 0 } }),
           });
           if (!live) {
             instance.destroy();
             return;
           }
           instances.push(instance);
+          /*
+           * Hand the pane whatever the tuning panel currently holds.
+           *
+           * The knobs live in one place for both glass systems, and the
+           * rasterised one reads them from `data-config`. Writing it here
+           * means a pane that mounts late -- these initialise one at a time as
+           * each gets a box -- picks up the current settings rather than
+           * upstream's defaults, without the panel having to know a new pane
+           * appeared.
+           */
+          applyGlassConfig();
           /*
            * A handle in dev, so the scene the shader samples can actually be
            * looked at. Debugging this blind is how the white-scene bug
