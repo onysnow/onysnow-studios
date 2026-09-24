@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { SHUTTER_EVENT } from "@/lib/shutter-event";
 import { flashPanels } from "@/lib/edge-glow";
 
 /**
@@ -15,12 +16,6 @@ import { flashPanels } from "@/lib/edge-glow";
  * cooldown, and under `prefers-reduced-motion` the overlays are not rendered at
  * all (see styles.css).
  */
-export const SHUTTER_EVENT = "onysnow:shutter";
-
-export function fireShutter(at?: { x: number; y: number }) {
-  window.dispatchEvent(new CustomEvent(SHUTTER_EVENT, { detail: at }));
-}
-
 /** A photographic surface worth leaving an afterimage of. */
 const SUBJECT = "img, video, picture, .gallery-frame, [data-photo]";
 

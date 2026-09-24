@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry } from "@/lib/edge-glow";
+import { glassGeometry, geometryStamp, MAX_OCCLUDERS } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
 
 /**
@@ -127,6 +127,20 @@ export function GlassLight({
     const uGrimeSpecks = U("uGrimeSpecks");
     const uGrimeFloor = U("uGrimeFloor");
     const uSideReach = U("uSideReach");
+    const uOccRect = U("uOccRect");
+    const uOccSoft = U("uOccSoft");
+    const uOccCount = U("uOccCount");
+
+    /*
+     * Scratch buffers for the occluders, allocated once.
+     *
+     * These are uploaded per pane per frame. Building two arrays each time
+     * would allocate a hundred-odd small Float32Arrays a second and hand the
+     * collector work to do in the middle of an animation, which is exactly
+     * where a pause is most visible.
+     */
+    const occRect = new Float32Array(MAX_OCCLUDERS * 4);
+    const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
     const uSheen = U("uSheen");
     const uSheenReach = U("uSheenReach");
     const uArris = U("uArris");
@@ -217,26 +231,90 @@ export function GlassLight({
       return null;
     };
 
+    /*
+     * ---- The pane's own surface layer ----
+     *
+     * The grime is a mark ON the glass. The photographs and the copy REST on
+     * that glass. So the marks have to be behind them, and the shared canvas
+     * cannot do it: it is fixed to the viewport at z-index 9997, above every
+     * piece of content on the page, and a mask to a pane's footprint does not
+     * help because a footprint contains whatever is standing in it. Reported
+     * five times; deferred five times; this is the fix.
+     *
+     * Each pane gets its own canvas at z-index -1 -- above the bevel and the
+     * reflection at -2 and below, under everything in normal flow. The shared
+     * WebGL canvas becomes an offscreen buffer that nothing displays, and each
+     * pane's scissored region is blitted out of it into that pane's layer.
+     *
+     * The layer is BLEED larger than the pane on every side, because the rim
+     * bloom genuinely escapes the glass and would otherwise be cut off square
+     * at the edge. `.glass` is position:relative with no overflow rule, so it
+     * spills correctly.
+     */
+    const surfaces = new WeakMap<HTMLElement, HTMLCanvasElement>();
+
+    const surfaceFor = (el: HTMLElement, cssW: number, cssH: number) => {
+      let layer = surfaces.get(el);
+      if (!layer) {
+        layer = document.createElement("canvas");
+        layer.className = "glass__surface";
+        layer.setAttribute("aria-hidden", "true");
+        el.insertBefore(layer, el.firstChild);
+        surfaces.set(el, layer);
+      }
+      const w = Math.max(1, Math.round(cssW * scale));
+      const h = Math.max(1, Math.round(cssH * scale));
+      if (layer.width !== w || layer.height !== h) {
+        layer.width = w;
+        layer.height = h;
+      }
+      return layer;
+    };
+
+    /** Every pane layer this pass touched, so the rest can be cleared. */
+    const drawn = new Set<HTMLCanvasElement>();
+    const allLayers = new Set<HTMLCanvasElement>();
+
     let wasLit = false;
     canvas.style.opacity = "0";
 
     /* Returns whether there is still something to draw; false parks the loop. */
+    /*
+     * Glass does not stop being glass in the dark.
+     *
+     * This used to bail out entirely whenever the charge was zero -- clear the
+     * buffer, hide the canvas, park the loop. Which threw away the two things
+     * the shader deliberately keeps OUTSIDE the charge gate: the refracted
+     * backdrop and the side band you can genuinely see through. The shader's
+     * own comment says a pane bends what is behind it whether or not anybody
+     * is shining anything at it, and then this hid all of it anyway. That is
+     * why the panes went flat the moment the shutter was idle.
+     *
+     * Now the resting state is DRAWN, once, and then the loop parks. The
+     * refraction and the side band only change when a pane moves or its
+     * backdrop loads -- never with the cursor -- so one frame is enough until
+     * something invalidates the geometry, and scroll and resize already do
+     * that. Idle costs one frame, not sixty a second.
+     */
+    let restingDrawn = false;
+    let restingStamp = -1;
+
     const step = (now: number) => {
       const charge = chargeRef.current;
       const lit = charge > 0.002;
+
       if (!lit) {
-        if (wasLit) {
-          gl.disable(gl.SCISSOR_TEST);
-          gl.clear(gl.COLOR_BUFFER_BIT);
-          canvas.style.opacity = "0";
-          wasLit = false;
+        // Already settled and nothing has moved: park without redrawing.
+        if (!wasLit && restingDrawn && geometryStamp() === restingStamp) return false;
+        wasLit = false;
+        restingDrawn = true;
+        restingStamp = geometryStamp();
+      } else {
+        restingDrawn = false;
+        if (!wasLit) {
+          requestSurface();
+          wasLit = true;
         }
-        return false;
-      }
-      if (!wasLit) {
-        requestSurface();
-        canvas.style.opacity = "1";
-        wasLit = true;
       }
 
       const panes = glassGeometry(now);
@@ -273,6 +351,35 @@ export function GlassLight({
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
         gl.uniform1f(uImageAspect, pane.ia);
 
+        /*
+         * What is standing on this pane, as shapes the shader can test.
+         *
+         * Pane-local pixels, already displaced by each occluder's cast vector,
+         * so the hole in the rake lands where the shadow does rather than
+         * under the object. The tail of the buffer is not cleared -- the count
+         * bounds the loop, so stale values past it are never read.
+         */
+        const occ = pane.occ;
+        const count = Math.min(occ.length, MAX_OCCLUDERS);
+        for (let i = 0; i < count; i++) {
+          const o = occ[i];
+          if (!o) continue;
+          const k = i * 4;
+          occRect[k] = o.cx;
+          occRect[k + 1] = o.cy;
+          occRect[k + 2] = o.hw;
+          occRect[k + 3] = o.hh;
+          occSoft[k] = Math.min(o.radius, Math.min(o.hw, o.hh));
+          occSoft[k + 1] = o.blur;
+          occSoft[k + 2] = o.alpha;
+          occSoft[k + 3] = 0;
+        }
+        gl.uniform1f(uOccCount, count);
+        if (count > 0) {
+          gl.uniform4fv(uOccRect, occRect);
+          gl.uniform4fv(uOccSoft, occSoft);
+        }
+
         // Scissor in device pixels, y counted from the bottom.
         const sx = Math.floor((pane.x - BLEED) * scale);
         const sw = Math.ceil((pane.w + BLEED * 2) * scale);
@@ -280,8 +387,34 @@ export function GlassLight({
         const sh = Math.ceil((pane.h + BLEED * 2) * scale);
         gl.scissor(sx, sy, sw, sh);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+        /*
+         * Out of the shared buffer and into the pane.
+         *
+         * drawImage reads top-down while the scissor counts from the bottom,
+         * so the source y is computed separately rather than reused -- getting
+         * that wrong mirrors every pane vertically, which looks like a shader
+         * bug and is not one.
+         */
+        const layer = surfaceFor(pane.el, pane.w + BLEED * 2, pane.h + BLEED * 2);
+        const ctx = layer.getContext("2d");
+        if (ctx) {
+          const syTop = Math.floor((pane.y - BLEED) * scale);
+          ctx.clearRect(0, 0, layer.width, layer.height);
+          ctx.drawImage(canvas, sx, syTop, sw, sh, 0, 0, layer.width, layer.height);
+          drawn.add(layer);
+          allLayers.add(layer);
+        }
       }
       gl.disable(gl.SCISSOR_TEST);
+
+      // A pane that scrolled out of range this frame keeps its last image
+      // otherwise, frozen, while the light moves on without it.
+      for (const layer of allLayers) {
+        if (drawn.has(layer)) continue;
+        layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
+      }
+      drawn.clear();
       return true;
     };
 

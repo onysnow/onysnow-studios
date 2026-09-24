@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { settingsQuery } from "@/lib/content";
+import { GlassToggle } from "./GlassToggle";
+import { DevNav } from "./DevNav";
 
 const links = [
   { to: "/portfolio", label: "Portfolio" },
@@ -43,6 +45,10 @@ export function SiteHeader() {
           <Button asChild variant="cinematic" size="lg">
             <Link to="/book">Book a session</Link>
           </Button>
+          {/* The routes that exist but are not part of the site's story. */}
+          <DevNav />
+          {/* A disc of the material, which switches which material it is. */}
+          <GlassToggle />
         </nav>
         <Sheet>
           <SheetTrigger asChild>

@@ -245,7 +245,25 @@
    * sibling rather than its child -- setting it on the ring meant the
    * aperture never saw it and stayed at its own size.
    */
-  --ring-size: var(--tune-ring, 30px);
+  /*
+   * The ring is the lens, and it opens as the flash winds.
+   *
+   * The emitter's bloom widens with the charge -- the shader mixes its spread
+   * toward full at charge squared -- so a fixed ring gets swallowed by its own
+   * light about halfway up the meter. The ring has to open at least as fast
+   * as the thing it is supposed to contain.
+   *
+   * Squared, to match the shader rather than merely to move: a linear ring
+   * against a squared bloom is ahead of the light early and behind it late,
+   * which is worse than not tracking at all because it looks like a mistake
+   * only at full charge.
+   *
+   * The aperture needs no rule of its own. It derives its size from this, so
+   * the blades stay seated on the ring's circle however wide the ring gets --
+   * which is right, because the blades come OUT of the lens.
+   */
+  --wind-sq: calc(var(--wind, 0) * var(--wind, 0));
+  --ring-size: calc(var(--tune-ring, 30px) * (1 + var(--wind-sq, 0) * var(--tune-ring-open, 2.4)));
   position: fixed;
   top: 0;
   left: 0;
@@ -1164,8 +1182,7 @@ span:has(> .photo-surface) {
    * pull a 14000px-wide layer further across, so no edge can enter the frame.
    */
   background-size: auto var(--tune-paper-room-zoom, 420vh);
-  background-position:
-    calc(-1 * var(--surface-x, 0px) + var(--reflect-x, 0) * -1 * 240px - 90px)
+  background-position: calc(-1 * var(--surface-x, 0px) + var(--reflect-x, 0) * -1 * 240px - 90px)
     calc(-1 * var(--surface-y, 0px) + var(--reflect-y, 0) * -1 * 160px - 40px);
 }
 
@@ -1953,7 +1970,22 @@ span:has(> .photo-surface) {
 }
 
 .custom-cursor__blade {
-  fill: #000;
+  /*
+   * The same colour as the ring, always.
+   *
+   * These were #000 on a layer deliberately kept OUTSIDE the cursor's
+   * `difference` blend, on the reasoning that blades are dark metal and the
+   * light comes through the opening. True of a real shutter and wrong here:
+   * the ring inverts against whatever is behind it, so it reads white on a
+   * dark frame and black on a bright one, while fixed-black blades vanished
+   * completely against anything dark.
+   *
+   * White, inside the same blend as the ring, means both invert by the same
+   * amount against the same backdrop -- so they are the same colour as each
+   * other in every frame, and both are legible in all of them. That is the
+   * property worth having; the metal is not.
+   */
+  fill: #fff;
   transform-box: view-box;
   /*
    * Hinged at its OWN pivot on the housing -- 50,4 is where this blade meets
@@ -2007,11 +2039,26 @@ span:has(> .photo-surface) {
 }
 
 .custom-cursor[data-click] .custom-cursor__iris {
-  animation: cursor-iris-show 230ms linear;
+  /*
+ * The shutter fires at a speed you can actually watch.
+ *
+ * All three of these ran at 230ms, which is roughly the real thing -- a leaf
+ * shutter at a slow-ish speed -- and it is too fast to READ. A real shutter
+ * does not have to be legible; this one is the entire feedback for the click,
+ * and at 230ms the blades are open, shut and open again before the eye has
+ * settled on them. It registered as a flicker rather than as an aperture.
+ *
+ * 520ms, on one variable so the three stay locked. They are one event: the
+ * blades sweep, the housing shows for exactly the span they are moving, and
+ * the ring takes the shock. Drifting apart would show immediately -- the ring
+ * recoiling after the blades had already reopened looks like a bug, not like
+ * slow motion.
+ */
+  animation: cursor-iris-show var(--tune-shutter-time, 520ms) linear;
 }
 
 .custom-cursor[data-click] .custom-cursor__blade {
-  animation: cursor-iris-snap 230ms cubic-bezier(0.3, 0, 0.2, 1);
+  animation: cursor-iris-snap var(--tune-shutter-time, 520ms) cubic-bezier(0.3, 0, 0.2, 1);
 }
 
 /* The ring takes the shock of the blades slamming. */
@@ -2026,7 +2073,7 @@ span:has(> .photo-surface) {
 }
 
 .custom-cursor[data-click] .custom-cursor__ring {
-  animation: cursor-shutter-ring 230ms cubic-bezier(0.3, 0, 0.2, 1);
+  animation: cursor-shutter-ring var(--tune-shutter-time, 520ms) cubic-bezier(0.3, 0, 0.2, 1);
 }
 
 .custom-cursor[data-click] .custom-cursor__dot {
@@ -2088,3 +2135,213 @@ span:has(> .photo-surface) {
  * instead of upstream's hardcoded white, which is where the problem actually
  * was; giving the wrapper a background here only ever masked it.)
  */
+/* ===================== The glass switch, and the hidden routes =====================
+ *
+ * Both live on the header pane, which is why neither uses a portal: a portal
+ * renders at the end of <body>, outside the header's stacking context and
+ * therefore outside the glass. A control that belongs to a sheet of glass
+ * should be ON that glass.
+ */
+
+/*
+ * The switch is a small pane, not a picture of one.
+ *
+ * It carries `.glass`, so in CSS mode it gets the treatment below and in
+ * raster mode the shader takes it over exactly like every other pane on the
+ * page -- the rasteriser selects `.glass` and does not care what the element
+ * is for. Pressing it therefore changes what the button is made of as well as
+ * what the site is made of, which is the most direct way to show a difference
+ * that is hard to put into words.
+ */
+.glass-toggle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  border: 1px solid oklch(1 0 0 / 0.16);
+  cursor: pointer;
+  flex: none;
+
+  /* The bevel, by the cheapest honest means: a bright arris up top where the
+     light would catch it, and a dark one underneath. */
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.22),
+    inset 0 -1px 0 oklch(0 0 0 / 0.35),
+    0 1px 3px oklch(0 0 0 / 0.4);
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.18s ease;
+}
+
+.glass-toggle:hover {
+  border-color: oklch(1 0 0 / 0.3);
+}
+
+.glass-toggle:active {
+  transform: scale(0.93);
+}
+
+.glass-toggle:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+/* Filled in raster, hollow in CSS -- the tell for when the two materials are
+   close enough that the disc alone does not say which is running. */
+.glass-toggle__pip {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid var(--amber);
+  background: transparent;
+  transition:
+    background-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.glass-toggle__pip[data-raster] {
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
+
+/* ---- The hidden routes ---- */
+
+.dev-nav__trigger {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--color-muted-foreground);
+  transition: color 0.18s ease;
+  flex: none;
+}
+
+.dev-nav__trigger:hover,
+.dev-nav__trigger[aria-expanded="true"] {
+  color: var(--color-foreground);
+}
+
+.dev-nav__trigger:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+/* Three dots, drawn rather than imported, because one glyph is not worth a
+   request and an icon font is not worth a dependency. */
+.dev-nav__dots {
+  width: 1rem;
+  height: 3px;
+  background:
+    radial-gradient(circle 1.5px at 1.5px 50%, currentColor 100%, transparent 0),
+    radial-gradient(circle 1.5px at 50% 50%, currentColor 100%, transparent 0),
+    radial-gradient(circle 1.5px at calc(100% - 1.5px) 50%, currentColor 100%, transparent 0);
+}
+
+.dev-nav__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.75rem);
+  z-index: 50;
+  width: 17rem;
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid oklch(1 0 0 / 0.1);
+  box-shadow: 0 18px 40px oklch(0 0 0 / 0.5);
+  animation: dev-nav-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes dev-nav-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dev-nav__menu {
+    animation: none;
+  }
+}
+
+.dev-nav__item {
+  display: block;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease;
+}
+
+.dev-nav__item:hover,
+.dev-nav__item:focus-visible {
+  background: oklch(1 0 0 / 0.07);
+  outline: none;
+}
+
+.dev-nav__item.is-active .dev-nav__label {
+  color: var(--amber);
+}
+
+.dev-nav__label {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--color-foreground);
+}
+
+.dev-nav__note {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--color-muted-foreground);
+}
+
+/* ===================== The pane's own surface =====================
+ *
+ * Where the grime actually lives now.
+ *
+ * It used to be drawn by the shared light canvas, which is fixed to the
+ * viewport at z-index 9997 -- above every piece of content on the page. The
+ * shader masked each pane's footprint perfectly correctly, and it did not
+ * matter: a footprint contains whatever is STANDING in it, so every mark
+ * landed on top of the photographs and the copy. Those rest ON the glass.
+ * Nothing on the surface of a pane can be in front of the things lying on it,
+ * and no weighting fixes that -- it was the wrong layer, reported five times.
+ *
+ * This is a canvas inside each pane at z-index -1: above the bevel, the
+ * refraction and the reflection (which sit at -2 and below), and under
+ * everything in normal flow. The layering stops being something to get right
+ * and becomes something the document does.
+ *
+ * It is inset NEGATIVELY by the same bleed the renderer uses, because the rim
+ * bloom genuinely escapes the glass -- that spill above a lit edge is most of
+ * what tells you the edge is bright rather than merely pale -- and clipping it
+ * to the pane would draw a hard line exactly where the glow should be softest.
+ * `.glass` is position: relative with no overflow rule, so it spills.
+ */
+.glass > .glass__surface {
+  position: absolute;
+  inset: -90px;
+  z-index: -1;
+  width: calc(100% + 180px);
+  height: calc(100% + 180px);
+  pointer-events: none;
+  /* ADDS to the pane the way light does, matching the shared canvas it
+     replaces. The shader has already tonemapped; this only places it. */
+  mix-blend-mode: plus-lighter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass > .glass__surface {
+    display: none;
+  }
+}
+
+/* Phones skip the whole effect layer; a canvas per pane is more, not less. */
+@media (pointer: coarse), (hover: none) {
+  .glass > .glass__surface {
+    display: none;
+  }
+}

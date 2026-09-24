@@ -18,7 +18,7 @@ import type { Service } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -116,59 +116,70 @@ function ServicesPage() {
           {list.map((s) => (
             <SortableItem key={s.id} id={s.id}>
               <div className="grid gap-4 rounded-lg border border-border bg-card p-4 pl-12 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    defaultValue={s.name}
-                    onBlur={(e) =>
-                      e.target.value !== s.name && patch(s.id, { name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Price shown</Label>
-                  <Input
-                    defaultValue={s.price_display}
-                    onBlur={(e) =>
-                      e.target.value !== s.price_display &&
-                      patch(s.id, { price_display: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label>Summary</Label>
-                  <Textarea
-                    defaultValue={s.summary}
-                    rows={2}
-                    onBlur={(e) =>
-                      e.target.value !== s.summary && patch(s.id, { summary: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label>What's included — one per line</Label>
-                  <Textarea
-                    defaultValue={(s.included ?? []).join("\n")}
-                    rows={4}
-                    onBlur={(e) => {
-                      const next = e.target.value
-                        .split("\n")
-                        .map((l) => l.trim())
-                        .filter(Boolean);
-                      if (next.join("\n") !== (s.included ?? []).join("\n"))
-                        patch(s.id, { included: next });
-                    }}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Turnaround</Label>
-                  <Input
-                    defaultValue={s.turnaround}
-                    onBlur={(e) =>
-                      e.target.value !== s.turnaround && patch(s.id, { turnaround: e.target.value })
-                    }
-                  />
-                </div>
+                <Field label="Name">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      defaultValue={s.name}
+                      onBlur={(e) =>
+                        e.target.value !== s.name && patch(s.id, { name: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Price shown">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      defaultValue={s.price_display}
+                      onBlur={(e) =>
+                        e.target.value !== s.price_display &&
+                        patch(s.id, { price_display: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="Summary" className="sm:col-span-2">
+                  {(id) => (
+                    <Textarea
+                      id={id}
+                      defaultValue={s.summary}
+                      rows={2}
+                      onBlur={(e) =>
+                        e.target.value !== s.summary && patch(s.id, { summary: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
+                <Field label="What's included — one per line" className="sm:col-span-2">
+                  {(id) => (
+                    <Textarea
+                      id={id}
+                      defaultValue={(s.included ?? []).join("\n")}
+                      rows={4}
+                      onBlur={(e) => {
+                        const next = e.target.value
+                          .split("\n")
+                          .map((l) => l.trim())
+                          .filter(Boolean);
+                        if (next.join("\n") !== (s.included ?? []).join("\n"))
+                          patch(s.id, { included: next });
+                      }}
+                    />
+                  )}
+                </Field>
+                <Field label="Turnaround">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      defaultValue={s.turnaround}
+                      onBlur={(e) =>
+                        e.target.value !== s.turnaround &&
+                        patch(s.id, { turnaround: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
                 <div className="flex items-end justify-between gap-4">
                   <label className="flex items-center gap-2 text-sm">
                     <Switch

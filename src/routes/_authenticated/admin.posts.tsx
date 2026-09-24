@@ -12,7 +12,7 @@ import type { Post, PostBlock } from "@/lib/content";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -159,68 +159,77 @@ function PostsPage() {
             return (
               <div key={post.id} className="rounded-lg border border-border bg-card p-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Title</Label>
-                    <Input
-                      defaultValue={post.title}
-                      onBlur={(e) =>
-                        e.target.value !== post.title && patch(post.id, { title: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>URL slug</Label>
-                    <Input
-                      defaultValue={post.slug}
-                      onBlur={(e) => {
-                        const v = slugify(e.target.value);
-                        if (v !== post.slug) patch(post.id, { slug: v });
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label>Excerpt</Label>
-                    <Textarea
-                      rows={2}
-                      defaultValue={post.excerpt}
-                      onBlur={(e) =>
-                        e.target.value !== post.excerpt &&
-                        patch(post.id, { excerpt: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Cover photograph</Label>
-                    <Select
-                      defaultValue={post.cover_photo_id ?? "none"}
-                      onValueChange={(v) =>
-                        patch(post.id, { cover_photo_id: v === "none" ? null : v })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a photograph" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {photoList.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.title || p.storage_path}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Reading time (minutes)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      defaultValue={post.reading_minutes}
-                      onBlur={(e) =>
-                        patch(post.id, { reading_minutes: Number(e.target.value) || 1 })
-                      }
-                    />
-                  </div>
+                  <Field label="Title">
+                    {(id) => (
+                      <Input
+                        id={id}
+                        defaultValue={post.title}
+                        onBlur={(e) =>
+                          e.target.value !== post.title && patch(post.id, { title: e.target.value })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label="URL slug">
+                    {(id) => (
+                      <Input
+                        id={id}
+                        defaultValue={post.slug}
+                        onBlur={(e) => {
+                          const v = slugify(e.target.value);
+                          if (v !== post.slug) patch(post.id, { slug: v });
+                        }}
+                      />
+                    )}
+                  </Field>
+                  <Field label="Excerpt" className="sm:col-span-2">
+                    {(id) => (
+                      <Textarea
+                        id={id}
+                        rows={2}
+                        defaultValue={post.excerpt}
+                        onBlur={(e) =>
+                          e.target.value !== post.excerpt &&
+                          patch(post.id, { excerpt: e.target.value })
+                        }
+                      />
+                    )}
+                  </Field>
+                  <Field label="Cover photograph">
+                    {(id) => (
+                      <Select
+                        defaultValue={post.cover_photo_id ?? "none"}
+                        onValueChange={(v) =>
+                          patch(post.id, { cover_photo_id: v === "none" ? null : v })
+                        }
+                      >
+                        <SelectTrigger id={id}>
+                          <SelectValue placeholder="Choose a photograph" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {photoList.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.title || p.storage_path}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </Field>
+                  <Field label="Reading time (minutes)">
+                    {(id) => (
+                      <Input
+                        id={id}
+                        type="number"
+                        min={1}
+                        defaultValue={post.reading_minutes}
+                        onBlur={(e) =>
+                          patch(post.id, { reading_minutes: Number(e.target.value) || 1 })
+                        }
+                      />
+                    )}
+                  </Field>
                 </div>
 
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-4">

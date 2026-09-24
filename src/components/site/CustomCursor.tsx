@@ -5,7 +5,7 @@ import { watchShutterCharge } from "@/lib/shutter-charge";
 import { CursorLight } from "./CursorLight";
 import { GlassLight } from "./GlassLight";
 import { FlareOverlay } from "./FlareOverlay";
-import { fireShutter } from "./ShutterFlash";
+import { fireShutter } from "@/lib/shutter-event";
 import {
   playShutterClick,
   playShutterFlash,

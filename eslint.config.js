@@ -45,4 +45,20 @@ export default tseslint.config(
     },
   },
   eslintPluginPrettier,
+  {
+    /*
+     * shadcn primitives export their variant helpers beside the component --
+     * `buttonVariants`, `badgeVariants` and so on -- and those exports are
+     * part of the API the rest of the app imports.
+     *
+     * react-refresh/only-export-components flags all eight of them. The fix
+     * it wants is splitting every primitive into two files, which churns
+     * vendored UI code, breaks the upstream shape people expect from shadcn,
+     * and buys nothing but a slightly faster hot reload in dev. Turned off
+     * here, and only here, rather than left as permanent noise that trains
+     * everyone to ignore the warning column.
+     */
+    files: ["src/components/ui/**"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
 );

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -209,22 +209,23 @@ function PhotosPage() {
             JPEG, PNG, WebP or HEIC. Multiple files welcome.
           </p>
         </div>
-        <div className="space-y-2">
-          <Label>Add to category</Label>
-          <Select value={uploadCategory} onValueChange={setUploadCategory}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={UNASSIGNED}>No category</SelectItem>
-              {(categories.data ?? []).map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Field label="Add to category">
+          {(id) => (
+            <Select value={uploadCategory} onValueChange={setUploadCategory}>
+              <SelectTrigger id={id} className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNASSIGNED}>No category</SelectItem>
+                {(categories.data ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </Field>
       </div>
 
       <div className="mt-8 flex flex-wrap items-center gap-3">

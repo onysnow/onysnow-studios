@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { FooterPhotoStrip } from "./FooterPhotoStrip";
-import { resolveSocialLinks } from "./SocialRail";
+import { resolveSocialLinks } from "@/lib/social-links";
 import { SubscribeForm } from "./SubscribeForm";
 import { categoriesQuery, settingsQuery } from "@/lib/content";
 

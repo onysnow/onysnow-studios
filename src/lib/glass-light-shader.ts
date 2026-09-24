@@ -39,6 +39,21 @@ uniform float uScale;         // device pixels per CSS pixel
 uniform vec2  uLight;         // CSS pixels, viewport-relative
 uniform float uCharge;        // 0 to 1
 
+/*
+ * ---- What is standing on this pane ----
+ *
+ * Up to MAX_OCC shadow shapes, in the pane's own pixels, already displaced by
+ * each occluder's cast vector -- so these are where the shadows LAND, not
+ * where the photographs sit.
+ *
+ * uOccRect: centre.xy, half-size.zw
+ * uOccSoft: corner radius, penumbra, strength, unused
+ */
+#define MAX_OCC 6
+uniform vec4 uOccRect[MAX_OCC];
+uniform vec4 uOccSoft[MAX_OCC];
+uniform float uOccCount;
+
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
 uniform float uTilt;          // -1 looking up at it, 1 looking down at it
@@ -104,6 +119,43 @@ float roundedBox(vec2 p, vec2 halfSize, float radius) {
   float r = min(radius, min(halfSize.x, halfSize.y));
   vec2 q = abs(p) - halfSize + r;
   return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
+}
+
+/*
+ * How much of the light is blocked at this point on the pane.
+ *
+ * This is the whole of the per-pixel occlusion. It replaces one number per
+ * pane, which dimmed the entire rake in proportion to whatever was standing
+ * in the light -- so a single photograph in a corner flattened the grime
+ * across the whole band, and the dimming had no relationship to the shape of
+ * the shadow you could see.
+ *
+ * Shadows do not add; the darkest one wins. Two overlapping prints do not
+ * make a blacker hole than one, they make a hole the shape of both, so this
+ * takes a max rather than a sum.
+ *
+ * The loop bound is a constant because GLSL ES 1.0 requires it, and the count
+ * is tested inside rather than used as a break condition -- a uniform in the
+ * loop condition fails to compile on some drivers, which is the kind of thing
+ * that works everywhere you test it and not on somebody's laptop.
+ */
+float occlusionAt(vec2 local) {
+  float blocked = 0.0;
+  for (int i = 0; i < MAX_OCC; i++) {
+    if (float(i) >= uOccCount) continue;
+    vec4 rect = uOccRect[i];
+    vec4 soft = uOccSoft[i];
+
+    // Rounded-rectangle distance: negative inside, in pixels.
+    vec2 q = abs(local - rect.xy) - rect.zw + soft.x;
+    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - soft.x;
+
+    // The penumbra straddles the edge, so the shadow fades across it rather
+    // than stopping dead at the boundary.
+    float edge = max(soft.y, 0.5);
+    blocked = max(blocked, soft.z * (1.0 - smoothstep(-edge, edge, d)));
+  }
+  return clamp(blocked, 0.0, 1.0);
 }
 
 /* The surface, photographed. A 2x2 atlas; each pane wears one cell. */
@@ -454,14 +506,26 @@ void main() {
    * problem from what the marks LOOK like, and trading the look away to fix
    * it was the wrong trade.
    */
-  face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks));
+  /*
+   * Cut by what is standing on the glass.
+   *
+   * A photograph blocking the source is also stopping that light reaching the
+   * marks underneath it, so the rake has a hole in it the shape of the
+   * shadow. Not taken all the way to zero: a shadow on a real pane is not a
+   * void -- the grime there still catches the ambient room, just not the
+   * source.
+   */
+  float blocked = occlusionAt(frag - uRect.xy);
+  float unlit = 1.0 - blocked * 0.88;
+
+  face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
 
   /*
    * And some of it shows without the light raking it at all, because grime
    * scatters whatever is passing through the pane, not only what grazes it.
    * Small, but it stops the surface vanishing entirely between sweeps.
    */
-  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2));
+  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2) * unlit);
 
 
   /*
