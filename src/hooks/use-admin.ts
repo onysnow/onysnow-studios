@@ -19,7 +19,20 @@ export function useAdminStatus() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any).rpc("bootstrap_current_user");
       const isAdmin = Boolean(data?.is_admin);
-      return { user, isAdmin, claimedFirstAdmin: Boolean(data?.claimed_first_admin) };
+      /*
+       * `claimed_first_admin` is gone, and has been since migration
+       * 20260921214942 redefined bootstrap_current_user to return only
+       * `is_admin`. The original version reported whether admin_users was
+       * empty, because back then signing in when it was empty GRANTED you
+       * admin -- that automatic grant is exactly what was closed.
+       *
+       * So this read a field the function no longer returns, coerced the
+       * undefined to false, and handed back a flag that was permanently
+       * false. Nothing consumed it, which is the only reason it never
+       * surfaced as a bug. Removed rather than re-plumbed: there is no
+       * first-admin claim left to report.
+       */
+      return { user, isAdmin };
     },
   });
 }
