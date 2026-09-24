@@ -2088,3 +2088,165 @@ span:has(> .photo-surface) {
  * instead of upstream's hardcoded white, which is where the problem actually
  * was; giving the wrapper a background here only ever masked it.)
  */
+/* ===================== The glass switch, and the hidden routes =====================
+ *
+ * Both live on the header pane, which is why neither uses a portal: a portal
+ * renders at the end of <body>, outside the header's stacking context and
+ * therefore outside the glass. A control that belongs to a sheet of glass
+ * should be ON that glass.
+ */
+
+/*
+ * The switch is a small pane, not a picture of one.
+ *
+ * It carries `.glass`, so in CSS mode it gets the treatment below and in
+ * raster mode the shader takes it over exactly like every other pane on the
+ * page -- the rasteriser selects `.glass` and does not care what the element
+ * is for. Pressing it therefore changes what the button is made of as well as
+ * what the site is made of, which is the most direct way to show a difference
+ * that is hard to put into words.
+ */
+.glass-toggle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  border: 1px solid oklch(1 0 0 / 0.16);
+  cursor: pointer;
+  flex: none;
+
+  /* The bevel, by the cheapest honest means: a bright arris up top where the
+     light would catch it, and a dark one underneath. */
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.22),
+    inset 0 -1px 0 oklch(0 0 0 / 0.35),
+    0 1px 3px oklch(0 0 0 / 0.4);
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.18s ease;
+}
+
+.glass-toggle:hover {
+  border-color: oklch(1 0 0 / 0.3);
+}
+
+.glass-toggle:active {
+  transform: scale(0.93);
+}
+
+.glass-toggle:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+/* Filled in raster, hollow in CSS -- the tell for when the two materials are
+   close enough that the disc alone does not say which is running. */
+.glass-toggle__pip {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid var(--amber);
+  background: transparent;
+  transition:
+    background-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.glass-toggle__pip[data-raster] {
+  background: var(--amber);
+  box-shadow: 0 0 6px var(--amber);
+}
+
+/* ---- The hidden routes ---- */
+
+.dev-nav__trigger {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: var(--color-muted-foreground);
+  transition: color 0.18s ease;
+  flex: none;
+}
+
+.dev-nav__trigger:hover,
+.dev-nav__trigger[aria-expanded="true"] {
+  color: var(--color-foreground);
+}
+
+.dev-nav__trigger:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+/* Three dots, drawn rather than imported, because one glyph is not worth a
+   request and an icon font is not worth a dependency. */
+.dev-nav__dots {
+  width: 1rem;
+  height: 3px;
+  background:
+    radial-gradient(circle 1.5px at 1.5px 50%, currentColor 100%, transparent 0),
+    radial-gradient(circle 1.5px at 50% 50%, currentColor 100%, transparent 0),
+    radial-gradient(circle 1.5px at calc(100% - 1.5px) 50%, currentColor 100%, transparent 0);
+}
+
+.dev-nav__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.75rem);
+  z-index: 50;
+  width: 17rem;
+  padding: 0.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid oklch(1 0 0 / 0.1);
+  box-shadow: 0 18px 40px oklch(0 0 0 / 0.5);
+  animation: dev-nav-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes dev-nav-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dev-nav__menu {
+    animation: none;
+  }
+}
+
+.dev-nav__item {
+  display: block;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease;
+}
+
+.dev-nav__item:hover,
+.dev-nav__item:focus-visible {
+  background: oklch(1 0 0 / 0.07);
+  outline: none;
+}
+
+.dev-nav__item.is-active .dev-nav__label {
+  color: var(--amber);
+}
+
+.dev-nav__label {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--color-foreground);
+}
+
+.dev-nav__note {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--color-muted-foreground);
+}
