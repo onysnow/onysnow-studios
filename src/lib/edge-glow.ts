@@ -79,6 +79,14 @@ export type GlassRect = {
    * glass that matters is a picture we can bind directly.
    */
   src: string;
+  /**
+   * What is standing on this pane, as shadow shapes in pane-local pixels.
+   *
+   * Already displaced by each occluder's cast vector, so these are where the
+   * shadows LAND rather than where the objects sit. The shader tests them per
+   * pixel to cut the rake, instead of dimming the whole pane by one number.
+   */
+  occ: readonly Occluder[];
   /** The image element's box, in CSS pixels. */
   ix: number;
   iy: number;
@@ -202,6 +210,32 @@ function paneTilt(r: DOMRect) {
 }
 
 let geometry: GlassRect[] = [];
+/**
+ * What is standing on each pane this pass, as shapes rather than one number.
+ *
+ * Rebuilt every pass because it follows the light: a value left from the last
+ * frame keeps a pane shadowed after the thing casting it has moved away.
+ */
+export const MAX_OCCLUDERS = 6;
+
+export type Occluder = {
+  cx: number;
+  cy: number;
+  hw: number;
+  hh: number;
+  radius: number;
+  blur: number;
+  alpha: number;
+};
+
+const occluders = new Map<HTMLElement, Occluder[]>();
+
+/** Shared, so a pane with nothing on it does not allocate every frame. */
+const EMPTY_OCCLUDERS: readonly Occluder[] = [];
+
+/** Pane rects for this pass, so an occluder can be put in pane-local space. */
+const paneRects = new Map<HTMLElement, DOMRect>();
+
 let geometryAt = -1;
 
 /**
@@ -257,6 +291,7 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       iw: b?.width ?? 1,
       ih: b?.height ?? 1,
       ia: img && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+      occ: occluders.get(el) ?? EMPTY_OCCLUDERS,
     });
   }
   return geometry;
@@ -390,11 +425,33 @@ function apply() {
   // registered panel does not force a style flush in the middle of the writes.
   for (const el of panelList) cornerRadius(el);
 
-  for (const el of panelList) el.dataset["occluders"] = "0";
+  /*
+   * Occlusion is gathered fresh each pass, and the pane rects have to be in
+   * place BEFORE the surfaces run -- each occluder is stored in its pane's
+   * own coordinates, so the pane's box has to be known when the thing
+   * standing on it is measured.
+   */
+  occluders.clear();
+  paneRects.clear();
+  panelList.forEach((el, i) => {
+    const rect = panelRects[i];
+    if (rect) paneRects.set(el, rect);
+  });
+
   panelList.forEach((el, i) => measure(el, panelRects[i]));
   surfaceList.forEach((el, i) => litSurface(el, surfaceRects[i]));
+
+  /*
+   * The single number stays, for the CSS layers that cannot do better.
+   *
+   * .glass__grime is gone but `--occluded` still feeds the transmitted pool,
+   * which is a CSS gradient and has no way to test a shape per pixel. The
+   * shader gets the real occluders; this is the fallback for what cannot.
+   */
   for (const el of panelList) {
-    el.style.setProperty("--occluded", Number(el.dataset["occluders"] ?? 0).toFixed(3));
+    let strongest = 0;
+    for (const o of occluders.get(el) ?? []) strongest = Math.max(strongest, o.alpha);
+    el.style.setProperty("--occluded", strongest.toFixed(3));
   }
 }
 
@@ -473,24 +530,51 @@ function litSurface(el: HTMLElement, rect?: DOMRect) {
   el.style.setProperty("--cast-alpha", alpha.toFixed(3));
 
   /*
-   * Tell the pane underneath that something is standing on it.
+   * Tell the pane what is standing on it, AND WHERE ITS SHADOW FALLS.
    *
    * The two systems are not independent: a photograph throwing a shadow across
    * the glass is also stopping that light reaching the grime under it, so the
-   * smears there should not be raked. Without this they are drawn as though
-   * the pane were bare, and you get a lit smear sitting inside a shadow.
+   * smears there should not be raked. Without it they are drawn as though the
+   * pane were bare and you get a lit smear sitting inside a shadow.
    *
-   * Approximate, and knowingly so: one number per pane rather than per pixel,
-   * so what it does is dim the whole rake in proportion to how much is
-   * standing in the light rather than cut a hole in exactly the right shape.
-   * Doing it properly means one canvas per pane computing the whole light
-   * field, which is a bigger change than this is worth until this one is seen
-   * to read.
+   * This used to be ONE NUMBER per pane -- the strongest occluder's alpha --
+   * which dimmed the entire rake in proportion to how much was standing in the
+   * light. That is wrong in a way you can see: a single photograph in a corner
+   * flattened the grime across the whole band, and the shadow it cast had no
+   * relationship to the shape of the dimming.
+   *
+   * Each occluder is now a rectangle the shader can test per pixel. Three
+   * things make it a shadow rather than a silhouette:
+   *
+   *   - it is OFFSET by the cast vector, not placed under the element. Light
+   *     from one side throws a photograph across the glass; the hole in the
+   *     rake belongs where the shadow lands, not where the print sits.
+   *   - it carries the same penumbra the box-shadow uses, so the edge of the
+   *     dimming and the edge of the visible shadow agree.
+   *   - it is in PANE-LOCAL pixels, because that is the space the shader
+   *     already works in for this pane.
    */
   const pane = el.closest<HTMLElement>(".glass");
   if (pane && alpha > 0.01) {
-    const previous = Number(pane.dataset["occluders"] ?? 0);
-    pane.dataset["occluders"] = String(Math.max(previous, alpha));
+    const list = occluders.get(pane) ?? [];
+    if (list.length < MAX_OCCLUDERS) {
+      const paneRect = paneRects.get(pane);
+      if (paneRect) {
+        list.push({
+          // Centre, in the pane's own coordinates, displaced by the throw.
+          cx: r.left - paneRect.left + r.width / 2 + cast.x,
+          cy: r.top - paneRect.top + r.height / 2 + cast.y,
+          hw: r.width / 2,
+          hh: r.height / 2,
+          radius: cornerRadius(el),
+          // The penumbra, matched to the shadow actually drawn. Never zero, or
+          // the hole has a hard edge no real shadow has.
+          blur: Math.max(cast.blur, 1),
+          alpha,
+        });
+        occluders.set(pane, list);
+      }
+    }
   }
 
   /*

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry, geometryStamp } from "@/lib/edge-glow";
+import { glassGeometry, geometryStamp, MAX_OCCLUDERS } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
 
 /**
@@ -127,6 +127,20 @@ export function GlassLight({
     const uGrimeSpecks = U("uGrimeSpecks");
     const uGrimeFloor = U("uGrimeFloor");
     const uSideReach = U("uSideReach");
+    const uOccRect = U("uOccRect");
+    const uOccSoft = U("uOccSoft");
+    const uOccCount = U("uOccCount");
+
+    /*
+     * Scratch buffers for the occluders, allocated once.
+     *
+     * These are uploaded per pane per frame. Building two arrays each time
+     * would allocate a hundred-odd small Float32Arrays a second and hand the
+     * collector work to do in the middle of an animation, which is exactly
+     * where a pause is most visible.
+     */
+    const occRect = new Float32Array(MAX_OCCLUDERS * 4);
+    const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
     const uSheen = U("uSheen");
     const uSheenReach = U("uSheenReach");
     const uArris = U("uArris");
@@ -336,6 +350,35 @@ export function GlassLight({
         gl.uniform1f(uSeed, pane.s);
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
         gl.uniform1f(uImageAspect, pane.ia);
+
+        /*
+         * What is standing on this pane, as shapes the shader can test.
+         *
+         * Pane-local pixels, already displaced by each occluder's cast vector,
+         * so the hole in the rake lands where the shadow does rather than
+         * under the object. The tail of the buffer is not cleared -- the count
+         * bounds the loop, so stale values past it are never read.
+         */
+        const occ = pane.occ;
+        const count = Math.min(occ.length, MAX_OCCLUDERS);
+        for (let i = 0; i < count; i++) {
+          const o = occ[i];
+          if (!o) continue;
+          const k = i * 4;
+          occRect[k] = o.cx;
+          occRect[k + 1] = o.cy;
+          occRect[k + 2] = o.hw;
+          occRect[k + 3] = o.hh;
+          occSoft[k] = Math.min(o.radius, Math.min(o.hw, o.hh));
+          occSoft[k + 1] = o.blur;
+          occSoft[k + 2] = o.alpha;
+          occSoft[k + 3] = 0;
+        }
+        gl.uniform1f(uOccCount, count);
+        if (count > 0) {
+          gl.uniform4fv(uOccRect, occRect);
+          gl.uniform4fv(uOccSoft, occSoft);
+        }
 
         // Scissor in device pixels, y counted from the bottom.
         const sx = Math.floor((pane.x - BLEED) * scale);
