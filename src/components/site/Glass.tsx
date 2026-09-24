@@ -1,7 +1,8 @@
-import { useCallback, useRef, type ElementType, type ReactNode } from "react";
+import { useEffect, useCallback, useRef, type ElementType, type ReactNode } from "react";
 import { registerEdgeGlow } from "@/lib/edge-glow";
 import { requestBevelFilter } from "@/lib/bevel-filters";
 import { registerLitSurface } from "@/lib/edge-glow";
+import { registerPane } from "@/lib/glass-panes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -51,7 +52,19 @@ export function Glass({
    * follows the element rather than the component's lifetime.
    */
   const release = useRef<(() => void) | null>(null);
+  /*
+   * The node, kept so the effect below can register it.
+   *
+   * The ref callback cannot do that registration itself: refs are attached
+   * during the commit, and the thing being guarded against is anything
+   * touching this element before React has finished hydrating it. An effect
+   * is the guarantee -- React does not run a subtree's effects until it has
+   * committed that subtree.
+   */
+  const node = useRef<HTMLElement | null>(null);
+
   const attach = useCallback((el: HTMLElement | null) => {
+    node.current = el;
     release.current?.();
     if (!el) {
       release.current = null;
@@ -100,6 +113,17 @@ export function Glass({
       for (const stop of letGo) stop();
       unregister();
     };
+  }, []);
+
+  /*
+   * Tell the rasterised glass this pane exists, and that it is safe to touch.
+   * See lib/glass-panes.ts -- this effect is the whole reason that registry
+   * exists rather than a querySelectorAll.
+   */
+  useEffect(() => {
+    const el = node.current;
+    if (!el) return;
+    return registerPane(el);
   }, []);
 
   return (
