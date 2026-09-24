@@ -437,27 +437,31 @@ void main() {
    * mostly broad films with a few bright points in them, not an even dusting.
    */
   /*
-   * The grime is NOT drawn here any more.
+   * Drawn HERE, by this pass, which is where it was and where it looked
+   * right.
    *
-   * This canvas is fixed to the viewport above all content, so anything it
-   * paints inside a pane's footprint lands on top of whatever is standing in
-   * that footprint -- the photographs and the copy, which sit ON the glass.
-   * Marks on a surface cannot be in front of the things resting on it, and no
-   * amount of weighting fixes that; it is the wrong layer.
+   * It spent one commit as '.glass__grime', a tiled span inside each pane, on
+   * the reasoning that a mark on a surface cannot be in front of the things
+   * resting on it. The reasoning still holds. The result did not: a 2048px
+   * map tiled at native size and pushed through brightness(1.8) contrast(3.2)
+   * lights up 11% of every pixel on the pane and blows 5.9% of them to white,
+   * which is not a wiped pane with a few marks on it, it is an even
+   * high-frequency field -- generated-looking, because the arithmetic made it
+   * generated. The shader's version is sparse because 'rake' is a real
+   * falloff around the source rather than a mask over a repeating tile.
    *
-   * It moved to '.glass__grime', a span inside each pane at a negative
-   * z-index, where the document does the layering. See styles.css.
-   *
-   * 'smear' and 'glint' stay because the specular below still reads them: a
-   * mark catches the tight reflection of the source differently from clean
-   * glass, and that IS this pass's job.
+   * The layering complaint is real and comes back with this. It is a separate
+   * problem from what the marks LOOK like, and trading the look away to fix
+   * it was the wrong trade.
    */
+  face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks));
 
   /*
    * And some of it shows without the light raking it at all, because grime
    * scatters whatever is passing through the pane, not only what grazes it.
    * Small, but it stops the surface vanishing entirely between sweeps.
    */
+  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2));
 
 
   /*

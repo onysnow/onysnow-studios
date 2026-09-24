@@ -350,20 +350,21 @@
  * let the white carry it, which the photographs on this site are dark enough
  * for.
  */
-.custom-cursor[data-state="media"] {
-  mix-blend-mode: normal;
-}
-
-.custom-cursor[data-state="media"] {
-  --ring-size: 96px;
-}
+/*
+ * Over a photograph: the same ring as everywhere else.
+ *
+ * This used to re-point --ring-size at 96px and switch the blend to normal,
+ * which together turned the small dark ring into a large white one the moment
+ * the pointer crossed onto a picture -- twice reported, and both halves of it
+ * were mine. Neither earned its keep: the size change was there to signal
+ * "this is a photograph" to someone who is already looking at the photograph,
+ * and dropping the blend was to stop a fill inverting somebody's picture, but
+ * the fill had already gone. A 1px ring under `difference` reads against
+ * anything -- dark on a bright frame, bright on a dark one -- which is the
+ * whole reason the reference cursor works.
+ */
 .custom-cursor[data-state="media"] .custom-cursor__ring {
   background-color: transparent;
-  border-color: #fff;
-  border-width: 1px;
-}
-.custom-cursor[data-state="media"] .custom-cursor__dot {
-  opacity: 0.85;
 }
 
 .has-custom-cursor,
@@ -839,8 +840,6 @@
   /* Both of these exist to be lit, and there is nothing here to light them. */
   .glass > .glass__bokeh,
   .glass > .glass__refract,
-  .glass > .glass__grime,
-  .glass > .glass__side::before,
   .transmitted,
   .photo-surface {
     display: none;
@@ -1102,65 +1101,6 @@ span:has(> .photo-surface) {
  *     something is catching them at a shallow angle. Dust on glass is
  *     invisible until it is lit, and then it is the most obvious thing there.
  */
-.glass > .glass__grime {
-  position: absolute;
-  inset: var(--side-depth, 10px);
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: -3;
-
-  background-image: var(--glass-surface, url("/glass-surface.jpg"));
-  background-repeat: repeat;
-  /* Viewport space, so neighbouring panes continue one sheet. */
-  background-position: calc(-1 * var(--pane-x, 0px)) calc(-1 * var(--pane-y, 0px));
-
-  /* Only where the light rakes across it. */
-  --rake: radial-gradient(
-    circle var(--tune-grime-reach, 520px) at var(--lit-x, 50%) var(--lit-y, 50%),
-    rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 0.55) 45%,
-    rgba(0, 0, 0, 0) 100%
-  );
-  -webkit-mask-image: var(--rake);
-  mask-image: var(--rake);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-
-  mix-blend-mode: plus-lighter;
-  /*
-   * Dimmed by whatever is standing on the pane.
-   *
-   * A photograph throwing a shadow across the glass is also stopping that
-   * light reaching the grime beneath it, so a lit smear inside a shadow is
-   * wrong. `--occluded` is how much is in the way, gathered per pass in
-   * lib/edge-glow.ts.
-   */
-  opacity: calc(var(--glow-on, 0) * var(--tune-grime, 0.5) * (1 - var(--occluded, 0) * 0.7));
-
-  /*
-   * Contrast, not brightness.
-   *
-   * The map has signal nearly everywhere, so passing it through as-is put a
-   * film over the whole pane and it read as dust rather than as glass someone
-   * had touched. Crushing the low end cleans most of the face back to nothing
-   * and leaves the actual marks, which is what a wiped pane looks like.
-   */
-  /*
-   * Measured off the texture rather than guessed.
-   *
-   * The map's median luminance is 0.059 and its 99th percentile is 0.522 -- a
-   * dark field with sparse bright marks, which is already the right shape. The
-   * first attempt at this crushed it with brightness(0.55), which put the
-   * whole thing below zero: peak lift measured 1/255, i.e. nothing at all.
-   *
-   * Lifting first and thresholding after keeps that shape and sharpens it.
-   * The median lands on exactly 0, the 90th percentile is a faint 0.12 and
-   * anything above the 95th is strong, so about a ninth of the pane carries
-   * a mark and the rest is clear glass.
-   */
-  filter: grayscale(1) brightness(1.8) contrast(3.2);
-}
-
 /*
  * The side face has its own, at its own scale.
  *
@@ -1169,26 +1109,6 @@ span:has(> .photo-surface) {
  * which is also why the side holds a highlight for longer as the light moves
  * off than the flat face does.
  */
-.glass > .glass__side::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: var(--glass-surface, url("/glass-surface.jpg"));
-  background-size: auto 340%;
-  background-position: calc(-1 * var(--pane-x, 0px)) center;
-  mix-blend-mode: plus-lighter;
-  opacity: calc(var(--glow-on, 0) * var(--tune-grime, 0.5) * 0.55);
-  filter: grayscale(1) brightness(1.7) contrast(3.6);
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glass > .glass__grime,
-  .glass > .glass__side::before {
-    display: none;
-  }
-}
-
 /* ---- The eye recovering from the flash ---- */
 
 /*
