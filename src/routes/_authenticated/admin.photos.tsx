@@ -101,7 +101,21 @@ function PhotosPage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { "image/*": [".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic"] },
+    /*
+     * HEIC is deliberately NOT listed, and that is what makes iPhone uploads
+     * work rather than what stops them.
+     *
+     * iOS transcodes a photo-library pick to JPEG on its way into a file
+     * input -- unless the input says it accepts HEIC, in which case it may
+     * hand over the original. So advertising `.heic` here was asking for the
+     * one format this pipeline cannot read: it decodes with createImageBitmap
+     * and canvas, and no browser engine on Android decodes HEIC at all.
+     *
+     * Leaving it out means the phone does the conversion itself, for free,
+     * before the file ever arrives. Anything that slips through anyway is
+     * caught by name and told plainly what to do -- see prepareImage.
+     */
+    accept: { "image/*": [".jpg", ".jpeg", ".png", ".webp", ".avif"] },
     multiple: true,
   });
 

@@ -49,7 +49,41 @@ function blurPlaceholder(bitmap: ImageBitmap): string {
  * actually renders. Without these a gallery row 280px tall still downloads the
  * full 2560px file, which is the single largest cost on a photography site.
  */
+/**
+ * Does this look like a HEIC/HEIF the browser cannot decode?
+ *
+ * Checked by CONTENT, not extension: iOS often hands over a file called
+ * `image.jpg` that is HEIC inside, and a phone photo renamed by hand is not
+ * rare either. The ISO base-media box at bytes 4-8 is `ftyp`, and the brand
+ * that follows says which flavour -- `heic`, `heix`, `hevc`, `mif1`, `msf1`.
+ *
+ * Worth the twelve bytes because the failure without it is inscrutable:
+ * createImageBitmap rejects with a generic decode error, which surfaces as
+ * "Could not upload IMG_5742.jpg" and tells nobody anything.
+ */
+async function looksLikeHeic(file: File): Promise<boolean> {
+  try {
+    const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    if (head.length < 12) return false;
+    const tag = String.fromCharCode(...head.slice(4, 8));
+    if (tag !== "ftyp") return false;
+    const brand = String.fromCharCode(...head.slice(8, 12)).toLowerCase();
+    return ["heic", "heix", "hevc", "hevx", "mif1", "msf1", "heif"].includes(brand);
+  } catch {
+    // Unreadable header is not proof of anything; let the decoder decide.
+    return false;
+  }
+}
+
 export async function prepareImage(input: File): Promise<PreparedImage> {
+  if (await looksLikeHeic(input)) {
+    throw new Error(
+      "That is a HEIC photo, which browsers cannot open. On iPhone: Settings > " +
+        "Camera > Formats > Most Compatible, or share it to yourself first — " +
+        "either gives you a JPEG.",
+    );
+  }
+
   const base = await imageCompression(input, {
     maxWidthOrHeight: MAX_EDGE,
     initialQuality: QUALITY,
