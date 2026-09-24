@@ -984,6 +984,42 @@
   }
 }
 
+/*
+ * A pane the rasterised glass has taken over stops being CSS glass.
+ *
+ * Set by RasterGlass only once a pane's liquidglass instance is actually up,
+ * so a pane whose capture failed keeps its backdrop-filter and still reads as
+ * glass instead of becoming a transparent hole.
+ *
+ * WHY THIS MATTERS MORE THAN IT LOOKS
+ *
+ * Without it the two glass systems run stacked. The CSS blur flattens the
+ * backdrop to an even wash before the shader ever sees it, and since
+ * html-to-image does not reproduce backdrop-filter, the shader refracts the
+ * sharp page and composites it over the blurred one. What you see is mostly
+ * the CSS glass -- which is exactly why the liquid mode felt like the CSS
+ * mode and why its knobs seemed dead.
+ *
+ * The background goes too. It is a translucent fill tuned to sit on top of a
+ * blur; over a refracted backdrop it is a second veil doing the same job
+ * twice. The shader has its own tint and opacity for this -- and with the
+ * blur gone, those two finally have something visible to act on.
+ */
+.glass[data-liquid] {
+  /*
+   * ONE property, unprefixed. Do not add `-webkit-backdrop-filter` here.
+   *
+   * Writing both made Lightning CSS collapse the pair and emit ONLY the
+   * -webkit- one, which Chrome ignores in favour of the standard property
+   * that `.glass` still sets -- so the rule compiled away to nothing and the
+   * blur stayed on. It cost a long time to find, because the source file, the
+   * served file and the matched-rule list all looked correct; only the
+   * COMPILED stylesheet showed the missing line. The build adds the prefixes.
+   */
+  backdrop-filter: none;
+  background: transparent;
+}
+
 /* ---- What sits on the glass, and what that throws across it ---- */
 
 /*

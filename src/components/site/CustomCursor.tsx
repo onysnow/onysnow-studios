@@ -1,4 +1,5 @@
 import { reportCharge } from "@/lib/edge-glow";
+import { CameraIris } from "./CameraIris";
 import { t } from "@/lib/tuning";
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
@@ -269,40 +270,71 @@ export function CustomCursor() {
      * rather than merely reached. At full it arms, and a click fires — the
      * flash never goes off on its own.
      */
-    const charger = watchShutterCharge({
-      onCharge: (charge, armed) => {
-        el.style.setProperty("--wind", charge.toFixed(2));
-        dot.style.setProperty("--wind", charge.toFixed(2));
-        /*
-         * The pilot lamp needs its own blend, so it needs its own flag.
-         *
-         * The dot lives in a second `.custom-cursor` element, which is
-         * `mix-blend-mode: difference` like the ring -- and a red thing
-         * inside a difference group comes out as whatever red inverted
-         * against the page happens to be, which is teal more often than not.
-         * The attribute lets the stylesheet composite it normally for exactly
-         * as long as it is lit, and leave the resting dot inverting the way
-         * it always has.
-         */
-        dot.toggleAttribute("data-pilot", charge > 0.01);
-        /*
-         * And on the root, because the glass needs it too. At rest a pane
-         * holds only the faintest reflection and its edge is a hairline; the
-         * light is what reveals both. That has to be a CSS custom property,
-         * since the layers doing the revealing are CSS, not the shader.
-         */
-        document.documentElement.style.setProperty("--wind", charge.toFixed(2));
-        chargeRef.current = charge;
-        reportCharge(charge);
-        setShutterCharge(charge);
-        // Blades close over the back half, once it's clearly deliberate.
-        const closed = Math.max(0, (charge - 0.5) / 0.5);
-        el.style.setProperty("--iris", closed.toFixed(2));
-        closedRef.current = closed;
-        el.toggleAttribute("data-winding", charge > 0.06);
-        el.toggleAttribute("data-armed", armed);
-      },
-    });
+    /*
+     * Named, rather than inline, so a test can drive it.
+     *
+     * The charge is a GESTURE -- sustained pointer speed held for a couple of
+     * seconds -- and synthetic pointer events have no believable timing, so
+     * an automated browser winds it to about 0.1 where 0.6 is needed. That
+     * has cost real time more than once: the occlusion maths had to be
+     * mirrored into a unit test because the shader term it modifies could not
+     * be reached, and the bloom's clipping could not be photographed at all.
+     *
+     * Exposing THIS function rather than a stand-in matters: everything the
+     * light does hangs off this one callback, so driving it exercises the
+     * real path -- the CSS variables, the pilot lamp, the shader's charge
+     * ref, the shadows, the blades -- rather than a parallel fake that can
+     * quietly stop matching.
+     *
+     * Dev only. It is a global, and globals belong in the build nobody ships.
+     */
+    const applyCharge = (charge: number, armed: boolean) => {
+      el.style.setProperty("--wind", charge.toFixed(2));
+      dot.style.setProperty("--wind", charge.toFixed(2));
+      /*
+       * The pilot lamp needs its own blend, so it needs its own flag.
+       *
+       * The dot lives in a second `.custom-cursor` element, which is
+       * `mix-blend-mode: difference` like the ring -- and a red thing
+       * inside a difference group comes out as whatever red inverted
+       * against the page happens to be, which is teal more often than not.
+       * The attribute lets the stylesheet composite it normally for exactly
+       * as long as it is lit, and leave the resting dot inverting the way
+       * it always has.
+       */
+      dot.toggleAttribute("data-pilot", charge > 0.01);
+      /*
+       * And on the root, because the glass needs it too. At rest a pane
+       * holds only the faintest reflection and its edge is a hairline; the
+       * light is what reveals both. That has to be a CSS custom property,
+       * since the layers doing the revealing are CSS, not the shader.
+       */
+      document.documentElement.style.setProperty("--wind", charge.toFixed(2));
+      chargeRef.current = charge;
+      reportCharge(charge);
+      setShutterCharge(charge);
+      // Blades close over the back half, once it's clearly deliberate.
+      const closed = Math.max(0, (charge - 0.5) / 0.5);
+      el.style.setProperty("--iris", closed.toFixed(2));
+      closedRef.current = closed;
+      el.toggleAttribute("data-winding", charge > 0.06);
+      el.toggleAttribute("data-armed", armed);
+    };
+
+    const charger = watchShutterCharge({ onCharge: applyCharge });
+
+    /*
+     * The seam. `window.__charge(0.9)` winds it; `window.__charge(0)` lets go.
+     *
+     * Returns nothing and takes the same two arguments the real gesture
+     * supplies, so a test is driving the identical code path a hand does.
+     */
+    if (import.meta.env.DEV) {
+      (window as unknown as { __charge?: (c: number, armed?: boolean) => void }).__charge = (
+        c,
+        armed = c >= 1,
+      ) => applyCharge(Math.min(1, Math.max(0, c)), armed);
+    }
 
     const onClick = (event: MouseEvent) => {
       /*
@@ -398,55 +430,8 @@ export function CustomCursor() {
       <CursorLight chargeRef={chargeRef} closedRef={closedRef} positionRef={lightPos} />
       <div ref={ringRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__ring" />
-        {/*
-        A real six-blade iris, for the click.
-
-        Each blade pivots about a point ON THE HOUSING RING and swings
-        inward -- that is what a leaf shutter does, and it is why the
-        opening is a hexagon: six straight inner edges sweeping across one
-        another. Rotating blades about the CENTRE instead, which is what
-        every snippet of this going around does, spins a pinwheel and
-        never produces the polygon.
-
-        All six share one rotation, so one keyframe animates the lot; only
-        the pivot differs, and that is static per blade.
-      */}
-        <svg
-          className="custom-cursor__iris"
-          viewBox="0 0 100 100"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <clipPath id="cursor-iris-housing">
-            <circle cx="50" cy="50" r="46" />
-          </clipPath>
-          <g clipPath="url(#cursor-iris-housing)">
-            <g key={0} transform="rotate(0 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-            <g key={1} transform="rotate(45 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-            <g key={2} transform="rotate(90 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-            <g key={3} transform="rotate(135 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-            <g key={4} transform="rotate(180 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-            <g key={5} transform="rotate(225 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-            <g key={6} transform="rotate(270 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-            <g key={7} transform="rotate(315 50 50)">
-              <path className="custom-cursor__blade" d="M 50,4 A 46,46 0 0,1 82.5,17.5 L 50,50 Z" />
-            </g>
-          </g>
-        </svg>
+        {/* The blades. Shared with the site loader -- see CameraIris. */}
+        <CameraIris className="custom-cursor__iris" />
       </div>
       <div ref={dotRef} aria-hidden="true" className="custom-cursor" data-state="default">
         <span className="custom-cursor__dot" />

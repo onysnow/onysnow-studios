@@ -101,21 +101,33 @@ function HomePage() {
   return (
     <>
       {/* Hero */}
-      <section data-photo className="relative min-h-[92svh] overflow-hidden">
-        <motion.div
-          className="absolute inset-0 max-md:!translate-y-0"
-          {...(reduced ? {} : { style: { y: heroY } })}
-        >
-          <Img
-            image={hero}
-            eager
-            className="h-[105svh] w-full"
-            imgClassName="scale-105 object-[72%_center] sm:object-center"
-            sizes="100vw"
-          />
-        </motion.div>
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-background/25" />
-        <div className="image-vignette absolute inset-0" />
+      <section data-photo className="relative min-h-[92svh]">
+        {/*
+         * The clip wraps the PICTURE, not the section -- same reasoning as
+         * ParallaxScene, and this is the hero's own copy of that structure.
+         *
+         * The parallax image is 105svh and slides, so a clip has to exist. On
+         * the section it also cropped the glass resting on it: the pane's
+         * light layer sits at `inset: -90px` so a lit edge can throw light
+         * past the boundary, and cropping that turns the softest part of the
+         * bloom into a hard line along the section edge.
+         */}
+        <div className="absolute inset-0 overflow-hidden">
+          <motion.div
+            className="absolute inset-0 max-md:!translate-y-0"
+            {...(reduced ? {} : { style: { y: heroY } })}
+          >
+            <Img
+              image={hero}
+              eager
+              className="h-[105svh] w-full"
+              imgClassName="scale-105 object-[72%_center] sm:object-center"
+              sizes="100vw"
+            />
+          </motion.div>
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-background/25" />
+          <div className="image-vignette absolute inset-0" />
+        </div>
         <div className="relative flex min-h-[92svh] flex-col justify-end px-5 pb-14 sm:px-8 lg:px-12 lg:pb-20">
           <Container>
             <p className="eyebrow">
