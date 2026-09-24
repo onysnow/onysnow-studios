@@ -348,9 +348,19 @@ export class LiquidGlass {
 		let needsButtonStyles = false;
 
 		for (const el of this.glassSet) {
-			// Glass elements must be direct children of the root.
-			if (el.parentElement !== this.root) {
-				console.warn('LiquidGlass: glass element must be a direct child of root, skipping.', el);
+			// LOCAL: a glass element may sit at any depth under root.
+			//
+			// Upstream required a direct child and dropped anything else with
+			// a warning. We allow nesting -- the scene walk maps a pane to the
+			// root-level child it lives under and prunes panes out of that
+			// child's capture, so the ordering and the self-reference are both
+			// handled. See _topLevelChildFor and _composeSceneForGlass.
+			//
+			// It has to be UNDER root, though. A pane outside the subtree has
+			// no defined place in the scene's paint order, and silently
+			// compositing it somewhere plausible would be worse than refusing.
+			if (el !== this.root && !this.root.contains(el)) {
+				console.warn('LiquidGlass: glass element must be inside root, skipping.', el);
 				this.glassSet.delete(el);
 				continue;
 			}
@@ -595,7 +605,8 @@ export class LiquidGlass {
 			if (tag === 'CANVAS' || tag === 'IMG' || tag === 'VIDEO') continue;
 			if (child.hasAttribute('data-dynamic')) continue;
 			try {
-				await this.capture.captureElement(child, false);
+				// LOCAL: prune any nested panes out of this contributor.
+				await this.capture.captureElement(child, false, this._glassWithin(child));
 			} catch (err) {
 				console.warn('LiquidGlass: prewarm capture failed:', child, err);
 			}
@@ -1137,6 +1148,41 @@ export class LiquidGlass {
 	}
 
 	/**
+	 * LOCAL: the root-level child a glass element sits under.
+	 *
+	 * Upstream requires every glass element to be a direct child of root, so
+	 * this would always be the element itself. We allow a pane to live at any
+	 * depth -- on this site the photograph it is glass OVER is a sibling of
+	 * the pane's PARENT, and forcing the markup to match the library would
+	 * mean restructuring the page to suit its implementation.
+	 *
+	 * Returns null if the element is not under root at all.
+	 */
+	private _topLevelChildFor(glass: HTMLElement): HTMLElement | null {
+		let node: HTMLElement | null = glass;
+		while (node && node.parentElement !== this.root) {
+			node = node.parentElement;
+			if (!node || node === document.body) return null;
+		}
+		return node;
+	}
+
+	/**
+	 * LOCAL: every glass element inside a subtree, itself included.
+	 *
+	 * Used to prune panes out of a contributor's capture. Without it a child
+	 * that contains a pane draws that pane into the scene the pane samples,
+	 * and you get the panel refracting a picture of itself.
+	 */
+	private _glassWithin(child: HTMLElement): HTMLElement[] {
+		const found: HTMLElement[] = [];
+		for (const el of this.glassSet) {
+			if (el === child || child.contains(el)) found.push(el);
+		}
+		return found;
+	}
+
+	/**
 	 * Build the local input scene for a glass panel by walking only the
 	 * contributors that paint before it in the stacking order.
 	 */
@@ -1148,13 +1194,33 @@ export class LiquidGlass {
 	): void {
 		this._prepareSceneCanvas(sampleRect.w, sampleRect.h);
 
+		// LOCAL: stop at the root-level child the pane LIVES UNDER, which is
+		// the pane itself when it is a direct child (upstream's only case) and
+		// an ancestor when it is nested. Comparing against the pane directly
+		// never matched for a nested pane, so the loop ran to the end and
+		// composited the very subtree the pane sits in.
+		const stopAt = this._topLevelChildFor(currentGlass) ?? currentGlass;
+
 		for (const child of this._sortedChildren) {
-			if (child === currentGlass) break;
+			if (child === stopAt) break;
 			if (this.glassSet.has(child)) {
 				this._drawPriorGlassToScene(child, sampleRect, rootRect, dpr);
 			} else {
 				this._drawNonGlassChildToScene(child, sampleRect, rootRect, dpr);
 			}
+		}
+
+		/*
+		 * LOCAL: the pane's own subtree, with every pane in it pruned.
+		 *
+		 * When the pane is nested, the child it lives under is a scene
+		 * contributor too -- on this site that subtree is where the photograph
+		 * is. Skipping it entirely was why a band refracted nothing but bokeh
+		 * on black. It is drawn with the panes hidden, so what lands in the
+		 * scene is the picture and not the glass.
+		 */
+		if (stopAt !== currentGlass && !this.glassSet.has(stopAt)) {
+			this._drawNonGlassChildToScene(stopAt, sampleRect, rootRect, dpr);
 		}
 	}
 
@@ -1268,7 +1334,8 @@ export class LiquidGlass {
 		// so the html-to-image pipeline runs at most once per frame
 		// per element regardless of how many glasses overlap it.
 		const isDynamic = child.hasAttribute('data-dynamic');
-		this.capture.captureElement(child, isDynamic);
+		// LOCAL: prune any nested panes out of this contributor.
+		this.capture.captureElement(child, isDynamic, this._glassWithin(child));
 		const rect = this._getPixelRect(child.getBoundingClientRect(), rootRect, dpr);
 		this.capture.drawCachedElement(
 			child,

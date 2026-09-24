@@ -132,8 +132,21 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
       if (started.has(pane)) return;
       const rect = pane.getBoundingClientRect();
       if (rect.width < 1 || rect.height < 1) return;
-      const root = pane.parentElement;
-      if (!root) return;
+      /*
+       * The root is the element that holds the thing this pane is glass OVER.
+       *
+       * For a band that is the ParallaxScene container: the photograph is a
+       * direct child of it, and the pane is nested two levels down inside it.
+       * Using the pane's immediate parent instead gave a scene of bokeh on
+       * black -- mean luma 13 out of 255 -- because the photograph was not in
+       * it. Nesting is supported in our copy of the library; see the LOCAL
+       * notes on _topLevelChildFor and _composeSceneForGlass.
+       *
+       * The fixed header has no such container, so it falls back to the body
+       * and gets the whole scrolling document as its scene, which is exactly
+       * what a bar floating over the page should refract.
+       */
+      const root = pane.closest<HTMLElement>("[data-photo]") ?? pane.parentElement ?? document.body;
       started.add(pane);
 
       // Serialised. Each init runs a full html-to-image capture of the
@@ -147,6 +160,17 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
           const instance = await LiquidGlass.init({
             root,
             glassElements: [pane],
+            /*
+             * The bands run straight across.
+             *
+             * Upstream's 65px corner is an iOS pill and it is right for the
+             * header, which is a floating bar. The section bands are
+             * full-bleed edge to edge, so a rounded corner there invents a
+             * shape the layout does not have. The BEVEL is untouched -- a
+             * square-edged slab of glass still has a rounded-over arris, and
+             * that arris is where every optical term in the shader lives.
+             */
+            ...(pane.classList.contains("glass--bar") ? {} : { defaults: { cornerRadius: 0 } }),
           });
           if (!live) {
             instance.destroy();

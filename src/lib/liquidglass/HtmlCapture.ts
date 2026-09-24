@@ -448,7 +448,19 @@ export class HtmlCapture {
 	 * Concurrent re-captures for the same element are deduplicated
 	 * via the `_capturing` set, so calling this every frame is cheap.
 	 */
-	async captureElement(element: HTMLElement, force = false): Promise<void> {
+	// LOCAL: hideNodes, so a child that CONTAINS a glass element can be
+	// captured with that element pruned out of the clone.
+	//
+	// Upstream assumes every glass element is a direct child of root, so a
+	// non-glass child never contains one and there is nothing to exclude. We
+	// support nesting (see _composeSceneForGlass), which means the subtree a
+	// pane lives in is itself a scene contributor, and capturing it as-is
+	// would put the pane into the very scene the pane refracts.
+	async captureElement(
+		element: HTMLElement,
+		force = false,
+		hideNodes: HTMLElement[] | null = null,
+	): Promise<void> {
 		const rect = element.getBoundingClientRect();
 		const cssW = rect.width;
 		const cssH = rect.height;
@@ -481,7 +493,7 @@ export class HtmlCapture {
 
 		this._capturing.add(element);
 		try {
-			await this._captureWithHtmlToImage(element, w, h, cssW, cssH);
+			await this._captureWithHtmlToImage(element, w, h, cssW, cssH, hideNodes);
 		} finally {
 			this._capturing.delete(element);
 		}
@@ -582,6 +594,7 @@ export class HtmlCapture {
 		h: number,
 		cssW: number,
 		cssH: number,
+		hideNodes: HTMLElement[] | null = null,   // LOCAL: see captureElement
 	): Promise<void> {
 		// Defensive: skip zero-sized captures. captureElement() already
 		// guards this but the html-to-image path is reachable from
@@ -597,6 +610,23 @@ export class HtmlCapture {
 				// uses the page's actual webfont at the correct weight
 				// and unicode subset for this element's text content.
 				fontEmbedCSS: this.fontEmbedCSSForElement(element),
+				// LOCAL: prune nested glass out of the clone. Compares against
+				// the node itself AND its ancestors, because html-to-image
+				// calls the filter for every node in the subtree and dropping
+				// only the root of a glass element would keep its children.
+				...(hideNodes && hideNodes.length
+					? {
+						filter: (node: Node) => {
+							if (node.nodeType !== 1) return true;
+							let cur: Node | null = node;
+							while (cur) {
+								if (hideNodes.includes(cur as HTMLElement)) return false;
+								cur = cur.parentNode;
+							}
+							return true;
+						},
+					}
+					: {}),
 			});
 
 			this.cache.set(element, { canvas: rendered, w, h });
