@@ -105,6 +105,24 @@ export function Glass({
   return (
     <Tag
       ref={attach}
+      /*
+       * This element's attributes are set from outside React, by design.
+       *
+       * `applyGlassConfig` writes `data-config` here -- it is how the tuning
+       * panel reaches the rasterised glass, which watches the attribute with
+       * a MutationObserver -- and `RasterGlass` writes `data-liquid` once a
+       * pane's instance is up. The server renders neither, so React finds
+       * attributes it did not put there and reports a hydration mismatch it
+       * cannot patch up.
+       *
+       * Same situation, and the same answer, as the <html> element in
+       * __root.tsx: the honest fix is to tell React this element's attributes
+       * are not its business, rather than to delay the writes until hydration
+       * happens to be finished. A frame's delay was tried and did not hold --
+       * lazily-loaded route content is still hydrating well after the first
+       * paint, so the race just moved.
+       */
+      suppressHydrationWarning
       className={cn(
         "glass",
         variant === "bar" && "glass--bar",

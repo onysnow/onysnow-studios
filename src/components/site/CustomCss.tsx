@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { settingsQuery } from "@/lib/content";
 import { safeCustomCss, safeHref } from "@/lib/safe-content";
 import { SITE_ASSETS } from "@/lib/site-assets";
+import { loadSavedTuning } from "@/lib/tuning";
 
 /** Display faces the portal can switch between. */
 const FONTS = new Set(["jost", "inter-tight", "barlow-condensed"]);
@@ -55,6 +56,21 @@ export function CustomCss() {
    * other URL out of the portal.
    */
   const glassSurface = safeHref(data?.[SITE_ASSETS.glassSurface.key] ?? "");
+
+  /*
+   * Whatever the lab last saved, applied to the real site.
+   *
+   * Here rather than in its own component because this is already the place
+   * that reads studio settings and writes them onto the document, and it is
+   * already mounted on every route. Once, on mount: the lab applies its own
+   * changes live while you are in it, and re-applying on every render would
+   * fight that.
+   */
+  useEffect(() => {
+    // The panes carry `suppressHydrationWarning` precisely so this does not
+    // have to be timed against hydration -- see Glass.tsx.
+    loadSavedTuning();
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;

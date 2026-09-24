@@ -828,6 +828,44 @@ if (typeof window !== "undefined") {
   onGlassMode(switchTuningMode);
 }
 
+/** Where the lab keeps what you tuned. */
+export const TUNING_STORE = "onysnow:tuning";
+
+/**
+ * Load what the lab saved and apply it.
+ *
+ * WHY THIS IS NOT ONLY THE LAB'S JOB
+ *
+ * It used to be. `lab.tsx` read localStorage, called `applyTuning`, and
+ * nothing else on the site ever did -- so every number tuned in the lab was
+ * written down and then read back only by the lab. The preview there looked
+ * exactly right and the actual site ignored all of it, which is indis-
+ * tinguishable from the sliders not working. Reported as "none of the
+ * properties I set have any effect", and correct.
+ *
+ * Tolerant of every shape the store has had: the flat map written before the
+ * per-mode sets existed, and the { css, raster } pair written since.
+ */
+export function loadSavedTuning() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(TUNING_STORE);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed["css"] || parsed["raster"]) {
+      restoreTuning(parsed as Parameters<typeof restoreTuning>[0]);
+    } else {
+      // Written before the sets were split: one set of numbers, tuned against
+      // whichever mode was up at the time. Seed both rather than guess.
+      const flat = parsed as Record<string, number>;
+      restoreTuning({ css: flat, raster: flat });
+    }
+  } catch {
+    // A blocked or corrupt store is not a reason to fail to render the site.
+  }
+  applyTuning();
+}
+
 /** Shorthand for the loops: `t("coreGain")`. */
 export const t = (key: keyof typeof tuning | string): number => tuning[key]?.value ?? 0;
 

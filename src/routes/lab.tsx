@@ -10,6 +10,7 @@ import {
   applyTuning,
   isPerMode,
   resetTuning,
+  loadSavedTuning,
   restoreTuning,
   serializeTuning,
   setValueIn,
@@ -110,25 +111,9 @@ function Lab() {
   const [, redraw] = useState(0);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORE);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Record<string, unknown>;
-        if (parsed["css"] || parsed["raster"]) {
-          restoreTuning(parsed as Parameters<typeof restoreTuning>[0]);
-        } else {
-          // A store written before the sets were split. One set of numbers,
-          // which were tuned against whichever mode was up at the time --
-          // seed BOTH from it rather than guessing which, so nothing is lost
-          // and the two start out agreeing.
-          const flat = parsed as Record<string, number>;
-          restoreTuning({ css: flat, raster: flat });
-        }
-      }
-    } catch {
-      // A blocked or corrupt store is not a reason to fail to open the page.
-    }
-    applyTuning();
+    // The same loader the rest of the site uses, so the lab cannot drift from
+    // what everyone else gets.
+    loadSavedTuning();
     redraw((n) => n + 1);
   }, []);
 

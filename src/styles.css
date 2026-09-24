@@ -1005,6 +1005,27 @@
  * twice. The shader has its own tint and opacity for this -- and with the
  * blur gone, those two finally have something visible to act on.
  */
+/*
+ * The CSS ROOM REFLECTION comes off a liquid pane too.
+ *
+ * Same mistake as the backdrop-filter, found the same way. `.glass__reflection`
+ * screen-blends an HDRI of a room onto the pane. Behind a tint and a 26px blur
+ * that reads as a faint gleam, which is what it is for. With both of those
+ * gone it is the loudest thing on the pane: an unrefracted, undistorted
+ * photograph of a room sitting on top of the refracted page, drowning it --
+ * reported as "what's with the background image, it's not even being
+ * refracted", and it is also why the photograph underneath stopped reading as
+ * continuing under the glass.
+ *
+ * It cannot be refracted, either: liquidglass samples what is BEHIND the pane,
+ * and this layer is ON it. Two reflection systems stacked, and the wrong one
+ * wins. The shader has its own fresnel and specular, and with the blur gone
+ * those finally have something to act on.
+ */
+.glass[data-liquid] > .glass__reflection {
+  display: none;
+}
+
 .glass[data-liquid] {
   /*
    * ONE property, unprefixed. Do not add `-webkit-backdrop-filter` here.
@@ -2606,3 +2627,25 @@ span:has(> .photo-surface) {
   }
 }
 
+
+/*
+ * Nothing scrolls sideways.
+ *
+ * The pane light layer sits at `inset: -90px` so a lit edge can throw light
+ * past the pane, and on a full-width band that means 90px beyond the viewport
+ * on each side. The section wrapper's `overflow: hidden` used to absorb that;
+ * moving the clip inward -- so the bloom could escape upward, which it must --
+ * left the overhang contributing to the document's scroll width. Measured:
+ * scrollWidth 1370 against a 1280 viewport, exactly the 90px bleed.
+ *
+ * `clip` rather than `hidden`, and on one axis only. `hidden` would make this
+ * a scroll container, which breaks sticky positioning and scroll restoration;
+ * `clip` does neither. And clipping only x leaves `overflow-y: visible`, so
+ * the vertical spill -- the part that actually had somewhere to go -- is
+ * untouched. There is no page to the left of the left edge, so nothing is
+ * lost horizontally.
+ */
+#main-content {
+  overflow-x: clip;
+  overflow-y: visible;
+}
