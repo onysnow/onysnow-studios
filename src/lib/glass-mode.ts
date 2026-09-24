@@ -87,6 +87,19 @@ export function setGlassMode(mode: GlassMode) {
   for (const fn of listeners) fn(mode);
 }
 
+/**
+ * Subscribe to mode changes from outside React.
+ *
+ * The tuning store needs this: knobs that are live in both systems keep a
+ * separate value per mode, and the swap has to happen the instant the mode
+ * does -- not one render later, and not only on the pages that happen to
+ * mount a component.
+ */
+export function onGlassMode(fn: (mode: GlassMode) => void) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
 export function toggleGlassMode(): GlassMode {
   const next: GlassMode = getGlassMode() === "raster" ? "css" : "raster";
   setGlassMode(next);

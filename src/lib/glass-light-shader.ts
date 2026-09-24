@@ -111,10 +111,6 @@ uniform vec3  uCool;
 #define SIDE_DISPERSION 7.0
 
 
-float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-
 /* Signed distance to a rounded rectangle. Negative inside, zero on the edge. */
 float roundedBox(vec2 p, vec2 halfSize, float radius) {
   float r = min(radius, min(halfSize.x, halfSize.y));
@@ -642,15 +638,20 @@ void main() {
   colour = sign(colour) * pow(abs(colour), vec3(1.0 / 2.2));
 
   /*
-   * Grain, after the tonemap, where a sensor's noise lands. Analytic falloffs
-   * are perfectly smooth, and perfectly smooth gradients both band on an 8-bit
-   * display and read as vector art.
+   * NO GRAIN HERE. Deliberately, and permanently.
+   *
+   * There used to be a per-pixel hash dithered in at this point, weighted by
+   * 4*l*(1-l) so it peaked in the midtones. The justification was 8-bit
+   * banding on smooth analytic falloffs. The result was a fine even dust over
+   * the entire pane that read as a noise overlay rather than as glass, at its
+   * very worst across exactly the mid-grey the panes spend most of their time
+   * at. Asked for its removal repeatedly; it is gone.
+   *
+   * If banding ever genuinely shows, the fix is a smaller ORDERED dither tied
+   * to the quantisation step, not a random field at 0.09 -- but it has not
+   * shown, and the pane has no business carrying texture that is not the
+   * smudge and scratch photographs.
    */
-  float l = clamp(max(max(colour.r, colour.g), colour.b), 0.0, 1.0);
-  float mids = 4.0 * l * (1.0 - l);
-  float g1 = hash(gl_FragCoord.xy);
-  float g2 = hash(gl_FragCoord.yx * 1.7);
-  colour += (vec3(g1, g2, g1 * 0.5 + g2 * 0.5) - 0.5) * 0.09 * mids;
 
   /*
    * NOT clipped to the pane.

@@ -26,6 +26,13 @@ const PHOTO = "img, picture, video, .gallery-frame";
  */
 const PHOTO_SCENE = "[data-photo]";
 
+/*
+ * The widest the ring is allowed to open over something clickable, and the
+ * size it uses whenever the control is at least this big. Matches the value
+ * the link state used to hard-code in the stylesheet.
+ */
+const LINK_RING = 56;
+
 /**
  * The cursor.
  *
@@ -107,6 +114,55 @@ export function CustomCursor() {
       if (el.dataset["state"] !== state) {
         el.dataset["state"] = state;
         dot.dataset["state"] = state;
+      }
+
+      /*
+       * The ring must never overhang what it is pointing at.
+       *
+       * The link state opened the ring to a flat 56px whatever it was over.
+       * On a nav word that looked deliberate. On a slider, a small icon
+       * button, a radio, it is several times the control: the thing you are
+       * aiming at disappears inside the cursor and there is no longer any way
+       * to tell whether you are still on it. Aim feedback is the one job a
+       * pointer has.
+       *
+       * TWO axes, and the tight one is the one that decides.
+       *
+       * A range input measures 608 x 16. Capping on the larger axis -- which
+       * is what I wrote first -- reads that as a big control and hands it the
+       * full 56px ring, which is exactly the case that was reported. What you
+       * aim at on a slider is a 16px band, so the ring has to fit the 16.
+       * The overall size still caps it too, for something small in both axes.
+       *
+       * +4 rather than a tight fit, so a sliver of the control shows around
+       * the ring on every side: a visible margin is the thing that says "still
+       * on it", and a ring exactly the size of its target reads as covering it.
+       * Floored at 14px so it cannot collapse into the dot.
+       *
+       * The consequence worth naming: a nav link is about 20px tall, so its
+       * ring is now ~24px rather than 56px. The big disc behind a nav word is
+       * gone. That is the same rule doing its job rather than an oversight --
+       * one rule that always fits beats two with a threshold between them.
+       *
+       * Written to `--ring-base`, not `--ring-size`, so the charge still opens
+       * it on top -- the old hard override silently disabled the wind growth
+       * over every link on the site.
+       */
+      if (state === "link" && interactive instanceof HTMLElement) {
+        const r = interactive.getBoundingClientRect();
+        const overall = Math.max(r.width, r.height);
+        const tight = Math.min(r.width, r.height);
+        let base = overall < LINK_RING ? overall + 4 : LINK_RING;
+        if (tight + 4 < base) base = tight + 4;
+        base = Math.max(base, 14);
+        const px = `${Math.round(base)}px`;
+        if (el.style.getPropertyValue("--ring-base") !== px) {
+          el.style.setProperty("--ring-base", px);
+          dot.style.setProperty("--ring-base", px);
+        }
+      } else if (el.style.getPropertyValue("--ring-base")) {
+        el.style.removeProperty("--ring-base");
+        dot.style.removeProperty("--ring-base");
       }
     };
 

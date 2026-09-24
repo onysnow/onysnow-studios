@@ -46,9 +46,39 @@ import { castShadow } from "./cast-shadow";
 
 export const lightState = { x: -9999, y: -9999, charge: 0 };
 
-/** Called by whoever owns the shutter gesture. */
+/**
+ * Called by whoever owns the shutter gesture.
+ *
+ * Schedules a pass, because the cast shadows read the charge. The charge
+ * decays on its own after the pointer stops, and `apply` is otherwise only
+ * driven by pointer events -- so without this the shadow freezes at whatever
+ * the last move left it at and sits there under an unlit pane.
+ *
+ * Guarded on a real change so the cursor's own rAF loop, which reports every
+ * frame whether or not the number moved, does not keep a second loop alive
+ * against a resting page.
+ */
 export function reportCharge(charge: number) {
+  const moved = Math.abs(charge - lightState.charge) > 0.003;
   lightState.charge = charge;
+  if (moved && !frame) frame = requestAnimationFrame(apply);
+  if (moved) for (const fn of chargeWatchers) fn(charge);
+}
+
+const chargeWatchers = new Set<(charge: number) => void>();
+
+/**
+ * Watch the charge.
+ *
+ * Here rather than on the cursor because this module is already the place
+ * anything that is not the cursor goes to find out about the light -- the
+ * panes read `lightState` the same way. The shutter overlay uses it to start
+ * photographing the page while the gesture is still winding, which is the
+ * only way its afterimage can be ready at the instant the thing fires.
+ */
+export function onCharge(fn: (charge: number) => void) {
+  chargeWatchers.add(fn);
+  return () => chargeWatchers.delete(fn);
 }
 let bound = false;
 
@@ -525,8 +555,23 @@ function litSurface(el: HTMLElement, rect?: DOMRect) {
   el.style.setProperty("--cast-y", `${cast.y.toFixed(1)}px`);
   el.style.setProperty("--cast-blur", `${cast.blur.toFixed(1)}px`);
 
-  // Only while the light is on it, and weaker the further away it is.
-  const alpha = near * near * t("shadowStrength");
+  /*
+   * Only while the light is ON, and weaker the further away it is.
+   *
+   * Nearness alone was the gate, which meant a pointer parked next to a
+   * photograph threw a shadow across the pane with nothing shining on it --
+   * a shadow from a light that is not lit. The emitter is driven by the
+   * shutter's charge, so the shadow has to be too.
+   *
+   * The curve is the SAME one the shader uses for its light, not merely
+   * something that also rises with charge: glass-light-shader.ts computes
+   * `lit = uCharge * uCharge * (3 - 2 * uCharge)`, which is smoothstep. If
+   * the two disagreed, the shadow would lead or lag the light that casts it,
+   * and that reads worse than having no shadow at all.
+   */
+  const c = lightState.charge;
+  const lit = c * c * (3 - 2 * c);
+  const alpha = near * near * lit * t("shadowStrength");
   el.style.setProperty("--cast-alpha", alpha.toFixed(3));
 
   /*

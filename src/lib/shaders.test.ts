@@ -54,3 +54,32 @@ describe("shader sources", () => {
     });
   }
 });
+
+/*
+ * NO GENERATED TEXTURE IN THE GLASS.
+ *
+ * A per-pixel `hash()` grain used to be dithered in after the tonemap,
+ * weighted by 4*l*(1-l) so it peaked in the midtones -- which is exactly the
+ * mid-grey a pane spends most of its time at. It read as an even dust over
+ * the whole surface rather than as glass, and was asked to be removed
+ * repeatedly before it actually was.
+ *
+ * The pane carries the smudge and scratch PHOTOGRAPHS and nothing else. This
+ * test is here so that cannot quietly stop being true: any pseudo-random term
+ * reintroduced into the light shader fails here, rather than in a screenshot
+ * weeks later.
+ */
+describe("no generated noise in the glass", () => {
+  it("has no pseudo-random term in the light shader", () => {
+    const src = GLASS_LIGHT_FRAGMENT_SHADER;
+    expect(src).not.toMatch(/fract\s*\(\s*sin\s*\(/);
+    expect(src).not.toMatch(/\bhash\s*\(/);
+    expect(src).not.toMatch(/\brandom\s*\(/);
+    expect(src).not.toMatch(/\bnoise\s*\(/);
+  });
+
+  it("gets its texture from the supplied photographs instead", () => {
+    // Sampled from the smudge/scratch images, not synthesised.
+    expect(GLASS_LIGHT_FRAGMENT_SHADER).toContain("uniform sampler2D uSurface");
+  });
+});
