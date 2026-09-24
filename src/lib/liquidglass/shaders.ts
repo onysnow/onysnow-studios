@@ -131,6 +131,9 @@ uniform float u_brightness;
 uniform float u_shadowAlpha;
 uniform float u_shadowSpread;
 uniform float u_shadowOffY;
+// LOCAL: the specular rig, which upstream hardcodes.
+uniform float u_specTight;   // scales every exponent; 1.0 is upstream
+uniform vec2  u_lightDir;    // shifts the two TIGHT lights; (0,0) is upstream
 uniform float u_bevelMode;
 
 varying vec2 v_localPx;
@@ -264,18 +267,23 @@ void main() {
 	float fres = pow(1.0 - abs(N.z), 4.0) * u_fresnel;
 
 	// ── Specular highlights (multi-light Blinn-Phong) ──
+	// LOCAL: u_lightDir shifts the two TIGHT lights (L1, L4) only; L2 and L3
+	// are broad fill and moving them just muddies the face. u_specTight scales
+	// every exponent. At u_lightDir = (0,0) and u_specTight = 1 this is
+	// byte-for-byte upstream's rig.
+	float tight = max(u_specTight, 0.05);
 	vec3 V = vec3(0.0, 0.0, 1.0);
-	vec3 L1 = normalize(vec3(0.4, 0.7, 1.0));
+	vec3 L1 = normalize(vec3(0.4 + u_lightDir.x, 0.7 + u_lightDir.y, 1.0));
 	vec3 H1 = normalize(L1 + V);
-	float sp1 = pow(max(dot(N, H1), 0.0), 90.0);
+	float sp1 = pow(max(dot(N, H1), 0.0), 90.0 * tight);
 	vec3 L2 = normalize(vec3(-0.3, -0.5, 1.0));
 	vec3 H2 = normalize(L2 + V);
-	float sp2 = pow(max(dot(N, H2), 0.0), 50.0) * 0.3;
+	float sp2 = pow(max(dot(N, H2), 0.0), 50.0 * tight) * 0.3;
 	vec3 L3 = normalize(vec3(0.1, 0.3, 1.0));
-	float spB = pow(max(dot(N, L3), 0.0), 6.0) * 0.1;
-	vec3 L4 = normalize(vec3(0.0, 0.9, 0.4));
+	float spB = pow(max(dot(N, L3), 0.0), 6.0 * tight) * 0.1;
+	vec3 L4 = normalize(vec3(0.0 + u_lightDir.x, 0.9 + u_lightDir.y, 0.4));
 	vec3 H4 = normalize(L4 + V);
-	float sp4 = pow(max(dot(N, H4), 0.0), 120.0) * 0.6;
+	float sp4 = pow(max(dot(N, H4), 0.0), 120.0 * tight) * 0.6;
 	float totalSpec = (sp1 + sp2 + spB + sp4) * u_spec;
 
 	// ── Inner border / stroke highlight ──

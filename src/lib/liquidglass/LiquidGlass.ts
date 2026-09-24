@@ -1125,6 +1125,7 @@ export class LiquidGlass {
 				renderW,
 				renderH,
 				config.blurAmount,
+				config.blurPasses,   // LOCAL
 			);
 			this.renderer.clear();
 			this.renderer.renderGlassPanel(

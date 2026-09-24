@@ -132,6 +132,7 @@ export class GlassRenderer {
 			'u_bgTex', 'u_blurTex', 'u_center', 'u_size', 'u_radius',
 			'u_res', 'u_pad', 'u_refract', 'u_chroma',
 			'u_edgeHL', 'u_spec', 'u_fresnel', 'u_distort', 'u_alpha',
+			'u_specTight', 'u_lightDir',   // LOCAL
 			'u_sat', 'u_tint', 'u_zRadius', 'u_brightness',
 			'u_shadowAlpha', 'u_shadowSpread', 'u_shadowOffY',
 			'u_bevelMode',
@@ -179,6 +180,12 @@ export class GlassRenderer {
 		width: number,
 		height: number,
 		blurAmount: number,
+		// LOCAL: was the fixed BLUR_ITERATIONS constant. Passed in rather than
+		// read off a config, because this method has never had one -- my first
+		// attempt referenced `config` here and it is not in scope. @ts-nocheck
+		// on this vendored file meant nothing caught it; it would have thrown
+		// at the first frame.
+		blurPasses: number = BLUR_ITERATIONS,
 	): void {
 		if (this.contextLost) return;
 		const gl = this.gl;
@@ -228,7 +235,10 @@ export class GlassRenderer {
 			const spread = blurAmount * 2.5;
 			gl.useProgram(this.blurP);
 			gl.uniform1i(this.blurU.u_tex, 0);
-			for (let i = 0; i < BLUR_ITERATIONS; i++) {
+			// More passes is a wider, smoother frost, and each costs two
+			// full-screen draws. Clamped so a bad config cannot stall a frame.
+			const passes = Math.max(1, Math.min(12, Math.round(blurPasses)));
+			for (let i = 0; i < passes; i++) {
 				gl.bindFramebuffer(gl.FRAMEBUFFER, fboSet.blurB.fbo);
 				gl.viewport(0, 0, bw, bh);
 				gl.bindTexture(gl.TEXTURE_2D, fboSet.blurA.tex);
@@ -285,6 +295,9 @@ export class GlassRenderer {
 		gl.uniform1f(this.glassU.u_spec, config.specular);
 		gl.uniform1f(this.glassU.u_fresnel, config.fresnel);
 		gl.uniform1f(this.glassU.u_distort, config.distortion);
+		// LOCAL: the specular rig, defaulted so an absent value is upstream's.
+		gl.uniform1f(this.glassU.u_specTight, config.specularTightness ?? 1);
+		gl.uniform2f(this.glassU.u_lightDir, config.lightX ?? 0, config.lightY ?? 0);
 		gl.uniform1f(this.glassU.u_alpha, config.opacity);
 		gl.uniform1f(this.glassU.u_sat, config.saturation);
 		gl.uniform1f(this.glassU.u_tint, config.tintStrength);

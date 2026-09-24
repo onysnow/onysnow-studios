@@ -60,6 +60,13 @@ export interface GlassConfig {
 	floating: boolean;
 	/** Whether this glass element behaves as a button (hover lift + press effect) */
 	button: boolean;
+	/** LOCAL: multiplies all four specular exponents. 1 = upstream's values. */
+	specularTightness: number;
+	/** LOCAL: shifts the two tight speculars' light direction. 0,0 = upstream. */
+	lightX: number;
+	lightY: number;
+	/** LOCAL: Gaussian blur passes for the frosted sample. Upstream fixed this at 6. */
+	blurPasses: number;
 	/**
 	 * Bevel mode: 0 = biconvex pill (half-circle cross-section, default),
 	 * 1 = dome (flat bottom, quarter-circle top — use with cornerRadius = zRadius
@@ -85,6 +92,11 @@ export const DEFAULTS: GlassConfig = {
 	shadowOpacity: 0.30,
 	shadowSpread: 10,
 	shadowOffsetY: 1,
+	specularTightness: 1.00,   // LOCAL
+	lightX: 0.00,              // LOCAL
+	lightY: 0.00,              // LOCAL
+	blurPasses: 6,             // LOCAL, was the BLUR_ITERATIONS constant
+
 	floating: false,
 	button: false,
 	bevelMode: 0,

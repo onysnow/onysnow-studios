@@ -157,11 +157,39 @@ function Lab() {
           </span>
         </div>
 
+        {/*
+          The rasterised glass is kept apart from everything else, and the
+          separation is not cosmetic.
+
+          Every other group on this page drives the CSS-and-WebGL effect layer,
+          which is live on the site. These drive ybouane's shader, which only
+          runs under `?glass=raster`. Mixed into one list they look like knobs
+          that are not working -- they are not connected to what you are
+          looking at unless you are in that mode, and nothing on the slider
+          says so.
+        */}
         {groups.map(([group, knobs]) => (
-          <section key={group} className="mb-12">
-            <h2 className="mb-5 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          <section
+            key={group}
+            className={
+              group === "Liquid glass"
+                ? "mb-12 rounded-lg border border-[var(--amber)]/30 bg-[var(--amber)]/[0.03] p-6"
+                : "mb-12"
+            }
+          >
+            <h2 className="mb-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {group}
             </h2>
+            {group === "Liquid glass" ? (
+              <p className="mb-5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                The rasterised glass shader. These do nothing unless the page is in{" "}
+                <code className="text-[var(--amber)]">?glass=raster</code> — in CSS mode the panes
+                are backdrop-filter and an SVG displacement map, and none of this reaches them.
+                Bevel depth has the most leverage of anything here: across the flat face of a pane
+                the surface normal is (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular
+                are exactly zero there. All of the glass lives on the edge.
+              </p>
+            ) : null}
             <div className="space-y-6">
               {knobs.map(([key, knob]) => (
                 <div key={key} className="grid gap-2 sm:grid-cols-[16rem_1fr_6rem] sm:items-center">
