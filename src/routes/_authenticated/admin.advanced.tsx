@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Check, Save } from "lucide-react";
 import { AdminHeading } from "@/components/admin/AdminHeading";
-import { CodeEditor, diffLines } from "@/components/admin/CodeEditor";
+import { CodeEditor } from "@/components/admin/CodeEditor";
+import { diffLines } from "@/lib/diff-lines";
 import {
   EDITABLE_TABLES,
   TABLE_PK,

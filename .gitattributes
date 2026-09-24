@@ -1,0 +1,34 @@
+# Line endings, settled once.
+#
+# There was no .gitattributes and core.autocrlf was unset, so every checkout
+# on Windows rewrote every file to CRLF while the repository held LF. The
+# result: `git diff` against main reported 8,599 insertions and 8,599
+# deletions across 18 files -- exactly equal, every line, no real change --
+# merges aborted with "local changes would be overwritten", and a fast-forward
+# that should have been trivial failed.
+#
+# `text=auto eol=lf` normalises to LF in the repository and checks out LF
+# everywhere. Every editor and toolchain this project uses handles LF on
+# Windows; the only thing that ever wanted CRLF was Notepad.
+* text=auto eol=lf
+
+# Binary, never touched.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.avif  binary
+*.ico   binary
+*.mp4   binary
+*.webm  binary
+*.mp3   binary
+*.wav   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.pdf   binary
+
+# Generated. Collapsed in diffs and left out of language stats, because a
+# lockfile conflict is resolved by re-running the install, never by hand.
+bun.lock linguist-generated=true -diff

@@ -36,13 +36,24 @@ function PagesPage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
 
+  /*
+   * Depends on the ROWS, not on the query object.
+   *
+   * The lint rule asked for `content` in the dependency array, and following
+   * it literally would have been worse than the warning: useQuery returns a
+   * fresh object every render, so depending on it re-runs the grouping on
+   * every render and the memo stops being a memo. Pulling the rows out makes
+   * the real dependency a plain value, which satisfies the rule honestly
+   * rather than silencing it.
+   */
+  const rows = content.data;
   const grouped = useMemo(() => {
-    const map: Record<string, typeof content.data> = {};
-    for (const row of content.data ?? []) {
+    const map: Record<string, typeof rows> = {};
+    for (const row of rows ?? []) {
       map[row.page_slug] = [...(map[row.page_slug] ?? []), row];
     }
     return map;
-  }, [content.data]);
+  }, [rows]);
 
   const slugs = Object.keys(grouped);
 
