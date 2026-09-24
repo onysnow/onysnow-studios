@@ -24,10 +24,249 @@ export type Knob = {
   /** Written to the document element as a custom property, with this suffix. */
   cssVar?: string;
   cssUnit?: string;
+  /**
+   * Written into each pane's `data-config` for the rasterised glass.
+   *
+   * That library watches the attribute with a MutationObserver and re-reads
+   * its configuration when it changes, so this is a live sink exactly like
+   * `cssVar` is -- no re-init, no reload.
+   *
+   * `"band"` and `"bar"` scope a value to the section panes or the fixed
+   * header respectively; anything else applies to both.
+   */
+  glassKey?: string;
+  glassScope?: "band" | "bar";
   hint?: string;
 };
 
 export const tuning: Record<string, Knob> = {
+  // ---- The rasterised glass ----
+  //
+  // These are the shader's own uniforms, not CSS. They only do anything in
+  // `?glass=raster`; in CSS mode the panes are backdrop-filter and an SVG
+  // displacement map, and none of this reaches them.
+  glassRefraction: {
+    label: "Refraction",
+    group: "Liquid glass",
+    value: 0.69,
+    min: 0,
+    max: 2,
+    step: 0.01,
+    glassKey: "refraction",
+    hint: "How far the bevel bends what is behind the pane. This is the effect; everything else is trim.",
+  },
+  glassChroma: {
+    label: "Dispersion",
+    group: "Liquid glass",
+    value: 0.05,
+    min: 0,
+    max: 0.4,
+    step: 0.005,
+    glassKey: "chromAberration",
+    hint: "Chromatic aberration at the rim. Glass splits wavelengths by slightly different amounts, and this is the single strongest cue that something is glass rather than a blur.",
+  },
+  glassBlur: {
+    label: "Frost",
+    group: "Liquid glass",
+    value: 0.18,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    glassKey: "blurAmount",
+    hint: "How far from clear the body of the pane is. 0 is optical glass; the photographs read straight through it.",
+  },
+  glassSpecular: {
+    label: "Gloss",
+    group: "Liquid glass",
+    value: 0,
+    min: 0,
+    max: 2,
+    step: 0.02,
+    glassKey: "specular",
+    hint: "Strength of the hard highlights off the bevel. Four fixed lights, Blinn-Phong, exponents 90/50/6/120.",
+  },
+  glassDistortion: {
+    label: "Roughness",
+    group: "Liquid glass",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    glassKey: "distortion",
+    hint: "Micro-distortion in the surface. Small amounts read as imperfect glass; large amounts read as water.",
+  },
+  glassFresnel: {
+    label: "Fresnel",
+    group: "Liquid glass",
+    value: 1,
+    min: 0,
+    max: 2,
+    step: 0.02,
+    glassKey: "fresnel",
+    hint: "How much brighter the pane gets where you see it at a grazing angle. Lives on the bevel, since the face is dead flat.",
+  },
+  glassEdge: {
+    label: "Edge highlight",
+    group: "Liquid glass",
+    value: 0.05,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    glassKey: "edgeHighlight",
+    hint: "The inner stroke and rim glow. Trim rather than optics.",
+  },
+  glassDepth: {
+    label: "Bevel depth",
+    group: "Liquid glass",
+    value: 40,
+    min: 4,
+    max: 140,
+    step: 2,
+    glassKey: "zRadius",
+    hint: "How far the edge rounds over. EVERY optical term lives here -- across the flat face the normal is (0,0,1) and refraction, fresnel and specular are all exactly zero. Too small and the pane is a blurred rectangle.",
+  },
+  glassCornerBand: {
+    label: "Corner, bands",
+    group: "Liquid glass",
+    value: 0,
+    min: 0,
+    max: 140,
+    step: 2,
+    glassKey: "cornerRadius",
+    glassScope: "band",
+    hint: "0 runs them straight across, which is what a full-bleed band wants.",
+  },
+  glassCornerBar: {
+    label: "Corner, header",
+    group: "Liquid glass",
+    value: 65,
+    min: 0,
+    max: 140,
+    step: 2,
+    glassKey: "cornerRadius",
+    glassScope: "bar",
+    hint: "The header is a floating bar, so it keeps a pill.",
+  },
+  glassTint: {
+    label: "Tint",
+    group: "Liquid glass",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    glassKey: "tintStrength",
+    hint: "Cool cast through the body, as thick glass has.",
+  },
+  glassSaturation: {
+    label: "Saturation",
+    group: "Liquid glass",
+    value: 0,
+    min: -1,
+    max: 1,
+    step: 0.02,
+    glassKey: "saturation",
+    hint: "Applied to what is seen THROUGH the pane, not to the page.",
+  },
+  glassSpecTight: {
+    label: "Highlight tightness",
+    group: "Liquid glass",
+    value: 1,
+    min: 0.1,
+    max: 4,
+    step: 0.05,
+    glassKey: "specularTightness",
+    hint: "Scales all four specular exponents at once (90/50/6/120 at 1.0). Higher is a smaller, harder glint; lower spreads it into a sheen. This is the roughness of the surface in the optical sense.",
+  },
+  glassLightX: {
+    label: "Light across",
+    group: "Liquid glass",
+    value: 0,
+    min: -1.5,
+    max: 1.5,
+    step: 0.05,
+    glassKey: "lightX",
+    hint: "Moves the two TIGHT speculars left and right. The two broad fill lights stay put — moving those muddies the face rather than lighting it.",
+  },
+  glassLightY: {
+    label: "Light up",
+    group: "Liquid glass",
+    value: 0,
+    min: -1.5,
+    max: 1.5,
+    step: 0.05,
+    glassKey: "lightY",
+    hint: "Same, vertically. 0,0 is the rig the library ships with.",
+  },
+  glassBlurPasses: {
+    label: "Frost quality",
+    group: "Liquid glass",
+    value: 6,
+    min: 1,
+    max: 12,
+    step: 1,
+    glassKey: "blurPasses",
+    hint: "Gaussian passes behind the frost. Each one costs two full-screen draws, so this is the knob to drop first if the panes are expensive.",
+  },
+  glassOpacity: {
+    label: "Pane opacity",
+    group: "Liquid glass",
+    value: 1,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    glassKey: "opacity",
+    hint: "The whole shader output's alpha. Below 1 the unrefracted page shows through underneath, which reads as thin glass rather than as clear glass.",
+  },
+  glassBevelMode: {
+    label: "Bevel profile",
+    group: "Liquid glass",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 1,
+    glassKey: "bevelMode",
+    hint: "0 is a biconvex pill, curved from both faces. 1 is a dome: flat underneath, quarter-circle on top. Set 1 with bevel depth equal to the corner radius for a half-sphere magnifier.",
+  },
+  glassShadow: {
+    label: "Drop shadow",
+    group: "Liquid glass",
+    value: 0.3,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    glassKey: "shadowOpacity",
+    hint: "The shadow the pane casts on the page. Drawn inside a 20px pad around the canvas, so a large spread gets clipped rather than growing.",
+  },
+  glassShadowSpread: {
+    label: "Shadow spread",
+    group: "Liquid glass",
+    value: 10,
+    min: 0,
+    max: 20,
+    step: 1,
+    glassKey: "shadowSpread",
+    hint: "Capped by the same 20px pad. Past that the shadow is cut off square, which looks worse than a smaller shadow.",
+  },
+  glassShadowY: {
+    label: "Shadow offset",
+    group: "Liquid glass",
+    value: 1,
+    min: -20,
+    max: 20,
+    step: 1,
+    glassKey: "shadowOffsetY",
+    hint: "Vertical only, which is upstream's choice — the implied light is directly above.",
+  },
+  glassBrightness: {
+    label: "Brightness",
+    group: "Liquid glass",
+    value: 0,
+    min: -0.5,
+    max: 0.5,
+    step: 0.01,
+    glassKey: "brightness",
+  },
+
   // ---- The light itself ----
   coreGain: {
     label: "Core gain",
@@ -444,6 +683,35 @@ export function applyTuning() {
   for (const knob of Object.values(tuning)) {
     if (!knob.cssVar) continue;
     root.setProperty(knob.cssVar, `${knob.value}${knob.cssUnit ?? ""}`);
+  }
+  applyGlassConfig();
+}
+
+/**
+ * Mirrors the shader knobs onto each pane's `data-config`.
+ *
+ * The rasterised glass keeps its configuration in that attribute and watches
+ * it with a MutationObserver, so writing it is enough -- the next frame picks
+ * the new values up. No re-init, which matters: an init runs a full
+ * html-to-image capture of everything behind the pane, and doing that on every
+ * drag of a slider would make the panel unusable.
+ *
+ * Only ever writes when the value would actually change, because the observer
+ * fires on any attribute write and an identical one is pure work.
+ */
+export function applyGlassConfig() {
+  if (typeof document === "undefined") return;
+  for (const pane of Array.from(document.querySelectorAll<HTMLElement>(".glass"))) {
+    const isBar = pane.classList.contains("glass--bar");
+    const config: Record<string, number> = {};
+    for (const knob of Object.values(tuning)) {
+      if (!knob.glassKey) continue;
+      if (knob.glassScope === "band" && isBar) continue;
+      if (knob.glassScope === "bar" && !isBar) continue;
+      config[knob.glassKey] = knob.value;
+    }
+    const next = JSON.stringify(config);
+    if (pane.dataset["config"] !== next) pane.dataset["config"] = next;
   }
 }
 

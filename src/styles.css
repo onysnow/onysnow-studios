@@ -1143,10 +1143,30 @@ span:has(> .photo-surface) {
   opacity: var(--tune-paper-room, 0.12);
   background-image: var(--room, url("/rooms/metro.jpg"));
   background-repeat: no-repeat;
-  background-size: auto var(--tune-paper-room-zoom, 150vh);
+  /*
+   * The SAME magnification as the pane's room, and the offsets pull rather
+   * than push.
+   *
+   * This was 150vh against the pane's 420vh, which was wrong twice over.
+   *
+   * Physically: a print resting on the glass is a few millimetres nearer the
+   * eye than the pane is. That changes WHERE it sees the room from -- parallax
+   * -- and essentially not at all how big the room looks. Magnification was
+   * the wrong axis to put the difference on; the offset below is the right
+   * one, and it is what makes the two reflections refuse to line up.
+   *
+   * Mechanically: metro.jpg is 1280x346, so at 150vh on a 900px viewport the
+   * layer is 4994x1350 -- and the two trailing terms were POSITIVE, pushing it
+   * right and down. With `no-repeat` that opens a transparent gutter at the
+   * element's top-left and leaves the image's own straight edge sitting in the
+   * frame. On the full-bleed hero that is a hard-edged grey rectangle in the
+   * corner, which is exactly what was reported. Negative offsets can only ever
+   * pull a 14000px-wide layer further across, so no edge can enter the frame.
+   */
+  background-size: auto var(--tune-paper-room-zoom, 420vh);
   background-position:
-    calc(-1 * var(--surface-x, 0px) + var(--reflect-x, 0) * -1 * 240px + 90px)
-    calc(-1 * var(--surface-y, 0px) + var(--reflect-y, 0) * -1 * 160px + 40px);
+    calc(-1 * var(--surface-x, 0px) + var(--reflect-x, 0) * -1 * 240px - 90px)
+    calc(-1 * var(--surface-y, 0px) + var(--reflect-y, 0) * -1 * 160px - 40px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2020,3 +2040,51 @@ span:has(> .photo-surface) {
     animation: none;
   }
 }
+
+/* ===================== Rasterised glass =====================
+ *
+ * Set on <html> by RasterGlass while ybouane/liquidglass is driving the panes.
+ *
+ * Only what the shader now OWNS is dropped: the blur, the bevel's refraction
+ * and the pane's own surface reflection. Those become two of everything if
+ * both systems paint them — two bevels, two rooms, two blurs stacked over each
+ * other, which does not look like stronger glass, it looks like a mistake.
+ *
+ * What stays is everything the shader knows nothing about: the light pass, the
+ * grime it rakes, the cast shadows, the transmitted pool, the bokeh behind the
+ * pane. Those are this site rather than this library, and they are the reason
+ * the CSS version exists at all.
+ *
+ * The fixed header keeps every bit of the CSS treatment — see the note in
+ * RasterGlass.tsx for why a cached capture is the wrong shape for an element
+ * that has the whole scrolling document behind it.
+ */
+:root[data-glass="raster"] .glass {
+  /* The shader samples the capture itself; a blur here would blur it twice. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* Its own background would sit between the capture and the shader output. */
+  background: transparent;
+}
+
+:root[data-glass="raster"] .glass > .glass__refract,
+:root[data-glass="raster"] .glass > .glass__side {
+  display: none;
+}
+
+/*
+ * The library injects its canvas as a child of the pane. It has to sit under
+ * everything resting on the glass -- the photographs and the copy -- for the
+ * same reason the grime did: things standing on a surface cannot have that
+ * surface in front of them.
+ */
+:root[data-glass="raster"] .glass > canvas {
+  z-index: -2;
+}
+
+/*
+ * (The scene's floor is handled in the library now -- see the LOCAL note in
+ * LiquidGlass._prepareSceneCanvas. It reads the page background off the root
+ * instead of upstream's hardcoded white, which is where the problem actually
+ * was; giving the wrapper a background here only ever masked it.)
+ */

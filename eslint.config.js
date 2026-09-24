@@ -6,7 +6,15 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    // src/lib/liquidglass is vendored verbatim from ybouane/liquidglass (MIT).
+    // It uses upstream's formatting, which disagrees with ours in 2094 places
+    // and in none that matter. Linting it would mean reformatting it, and
+    // reformatting it would destroy the ability to diff the directory against
+    // upstream and see only what WE changed -- which is the entire reason it
+    // is vendored rather than installed. See src/lib/liquidglass/NOTICE.md.
+    ignores: ["dist", ".output", ".vinxi", "src/lib/liquidglass/**"],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

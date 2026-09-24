@@ -14,6 +14,8 @@ import { SiteHeader } from "@/components/site/SiteHeader";
 import { CustomCursor } from "@/components/site/CustomCursor";
 import { ShutterFlash } from "@/components/site/ShutterFlash";
 import { GlassFilters } from "@/components/site/GlassFilters";
+import { RasterGlass } from "@/components/site/RasterGlass";
+import { useRasterGlass } from "@/lib/glass-mode";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
@@ -115,6 +117,7 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { location } = useRouterState({ select: (s) => ({ location: s.location }) });
   const isAdmin = location.pathname.startsWith("/admin") || location.pathname.startsWith("/auth");
+  const raster = useRasterGlass();
   return (
     <QueryClientProvider client={queryClient}>
       {isAdmin ? (
@@ -135,6 +138,16 @@ function RootComponent() {
           <CustomCursor />
           <ShutterFlash />
           <GlassFilters />
+          {/*
+            The rasterised glass, off unless asked for.
+
+            Both systems exist on purpose. The CSS one is what ships; this one
+            is the liquidglass pipeline, and until it has been looked at next
+            to real glass on a real machine it is a thing to compare against,
+            not a replacement. `?glass=raster` turns it on, `?glass=css` turns
+            it back off and remembers the choice.
+          */}
+          <RasterGlass enabled={raster} />
         </>
       )}
       <Toaster position="bottom-right" />

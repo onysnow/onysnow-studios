@@ -67,9 +67,21 @@ export function Img({
   return (
     <span
       ref={surface}
-      className={cn("relative block overflow-hidden bg-muted", className)}
+      className={cn("relative block overflow-hidden", className)}
       {...(style ? { style } : {})}
     >
+      {/*
+        The loading placeholder, as a child rather than a background on the
+        frame itself.
+
+        It was `bg-muted` on the wrapper. That is invisible on the live page --
+        the photograph covers it -- and fatal to the rasterised capture, which
+        draws media separately from structure and therefore had an opaque
+        rectangle sitting exactly where every photograph should have shown
+        through. As its own element it can be filtered out of the capture and
+        still do its job here.
+      */}
+      <span aria-hidden="true" data-raster-skip className="absolute inset-0 bg-muted" />
       {blur ? (
         <img
           aria-hidden="true"
@@ -98,6 +110,20 @@ export function Img({
           src={src}
           {...(srcSet ? { srcSet } : {})}
           sizes={sizes}
+          /*
+           * Required before the photograph can be read back out of a canvas.
+           *
+           * The rasterised glass draws these straight onto its capture with
+           * drawImage and then samples that capture in a shader. A canvas that
+           * has drawn a cross-origin image WITHOUT this attribute is tainted:
+           * the draw succeeds, nothing warns, and the first read throws a
+           * SecurityError. Storage already answers with
+           * `access-control-allow-origin: *`, so this costs nothing -- but
+           * permissive CORS on the server does not taint-proof the canvas on
+           * its own, the request has to be made in CORS mode, which is what
+           * this attribute does.
+           */
+          crossOrigin="anonymous"
           alt={alt ?? image?.alt ?? ""}
           width={width}
           height={height}
