@@ -24,7 +24,19 @@ export function SiteHeader() {
   const tail = words.length > 1 ? words[words.length - 1] : "";
   return (
     <Glass as="header" variant="bar" className="fixed inset-x-0 top-0 z-40">
-      <div className="mx-auto grid h-16 max-w-screen-2xl grid-cols-[minmax(0,1fr)_auto] items-center px-5 sm:px-8 lg:px-12">
+      <div className="mx-auto grid h-16 max-w-screen-2xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-5 sm:px-8 lg:px-12">
+        {/*
+          The two controls lead, then the wordmark.
+
+          The menu is furthest left because it is the only thing on the bar
+          that opens something, and the switch sits between it and the name
+          with a gap either side -- close enough to read as a pair of
+          controls, far enough not to look attached to the studio name.
+        */}
+        <div className="flex items-center gap-3">
+          <DevNav />
+          <GlassToggle />
+        </div>
         <Link
           to="/"
           className="min-w-0 font-display text-lg text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -45,10 +57,6 @@ export function SiteHeader() {
           <Button asChild variant="cinematic" size="lg">
             <Link to="/book">Book a session</Link>
           </Button>
-          {/* The routes that exist but are not part of the site's story. */}
-          <DevNav />
-          {/* A disc of the material, which switches which material it is. */}
-          <GlassToggle />
         </nav>
         <Sheet>
           <SheetTrigger asChild>

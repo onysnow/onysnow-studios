@@ -2106,7 +2106,7 @@ span:has(> .photo-surface) {
  * RasterGlass.tsx for why a cached capture is the wrong shape for an element
  * that has the whole scrolling document behind it.
  */
-:root[data-glass="raster"] .glass {
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu) {
   /* The shader samples the capture itself; a blur here would blur it twice. */
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -2114,8 +2114,8 @@ span:has(> .photo-surface) {
   background: transparent;
 }
 
-:root[data-glass="raster"] .glass > .glass__refract,
-:root[data-glass="raster"] .glass > .glass__side {
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__refract,
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__side {
   display: none;
 }
 
@@ -2125,7 +2125,7 @@ span:has(> .photo-surface) {
  * same reason the grime did: things standing on a surface cannot have that
  * surface in front of them.
  */
-:root[data-glass="raster"] .glass > canvas {
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas {
   z-index: -2;
 }
 
@@ -2230,20 +2230,21 @@ span:has(> .photo-surface) {
   outline-offset: 3px;
 }
 
-/* Three dots, drawn rather than imported, because one glyph is not worth a
-   request and an icon font is not worth a dependency. */
+/* Three bars, drawn rather than imported, because one glyph is not worth a
+   request and an icon font is not worth a dependency. Bars rather than dots:
+   a hamburger says "this opens a menu" to everyone, which is what it does. */
 .dev-nav__dots {
-  width: 1rem;
-  height: 3px;
+  width: 1.05rem;
+  height: 0.7rem;
   background:
-    radial-gradient(circle 1.5px at 1.5px 50%, currentColor 100%, transparent 0),
-    radial-gradient(circle 1.5px at 50% 50%, currentColor 100%, transparent 0),
-    radial-gradient(circle 1.5px at calc(100% - 1.5px) 50%, currentColor 100%, transparent 0);
+    linear-gradient(currentColor, currentColor) 0 0 / 100% 1.5px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 50% / 100% 1.5px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 100% / 100% 1.5px no-repeat;
 }
 
 .dev-nav__menu {
   position: absolute;
-  right: 0;
+  left: 0;
   top: calc(100% + 0.75rem);
   z-index: 50;
   width: 17rem;
@@ -2343,5 +2344,59 @@ span:has(> .photo-surface) {
 @media (pointer: coarse), (hover: none) {
   .glass > .glass__surface {
     display: none;
+  }
+}
+
+/* ===================== The flash-ready lamp =====================
+ *
+ * The dot at the centre of the cursor charges red as the flash winds, the way
+ * the ready lamp on a speedlight does.
+ *
+ * It is deliberately NOT the hexagon. That bloom is the emission -- it grows
+ * until it fills the screen and it is the whole point of firing. This is the
+ * opposite: a small, intense source that says the charge is building and
+ * stays exactly the size it is. Two lights doing the same job at different
+ * scales would just read as one badly-drawn light.
+ *
+ * Composited normally rather than by `difference`, for as long as it is lit.
+ * The dot lives in its own `.custom-cursor` element, so switching its blend
+ * leaves the ring inverting the way it always has -- and without that switch a
+ * red dot inside a difference group comes out teal over anything warm, which
+ * is precisely the colour it must not be.
+ */
+.custom-cursor[data-pilot] {
+  mix-blend-mode: normal;
+}
+
+.custom-cursor[data-pilot] .custom-cursor__dot {
+  /*
+   * Toward a hot red as it fills, never quite to pure red: a real lamp is a
+   * bright element behind a red lens, so its middle reads orange-white while
+   * its edge is saturated.
+   */
+  background-color: color-mix(in oklab, oklch(0.72 0.23 27) calc(var(--wind, 0) * 100%), #fff);
+
+  /*
+   * Two shadows, both tight.
+   *
+   * The inner one is the lens itself blooming; the outer is the small halo a
+   * point source throws. Both scale with the charge, and both stay inside
+   * about 14px -- the moment this spreads further it stops being a lamp and
+   * starts competing with the emitter.
+   */
+  box-shadow:
+    0 0 calc(var(--wind, 0) * 6px) calc(var(--wind, 0) * 1.5px)
+      oklch(0.72 0.23 27 / calc(var(--wind, 0) * 0.95)),
+    0 0 calc(var(--wind, 0) * 14px) calc(var(--wind, 0) * 3px)
+      oklch(0.62 0.21 27 / calc(var(--wind, 0) * 0.45));
+
+  /* Grows a little, but nothing like the ring. A lamp does not open. */
+  width: calc(var(--tune-dot, 6px) * (1 + var(--wind, 0) * 0.5));
+  height: calc(var(--tune-dot, 6px) * (1 + var(--wind, 0) * 0.5));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .custom-cursor[data-pilot] .custom-cursor__dot {
+    box-shadow: none;
   }
 }

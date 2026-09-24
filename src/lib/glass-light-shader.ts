@@ -38,6 +38,7 @@ uniform vec2  uViewport;      // device pixels
 uniform float uScale;         // device pixels per CSS pixel
 uniform vec2  uLight;         // CSS pixels, viewport-relative
 uniform float uCharge;        // 0 to 1
+uniform float uRestEdge;      // how much edge shows with nothing shining
 
 /*
  * ---- What is standing on this pane ----
@@ -617,7 +618,23 @@ void main() {
    * without it the pane has no edge at all when idle.
    */
   colour += vec3(specular) * inside * lit;
-  colour += vec3(EDGE_HIGHLIGHT * bevel) * inside * (0.35 + 0.65 * lit);
+  /*
+   * The resting floor is a HINT of an edge, not a third of the pane.
+   *
+   * At 0.35 this put the bevel's highlight across every pixel the bevel
+   * touches whenever the shutter was idle -- measured at 18-37% of the pane
+   * covered at mean luma 60-80, added with plus-lighter. That is not an edge
+   * catching the room, it is a wash, and it is what made the panes look
+   * blown out and dusty with nothing shining on them.
+   *
+   * The bevel is wide on purpose -- it is where the refraction lives -- so
+   * anything applied across its whole width is a broad term whether or not it
+   * was meant to be. Squaring it pulls the floor back to the arris, where a
+   * resting highlight actually sits, and the level is a knob because how much
+   * ambient a pane catches is a property of the room, not a fact.
+   */
+  float restEdge = bevel * bevel * uRestEdge;
+  colour += vec3(EDGE_HIGHLIGHT) * (restEdge + bevel * lit) * inside;
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.
