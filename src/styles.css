@@ -884,7 +884,22 @@
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: var(--lit-near, 0);
+  /*
+   * Gated on the charge, not merely on proximity.
+   *
+   * This was opacity: var(--lit-near, 0) -- pure distance from the pointer,
+   * with no idea whether anything is actually shining. So a soft bright patch
+   * followed the cursor across every photograph and every pane whether or not
+   * the shutter had been wound, which is the standing glow that got reported
+   * three times. Twice I went looking in CursorLight, whose every term is
+   * already multiplied by uCharge, and once in the glass shader, whose canvas
+   * is already opacity: 0 at rest. Both were innocent. It was here, in CSS.
+   *
+   * --wind is the wind-up, published on the root each frame by CustomCursor.
+   * A specular off paper and a pool of transmitted light are both the LIGHT;
+   * with no light there is nothing for them to be.
+   */
+  opacity: calc(var(--lit-near, 0) * var(--wind, 0));
   transition: opacity 0.4s ease;
   mix-blend-mode: screen;
 }
@@ -902,7 +917,7 @@
   background-repeat: repeat;
   background-position: calc(-1 * var(--surface-x, 0px)) calc(-1 * var(--surface-y, 0px));
   filter: grayscale(1) brightness(2.1) contrast(1.9);
-  opacity: var(--tune-transmit, 0.34);
+  opacity: calc(var(--tune-transmit, 0.34) * var(--wind, 0));
 
   --pool: radial-gradient(
     circle var(--tune-transmit-reach, 640px) at var(--lit-x, 50%) var(--lit-y, 50%),
@@ -927,7 +942,7 @@
     color-mix(in oklab, var(--amber) 55%, oklch(1 0 0 / 0.16)) 40%,
     transparent 78%
   );
-  opacity: calc(var(--tune-transmit, 0.34) * 1.5);
+  opacity: calc(var(--tune-transmit, 0.34) * 1.5 * var(--wind, 0));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1039,7 +1054,22 @@ span:has(> .photo-surface) {
   inset: 0;
   pointer-events: none;
   z-index: 2;
-  opacity: var(--lit-near, 0);
+  /*
+   * Gated on the charge, not merely on proximity.
+   *
+   * This was opacity: var(--lit-near, 0) -- pure distance from the pointer,
+   * with no idea whether anything is actually shining. So a soft bright patch
+   * followed the cursor across every photograph and every pane whether or not
+   * the shutter had been wound, which is the standing glow that got reported
+   * three times. Twice I went looking in CursorLight, whose every term is
+   * already multiplied by uCharge, and once in the glass shader, whose canvas
+   * is already opacity: 0 at rest. Both were innocent. It was here, in CSS.
+   *
+   * --wind is the wind-up, published on the root each frame by CustomCursor.
+   * A specular off paper and a pool of transmitted light are both the LIGHT;
+   * with no light there is nothing for them to be.
+   */
+  opacity: calc(var(--lit-near, 0) * var(--wind, 0));
   transition: opacity 0.35s ease;
 }
 
