@@ -338,6 +338,24 @@ export function CustomCursor() {
 
     const onClick = (event: MouseEvent) => {
       /*
+       * The click that ends a hold is swallowed whole.
+       *
+       * Press-and-hold winds the shutter; letting go is the end of winding,
+       * not the taking of a photograph. Firing here would spend the charge
+       * the same gesture had just earned, so the meter could never be seen
+       * full and the second trigger would be indistinguishable from a very
+       * slow click. The shot is a separate press.
+       *
+       * It swallows navigation too, which is intended: a link held down for
+       * a third of a second and released is a gesture, not a click on a link.
+       */
+      if (charger.consumeHoldRelease()) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      /*
        * Resolved fresh from the pointer position rather than read off the last
        * pointermove. Content moves under a stationary cursor — a carousel
        * advancing, the page scrolling — and the cached target goes stale, so

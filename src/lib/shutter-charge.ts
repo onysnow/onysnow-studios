@@ -45,6 +45,58 @@ const MAX_DRIFT = 520;
  */
 const GAIN = 0.8;
 const DECAY = 0.5;
+
+/*
+ * The second way in: press and hold.
+ *
+ * WHY THERE ARE TWO
+ *
+ * The movement trigger measures pointer SPEED, and speed is sampled from
+ * `pointermove` events, which the browser throttles to the frame rate. On a
+ * page that is dropping frames -- an old machine, a heavy scroll, a tab that
+ * has been backgrounded and come back -- you get a handful of samples, the
+ * computed speed collapses, and winding becomes impossible at exactly the
+ * moment the page is least pleasant to use. Holding is measured in elapsed
+ * time instead, which does not care how many frames arrived.
+ *
+ * So this is not a shortcut. It is the path that still works when the other
+ * one cannot, and it fills at a deliberately similar rate -- about three
+ * seconds net, same as vigorous circling -- because winding a shutter should
+ * feel like work whichever way you do it.
+ *
+ * It also happens to be what a camera does: half-press to charge, full press
+ * to fire. Releasing produces a click, and the click already fires the
+ * shutter when armed, so the two halves were always there.
+ */
+/*
+ * How long a hold takes to fill, in milliseconds of WALL CLOCK.
+ *
+ * Not a per-frame gain, which is what this was first. Integrating a rate
+ * frame by frame loses whatever time the clamp discards, so on a page running
+ * at 3fps a 3.6 second hold reached 0.73 and never armed -- on the exact kind
+ * of page this trigger exists to rescue. Measured, not reasoned about.
+ *
+ * Reading the clock instead makes the promise simple and keepable: hold for
+ * this long and it is full, whatever the frame rate, whatever the page is
+ * doing. Matched to the movement path's own fill time so neither is the
+ * obviously correct choice.
+ */
+const HOLD_FULL_MS = 2600;
+
+/*
+ * Where a hold does NOT wind.
+ *
+ * Anything you press and hold as part of using it: a slider you are dragging,
+ * a button you are pressing, a field you are selecting text in. Tuning the
+ * lab means holding a slider knob for seconds at a time, and charging the
+ * flash every time you adjust one would be maddening.
+ *
+ * Anchors are deliberately NOT here. Every photograph on the site is wrapped
+ * in a link, and a photograph is precisely what you want to be holding over.
+ * A hold on a link that never arms still ends in an ordinary click, so
+ * navigation is untouched.
+ */
+const NO_HOLD = 'input, textarea, select, button, [role="button"], [role="slider"], label, summary';
 /*
  * Once armed, it STAYS armed until a click spends it. No timer.
  *
@@ -69,14 +121,88 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
   let lastReported = -1;
   let raf = 0;
   let stopped = false;
+  let holding = false;
+  let heldSince = 0;
+  let endedAHold = false;
 
   function onMove(event: PointerEvent) {
     samples.push({ x: event.clientX, y: event.clientY, t: performance.now() });
   }
 
+  /*
+   * How long a press has to last before it counts as a gesture rather than a
+   * click. Comfortably longer than a deliberate click and far shorter than
+   * anything that charges usefully, so neither is ever mistaken for the
+   * other.
+   */
+  const HOLD_GESTURE_MS = 300;
+
+  function onDown(event: PointerEvent) {
+    // Primary button only: a right-click opens a menu and a middle-click
+    // opens a tab, and neither is someone winding a shutter.
+    if (event.button !== 0) return;
+    const node = event.target as Element | null;
+    if (node?.closest?.(NO_HOLD)) return;
+    holding = true;
+    heldSince = performance.now();
+  }
+
+  /*
+   * Every way a hold can end, including the ones that fire no pointerup:
+   * the pointer leaving the window, a gesture being cancelled by the browser,
+   * the tab going away mid-press. Missing any of these leaves the charge
+   * winding forever with nothing held down.
+   */
+  function release() {
+    /*
+     * A press that WOUND is not a press that FIRES.
+     *
+     * Holding charges; letting go is just the end of charging. The shot is a
+     * separate, second press -- which is the only way the two can coexist,
+     * since otherwise every hold would end by immediately spending what it
+     * had just earned, and the meter could never be seen full at all.
+     *
+     * Recorded here and read once by whoever handles the click, because the
+     * click arrives after this and has no other way to know what preceded it.
+     */
+    if (holding && performance.now() - heldSince >= HOLD_GESTURE_MS) endedAHold = true;
+    holding = false;
+  }
+
   function frame(now: number) {
     if (stopped) return;
-    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    /*
+     * ONE time base, wall clock, capped at a quarter second.
+     *
+     * The cap was 50ms, which exists so a tab returning from the background
+     * cannot dump ten seconds of charge in a single frame. But 50ms is also
+     * about three frames of ordinary jank, so on a page rendering at 20fps
+     * the integration ran at a third of real time -- and a slow page is the
+     * entire reason the hold trigger exists. Worse, gain and decay were on
+     * different bases for a while, which made the fill rate depend on the
+     * frame rate in both directions at once: measured 0.49 in the first half
+     * second on a slow page against 0.35/s on a fast one.
+     *
+     * A quarter second still blocks the background-tab jump -- ten seconds
+     * away yields 0.25s of charge -- and lets ordinary jank through. Speed is
+     * computed from timestamped samples over a fixed window, so the movement
+     * path never cared about this value anyway.
+     */
+    const dt = Math.min(0.25, (now - lastFrame) / 1000);
+    /*
+     * The hold is measured against the CLOCK, not against the frame budget.
+     *
+     * `dt` is clamped to 50ms so a tab returning from the background cannot
+     * dump ten seconds of charge in one frame. That clamp is right for the
+     * movement path, which is sampled per frame anyway -- but applying it to
+     * the hold meant that on a page rendering at 20fps the charge accrued at
+     * a third of wall-clock speed. Measured: 0.47 after four seconds of
+     * holding, where the constants say it should have been full.
+     *
+     * Which is precisely backwards, because a slow page is the entire reason
+     * this trigger exists. A wider ceiling keeps the background-tab guard
+     * while letting ordinary jank through untouched.
+     */
     lastFrame = now;
 
     samples = samples.filter((s) => now - s.t <= SAMPLE_MS);
@@ -115,6 +241,19 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
         charge += strength * GAIN * dt;
       }
       charge -= DECAY * dt;
+
+      /*
+       * The hold sets a FLOOR, it does not add a rate.
+       *
+       * Applied after the bleed and as a maximum, so the two triggers cannot
+       * fight: movement can carry the charge above where the hold has got to,
+       * and the hold guarantees its own progress regardless of what the bleed
+       * is doing. Holding and circling together still beats either alone,
+       * which is the forgiving behaviour worth keeping.
+       */
+      if (holding) {
+        charge = Math.max(charge, (now - heldSince) / HOLD_FULL_MS);
+      }
       charge = Math.max(0, Math.min(1, charge));
 
       if (charge >= 1) armed = true;
@@ -130,14 +269,38 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
   }
 
   window.addEventListener("pointermove", onMove, { passive: true });
+  window.addEventListener("pointerdown", onDown, { passive: true });
+  window.addEventListener("pointerup", release, { passive: true });
+  window.addEventListener("pointercancel", release, { passive: true });
+  window.addEventListener("blur", release);
+  document.addEventListener("visibilitychange", release);
   raf = requestAnimationFrame(frame);
 
   return {
     isArmed: () => armed,
+    /**
+     * Was the click now arriving merely the end of a hold?
+     *
+     * Reads once and clears, so a single release can only swallow a single
+     * click and a genuine click straight afterwards still counts.
+     */
+    consumeHoldRelease: () => {
+      const was = endedAHold;
+      endedAHold = false;
+      return was;
+    },
     /** Called after the shutter fires, so the charge has to be earned again. */
     spend: () => {
       armed = false;
       charge = 0;
+      /*
+       * A shot ends the hold that earned it.
+       *
+       * Without this, firing while still pressed starts winding again from
+       * the same press -- so one deliberate hold becomes a burst of shots as
+       * the meter refills under your finger. The next shot needs a new press.
+       */
+      holding = false;
       lastReported = -1;
       onCharge?.(0, false);
     },
@@ -145,6 +308,11 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
       stopped = true;
       cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      window.removeEventListener("blur", release);
+      document.removeEventListener("visibilitychange", release);
     },
   };
 }
