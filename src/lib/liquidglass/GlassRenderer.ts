@@ -232,13 +232,23 @@ export class GlassRenderer {
 
 		// Multi-pass Gaussian blur (skip entirely when not needed)
 		if (blurAmount > 0) {
-			const spread = blurAmount * 2.5;
+			// LOCAL: each pass reaches further than the last (Kawase-style).
+			//
+			// Upstream used one fixed offset of blurAmount * 2.5 texels for
+			// every pass, which tops out around an 8px blur at full frost --
+			// enough to soften a photograph, nowhere near enough to hide it.
+			// Growing the offset per pass widens the result with the square
+			// root of the sum of squares (about 33px at full frost with six
+			// passes) while the early, tight passes fill in between the wide
+			// ones' taps, so it stays smooth instead of banding.
+			const base = blurAmount * 2.5;
 			gl.useProgram(this.blurP);
 			gl.uniform1i(this.blurU.u_tex, 0);
 			// More passes is a wider, smoother frost, and each costs two
 			// full-screen draws. Clamped so a bad config cannot stall a frame.
 			const passes = Math.max(1, Math.min(12, Math.round(blurPasses)));
 			for (let i = 0; i < passes; i++) {
+				const spread = base * (i + 1);
 				gl.bindFramebuffer(gl.FRAMEBUFFER, fboSet.blurB.fbo);
 				gl.viewport(0, 0, bw, bh);
 				gl.bindTexture(gl.TEXTURE_2D, fboSet.blurA.tex);

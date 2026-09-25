@@ -116,7 +116,7 @@ export const tuning: Record<string, Knob> = {
   glassBlur: {
     label: "Frost",
     group: "Liquid glass",
-    value: 0.12,
+    value: 0.9,
     min: 0,
     max: 1,
     step: 0.01,
