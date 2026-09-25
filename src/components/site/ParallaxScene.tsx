@@ -3,6 +3,26 @@ import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion
 import { Img, type ImgSource } from "./Img";
 import { cn } from "@/lib/utils";
 
+/**
+ * Room for a glass band to sit over this photograph's edge.
+ *
+ * A seam band (see PhotoSection) floats across the join between the photograph
+ * above it and the one below, and what shows through the glass is THOSE
+ * photographs carrying on underneath -- not a third picture. So this box grows
+ * by exactly the part of the band that overlaps it, and the band pulls itself
+ * in by the same amount: the image really is behind the glass, and nothing on
+ * the page moves.
+ *
+ * content-box, because the height comes from a min-height. Under border-box
+ * the padding is counted INSIDE the min-height and an empty photograph never
+ * grows at all.
+ */
+export const SEAM_ROOM = {
+  boxSizing: "content-box",
+  paddingTop: "var(--seam-above, 0px)",
+  paddingBottom: "var(--seam-below, 0px)",
+} as const;
+
 const DEPTH = { subtle: 0.04, standard: 0.08, deep: 0.14 } as const;
 
 const SCRIM = {
@@ -48,7 +68,7 @@ export function ParallaxScene({
      * edge, so a hit test from the pointer lands on a plain div and finds no
      * `img` above it. The marker is on the container they all share.
      */
-    <div ref={ref} data-photo className={cn("relative", height, className)}>
+    <div ref={ref} data-photo className={cn("relative", height, className)} style={SEAM_ROOM}>
       {/*
        * The clip wraps the PICTURE, not the section.
        *

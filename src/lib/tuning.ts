@@ -94,7 +94,7 @@ export const tuning: Record<string, Knob> = {
   glassRefraction: {
     label: "Refraction",
     group: "Liquid glass",
-    value: 0.69,
+    value: 1.3,
     min: 0,
     max: 2,
     step: 0.01,
@@ -105,7 +105,7 @@ export const tuning: Record<string, Knob> = {
   glassChroma: {
     label: "Dispersion",
     group: "Liquid glass",
-    value: 0.05,
+    value: 0.12,
     min: 0,
     max: 0.4,
     step: 0.005,
@@ -171,7 +171,7 @@ export const tuning: Record<string, Knob> = {
   glassDepth: {
     label: "Bevel depth",
     group: "Liquid glass",
-    value: 40,
+    value: 90,
     min: 4,
     max: 140,
     step: 2,

@@ -157,7 +157,17 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
        * and gets the whole scrolling document as its scene, which is exactly
        * what a bar floating over the page should refract.
        */
-      const root = pane.closest<HTMLElement>("[data-photo]") ?? pane.parentElement ?? document.body;
+      /*
+       * A seam band's picture is its NEIGHBOURS, which are siblings of it,
+       * not children -- so its scene has to be the page content they all sit
+       * in. The library skips any section that does not overlap the pane, so
+       * this costs the two photographs actually behind the glass and nothing
+       * further down the page.
+       */
+      const seam = pane.closest<HTMLElement>("[data-seam]");
+      const root = seam
+        ? (seam.parentElement ?? document.body)
+        : (pane.closest<HTMLElement>("[data-photo]") ?? pane.parentElement ?? document.body);
       started.add(pane);
 
       // Serialised. Each init runs a full html-to-image capture of the

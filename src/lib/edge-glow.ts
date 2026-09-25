@@ -191,8 +191,20 @@ function smallestVariant(img: HTMLImageElement): string {
 }
 
 function backdropOf(el: HTMLElement): HTMLImageElement | null {
-  const scene = el.closest("[data-photo]");
+  let scene = el.closest("[data-photo]");
   if (!scene) return null;
+  /*
+   * A seam band has no photograph of its own: the ones above and below carry
+   * on under it (see PhotoSection). The shader takes one image, so it gets
+   * the one above -- the edge the light most often rakes across -- falling
+   * back to the one below for a band with nothing over it.
+   */
+  if (scene.hasAttribute("data-seam")) {
+    const up = scene.previousElementSibling;
+    const down = scene.nextElementSibling;
+    scene = up?.hasAttribute("data-photo") ? up : down?.hasAttribute("data-photo") ? down : null;
+    if (!scene) return null;
+  }
   const images = scene.querySelectorAll<HTMLImageElement>("img[src]");
   for (let i = images.length - 1; i >= 0; i -= 1) {
     const img = images[i];

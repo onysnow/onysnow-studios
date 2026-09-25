@@ -69,4 +69,43 @@ test.describe("glass", () => {
 
     expect(during).toBeGreaterThan(before * 1.5 + 1000);
   });
+
+  test("a band sits over the join, with both photographs running on under it", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const seam = page.locator("[data-seam]").first();
+    await expect
+      .poll(() => seam.evaluate((el) => (el as HTMLElement).style.marginTop))
+      .not.toBe("");
+
+    const g = await seam.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const up = el.previousElementSibling!.getBoundingClientRect();
+      const down = el.nextElementSibling!.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, upBottom: up.bottom, downTop: down.top };
+    });
+    // The photographs meet behind the middle of the glass.
+    const middle = (g.top + g.bottom) / 2;
+    expect(Math.abs(g.upBottom - middle)).toBeLessThan(2);
+    expect(Math.abs(g.downTop - middle)).toBeLessThan(2);
+  });
+
+  test("liquid glass actually renders a nested pane", async ({ page }) => {
+    await page.goto("/?glass=raster");
+    await page.waitForLoadState("networkidle");
+    // The library only draws once a pane is initialised and has rendered a
+    // frame; its scene canvas stays at the 300x150 canvas default until then.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const inst = (
+              window as unknown as { __liquidglass?: { _sceneCanvas: HTMLCanvasElement }[] }
+            ).__liquidglass?.[0];
+            return inst ? inst._sceneCanvas.width : 0;
+          }),
+        { timeout: 20_000 },
+      )
+      .toBeGreaterThan(300);
+  });
 });
