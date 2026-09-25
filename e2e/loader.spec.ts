@@ -45,8 +45,10 @@ test.describe("site loader", () => {
       /* never fulfilled */
     });
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    // The loader's warm-up deadline is 10s from hydration; the dev server
+    // takes several seconds to hydrate on a cold start, so allow for both.
     await expect(page.getByRole("button", { name: "Click to enter" })).toBeVisible({
-      timeout: 15_000,
+      timeout: 25_000,
     });
   });
 });
