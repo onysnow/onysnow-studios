@@ -2307,13 +2307,15 @@ span:has(> .photo-surface) {
 /* Three bars, drawn rather than imported, because one glyph is not worth a
    request and an icon font is not worth a dependency. Bars rather than dots:
    a hamburger says "this opens a menu" to everyone, which is what it does. */
+/*
+ * Four dots, not three bars. Three bars is the phone menu's icon, and on a
+ * phone both sit in the same header -- two identical hamburgers doing
+ * different things, which the visual check caught at 390px.
+ */
 .dev-nav__dots {
-  width: 1.05rem;
-  height: 0.7rem;
-  background:
-    linear-gradient(currentColor, currentColor) 0 0 / 100% 1.5px no-repeat,
-    linear-gradient(currentColor, currentColor) 0 50% / 100% 1.5px no-repeat,
-    linear-gradient(currentColor, currentColor) 0 100% / 100% 1.5px no-repeat;
+  width: 0.8rem;
+  height: 0.8rem;
+  background: radial-gradient(circle, currentColor 0 1.6px, transparent 2px) 0 0 / 50% 50%;
 }
 
 .dev-nav__menu {
@@ -2603,7 +2605,18 @@ span:has(> .photo-surface) {
  * The way in. Amber, in the site's own eyebrow treatment, because that is
  * what this page uses for "do this next" everywhere else.
  */
+/*
+ * Out of flow, so the word stays dead centre on the pane whether or not this
+ * is showing. In flow, its arrival pushed the word 22px up the moment the
+ * page was ready -- exactly the frame you are looking at it.
+ */
 .site-loader__enter {
+  position: absolute;
+  top: calc(50% + 1.6rem);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: max-content;
   padding: 8px 4px;
   background: none;
   border: 0;
@@ -2648,4 +2661,10 @@ span:has(> .photo-surface) {
 #main-content {
   overflow-x: clip;
   overflow-y: visible;
+}
+
+/* While the shutter is being wound by a held press: see shutter-charge.ts. */
+html.is-winding,
+html.is-winding * {
+  user-select: none;
 }

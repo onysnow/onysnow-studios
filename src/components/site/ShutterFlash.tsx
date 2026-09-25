@@ -96,13 +96,16 @@ export function ShutterFlash() {
      * which is exactly the warning needed, and it is what a real camera is
      * doing with that time too.
      *
-     * Halfway rather than at the first flicker: below that the gesture is
+     * A quarter rather than the first flicker: below that the gesture is
      * usually somebody moving the pointer across the page rather than winding
      * anything, and capturing on every stray sweep would be the most expensive
-     * thing on the site.
+     * thing on the site. It was halfway, and measured that was too late: the
+     * capture takes a couple of seconds on an ordinary machine, so a shot fired
+     * right after a full hold arrived before the page had been photographed and
+     * burned in only the photograph under the pointer.
      */
     const stopWatching = onCharge((charge) => {
-      if (charge > 0.5) prepareBurn();
+      if (charge > 0.25) prepareBurn();
     });
 
     // Anything that moves the page makes a held capture a lie.

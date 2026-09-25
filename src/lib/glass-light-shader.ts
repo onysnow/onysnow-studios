@@ -155,10 +155,27 @@ float occlusionAt(vec2 local) {
   return clamp(blocked, 0.0, 1.0);
 }
 
-/* The surface, photographed. A 2x2 atlas; each pane wears one cell. */
+/*
+ * The surface, photographed. A 2x2 atlas of four different pieces of glass.
+ *
+ * It used to be one cell per pane, repeated every 340px. On a full-width pane
+ * that is the same four scratches four times over, and under a charged light
+ * they lined up along the lit edge as identical tick marks at exactly 340px
+ * spacing -- a pattern, which is the one thing a real scratch never is.
+ *
+ * Now each repeat of the tile takes a different cell AND is mirrored on odd
+ * rows and columns, so neighbouring tiles never show the same mark in the
+ * same place. The tile is also twice the size, so a full-width pane is two
+ * or three tiles across rather than four. All four cells are photographs;
+ * nothing here is generated.
+ */
 vec3 surfaceAt(vec2 uv, float seed) {
-  vec2 cell = vec2(mod(seed, 2.0), floor(seed * 0.5));
-  vec2 inCell = fract(uv) * 0.49 + 0.005;
+  vec2 tile = floor(uv);
+  float pick = mod(seed + tile.x + 3.0 * tile.y, 4.0);
+  vec2 cell = vec2(mod(pick, 2.0), floor(pick * 0.5));
+  vec2 f = fract(uv);
+  f = mix(f, 1.0 - f, mod(abs(tile), 2.0));
+  vec2 inCell = f * 0.49 + 0.005;
   return texture2D(uSurface, (inCell + cell) * 0.5).rgb;
 }
 
@@ -303,7 +320,7 @@ void main() {
   float specular = pow(ndl, 24.0) * bevel * direct * 3.0;
 
   // ---- The surface ----
-  vec3 surf = surfaceAt((frag - uRect.xy) / 340.0, uSeed) * uHasSurface;
+  vec3 surf = surfaceAt((frag - uRect.xy) / 680.0, uSeed) * uHasSurface;
   float handled = 0.35 + 0.95 * surf.b;
 
   /*

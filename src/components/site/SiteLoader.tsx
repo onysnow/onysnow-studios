@@ -157,6 +157,26 @@ export function SiteLoader() {
     return () => window.clearInterval(id);
   }, [state]);
 
+  /*
+   * Enter from the keyboard without focusing the button.
+   *
+   * It used to be `autoFocus`, which Chrome treats as keyboard focus and so
+   * drew the focus ring round it on every load: a box round "Click to enter"
+   * that nobody put there. The button is still in the tab order for anyone
+   * tabbing to it; this just lets Enter work without the ring.
+   */
+  useEffect(() => {
+    if (state !== "ready") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      remember();
+      setState("leaving");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state]);
+
   // Unmount once the fade has finished, so nothing pops.
   useEffect(() => {
     if (state !== "leaving") return;
@@ -242,12 +262,7 @@ export function SiteLoader() {
               and announced as the control it is.
             */}
             {state === "ready" ? (
-              <button
-                type="button"
-                className="site-loader__enter eyebrow"
-                onClick={enter}
-                autoFocus
-              >
+              <button type="button" className="site-loader__enter eyebrow" onClick={enter}>
                 Click to enter
               </button>
             ) : null}
