@@ -6,6 +6,14 @@ import { registerPane } from "@/lib/glass-panes";
 import { cn } from "@/lib/utils";
 
 /**
+ * SVG filters inside backdrop-filter are Chromium-only. Where they are not
+ * supported, a url() in the value would invalidate the whole declaration and
+ * take the blur down with it -- so the bevel is only offered where it works.
+ */
+const BEVEL_SUPPORTED =
+  typeof CSS !== "undefined" && CSS.supports?.("backdrop-filter", 'url("#x")') === true;
+
+/**
  * Every frosted surface on the site.
  *
  * The cursor's light on the glass — the lit arris, the bloom, the reflected
@@ -83,13 +91,18 @@ export function Glass({
      * pane has to ask for the filter that matches it and point its refraction
      * layer at it. Until that resolves, the CSS fallback in styles.css stands.
      */
-    const refract = el.querySelector<HTMLElement>(".glass__refract");
     const fit = () => {
-      if (!refract) return;
       const rect = el.getBoundingClientRect();
       const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
       const id = requestBevelFilter({ width: rect.width, height: rect.height, radius });
-      if (id) refract.style.backdropFilter = `url("#${id}")`;
+      /*
+       * Onto the pane itself, as a variable the stylesheet folds into the
+       * pane's own backdrop-filter. Not onto the refraction layer, which is
+       * a child and cannot see past the pane (see `.glass` in styles.css);
+       * and not as an inline backdrop-filter, which would beat the rules that
+       * switch the CSS frost off under liquid glass.
+       */
+      if (id && BEVEL_SUPPORTED) el.style.setProperty("--glass-bevel", `url("#${id}")`);
     };
 
     fit();

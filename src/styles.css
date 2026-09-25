@@ -507,7 +507,42 @@
     --side-bottom: calc(3px + 13px * var(--pane-bottom, 0.18));
     position: relative;
     background-color: oklch(0.145 0.011 55 / 30%);
-    backdrop-filter: blur(26px) saturate(150%);
+    /*
+     * Frost AND bend, in the pane's own backdrop pass.
+     *
+     * The bend used to live on a child layer (.glass__refract) with its own
+     * backdrop-filter, and it never once saw the photograph behind the pane.
+     * A pane with blend-mode children is an isolated group, and an isolated
+     * group is a "backdrop root": a child's backdrop-filter can only see what
+     * is painted INSIDE it -- here, the pane's dark tint. So the refraction
+     * layer bent the tint and painted it, opaque, over the whole pane. Found by
+     * switching layers off one at a time over "What I do": 74 brightness
+     * behind the pane, 18 through it, 56 with the child layers removed. That
+     * is the "background isn't refracted or distorted at all" report, and why
+     * the CSS glass read as smoked plastic rather than glass.
+     *
+     * The pane's OWN backdrop-filter is the one pass that sees the page, so
+     * the bevel map joins the blur here. --glass-bevel is set by <Glass> to
+     * this pane's geometry, and only where url() filters are supported;
+     * elsewhere it is unset and this is the plain frost.
+     */
+    backdrop-filter: blur(26px) saturate(150%) var(--glass-bevel, );
+    /*
+     * Not inherited. Custom properties cascade, so a small pane INSIDE a big
+     * one -- the round toggle in the header -- was picking up the header's
+     * 1440x64 bevel map and bending itself by it. Each pane's own value is
+     * set inline by <Glass>, which beats this.
+     */
+    --glass-bevel: initial;    /*
+     * A stacking context of its own, in every mode. Every layer inside a pane
+     * -- the light and grime surface, the lit sides, the liquid render -- uses
+     * a negative z-index to sit under the copy. The backdrop-filter used to be
+     * what made the pane a stacking context; under liquid glass that filter is
+     * switched off, and every one of those layers silently escaped the pane
+     * and painted BEHIND the photograph the pane sits over. The liquid pane
+     * showed the raw photo, and none of its light.
+     */
+    isolation: isolate;
     /*
      * Thickness, kept deliberately faint. An earlier version drew it with heavy
      * inset shadows and the edge read as a painted bevel; the light is what
@@ -521,7 +556,7 @@
 
   .glass--bar {
     background-color: oklch(0.145 0.011 55 / 26%);
-    backdrop-filter: blur(28px) saturate(150%);
+    backdrop-filter: blur(28px) saturate(150%) var(--glass-bevel, );
     box-shadow:
       inset 0 1px 0 oklch(1 0 0 / 0.08),
       inset 0 -1px 0 oklch(1 0 0 / 0.03);
@@ -1887,6 +1922,19 @@ span:has(> .photo-surface) {
    * Two strips could never show much. They were as tall as the side face,
    * which is a few pixels, so the bend had nowhere to happen.
    */
+  /*
+   * Retired, along with the bokeh pass above: both were backdrop-filters on a
+   * CHILD of the pane, and a child of an isolated pane cannot see past it (see
+   * `.glass`). The bokeh sat underneath this layer and was covered by it, so
+   * neither ever showed what it was built to show. The bend now happens in
+   * the pane's own backdrop pass. Kept in the markup, hidden, so nothing that
+   * queries for them breaks.
+   */
+  .glass > .glass__refract,
+  .glass > .glass__bokeh {
+    display: none;
+  }
+
   .glass > .glass__refract {
     position: absolute;
     inset: 0;
@@ -2181,15 +2229,17 @@ span:has(> .photo-surface) {
  * that has the whole scrolling document behind it.
  */
 :root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu) {
-  /* The shader samples the capture itself; a blur here would blur it twice. */
+  /*
+   * The shader samples the capture itself; a blur here would blur it twice.
+   * Unprefixed only -- the same Lightning CSS trap as `.glass[data-liquid]`:
+   * writing both compiled to the -webkit- one alone, which Chrome ignores.
+   */
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   /* Its own background would sit between the capture and the shader output. */
   background: transparent;
 }
 
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__refract,
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__side {
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__refract {
   display: none;
 }
 
@@ -2199,8 +2249,19 @@ span:has(> .photo-surface) {
  * same reason the grime did: things standing on a surface cannot have that
  * surface in front of them.
  */
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas {
-  z-index: -2;
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas:not(.glass__surface) {
+  /*
+   * The LIBRARY's canvas only, and !important because it writes z-index:-1
+   * inline. This used to match every canvas in the pane -- including our own
+   * .glass__surface, the layer the light and the grime are drawn into -- and
+   * never beat the library's inline value. So the surface dropped to -2, the
+   * opaque liquid render sat at -1 on top of it, and a fully charged liquid
+   * pane showed no light at all: 44 brightness against 78 for the same pane
+   * in CSS mode, and hiding the surface layer changed nothing, because it
+   * was already buried. That is why liquid mode had "hardly any" edge bloom
+   * or light on the glass.
+   */
+  z-index: -3 !important;
 }
 
 /*
