@@ -139,7 +139,22 @@ export function SiteLoader() {
 
   if (state === "gone") return null;
 
-  const enter = () => setState((s) => (s === "ready" ? "leaving" : s));
+  /*
+   * Remembered at the moment you are let in -- not when the page becomes
+   * ready. Someone who reloads while still looking at "Ready" never actually
+   * entered, and showing them the loader again is correct.
+   *
+   * This call went missing once already. The first version of this component
+   * remembered on reveal; rewriting it for click-to-enter kept `remember()`
+   * defined and dropped every call to it, so the flag was never written and
+   * every load of every page looked like a first visit. e2e/loader.spec.ts
+   * now reloads after entering and fails if the loader comes back.
+   */
+  const enter = () => {
+    if (state !== "ready") return;
+    remember();
+    setState("leaving");
+  };
 
   return (
     <div ref={host} className="site-loader" data-state={state} role="status" aria-label="Loading">
