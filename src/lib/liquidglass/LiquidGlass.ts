@@ -1389,6 +1389,17 @@ export class LiquidGlass {
 			}
 			if (isGlassCanvas) continue;
 
+			// LOCAL: nothing that sits ON a pane. The pane's own html is
+			// pruned from the scene, but this media walk went round that and
+			// drew every photograph inside it too -- the portfolio cards on the
+			// "Ways to work together" band came out refracted behind
+			// themselves, a smeared second copy along the bevel.
+			let onGlass = false;
+			for (const g of this.glassSet) {
+				if (g !== parent && g.contains(htmlEl)) { onGlass = true; break; }
+			}
+			if (onGlass) continue;
+
 			this._drawMediaElement(htmlEl, targetCtx, sampleRect, rootRect, dpr);
 		}
 	}
