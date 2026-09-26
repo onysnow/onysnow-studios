@@ -1082,8 +1082,12 @@ export class LiquidGlass {
 		dirtyTargets: Set<HTMLElement>,
 		renderedThisFrame: Array<{ rect: SampleRect }>,
 	): void {
-		const config = this._getConfig(child);
 		const elRect = child.getBoundingClientRect();
+		// LOCAL: a pane as wide as its root is a band with no sides.
+		const config = {
+			...this._getConfig(child),
+			straight: elRect.width >= this.root.getBoundingClientRect().width - 1 ? 1 : 0,
+		};
 		const elW = child.offsetWidth;
 		const elH = child.offsetHeight;
 		const centerX = (elRect.left - rootRect.left) + elRect.width / 2;

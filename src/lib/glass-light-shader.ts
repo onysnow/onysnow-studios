@@ -57,6 +57,7 @@ uniform float uOccCount;
 
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
+uniform float uStraight;      // 1: a full-width band -- top and bottom edges only
 uniform float uTilt;          // -1 looking up at it, 1 looking down at it
 uniform float uSeed;
 uniform float uGrimeRake;   // tunable
@@ -185,7 +186,13 @@ void main() {
 
   vec2 halfSize = uRect.zw * 0.5;
   vec2 p = frag - (uRect.xy + halfSize);
-  float d = roundedBox(p, halfSize, uRadius);
+  /*
+   * A band across the whole page has no sides: they are off the screen. Its
+   * edges are measured as if it ran on forever sideways, so the rim, the
+   * bevel and the bend run straight across and nothing turns a corner.
+   */
+  vec2 edgeHalf = uStraight > 0.5 ? vec2(1e5, halfSize.y) : halfSize;
+  float d = roundedBox(p, edgeHalf, uRadius);
   float inside = smoothstep(0.5, -0.5, d);
 
   /*
@@ -197,10 +204,10 @@ void main() {
    * across the middle, which is exactly how a pane behaves.
    */
   const float EPS = 1.0;
-  float dx = roundedBox(p + vec2(EPS, 0.0), halfSize, uRadius)
-           - roundedBox(p - vec2(EPS, 0.0), halfSize, uRadius);
-  float dy = roundedBox(p + vec2(0.0, EPS), halfSize, uRadius)
-           - roundedBox(p - vec2(0.0, EPS), halfSize, uRadius);
+  float dx = roundedBox(p + vec2(EPS, 0.0), edgeHalf, uRadius)
+           - roundedBox(p - vec2(EPS, 0.0), edgeHalf, uRadius);
+  float dy = roundedBox(p + vec2(0.0, EPS), edgeHalf, uRadius)
+           - roundedBox(p - vec2(0.0, EPS), edgeHalf, uRadius);
   vec2 grad = normalize(vec2(dx, dy) + 1e-6);
 
   float depth = -d;                       // positive inside

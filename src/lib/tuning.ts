@@ -127,7 +127,7 @@ export const tuning: Record<string, Knob> = {
   glassBlur: {
     label: "Frost",
     group: "Liquid glass",
-    value: 0.9,
+    value: 0.6,
     min: 0,
     max: 1,
     step: 0.01,
@@ -138,7 +138,7 @@ export const tuning: Record<string, Knob> = {
   glassSpecular: {
     label: "Gloss",
     group: "Liquid glass",
-    value: 0,
+    value: 0.6,
     min: 0,
     max: 2,
     step: 0.02,
@@ -160,7 +160,7 @@ export const tuning: Record<string, Knob> = {
   glassFresnel: {
     label: "Fresnel",
     group: "Liquid glass",
-    value: 1,
+    value: 1.3,
     min: 0,
     max: 2,
     step: 0.02,
@@ -171,7 +171,7 @@ export const tuning: Record<string, Knob> = {
   glassEdge: {
     label: "Edge highlight",
     group: "Liquid glass",
-    value: 0.15,
+    value: 0.25,
     min: 0,
     max: 1,
     step: 0.01,
@@ -239,7 +239,7 @@ export const tuning: Record<string, Knob> = {
   glassSpecTight: {
     label: "Highlight tightness",
     group: "Liquid glass",
-    value: 1,
+    value: 1.4,
     min: 0.1,
     max: 4,
     step: 0.05,
@@ -423,7 +423,7 @@ export const tuning: Record<string, Knob> = {
   sheen: {
     label: "Surface sheen",
     group: "Glass",
-    value: 3.9,
+    value: 5.2,
     min: 0,
     max: 10,
     step: 0.1,

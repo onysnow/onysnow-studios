@@ -145,6 +145,12 @@ export type BevelOptions = {
   /** Index of refraction. 1.5 is ordinary glass. */
   ior: number;
   profile?: SurfaceProfile;
+  /**
+   * Bevel the top and bottom edges only. A band that runs the full width of
+   * the page has no sides worth the name -- they are off the edge of the
+   * screen -- and bending them draws corners where there should be none.
+   */
+  straight?: boolean;
 };
 
 /**
@@ -162,8 +168,10 @@ export function bevelField(
 ): BevelField {
   const { bezelWidth, thickness, ior, profile = "circle" } = options;
   const data = new Uint8ClampedArray(width * height * 4);
-  const halfW = width / 2;
   const halfH = height / 2;
+  // Straight: measure distance to the top and bottom only, as if the pane
+  // ran on forever sideways.
+  const halfW = options.straight ? 1e7 : width / 2;
   const e = 1;
 
   const ox = new Float32Array(width * height);
@@ -172,7 +180,7 @@ export function bevelField(
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const px = x + 0.5 - halfW;
+      const px = options.straight ? 0 : x + 0.5 - halfW;
       const py = y + 0.5 - halfH;
 
       const inside = -roundedRectSDF(px, py, halfW, halfH, radius);

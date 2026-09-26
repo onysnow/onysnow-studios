@@ -94,7 +94,10 @@ export function Glass({
     const fit = () => {
       const rect = el.getBoundingClientRect();
       const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
-      const id = requestBevelFilter({ width: rect.width, height: rect.height, radius });
+      // Full-width bands bend at the top and bottom only: no sides, no corners.
+      const straight =
+        rect.width >= (document.documentElement.clientWidth || window.innerWidth) - 1;
+      const id = requestBevelFilter({ width: rect.width, height: rect.height, radius, straight });
       /*
        * Onto the pane itself, as a variable the stylesheet folds into the
        * pane's own backdrop-filter. Not onto the refraction layer, which is

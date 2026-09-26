@@ -130,7 +130,7 @@ export class GlassRenderer {
 		this.glassP = this._link(VS_GLASS, FS_GLASS);
 		this.glassU = this._uloc(this.glassP, [
 			'u_bgTex', 'u_blurTex', 'u_center', 'u_size', 'u_radius',
-			'u_res', 'u_pad', 'u_refract', 'u_chroma', 'u_edgeBlur', 'u_blurOn',
+			'u_res', 'u_pad', 'u_refract', 'u_chroma', 'u_edgeBlur', 'u_blurOn', 'u_straight',
 			'u_edgeHL', 'u_spec', 'u_fresnel', 'u_distort', 'u_alpha',
 			'u_specTight', 'u_lightDir',   // LOCAL
 			'u_sat', 'u_tint', 'u_zRadius', 'u_brightness',
@@ -303,6 +303,7 @@ export class GlassRenderer {
 		gl.uniform1f(this.glassU.u_chroma, config.chromAberration);
 		gl.uniform1f(this.glassU.u_edgeBlur, config.edgeBlur ?? 0); // LOCAL
 		gl.uniform1f(this.glassU.u_blurOn, config.blurAmount > 0 ? 1 : 0); // LOCAL
+		gl.uniform1f(this.glassU.u_straight, config.straight ?? 0); // LOCAL
 		gl.uniform1f(this.glassU.u_edgeHL, config.edgeHighlight);
 		gl.uniform1f(this.glassU.u_spec, config.specular);
 		gl.uniform1f(this.glassU.u_fresnel, config.fresnel);

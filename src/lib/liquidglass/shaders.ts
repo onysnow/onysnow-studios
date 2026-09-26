@@ -121,6 +121,7 @@ uniform float u_refract;
 uniform float u_chroma;
 uniform float u_edgeBlur; // LOCAL
 uniform float u_blurOn;   // LOCAL: 0 when the frost is off
+uniform float u_straight; // LOCAL: 1 for a band as wide as the page
 uniform float u_edgeHL;
 uniform float u_spec;
 uniform float u_fresnel;
@@ -192,8 +193,11 @@ void main() {
 	// ── Anti-aliased mask ──
 	float mask = 1.0 - smoothstep(-1.5, 0.5, sdf);
 
-	float maxD = min(half_.x, half_.y);
-	float inside = -sdf;
+	// LOCAL: a pane as wide as the scene is a band with no sides -- measured
+	// top-and-bottom only, so its bevel, blur and fringe run straight across.
+	bool straight = u_straight > 0.5;
+	float maxD = straight ? half_.y : min(half_.x, half_.y);
+	float inside = straight ? half_.y - abs(v_localPx.y) : -sdf;
 	float edge = smoothstep(maxD * 0.35, 0.0, inside);
 
 	// ── Surface normal (top surface) via bevel height field ──
@@ -211,6 +215,13 @@ void main() {
 	float dL = r < 1.0 ? bevelDist(v_localPx - vec2(e, 0.0), half_, k) : -rrSDF(v_localPx - vec2(e, 0.0), half_, r);
 	float dU = r < 1.0 ? bevelDist(v_localPx + vec2(0.0, e), half_, k) : -rrSDF(v_localPx + vec2(0.0, e), half_, r);
 	float dD = r < 1.0 ? bevelDist(v_localPx - vec2(0.0, e), half_, k) : -rrSDF(v_localPx - vec2(0.0, e), half_, r);
+	if (straight) {
+		dC = inside;
+		dR = inside;
+		dL = inside;
+		dU = half_.y - abs(v_localPx.y + e);
+		dD = half_.y - abs(v_localPx.y - e);
+	}
 	float hC = bevelHeight(dC, zR);
 	float hR = bevelHeight(dR, zR);
 	float hL = bevelHeight(dL, zR);

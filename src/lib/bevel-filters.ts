@@ -28,7 +28,7 @@ export const GLASS_THICKNESS = 18;
 /** Ordinary soda-lime glass. */
 export const GLASS_IOR = 1.5;
 
-export type PaneGeometry = { width: number; height: number; radius: number };
+export type PaneGeometry = { width: number; height: number; radius: number; straight?: boolean };
 
 export type BevelEntry = {
   id: string;
@@ -51,13 +51,14 @@ function bucket(n: number): number {
 }
 
 function keyFor(g: PaneGeometry): string {
-  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}`;
+  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}${g.straight ? "s" : ""}`;
 }
 
 function encode(
   width: number,
   height: number,
   radius: number,
+  straight = false,
 ): { href: string; scale: number } | null {
   if (typeof document === "undefined") return null;
 
@@ -71,6 +72,7 @@ function encode(
     bezelWidth: BEZEL_WIDTH * scale,
     thickness: GLASS_THICKNESS * scale,
     ior: GLASS_IOR,
+    straight,
   });
 
   const canvas = document.createElement("canvas");
@@ -102,7 +104,7 @@ export function requestBevelFilter(g: PaneGeometry): string | null {
   const existing = cache.get(key);
   if (existing) return existing.id;
 
-  const encoded = encode(bucket(g.width), bucket(g.height), g.radius);
+  const encoded = encode(bucket(g.width), bucket(g.height), g.radius, g.straight ?? false);
   if (!encoded) return null;
 
   const entry: BevelEntry = { id: `glass-bevel-${key}`, ...encoded };

@@ -109,7 +109,9 @@ void main() {
     vec4 r = uRect[i];
     vec2 hs = r.zw * 0.5;
     vec2 q = Q - (r.xy + hs);
-    float d = min(hs.x - abs(q.x), hs.y - abs(q.y));
+    // A band as wide as the page has no sides to cast: top and bottom only.
+    bool straight = r.z >= uViewport.x / uScale - 1.0;
+    float d = straight ? hs.y - abs(q.y) : min(hs.x - abs(q.x), hs.y - abs(q.y));
     float pen = max(uPenumbra, 2.0);
     if (d <= -pen) continue;
     // How much of the light's disc sees this point through the glass: the
