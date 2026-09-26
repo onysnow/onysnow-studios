@@ -619,6 +619,20 @@ function litSurface(el: HTMLElement, rect?: DOMRect) {
   el.style.setProperty("--cast-alpha", alpha.toFixed(3));
 
   /*
+   * Whether the lamp is on (the same smoothstep of the charge), and which way
+   * its light comes from, as a CSS gradient angle pointing AWAY from it -- so
+   * a gradient's 0% sits on the side facing the lamp. A solid surface uses
+   * these to catch the light on the edge that faces it (see .plastic).
+   */
+  el.style.setProperty("--lit-on", lit.toFixed(3));
+  const awayX = centreX - pointerX;
+  const awayY = centreY - pointerY;
+  el.style.setProperty(
+    "--lit-angle",
+    `${((Math.atan2(awayX, -awayY) * 180) / Math.PI).toFixed(1)}deg`,
+  );
+
+  /*
    * Tell the pane what is standing on it, AND WHERE ITS SHADOW FALLS.
    *
    * The two systems are not independent: a photograph throwing a shadow across

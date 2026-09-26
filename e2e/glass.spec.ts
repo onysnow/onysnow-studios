@@ -129,3 +129,44 @@ test.describe("glass", () => {
     await expect(floor).toHaveAttribute("data-dynamic", "idle", { timeout: 15_000 });
   });
 });
+
+test.describe("plastic on the glass", () => {
+  test.skip(
+    ({ browserName }) => browserName !== "chromium",
+    "The effect layer is suppressed outside Chromium.",
+  );
+
+  test("the orange button throws its shadow away from the lamp, and has no fixed drop shadow", async ({
+    page,
+  }) => {
+    await page.goto("/?glass=css");
+    await page.waitForLoadState("networkidle");
+    const button = page.locator("main .glass .plastic").first();
+    await button.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(800);
+    const box = (await button.boundingBox())!;
+
+    // Unlit: no shadow at all -- a lamp that is off throws nothing.
+    const unlit = await button.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(unlit === "none" || /rgba\(150, 62, 6, 0\)/.test(unlit)).toBe(true);
+
+    const offsetX = async (x: number, y: number) => {
+      await page.mouse.move(x, y, { steps: 4 });
+      await page.mouse.down();
+      await page.waitForTimeout(2200);
+      const shadow = await button.evaluate((el) => getComputedStyle(el).boxShadow);
+      await page.mouse.up();
+      await page.waitForTimeout(600);
+      // "rgba(...) Xpx Ypx Bpx": the first length is the horizontal throw.
+      return Number.parseFloat(
+        shadow
+          .replace(/rgba?\([^)]*\)/, "")
+          .trim()
+          .split(/\s+/)[0] ?? "0",
+      );
+    };
+
+    expect(await offsetX(box.x - 80, box.y + box.height / 2)).toBeGreaterThan(0.5);
+    expect(await offsetX(box.x + box.width + 80, box.y + box.height / 2)).toBeLessThan(-0.5);
+  });
+});
