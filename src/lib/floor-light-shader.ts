@@ -1,4 +1,6 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
+import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
+import { TRANSMISSION_GLSL } from "@/effects/optics/transmission.glsl";
 
 /**
  * The light that goes THROUGH the glass and lands on the photographs behind.
@@ -59,11 +61,17 @@ uniform float uCharge;
 
 uniform float uGap;
 uniform float uHeight;
-uniform float uReach;
 uniform float uLightGain;
 uniform float uShadowGain;
 uniform float uCaustics;
-uniform float uPenumbra;
+/*
+ * The causes of how sharp and how bright the cast light is: the lamp's size
+ * (radius, CSS px) and the glass's index. There is no reach and no penumbra
+ * setting -- both are worked out per point from where the lamp is (see
+ * effects/optics/transmission.ts).
+ */
+uniform float uLightSize;
+uniform float uIor;
 uniform float uView;
 uniform float uFrost;
 uniform float uPrism;
@@ -79,6 +87,8 @@ uniform float uSeed[${MAX_FLOOR_PANES}];
 uniform float uEdge[${MAX_FLOOR_PANES}];
 
 ${EDGE_PROFILE_GLSL}
+${REFLECTION_GLSL}
+${TRANSMISSION_GLSL}
 
 /*
  * The bottom of the pool, worked out rather than drawn.
@@ -99,7 +109,7 @@ ${EDGE_PROFILE_GLSL}
  * small: the determinant is floored by the penumbra, and a big soft lamp
  * gives soft cells while a tight one gives wire-thin lines.
  */
-float causticAt(vec2 x, float seed) {
+float causticAt(vec2 x, float seed, float pen) {
   x += vec2(seed * 613.0, seed * 389.0);
   float hxx = 0.0;
   float hyy = 0.0;
@@ -118,7 +128,7 @@ float causticAt(vec2 x, float seed) {
   }
   float s = 3.5 * uCaustics * clamp(uGap / 70.0, 0.3, 2.5);
   float det = (1.0 + s * hxx) * (1.0 + s * hyy) - s * s * hxy * hxy;
-  float soft = clamp(uPenumbra / 240.0, 0.03, 0.4);
+  float soft = clamp(pen / 240.0, 0.03, 0.4);
   return clamp(1.0 / max(abs(det), soft), 0.2, 7.0);
 }
 
@@ -151,14 +161,26 @@ float causticAt(vec2 x, float seed) {
  * Returns the light added (per colour) in rgb and the light taken away in a.
  */
 vec4 floorAt(vec2 P, float lit) {
-  float dist2 = dot(P - uLight, P - uLight);
-  float R = uReach;
-  float pool = exp(-dist2 / (R * R)) * lit;
-  // The same light after the frost has spread it: wider, and dimmer by the
-  // same area, so no light is made up.
-  float Rf = R * (1.0 + 0.9 * uFrost);
-  float poolFrost = exp(-dist2 / (Rf * Rf)) * (R * R) / (Rf * Rf) * lit;
-  if (max(pool, poolFrost) < 0.002) return vec4(0.0);
+  /*
+   * How the lamp's light arrives HERE: from how far off to the side it is and
+   * how high. Everything below that changes across the floor -- brightness,
+   * how much gets through, how soft each edge is, how far the band is thrown
+   * -- follows from these two numbers, so it all grades smoothly away from
+   * the lamp rather than being one look everywhere.
+   */
+  vec2 toP = P - uLight;
+  float rLamp = length(toP);
+  float cosT = cosIncidence(rLamp, uHeight);
+  float pool = irradianceFalloff(rLamp, uHeight) * lit;
+  if (pool < 0.002) return vec4(0.0);
+  vec2 radial = rLamp > 0.5 ? toP / rLamp : vec2(0.0, 1.0);
+  // Relative to straight on, so the glass passes today's light under the lamp
+  // and less at a slant, where more of it is reflected away.
+  float passes = transmittance(cosT, uIor) / transmittance(1.0, uIor);
+  float frostBlur = frostSpread(uFrost, uIor, uGap, cosT);
+  float slant = slantSpread(cosT);
+  // A distance on the floor, as a distance on the glass plane.
+  float toGlass = max(uHeight - uGap, 1.0) / max(uHeight, 1.0);
 
   // Back along the ray to the glass plane.
   vec2 Q = P + (uLight - P) * (uGap / max(uHeight, uGap + 1.0));
@@ -172,8 +194,18 @@ vec4 floorAt(vec2 P, float lit) {
     // A band as wide as the page has no sides to cast: top and bottom only.
     bool straight = r.z >= uViewport.x / uScale - 1.0;
     float d = straight ? hs.y - abs(q.y) : min(hs.x - abs(q.x), hs.y - abs(q.y));
-    // The shadow's edge is as soft as the light is big, and no softer.
-    float pen = max(uPenumbra, 2.0);
+    /*
+     * The edge's softness at this point: the lamp's size seen past the edge,
+     * stretched when the lamp is off to the side of that edge, plus the
+     * frost's scatter over the slant path. Measured on the floor, used on
+     * the glass plane where d is.
+     */
+    vec2 edgeNormal = straight || abs(q.y) - hs.y > abs(q.x) - hs.x
+      ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
+    float cosPhi = abs(dot(radial, edgeNormal));
+    float penFloor = penumbraAcross(uLightSize, uGap, uHeight, cosT, cosPhi);
+    float softFloor = sqrt(penFloor * penFloor + frostBlur * frostBlur);
+    float pen = max(softFloor * toGlass, 1.0);
     if (d <= -pen) continue;
     float inGlass = smoothstep(-pen, pen, d);
     d = max(d, 0.0);
@@ -183,10 +215,10 @@ vec4 floorAt(vec2 P, float lit) {
 
     /*
      * The face: flat, frosted. Straight on through, but the frost spreads
-     * the beam (poolFrost) and sends a little back.
+     * the beam (see frostBlur above) and sends a little back.
      */
     float onFace = smoothstep(1.0 - soft, 1.0 + soft, x);
-    vec3 through = vec3(poolFrost * (1.0 - 0.18 * uFrost) * onFace);
+    vec3 through = vec3(pool * passes * (1.0 - 0.18 * uFrost) * onFace);
 
     /*
      * The bevel: a clear, polished strip, angled. Every ray through it is
@@ -203,17 +235,19 @@ vec4 floorAt(vec2 P, float lit) {
      * further in for blue: white in the middle, colour only at its edges.
      */
     float converge = 0.35;
-    float width = 1.0 - converge;
-    float shift = 0.55;
-    float split = 0.05 * uPrism;
+    // At a slant the same turn is carried further: the band lands further in
+    // and spreads wider -- the same light over more floor, so it is dimmer.
+    float width = (1.0 - converge) * slant;
+    float shift = 0.55 * slant;
+    float split = 0.05 * uPrism * slant;
     vec3 from = vec3(shift - split, shift, shift + split);
     vec3 band = smoothstep(from - soft, from + soft, vec3(x))
               * (1.0 - smoothstep(from + width - soft, from + width + soft, vec3(x)));
-    through += band * pool * 0.92 / width;
+    through += band * pool * passes * 0.92 / width;
 
     // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {
-      through *= causticAt(Q - r.xy, uSeed[i]);
+      through *= causticAt(Q - r.xy, uSeed[i], penFloor);
     }
 
     light = mix(vec3(pool), through, inGlass);

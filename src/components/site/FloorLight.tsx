@@ -8,6 +8,7 @@ import {
 } from "@/lib/floor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { t } from "@/lib/tuning";
+import { FLOAT_GLASS } from "@/effects/materials/presets";
 
 /**
  * Light through the glass, and the glass's shadow, on the photographs.
@@ -83,12 +84,12 @@ export function FloorLight() {
     const uCharge = U("uCharge");
     const uGap = U("uGap");
     const uHeight = U("uHeight");
-    const uReach = U("uReach");
     const uEdge = U("uEdge");
     const uLightGain = U("uLightGain");
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
-    const uPenumbra = U("uPenumbra");
+    const uLightSize = U("uLightSize");
+    const uIor = U("uIor");
     const uView = U("uView");
     const uFrost = U("uFrost");
     const uPrism = U("uPrism");
@@ -196,18 +197,15 @@ export function FloorLight() {
       gl.uniform1f(uCharge, charge);
       gl.uniform1f(uGap, t("floorGap"));
       gl.uniform1f(uHeight, t("shadowHeight"));
-      gl.uniform1f(uReach, t("floorReach"));
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
       gl.uniform1f(uFrost, t("glassBlur"));
       gl.uniform1f(uPrism, t("floorPrism"));
-      // The same penumbra the cast shadows use: light size * gap / height.
-      gl.uniform1f(
-        uPenumbra,
-        (t("shadowSoftness") * t("floorGap")) / Math.max(t("shadowHeight"), 1),
-      );
+      // Causes only: how sharp and bright each point is follows from these.
+      gl.uniform1f(uLightSize, t("shadowSoftness"));
+      gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1i(uCount, n);
       gl.uniform4fv(uRect, rects);
       gl.uniform1fv(uSeed, seeds);

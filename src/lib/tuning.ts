@@ -619,15 +619,6 @@ export const tuning: Record<string, Knob> = {
     step: 0.05,
     hint: "The bevel is a prism: the bright line it throws splits into colours, red furthest out and blue furthest in.",
   },
-  floorReach: {
-    label: "Light reach",
-    group: "Shadows",
-    value: 400,
-    min: 120,
-    max: 1400,
-    step: 10,
-    hint: "How far from the light the pool on the photographs extends.",
-  },
 
   // ---- Cursor ----
   ringSize: {
