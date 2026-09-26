@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry, geometryStamp, MAX_OCCLUDERS } from "@/lib/edge-glow";
+import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
+import { FLOAT_GLASS } from "@/effects/materials/presets";
+import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -118,6 +120,8 @@ export function GlassLight({
     const uCharge = U("uCharge");
     const uRect = U("uRect");
     const uRadius = U("uRadius");
+    const uEdgeWidth = U("uEdgeWidth");
+    const uStraight = U("uStraight");
     const uTilt = U("uTilt");
     const uSeed = U("uSeed");
     const uImage = U("uImage");
@@ -143,8 +147,10 @@ export function GlassLight({
      */
     const occRect = new Float32Array(MAX_OCCLUDERS * 4);
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
-    const uSheen = U("uSheen");
-    const uSheenReach = U("uSheenReach");
+    const uIor = U("uIor");
+    const uFrost = U("uFrost");
+    const uLightHeight = U("uLightHeight");
+    const uLampPower = U("uLampPower");
     const uArris = U("uArris");
 
     // The site's amber and teal in linear light — the shader works in linear
@@ -332,8 +338,12 @@ export function GlassLight({
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uSideReach, t("sideReach"));
       gl.uniform1f(uRestEdge, t("restEdge"));
-      gl.uniform1f(uSheen, t("sheen"));
-      gl.uniform1f(uSheenReach, t("sheenFalloff"));
+      // The reflection on the face, from causes: the glass, its frost, and
+      // the lamp's height above the glass and its brightness.
+      gl.uniform1f(uIor, FLOAT_GLASS.ior);
+      gl.uniform1f(uFrost, t("glassBlur"));
+      gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
+      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
       gl.uniform1f(uArris, t("arris"));
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, surface);
@@ -349,6 +359,8 @@ export function GlassLight({
 
         gl.uniform4f(uRect, pane.x, pane.y, pane.w, pane.h);
         gl.uniform1f(uRadius, pane.r);
+        gl.uniform1f(uEdgeWidth, pane.e);
+        gl.uniform1f(uStraight, pane.w >= viewportWidth() - 1 ? 1 : 0);
         gl.uniform1f(uTilt, pane.t);
         gl.uniform1f(uSeed, pane.s);
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
@@ -434,6 +446,31 @@ export function GlassLight({
           ctx.clearRect(0, 0, layer.width, layer.height);
           if (cw > 0 && ch > 0) {
             ctx.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
+
+            /*
+             * Glare: the glow of the edge carried PAST the edge.
+             *
+             * The highlight lives in the bevel, inside the glass, and most of
+             * the shader's terms stop at the rim because the glass does. The
+             * glow that makes a lit edge read as bright does not: it is the
+             * lens spreading the hottest light a little in every direction,
+             * and it has no idea where the pane ends. Without it the warm
+             * glow above a lit bottom edge stopped dead on the line and read
+             * as clipped.
+             *
+             * So a blurred copy of this same light is added over itself --
+             * the standard bloom pass -- which spreads the bright part of the
+             * rim out over the photograph beyond as much as into the glass.
+             */
+            const spill = t("rimGlare");
+            if (spill > 0) {
+              ctx.save();
+              ctx.globalCompositeOperation = "lighter";
+              ctx.globalAlpha = Math.min(spill, 1);
+              ctx.filter = `blur(${Math.round(t("rimGlareSize") * scale)}px)`;
+              ctx.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
+              ctx.restore();
+            }
           }
           drawn.add(layer);
           allLayers.add(layer);
@@ -454,6 +491,14 @@ export function GlassLight({
     const loop = sleepingLoop(step);
     const wake = () => loop.wake();
     window.addEventListener("pointermove", wake, { passive: true });
+    /*
+     * And on the charge itself. The loop parks at zero charge and used to be
+     * woken only by pointer movement -- so winding the shutter by HOLDING
+     * still, which is the whole point of the hold trigger, grew the ring and
+     * lit nothing. Caught frame by frame: 25, 50, 75, 100% charge with the
+     * pointer still, and not one photon on the glass until it moved.
+     */
+    const stopCharge = onCharge(wake);
     loop.wake();
 
     const onLost = (event: Event) => {
@@ -467,6 +512,7 @@ export function GlassLight({
     return () => {
       loop.stop();
       window.removeEventListener("pointermove", wake);
+      stopCharge();
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
       window.removeEventListener("resize", resize);

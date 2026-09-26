@@ -76,13 +76,19 @@ export function CustomCursor() {
 
     let targetX = window.innerWidth / 2;
     let targetY = window.innerHeight / 2;
-    // Two followers at different rates. The ring is the one that visibly trails;
-    // the dot sits almost on the pointer, and the gap between them is what makes
-    // the ring read as catching up rather than as lag.
+    /*
+     * ONE follower. The pilot light is the lamp's own centre.
+     *
+     * The ring and the dot used to ease at different rates, so while the
+     * pointer moved the dot ran ahead of the ring -- and on a busy frame it
+     * stayed visibly off-centre for most of a second. The pilot light is the
+     * red lamp at the middle of the lens, and the light the glass responds
+     * to is drawn from the same point; it cannot be somewhere else. Both are
+     * now written from one position.
+     */
     let ringX = targetX;
     let ringY = targetY;
-    let dotX = targetX;
-    let dotY = targetY;
+    let last = performance.now();
     let frame = 0;
 
     const onMove = (event: PointerEvent) => {
@@ -231,16 +237,22 @@ export function CustomCursor() {
      * in alignment.
      */
 
-    const tick = () => {
-      const ringEase = t("ringEase");
-      const dotEase = t("dotEase");
-      ringX += (targetX - ringX) * ringEase;
-      ringY += (targetY - ringY) * ringEase;
-      dotX += (targetX - dotX) * dotEase;
-      dotY += (targetY - dotY) * dotEase;
+    const tick = (now: number) => {
+      /*
+       * Eased by TIME, not by frame. "Ring follow" is the fraction closed per
+       * 60 fps frame; a frame that took twice as long closes as much as two
+       * would have. Per-frame easing made the lag depend on how busy the page
+       * was -- on a heavy frame the follower fell far behind and crawled back.
+       */
+      const dt = Math.min(Math.max(now - last, 0), 100) / (1000 / 60);
+      last = now;
+      const k = 1 - Math.pow(1 - t("ringEase"), dt);
+      ringX += (targetX - ringX) * k;
+      ringY += (targetY - ringY) * k;
 
-      el.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
-      dot.style.transform = `translate3d(${dotX}px, ${dotY}px, 0) translate(-50%, -50%)`;
+      const at = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
+      el.style.transform = at;
+      dot.style.transform = at;
       // The emitter rides with the ring but lives outside the difference layer.
       // The shader reads these; it runs its own loop.
       lightPos.current.x = ringX;

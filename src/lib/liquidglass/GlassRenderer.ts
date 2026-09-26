@@ -130,7 +130,7 @@ export class GlassRenderer {
 		this.glassP = this._link(VS_GLASS, FS_GLASS);
 		this.glassU = this._uloc(this.glassP, [
 			'u_bgTex', 'u_blurTex', 'u_center', 'u_size', 'u_radius',
-			'u_res', 'u_pad', 'u_refract', 'u_chroma',
+			'u_res', 'u_pad', 'u_refract', 'u_chroma', 'u_edgeBlur', 'u_blurOn', 'u_straight',
 			'u_edgeHL', 'u_spec', 'u_fresnel', 'u_distort', 'u_alpha',
 			'u_specTight', 'u_lightDir',   // LOCAL
 			'u_sat', 'u_tint', 'u_zRadius', 'u_brightness',
@@ -232,13 +232,23 @@ export class GlassRenderer {
 
 		// Multi-pass Gaussian blur (skip entirely when not needed)
 		if (blurAmount > 0) {
-			const spread = blurAmount * 2.5;
+			// LOCAL: each pass reaches further than the last (Kawase-style).
+			//
+			// Upstream used one fixed offset of blurAmount * 2.5 texels for
+			// every pass, which tops out around an 8px blur at full frost --
+			// enough to soften a photograph, nowhere near enough to hide it.
+			// Growing the offset per pass widens the result with the square
+			// root of the sum of squares (about 33px at full frost with six
+			// passes) while the early, tight passes fill in between the wide
+			// ones' taps, so it stays smooth instead of banding.
+			const base = blurAmount * 2.5;
 			gl.useProgram(this.blurP);
 			gl.uniform1i(this.blurU.u_tex, 0);
 			// More passes is a wider, smoother frost, and each costs two
 			// full-screen draws. Clamped so a bad config cannot stall a frame.
 			const passes = Math.max(1, Math.min(12, Math.round(blurPasses)));
 			for (let i = 0; i < passes; i++) {
+				const spread = base * (i + 1);
 				gl.bindFramebuffer(gl.FRAMEBUFFER, fboSet.blurB.fbo);
 				gl.viewport(0, 0, bw, bh);
 				gl.bindTexture(gl.TEXTURE_2D, fboSet.blurA.tex);
@@ -291,6 +301,9 @@ export class GlassRenderer {
 		gl.uniform1f(this.glassU.u_pad, SHADOW_PAD * dpr);
 		gl.uniform1f(this.glassU.u_refract, config.refraction);
 		gl.uniform1f(this.glassU.u_chroma, config.chromAberration);
+		gl.uniform1f(this.glassU.u_edgeBlur, config.edgeBlur ?? 0); // LOCAL
+		gl.uniform1f(this.glassU.u_blurOn, config.blurAmount > 0 ? 1 : 0); // LOCAL
+		gl.uniform1f(this.glassU.u_straight, config.straight ?? 0); // LOCAL
 		gl.uniform1f(this.glassU.u_edgeHL, config.edgeHighlight);
 		gl.uniform1f(this.glassU.u_spec, config.specular);
 		gl.uniform1f(this.glassU.u_fresnel, config.fresnel);

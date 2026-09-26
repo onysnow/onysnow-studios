@@ -119,6 +119,9 @@ uniform vec2 u_res;
 
 uniform float u_refract;
 uniform float u_chroma;
+uniform float u_edgeBlur; // LOCAL
+uniform float u_blurOn;   // LOCAL: 0 when the frost is off
+uniform float u_straight; // LOCAL: 1 for a band as wide as the page
 uniform float u_edgeHL;
 uniform float u_spec;
 uniform float u_fresnel;
@@ -157,6 +160,14 @@ float bevelHeight(float d, float zR) {
 	return sqrt(d * (2.0 * zR - d));
 }
 
+// LOCAL: see the square-pane note in main().
+float bevelDist(vec2 p, vec2 b, float k) {
+	float a = b.x - abs(p.x);
+	float c = b.y - abs(p.y);
+	float h = clamp(0.5 + 0.5 * (c - a) / max(k, 1e-3), 0.0, 1.0);
+	return mix(c, a, h) - k * h * (1.0 - h);
+}
+
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -182,18 +193,35 @@ void main() {
 	// ── Anti-aliased mask ──
 	float mask = 1.0 - smoothstep(-1.5, 0.5, sdf);
 
-	float maxD = min(half_.x, half_.y);
-	float inside = -sdf;
+	// LOCAL: a pane as wide as the scene is a band with no sides -- measured
+	// top-and-bottom only, so its bevel, blur and fringe run straight across.
+	bool straight = u_straight > 0.5;
+	float maxD = straight ? half_.y : min(half_.x, half_.y);
+	float inside = straight ? half_.y - abs(v_localPx.y) : -sdf;
 	float edge = smoothstep(maxD * 0.35, 0.0, inside);
 
 	// ── Surface normal (top surface) via bevel height field ──
 	float zR = u_zRadius;
 	float e = 2.0;
-	float dC = inside;
-	float dR = -rrSDF(v_localPx + vec2(e, 0.0), half_, r);
-	float dL = -rrSDF(v_localPx - vec2(e, 0.0), half_, r);
-	float dU = -rrSDF(v_localPx + vec2(0.0, e), half_, r);
-	float dD = -rrSDF(v_localPx - vec2(0.0, e), half_, r);
+	// LOCAL: square panes get a smooth-min inside distance for the bevel.
+	// With r = 0 the plain distance is min(dx, dy), which creases along each
+	// corner's diagonal; the normal flips across that crease and draws a hard
+	// mitre -- a picture frame in every corner. Smooth-min rounds the height
+	// field's contours near the corner only, so the pane stays square and the
+	// two edges' bends flow into each other.
+	float k = zR * 0.15;
+	float dC = r < 1.0 ? bevelDist(v_localPx, half_, k) : inside;
+	float dR = r < 1.0 ? bevelDist(v_localPx + vec2(e, 0.0), half_, k) : -rrSDF(v_localPx + vec2(e, 0.0), half_, r);
+	float dL = r < 1.0 ? bevelDist(v_localPx - vec2(e, 0.0), half_, k) : -rrSDF(v_localPx - vec2(e, 0.0), half_, r);
+	float dU = r < 1.0 ? bevelDist(v_localPx + vec2(0.0, e), half_, k) : -rrSDF(v_localPx + vec2(0.0, e), half_, r);
+	float dD = r < 1.0 ? bevelDist(v_localPx - vec2(0.0, e), half_, k) : -rrSDF(v_localPx - vec2(0.0, e), half_, r);
+	if (straight) {
+		dC = inside;
+		dR = inside;
+		dL = inside;
+		dU = half_.y - abs(v_localPx.y + e);
+		dD = half_.y - abs(v_localPx.y - e);
+	}
 	float hC = bevelHeight(dC, zR);
 	float hR = bevelHeight(dR, zR);
 	float hL = bevelHeight(dL, zR);
@@ -247,10 +275,29 @@ void main() {
 		texture2D(u_blurTex, base - caD).b
 	);
 	// ── Edge-weighted blur mix ──
-	// Centre of the panel uses the blurred sample; the rim blends
-	// toward the sharp sample so refraction edges stay crisp.
-	float edgeMix = (1.0 - edge * 0.15);
-	vec3 col = mix(sharp, blur, edgeMix);
+	// LOCAL: the rim goes MORE out of focus, not less. Upstream pulled the
+	// rim toward the sharp sample so the bend read crisply; a thick lens
+	// edge does the opposite -- it is where the image is most out of focus.
+	// A ring of taps over the already-blurred texture, widening toward the
+	// edge, defocuses the bevel beyond the face's frost. No noise: eight
+	// fixed directions.
+	vec3 col = blur;
+	float ringPx = u_edgeBlur * edge * 36.0;
+	if (ringPx > 0.5) {
+		vec2 ringUV = vec2(ringPx) / u_res;
+		vec3 acc = blur;
+		acc += texture2D(u_blurTex, base + vec2( 1.0,  0.0) * ringUV).rgb;
+		acc += texture2D(u_blurTex, base + vec2(-1.0,  0.0) * ringUV).rgb;
+		acc += texture2D(u_blurTex, base + vec2( 0.0,  1.0) * ringUV).rgb;
+		acc += texture2D(u_blurTex, base + vec2( 0.0, -1.0) * ringUV).rgb;
+		acc += texture2D(u_blurTex, base + vec2( 0.707,  0.707) * ringUV).rgb;
+		acc += texture2D(u_blurTex, base + vec2(-0.707,  0.707) * ringUV).rgb;
+		acc += texture2D(u_blurTex, base + vec2( 0.707, -0.707) * ringUV).rgb;
+		acc += texture2D(u_blurTex, base + vec2(-0.707, -0.707) * ringUV).rgb;
+		col = acc / 9.0;
+	}
+	// The sharp sample only matters with no frost at all.
+	col = mix(sharp, col, step(0.001, u_blurOn));
 
 	// ── Brightness ──
 	col *= 1.0 + u_brightness;

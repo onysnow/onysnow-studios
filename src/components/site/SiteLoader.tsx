@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ScrambleText } from "./ScrambleText";
+import { useRouter } from "@tanstack/react-router";
+
 import { whenFirstScreenReady } from "@/lib/page-ready";
+import { warmSite } from "@/lib/warm-up";
 
 /**
  * The shutter winding, while the first screen loads -- and something to do
@@ -54,6 +57,22 @@ const SEEN = "onysnow:loaded";
 const WORDS = ["Loading", "Metering", "Focusing", "Developing"] as const;
 const WORD_MS = 1900;
 
+/**
+ * The warm-up gets this long, then you are let in regardless of what is still
+ * outstanding. Longer than page-ready's own deadline because it is doing far
+ * more -- every page's code and data, every photograph on this one -- but
+ * still finite: a loader that can hang is a site that can be unreachable.
+ */
+const WARM_DEADLINE_MS = 10000;
+
+/**
+ * Never open onto "Click to enter" before the first word has finished
+ * scrambling. On a fast connection the warm-up can finish in a few hundred
+ * milliseconds, and a loader that flashes its ready state before you have seen
+ * it do anything reads as broken rather than fast.
+ */
+const MIN_HOLD_MS = WORD_MS;
+
 function alreadySeen() {
   try {
     return sessionStorage.getItem(SEEN) === "1";
@@ -86,6 +105,7 @@ export function SiteLoader() {
   const [state, setState] = useState<"holding" | "ready" | "leaving" | "gone">("holding");
   const [word, setWord] = useState(0);
   const host = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -95,27 +115,66 @@ export function SiteLoader() {
     }
 
     let live = true;
-    void whenFirstScreenReady().then((report) => {
+    const started = performance.now();
+    const deadline = new Promise<"deadline">((resolve) =>
+      window.setTimeout(() => resolve("deadline"), WARM_DEADLINE_MS),
+    );
+    const floor = new Promise<void>((resolve) => window.setTimeout(resolve, MIN_HOLD_MS));
+
+    /*
+     * The first screen and the warm-up run side by side, not one after the
+     * other: the warm-up is mostly network and the first screen mostly decode,
+     * so overlapping them costs nothing and saves the whole of the shorter one.
+     */
+    const work = Promise.all([whenFirstScreenReady(), warmSite(router)]);
+
+    void Promise.all([Promise.race([work, deadline]), floor]).then(([outcome]) => {
       if (!live) return;
       setState("ready");
       if (import.meta.env.DEV) {
-        console.info(
-          `[loader] ready after ${report.ms}ms, ${report.images} above-the-fold images` +
-            (report.timedOut ? " (deadline hit — revealed anyway)" : ""),
-        );
+        const ms = Math.round(performance.now() - started);
+        if (outcome === "deadline") {
+          console.info(`[loader] ready after ${ms}ms (deadline hit — revealed anyway)`);
+        } else {
+          const [screen, warm] = outcome;
+          console.info(
+            `[loader] ready after ${ms}ms: ${screen.images} above-the-fold images, ` +
+              `${warm.done}/${warm.total} warm-up tasks`,
+          );
+        }
       }
     });
 
     return () => {
       live = false;
     };
-  }, []);
+  }, [router]);
 
   // Cycle the word only while there is still something to wait for.
   useEffect(() => {
     if (state !== "holding") return;
     const id = window.setInterval(() => setWord((n) => (n + 1) % WORDS.length), WORD_MS);
     return () => window.clearInterval(id);
+  }, [state]);
+
+  /*
+   * Enter from the keyboard without focusing the button.
+   *
+   * It used to be `autoFocus`, which Chrome treats as keyboard focus and so
+   * drew the focus ring round it on every load: a box round "Click to enter"
+   * that nobody put there. The button is still in the tab order for anyone
+   * tabbing to it; this just lets Enter work without the ring.
+   */
+  useEffect(() => {
+    if (state !== "ready") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      remember();
+      setState("leaving");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [state]);
 
   // Unmount once the fade has finished, so nothing pops.
@@ -139,7 +198,22 @@ export function SiteLoader() {
 
   if (state === "gone") return null;
 
-  const enter = () => setState((s) => (s === "ready" ? "leaving" : s));
+  /*
+   * Remembered at the moment you are let in -- not when the page becomes
+   * ready. Someone who reloads while still looking at "Ready" never actually
+   * entered, and showing them the loader again is correct.
+   *
+   * This call went missing once already. The first version of this component
+   * remembered on reveal; rewriting it for click-to-enter kept `remember()`
+   * defined and dropped every call to it, so the flag was never written and
+   * every load of every page looked like a first visit. e2e/loader.spec.ts
+   * now reloads after entering and fails if the loader comes back.
+   */
+  const enter = () => {
+    if (state !== "ready") return;
+    remember();
+    setState("leaving");
+  };
 
   return (
     <div ref={host} className="site-loader" data-state={state} role="status" aria-label="Loading">
@@ -188,12 +262,7 @@ export function SiteLoader() {
               and announced as the control it is.
             */}
             {state === "ready" ? (
-              <button
-                type="button"
-                className="site-loader__enter eyebrow"
-                onClick={enter}
-                autoFocus
-              >
+              <button type="button" className="site-loader__enter eyebrow" onClick={enter}>
                 Click to enter
               </button>
             ) : null}

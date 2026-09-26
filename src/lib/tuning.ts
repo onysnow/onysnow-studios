@@ -15,6 +15,7 @@
  */
 
 import { getGlassMode, onGlassMode } from "./glass-mode";
+import { DEFAULT_EDGE_WIDTH, readEdgeWidth } from "@/effects/optics/edge-profile";
 
 export type Knob = {
   label: string;
@@ -56,6 +57,27 @@ export type Knob = {
 };
 
 export const tuning: Record<string, Knob> = {
+  // ---- The glass's shape ----
+  //
+  // A cause, not a result: how wide the rounded-over edge of a pane is. The
+  // bend, the light on the edge and the edge of its shadow all work out their
+  // own values from this one number, in both glass modes, so they cannot land
+  // in different places again. A pane can set its own with data-edge-width;
+  // this is the width for every pane that does not.
+  //
+  // It replaces three knobs that were each a different width for the same
+  // edge: "Bevel depth" (150, the liquid bend), "Shadow edge" (90) and the
+  // fixed 26 of the CSS bend.
+  edgeWidth: {
+    label: "Edge width",
+    group: "Glass shape",
+    value: DEFAULT_EDGE_WIDTH,
+    min: 4,
+    max: 200,
+    step: 1,
+    glassKey: "zRadius",
+    hint: "How wide the rounded-over edge of the glass is, in pixels. Everything the edge does follows from it: how far it bends what is behind it, where its highlight sits, and where the bright seam and dark rim of its shadow fall. Panes can set their own.",
+  },
   // ---- The rasterised glass ----
   //
   // These are the shader's own uniforms, not CSS. They only do anything in
@@ -94,18 +116,29 @@ export const tuning: Record<string, Knob> = {
   glassRefraction: {
     label: "Refraction",
     group: "Liquid glass",
-    value: 0.69,
+    value: 3.2,
     min: 0,
-    max: 2,
+    max: 4,
     step: 0.01,
     glassKey: "refraction",
     modes: "raster",
     hint: "How far the bevel bends what is behind the pane. This is the effect; everything else is trim.",
   },
+  glassEdgeBlur: {
+    label: "Edge blur",
+    group: "Liquid glass",
+    value: 0.7,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    glassKey: "edgeBlur",
+    modes: "raster",
+    hint: "How far out of focus the bent rim goes, on top of the frost. A thick lens edge is where the picture is softest.",
+  },
   glassChroma: {
     label: "Dispersion",
     group: "Liquid glass",
-    value: 0.05,
+    value: 0.04,
     min: 0,
     max: 0.4,
     step: 0.005,
@@ -116,7 +149,7 @@ export const tuning: Record<string, Knob> = {
   glassBlur: {
     label: "Frost",
     group: "Liquid glass",
-    value: 0.18,
+    value: 0.6,
     min: 0,
     max: 1,
     step: 0.01,
@@ -127,7 +160,7 @@ export const tuning: Record<string, Knob> = {
   glassSpecular: {
     label: "Gloss",
     group: "Liquid glass",
-    value: 0,
+    value: 0.6,
     min: 0,
     max: 2,
     step: 0.02,
@@ -149,7 +182,7 @@ export const tuning: Record<string, Knob> = {
   glassFresnel: {
     label: "Fresnel",
     group: "Liquid glass",
-    value: 1,
+    value: 1.3,
     min: 0,
     max: 2,
     step: 0.02,
@@ -160,24 +193,13 @@ export const tuning: Record<string, Knob> = {
   glassEdge: {
     label: "Edge highlight",
     group: "Liquid glass",
-    value: 0.05,
+    value: 0.25,
     min: 0,
     max: 1,
     step: 0.01,
     glassKey: "edgeHighlight",
     modes: "raster",
     hint: "The inner stroke and rim glow. Trim rather than optics.",
-  },
-  glassDepth: {
-    label: "Bevel depth",
-    group: "Liquid glass",
-    value: 40,
-    min: 4,
-    max: 140,
-    step: 2,
-    glassKey: "zRadius",
-    modes: "raster",
-    hint: "How far the edge rounds over. EVERY optical term lives here -- across the flat face the normal is (0,0,1) and refraction, fresnel and specular are all exactly zero. Too small and the pane is a blurred rectangle.",
   },
   glassCornerBand: {
     label: "Corner, bands",
@@ -228,7 +250,7 @@ export const tuning: Record<string, Knob> = {
   glassSpecTight: {
     label: "Highlight tightness",
     group: "Liquid glass",
-    value: 1,
+    value: 1.4,
     min: 0.1,
     max: 4,
     step: 0.05,
@@ -327,7 +349,7 @@ export const tuning: Record<string, Knob> = {
   glassBrightness: {
     label: "Brightness",
     group: "Liquid glass",
-    value: 0,
+    value: 0.08,
     min: -0.5,
     max: 0.5,
     step: 0.01,
@@ -409,23 +431,6 @@ export const tuning: Record<string, Knob> = {
     max: 25,
     step: 0.5,
   },
-  sheen: {
-    label: "Surface sheen",
-    group: "Glass",
-    value: 3.9,
-    min: 0,
-    max: 10,
-    step: 0.1,
-    hint: "The broad glare across the face, as opposed to the point reflection.",
-  },
-  sheenFalloff: {
-    label: "Sheen reach",
-    group: "Glass",
-    value: 540,
-    min: 120,
-    max: 1600,
-    step: 20,
-  },
   sideReach: {
     label: "Side reach",
     group: "Glass",
@@ -436,6 +441,24 @@ export const tuning: Record<string, Knob> = {
     hint: "How far the light has to travel before the pane's edges stop catching it. Grazing surfaces hold their reflectance over a much wider range of angles than a face-on one, so this is deliberately broader than the face's falloff.",
   },
 
+  rimGlare: {
+    label: "Edge glare",
+    group: "Glass",
+    value: 0.8,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "The glow of a lit edge spilling past the rim onto the photograph beyond, the way a bright edge glares in a lens. 0 stops the glow at the glass.",
+  },
+  rimGlareSize: {
+    label: "Edge glare size",
+    group: "Glass",
+    value: 16,
+    min: 2,
+    max: 60,
+    step: 1,
+    hint: "How far the glare spreads, in pixels.",
+  },
   arris: {
     label: "Edge glow",
     group: "Glass",
@@ -542,6 +565,70 @@ export const tuning: Record<string, Knob> = {
     hint: "The emitter's radius. This is what sets the penumbra.",
   },
 
+  floorView: {
+    label: "Bend under glass",
+    group: "Shadows",
+    value: 1,
+    min: 0,
+    max: 3,
+    step: 0.05,
+    hint: "How hard the glass bends the light and shadow you see through it, at its top and bottom edges.",
+  },
+  floorGap: {
+    label: "Glass height",
+    group: "Shadows",
+    value: 70,
+    min: 0,
+    max: 240,
+    step: 2,
+    hint: "How far the glass stands off the photograph behind it. The further, the further its shadow and caustics fall from the pane.",
+  },
+  floorLight: {
+    label: "Light through glass",
+    group: "Shadows",
+    value: 0.35,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "How much of the light lands on the photographs behind the glass.",
+  },
+  floorShadow: {
+    label: "Glass shadow",
+    group: "Shadows",
+    value: 0.6,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "How dark the glass's own shadow goes where its bevel throws the light away.",
+  },
+  floorCaustics: {
+    label: "Glass waviness",
+    group: "Shadows",
+    value: 0,
+    min: 0,
+    max: 3,
+    step: 0.05,
+    hint: "0 is flat sheet glass, which throws no pattern. Raise it for rolled or hammered glass: the waviness focuses the light into the net of lines on the floor of a pool.",
+  },
+  floorPrism: {
+    label: "Edge rainbow",
+    group: "Shadows",
+    value: 1,
+    min: 0,
+    max: 3,
+    step: 0.05,
+    hint: "The bevel is a prism: the bright line it throws splits into colours, red furthest out and blue furthest in.",
+  },
+  floorReach: {
+    label: "Light reach",
+    group: "Shadows",
+    value: 400,
+    min: 120,
+    max: 1400,
+    step: 10,
+    hint: "How far from the light the pool on the photographs extends.",
+  },
+
   // ---- Cursor ----
   ringSize: {
     label: "Ring",
@@ -571,15 +658,6 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.01,
     hint: "Per-frame fraction of the remaining distance. Lower trails more. 0.16 settles in about 0.29s — roughly twice the reference's lag, which is deliberate.",
-  },
-  dotEase: {
-    label: "Dot follow",
-    group: "Cursor",
-    value: 0.2,
-    min: 0.05,
-    max: 1,
-    step: 0.01,
-    hint: "Keep this at about 1.25x the ring's. Further apart and the dot runs ahead of the ring and the light, which is what made it look off-centre.",
   },
 
   // ---- What the flash leaves on the retina ----
@@ -828,8 +906,60 @@ if (typeof window !== "undefined") {
   onGlassMode(switchTuningMode);
 }
 
+/** Where the lab keeps what you tuned. */
+export const TUNING_STORE = "onysnow:tuning";
+
+/**
+ * Load what the lab saved and apply it.
+ *
+ * WHY THIS IS NOT ONLY THE LAB'S JOB
+ *
+ * It used to be. `lab.tsx` read localStorage, called `applyTuning`, and
+ * nothing else on the site ever did -- so every number tuned in the lab was
+ * written down and then read back only by the lab. The preview there looked
+ * exactly right and the actual site ignored all of it, which is indis-
+ * tinguishable from the sliders not working. Reported as "none of the
+ * properties I set have any effect", and correct.
+ *
+ * Tolerant of every shape the store has had: the flat map written before the
+ * per-mode sets existed, and the { css, raster } pair written since.
+ */
+export function loadSavedTuning() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(TUNING_STORE);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (parsed["css"] || parsed["raster"]) {
+      restoreTuning(parsed as Parameters<typeof restoreTuning>[0]);
+    } else {
+      // Written before the sets were split: one set of numbers, tuned against
+      // whichever mode was up at the time. Seed both rather than guess.
+      const flat = parsed as Record<string, number>;
+      restoreTuning({ css: flat, raster: flat });
+    }
+  } catch {
+    // A blocked or corrupt store is not a reason to fail to render the site.
+  }
+  applyTuning();
+}
+
 /** Shorthand for the loops: `t("coreGain")`. */
 export const t = (key: keyof typeof tuning | string): number => tuning[key]?.value ?? 0;
+
+const appliedListeners = new Set<() => void>();
+
+/**
+ * Called after every change is applied.
+ *
+ * For the few things that cannot read a knob inside a loop -- the CSS bevel
+ * map is built once per pane geometry, so a new edge width has to ask for a
+ * new one.
+ */
+export function onTuningApplied(fn: () => void): () => void {
+  appliedListeners.add(fn);
+  return () => appliedListeners.delete(fn);
+}
 
 /** Mirrors the CSS-side knobs onto the document element. */
 export function applyTuning() {
@@ -840,6 +970,7 @@ export function applyTuning() {
     root.setProperty(knob.cssVar, `${knob.value}${knob.cssUnit ?? ""}`);
   }
   applyGlassConfig();
+  for (const fn of appliedListeners) fn();
 }
 
 /**
@@ -865,6 +996,8 @@ export function applyGlassConfig() {
       if (knob.glassScope === "bar" && !isBar) continue;
       config[knob.glassKey] = knob.value;
     }
+    // The edge is the pane's own: its attribute wins over the knob.
+    config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);
     const next = JSON.stringify(config);
     if (pane.dataset["config"] !== next) pane.dataset["config"] = next;
   }

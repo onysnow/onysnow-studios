@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
+import { onCharge } from "@/lib/edge-glow";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { t } from "@/lib/tuning";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
@@ -231,6 +232,14 @@ export function CursorLight({
     const loop = sleepingLoop(step);
     const wake = () => loop.wake();
     window.addEventListener("pointermove", wake, { passive: true });
+    /*
+     * And on the charge itself. The loop parks at zero charge and used to be
+     * woken only by pointer movement -- so winding the shutter by HOLDING
+     * still, which is the whole point of the hold trigger, grew the ring and
+     * lit nothing. Caught frame by frame: 25, 50, 75, 100% charge with the
+     * pointer still, and not one photon on the glass until it moved.
+     */
+    const stopCharge = onCharge(wake);
     loop.wake();
 
     /*
@@ -248,6 +257,7 @@ export function CursorLight({
     return () => {
       loop.stop();
       window.removeEventListener("pointermove", wake);
+      stopCharge();
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
       window.removeEventListener("resize", resize);

@@ -42,6 +42,7 @@ let pointerY = -9999;
  * One pointer listener already runs here; this is the same reading.
  */
 import { t } from "./tuning";
+import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { castShadow } from "./cast-shadow";
 
 export const lightState = { x: -9999, y: -9999, charge: 0 };
@@ -99,6 +100,11 @@ export type GlassRect = {
   h: number;
   /** Corner radius, in CSS pixels. */
   r: number;
+  /**
+   * How wide this pane's rounded-over edge is, in CSS pixels. The one width
+   * every effect on this pane reads, from its data-edge-width or the knob.
+   */
+  e: number;
   /**
    * The photograph behind this pane, and where it is drawn on screen.
    *
@@ -191,8 +197,20 @@ function smallestVariant(img: HTMLImageElement): string {
 }
 
 function backdropOf(el: HTMLElement): HTMLImageElement | null {
-  const scene = el.closest("[data-photo]");
+  let scene = el.closest("[data-photo]");
   if (!scene) return null;
+  /*
+   * A seam band has no photograph of its own: the ones above and below carry
+   * on under it (see PhotoSection). The shader takes one image, so it gets
+   * the one above -- the edge the light most often rakes across -- falling
+   * back to the one below for a band with nothing over it.
+   */
+  if (scene.hasAttribute("data-seam")) {
+    const up = scene.previousElementSibling;
+    const down = scene.nextElementSibling;
+    scene = up?.hasAttribute("data-photo") ? up : down?.hasAttribute("data-photo") ? down : null;
+    if (!scene) return null;
+  }
   const images = scene.querySelectorAll<HTMLImageElement>("img[src]");
   for (let i = images.length - 1; i >= 0; i -= 1) {
     const img = images[i];
@@ -213,6 +231,14 @@ function surfaceSeed(el: HTMLElement) {
     seeds.set(el, seed);
   }
   return seed;
+}
+
+/**
+ * How wide a pane's edge is: its own data-edge-width, else the "Edge width"
+ * knob. Read fresh rather than cached, so moving the knob moves every edge.
+ */
+export function paneEdgeWidth(el: HTMLElement): number {
+  return readEdgeWidth(el, t("edgeWidth"));
 }
 
 function cornerRadius(el: HTMLElement) {
@@ -313,6 +339,7 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       w: r.width,
       h: r.height,
       r: cornerRadius(el),
+      e: paneEdgeWidth(el),
       t: paneTilt(r),
       s: surfaceSeed(el),
       src: img ? smallestVariant(img) : "",

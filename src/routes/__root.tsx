@@ -16,6 +16,7 @@ import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { CustomCursor } from "@/components/site/CustomCursor";
 import { SiteLoader } from "@/components/site/SiteLoader";
+import { FloorLight } from "@/components/site/FloorLight";
 import { ShutterFlash } from "@/components/site/ShutterFlash";
 import { GlassFilters } from "@/components/site/GlassFilters";
 import { RasterGlass } from "@/components/site/RasterGlass";
@@ -151,6 +152,8 @@ function RootComponent() {
           </a>
           <SiteHeader />
           <main id="main-content">
+            {/* First in main: above the photographs, below every pane. */}
+            <FloorLight />
             <Outlet />
           </main>
           <SiteFooter />

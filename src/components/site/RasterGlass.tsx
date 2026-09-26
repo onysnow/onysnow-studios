@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { applyGlassConfig } from "@/lib/tuning";
+import { onPane } from "@/lib/glass-panes";
 
 /**
  * The panes, refracting a rasterised copy of the page behind them.
@@ -156,7 +157,17 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
        * and gets the whole scrolling document as its scene, which is exactly
        * what a bar floating over the page should refract.
        */
-      const root = pane.closest<HTMLElement>("[data-photo]") ?? pane.parentElement ?? document.body;
+      /*
+       * A seam band's picture is its NEIGHBOURS, which are siblings of it,
+       * not children -- so its scene has to be the page content they all sit
+       * in. The library skips any section that does not overlap the pane, so
+       * this costs the two photographs actually behind the glass and nothing
+       * further down the page.
+       */
+      const seam = pane.closest<HTMLElement>("[data-seam]");
+      const root = seam
+        ? (seam.parentElement ?? document.body)
+        : (pane.closest<HTMLElement>("[data-photo]") ?? pane.parentElement ?? document.body);
       started.add(pane);
 
       // Serialised. Each init runs a full html-to-image capture of the
@@ -231,17 +242,34 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
       });
     };
 
-    const panes = Array.from(document.querySelectorAll<HTMLElement>(RASTER_PANES));
+    /*
+     * Panes come from the registry, not from the document.
+     *
+     * A querySelectorAll here found panes that React had rendered but not yet
+     * hydrated -- this component is mounted at the root, the panes live in
+     * lazily-hydrated route content -- and injecting a canvas into one of
+     * those made React discard the tree and regenerate it, taking the canvas
+     * with it. Measured at 4 loads in 12 before this change.
+     *
+     * A pane registers from its own effect, so a pane arriving here has
+     * already been committed by React. The ordering is structural rather
+     * than timed, which is the only kind of fix a race actually has.
+     */
     const sizes = new ResizeObserver((entries) => {
       for (const entry of entries) initPane(entry.target as HTMLElement);
     });
-    for (const pane of panes) {
+    const stopListening = onPane((pane) => {
+      if (!live) return;
+      // The registry carries every pane; this component only wants the ones
+      // the rasteriser is meant to take over.
+      if (!pane.matches(RASTER_PANES)) return;
       sizes.observe(pane);
       initPane(pane);
-    }
+    });
 
     return () => {
       live = false;
+      stopListening();
       sizes.disconnect();
       for (const instance of instances) {
         try {

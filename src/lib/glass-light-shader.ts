@@ -1,3 +1,6 @@
+import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
+import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
+
 /**
  * Fragment shader for one pane of glass.
  *
@@ -57,14 +60,24 @@ uniform float uOccCount;
 
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
+uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one edge every effect shares
+uniform float uStraight;      // 1: a full-width band -- top and bottom edges only
 uniform float uTilt;          // -1 looking up at it, 1 looking down at it
 uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
 uniform float uGrimeFloor;  // tunable
 uniform float uSideReach;   // tunable
-uniform float uSheen;       // tunable
-uniform float uSheenReach;  // tunable
+/*
+ * The lamp's reflection on the face comes from causes only: what the glass is
+ * made of (uIor), how frosted its surface is (uFrost), how high the lamp is
+ * above it (uLightHeight) and how bright it is (uLampPower). There is no
+ * glare setting -- see effects/optics/reflection.ts.
+ */
+uniform float uIor;
+uniform float uFrost;
+uniform float uLightHeight; // CSS pixels above the glass
+uniform float uLampPower;
 uniform float uArris;       // tunable
 
 uniform sampler2D uBackdrop;  // the photograph behind this pane
@@ -85,7 +98,6 @@ uniform vec3  uCool;
 #define CHROM_ABERRATION 0.05
 #define EDGE_HIGHLIGHT 0.05
 #define FRESNEL 1.0
-#define Z_RADIUS 40.0   // bevel depth in CSS pixels
 #define MAX_BEND 34.0   // peak displacement at the rim, CSS pixels
 
 /*
@@ -111,12 +123,13 @@ uniform vec3  uCool;
 #define SIDE_DISPERSION 7.0
 
 
-/* Signed distance to a rounded rectangle. Negative inside, zero on the edge. */
-float roundedBox(vec2 p, vec2 halfSize, float radius) {
-  float r = min(radius, min(halfSize.x, halfSize.y));
-  vec2 q = abs(p) - halfSize + r;
-  return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
-}
+/*
+ * The edge: rounded box, band, Fresnel rise and tonemap, from the shared
+ * optics library -- the same edge the CSS bend and the light under the glass
+ * are drawn from. Its width is uEdgeWidth, per pane; there is no width here.
+ */
+${EDGE_PROFILE_GLSL}
+${REFLECTION_GLSL}
 
 /*
  * How much of the light is blocked at this point on the pane.
@@ -155,10 +168,27 @@ float occlusionAt(vec2 local) {
   return clamp(blocked, 0.0, 1.0);
 }
 
-/* The surface, photographed. A 2x2 atlas; each pane wears one cell. */
+/*
+ * The surface, photographed. A 2x2 atlas of four different pieces of glass.
+ *
+ * It used to be one cell per pane, repeated every 340px. On a full-width pane
+ * that is the same four scratches four times over, and under a charged light
+ * they lined up along the lit edge as identical tick marks at exactly 340px
+ * spacing -- a pattern, which is the one thing a real scratch never is.
+ *
+ * Now each repeat of the tile takes a different cell AND is mirrored on odd
+ * rows and columns, so neighbouring tiles never show the same mark in the
+ * same place. The tile is also twice the size, so a full-width pane is two
+ * or three tiles across rather than four. All four cells are photographs;
+ * nothing here is generated.
+ */
 vec3 surfaceAt(vec2 uv, float seed) {
-  vec2 cell = vec2(mod(seed, 2.0), floor(seed * 0.5));
-  vec2 inCell = fract(uv) * 0.49 + 0.005;
+  vec2 tile = floor(uv);
+  float pick = mod(seed + tile.x + 3.0 * tile.y, 4.0);
+  vec2 cell = vec2(mod(pick, 2.0), floor(pick * 0.5));
+  vec2 f = fract(uv);
+  f = mix(f, 1.0 - f, mod(abs(tile), 2.0));
+  vec2 inCell = f * 0.49 + 0.005;
   return texture2D(uSurface, (inCell + cell) * 0.5).rgb;
 }
 
@@ -168,7 +198,13 @@ void main() {
 
   vec2 halfSize = uRect.zw * 0.5;
   vec2 p = frag - (uRect.xy + halfSize);
-  float d = roundedBox(p, halfSize, uRadius);
+  /*
+   * A band across the whole page has no sides: they are off the screen. Its
+   * edges are measured as if it ran on forever sideways, so the rim, the
+   * bevel and the bend run straight across and nothing turns a corner.
+   */
+  vec2 edgeHalf = uStraight > 0.5 ? vec2(1e5, halfSize.y) : halfSize;
+  float d = roundedBox(p, edgeHalf, uRadius);
   float inside = smoothstep(0.5, -0.5, d);
 
   /*
@@ -180,14 +216,14 @@ void main() {
    * across the middle, which is exactly how a pane behaves.
    */
   const float EPS = 1.0;
-  float dx = roundedBox(p + vec2(EPS, 0.0), halfSize, uRadius)
-           - roundedBox(p - vec2(EPS, 0.0), halfSize, uRadius);
-  float dy = roundedBox(p + vec2(0.0, EPS), halfSize, uRadius)
-           - roundedBox(p - vec2(0.0, EPS), halfSize, uRadius);
+  float dx = roundedBox(p + vec2(EPS, 0.0), edgeHalf, uRadius)
+           - roundedBox(p - vec2(EPS, 0.0), edgeHalf, uRadius);
+  float dy = roundedBox(p + vec2(0.0, EPS), edgeHalf, uRadius)
+           - roundedBox(p - vec2(0.0, EPS), edgeHalf, uRadius);
   vec2 grad = normalize(vec2(dx, dy) + 1e-6);
 
   float depth = -d;                       // positive inside
-  float band = clamp(depth / Z_RADIUS, 0.0, 1.0);
+  float band = edgeBand(depth, uEdgeWidth);
 
   /*
    * A displacement CURVE, not the raw derivative of the height field.
@@ -248,7 +284,7 @@ void main() {
    * a flat pane the grazing angles are the rim, so reflectivity climbs there.
    */
   float facing = clamp(depth / max(min(halfSize.x, halfSize.y), 1.0), 0.0, 1.0);
-  float fresnel = FRESNEL * pow(1.0 - facing, 5.0);
+  float fresnel = FRESNEL * fresnelRise(facing);
 
   // ---- The light, and how far it reaches this point ----
   float dl = distance(frag, uLight);
@@ -303,7 +339,7 @@ void main() {
   float specular = pow(ndl, 24.0) * bevel * direct * 3.0;
 
   // ---- The surface ----
-  vec3 surf = surfaceAt((frag - uRect.xy) / 340.0, uSeed) * uHasSurface;
+  vec3 surf = surfaceAt((frag - uRect.xy) / 680.0, uSeed) * uHasSurface;
   float handled = 0.35 + 0.95 * surf.b;
 
   /*
@@ -470,8 +506,13 @@ void main() {
 
 
 
-  // ---- Light scattered into the body, and off the grime ----
-  vec3 face = vec3(inside * (direct * 0.9));
+  // ---- Light off the grime ----
+  /*
+   * There used to be a "flashlight" here: a pool of the lamp painted on the
+   * face, behind a setting that sat at zero. The lamp on the face is its
+   * reflection, and that is now worked out from the material below.
+   */
+  vec3 face = vec3(0.0);
 
   /*
    * The grime, raked by the light.
@@ -518,48 +559,26 @@ void main() {
   face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
 
   /*
-   * And some of it shows without the light raking it at all, because grime
-   * scatters whatever is passing through the pane, not only what grazes it.
-   * Small, but it stops the surface vanishing entirely between sweeps.
+   * Grime also scatters the light passing THROUGH the pane, not only what
+   * grazes it. That was a term here scaled by a setting that sat at zero; it
+   * comes back driven by the smudge layer in step 9 of the optics plan.
    */
-  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2) * unlit);
 
 
   /*
-   * ---- The reflected source ----
-   * A pane reflects from its front and its back surface, so a bright source
-   * leaves a sharp image and a fainter ghost below it. That doubling is most
-   * of what makes a reflection read as glass rather than as a smear of light.
+   * ---- The lamp, reflected by the face ----
+   *
+   * Glass reflects about 4% straight on -- ((n - 1) / (n + 1))^2 -- and more
+   * toward grazing. It was two settings, both at zero, so the pane reflected
+   * nothing. Now it is the material's reflectance, spread by the surface's
+   * roughness: polished glass gives a small, sharp, bright image of the lamp;
+   * frost spreads the same light into a wide, dim sheen. Neither end is
+   * tuned; both follow from uIor, uFrost and where the lamp is.
+   *
+   * Blocked by whatever is standing on the glass between it and the lamp.
    */
-  vec2 toNear = frag - (uLight + vec2(0.0, 9.0));
-  float rNear = length(toNear / vec2(1.0, 1.22));
-  float rFar = length((frag - (uLight + vec2(4.0, 27.0))) / vec2(1.0, 1.6));
-  vec3 image = vec3(
-    1.6 / (1.0 + (rNear * rNear) / 620.0),
-    1.6 / (1.0 + (rNear * rNear) / 520.0),
-    1.6 / (1.0 + (rNear * rNear) / 450.0)
-  ) + vec3(0.3) / (1.0 + (rFar * rFar) / 2600.0);
-  vec3 mirror = inside * image * (0.24 + 0.76 * fresnel) * (13.0 + glint * 14.0);
-
-  /*
-   * ---- The broad sheen ----
-   *
-   * The term above is the IMAGE of the source: tight, a few tens of pixels
-   * across, and sitting directly under the cursor's own blown core, which is
-   * why it has been invisible -- it was hidden inside the thing casting it.
-   *
-   * What was missing is the other half of a specular response. A sheet of
-   * glass does not only show you a small bright copy of the lamp; its whole
-   * face lifts on the side the light is on, because the surface is reflecting
-   * the light's wide falloff as well as its core. That is the part you read as
-   * GLARE, and it works at pane scale rather than at cursor scale.
-   *
-   * Weighted by fresnel, so it climbs toward the rim the way reflectivity
-   * actually does, and falling off over hundreds of pixels so it covers the
-   * band rather than pooling.
-   */
-  float sheen = exp(-dl / uSheenReach);
-  mirror += inside * (0.12 + 0.88 * fresnel) * sheen * uSheen;
+  float reflected = lampReflection(frag - uLight, uLightHeight, uLampPower, uIor, uFrost);
+  vec3 mirror = inside * vec3(1.0, 0.94, 0.84) * reflected * (1.0 - blocked);
 
   /*
    * Everything the light does scales with the charge, and there is genuinely
@@ -634,8 +653,7 @@ void main() {
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.
-  colour = colour / (1.0 + abs(colour));
-  colour = sign(colour) * pow(abs(colour), vec3(1.0 / 2.2));
+  colour = toneMapGlass(colour);
 
   /*
    * NO GRAIN HERE. Deliberately, and permanently.

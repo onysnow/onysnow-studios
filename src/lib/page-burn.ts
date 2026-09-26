@@ -72,6 +72,9 @@ export type PageBurn = {
   height: number;
 };
 
+/** Slack around the viewport, for shadows and glows that spill in from just outside. */
+const MARGIN = 120;
+
 let ready: PageBurn | null = null;
 let stamp = "";
 let inFlight = false;
@@ -150,7 +153,19 @@ async function rasterise(): Promise<PageBurn | null> {
       filter: (node) => {
         if (!(node instanceof Element)) return true;
         if (skip.has(node)) return false;
-        return !node.matches(OVERLAY);
+        if (node.matches(OVERLAY)) return false;
+        /*
+         * Nothing that is off screen. The burn is of the viewport, but
+         * html-to-image clones and inlines the WHOLE body -- every photograph
+         * five screens down fetched and base64'd into the SVG. Measured on the
+         * home page: nearly six seconds, so any shot fired sooner than that
+         * got the photo-only fallback instead of the page. An element entirely
+         * outside the viewport cannot contribute a pixel, so it is dropped;
+         * its ancestors still span the viewport and are kept.
+         */
+        const r = node.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) return true;
+        return r.bottom > -MARGIN && r.top < h + MARGIN && r.right > -MARGIN && r.left < w + MARGIN;
       },
     });
 

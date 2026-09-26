@@ -1035,8 +1035,18 @@ export class LiquidGlass {
 		//    re-rendered → I need to refresh too."
 		const renderedThisFrame: Array<{ rect: SampleRect }> = [];
 
-		for (const child of this._sortedChildren) {
-			if (!this.glassSet.has(child)) continue;
+		// LOCAL: every pane, nested or not, in the paint order of the
+		// root-level child it lives under.
+		//
+		// Upstream walked root's direct children and rendered the ones that
+		// were glass -- correct when glass HAD to be a direct child. With
+		// nesting allowed (see _setupGlassElements) a nested pane is never a
+		// direct child, so this loop skipped it every frame: the scene was
+		// never composed (the canvas sat at its 300x150 default, all zero),
+		// the shader never ran, and the pane was a transparent hole showing
+		// the real page through it. That is why liquid mode "didn't seem to
+		// refract or distort" -- it was not rendering at all.
+		for (const child of this._glassInPaintOrder()) {
 			this._renderGlassElement(
 				child,
 				rootRect,
@@ -1072,8 +1082,12 @@ export class LiquidGlass {
 		dirtyTargets: Set<HTMLElement>,
 		renderedThisFrame: Array<{ rect: SampleRect }>,
 	): void {
-		const config = this._getConfig(child);
 		const elRect = child.getBoundingClientRect();
+		// LOCAL: a pane as wide as its root is a band with no sides.
+		const config = {
+			...this._getConfig(child),
+			straight: elRect.width >= this.root.getBoundingClientRect().width - 1 ? 1 : 0,
+		};
 		const elW = child.offsetWidth;
 		const elH = child.offsetHeight;
 		const centerX = (elRect.left - rootRect.left) + elRect.width / 2;
@@ -1159,7 +1173,13 @@ export class LiquidGlass {
 	 *
 	 * Returns null if the element is not under root at all.
 	 */
-	private _topLevelChildFor(glass: HTMLElement): HTMLElement | null {
+	private _glassInPaintOrder(): HTMLElement[] {
+		const rank = new Map(this._sortedChildren.map((el, i) => [el, i]));
+		const at = (g: HTMLElement) => rank.get(this._topLevelChildFor(g) ?? g) ?? Number.MAX_SAFE_INTEGER;
+		return [...this.glassSet].sort((a, b) => at(a) - at(b));
+	}
+
+		private _topLevelChildFor(glass: HTMLElement): HTMLElement | null {
 		let node: HTMLElement | null = glass;
 		while (node && node.parentElement !== this.root) {
 			node = node.parentElement;
@@ -1292,7 +1312,8 @@ export class LiquidGlass {
 	}
 
 	private _childHasDynamicContent(child: HTMLElement): boolean {
-		if (child.hasAttribute('data-dynamic')) return true;
+		// LOCAL: data-dynamic="idle" is a dynamic contributor that is not moving right now.
+		if (child.hasAttribute('data-dynamic')) return child.getAttribute('data-dynamic') !== 'idle';
 		if (child.tagName === 'VIDEO') return true;
 		return child.querySelector('[data-dynamic], video') !== null;
 	}
@@ -1373,6 +1394,17 @@ export class LiquidGlass {
 			}
 			if (isGlassCanvas) continue;
 
+			// LOCAL: nothing that sits ON a pane. The pane's own html is
+			// pruned from the scene, but this media walk went round that and
+			// drew every photograph inside it too -- the portfolio cards on the
+			// "Ways to work together" band came out refracted behind
+			// themselves, a smeared second copy along the bevel.
+			let onGlass = false;
+			for (const g of this.glassSet) {
+				if (g !== parent && g.contains(htmlEl)) { onGlass = true; break; }
+			}
+			if (onGlass) continue;
+
 			this._drawMediaElement(htmlEl, targetCtx, sampleRect, rootRect, dpr);
 		}
 	}
@@ -1399,6 +1431,60 @@ export class LiquidGlass {
 		// short-circuit.
 		if (dw <= 0 || dh <= 0) return false;
 
+		// LOCAL: respect the overflow clips the page puts on this element.
+		//
+		// drawImage paints the element's whole box, but on the page the box
+		// is often cut by an ancestor -- a parallax photograph is 128% of its
+		// frame and slides inside an overflow:hidden wrapper. Drawn unclipped,
+		// the part of the image that is hidden on screen turned up in the
+		// scene: behind a band sitting over the join between two photographs,
+		// the upper photograph ran on through the lower half of the glass
+		// where the next photograph should have been.
+		const clip = this._visibleClipFor(el, rootRect, dpr);
+		if (clip && (clip.w <= 0 || clip.h <= 0)) return false;
+		targetCtx.save();
+		if (clip) {
+			targetCtx.beginPath();
+			targetCtx.rect(clip.x - sampleRect.x, clip.y - sampleRect.y, clip.w, clip.h);
+			targetCtx.clip();
+		}
+		try {
+			return this._drawMediaUnclipped(el, tag, targetCtx, r, dx, dy, dw, dh);
+		} finally {
+			targetCtx.restore();
+		}
+	}
+
+	/** LOCAL: the intersection of every overflow clip between el and root, in root pixels. */
+	private _visibleClipFor(el: HTMLElement, rootRect: DOMRect, dpr: number): SampleRect | null {
+		let clip: DOMRect | null = null;
+		for (let node = el.parentElement; node && node !== this.root; node = node.parentElement) {
+			const st = getComputedStyle(node);
+			if (st.overflowX === 'visible' && st.overflowY === 'visible') continue;
+			const r = node.getBoundingClientRect();
+			if (!clip) {
+				clip = new DOMRect(r.left, r.top, r.width, r.height);
+			} else {
+				const left = Math.max(clip.left, r.left);
+				const top = Math.max(clip.top, r.top);
+				const right = Math.min(clip.right, r.right);
+				const bottom = Math.min(clip.bottom, r.bottom);
+				clip = new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+			}
+		}
+		return clip ? this._getPixelRect(clip, rootRect, dpr) : null;
+	}
+
+	private _drawMediaUnclipped(
+		el: HTMLElement,
+		tag: string,
+		targetCtx: CanvasRenderingContext2D,
+		r: DOMRect,
+		dx: number,
+		dy: number,
+		dw: number,
+		dh: number,
+	): boolean {
 		if (tag === 'CANVAS') {
 			const liveCanvas = el as HTMLCanvasElement;
 			if (liveCanvas.width <= 0 || liveCanvas.height <= 0) return false;

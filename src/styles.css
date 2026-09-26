@@ -366,6 +366,15 @@
 .custom-cursor[data-state="link"] .custom-cursor__dot {
   opacity: 0;
 }
+/*
+ * ...unless it is lit. Over a link the resting dot hides so it does not sit
+ * on the words, but once the shutter is charging the dot is the pilot light,
+ * the source of everything the glass is doing, and it stays -- otherwise the
+ * lamp over any photograph (they are all links) had no pilot at all.
+ */
+.custom-cursor[data-state="link"][data-pilot] .custom-cursor__dot {
+  opacity: 1;
+}
 
 /*
  * Over a photograph: a wider ring, and deliberately NOT filled.
@@ -507,7 +516,42 @@
     --side-bottom: calc(3px + 13px * var(--pane-bottom, 0.18));
     position: relative;
     background-color: oklch(0.145 0.011 55 / 30%);
-    backdrop-filter: blur(26px) saturate(150%);
+    /*
+     * Frost AND bend, in the pane's own backdrop pass.
+     *
+     * The bend used to live on a child layer (.glass__refract) with its own
+     * backdrop-filter, and it never once saw the photograph behind the pane.
+     * A pane with blend-mode children is an isolated group, and an isolated
+     * group is a "backdrop root": a child's backdrop-filter can only see what
+     * is painted INSIDE it -- here, the pane's dark tint. So the refraction
+     * layer bent the tint and painted it, opaque, over the whole pane. Found by
+     * switching layers off one at a time over "What I do": 74 brightness
+     * behind the pane, 18 through it, 56 with the child layers removed. That
+     * is the "background isn't refracted or distorted at all" report, and why
+     * the CSS glass read as smoked plastic rather than glass.
+     *
+     * The pane's OWN backdrop-filter is the one pass that sees the page, so
+     * the bevel map joins the blur here. --glass-bevel is set by <Glass> to
+     * this pane's geometry, and only where url() filters are supported;
+     * elsewhere it is unset and this is the plain frost.
+     */
+    backdrop-filter: blur(30px) saturate(150%) var(--glass-bevel, );
+    /*
+     * Not inherited. Custom properties cascade, so a small pane INSIDE a big
+     * one -- the round toggle in the header -- was picking up the header's
+     * 1440x64 bevel map and bending itself by it. Each pane's own value is
+     * set inline by <Glass>, which beats this.
+     */
+    --glass-bevel: initial;    /*
+     * A stacking context of its own, in every mode. Every layer inside a pane
+     * -- the light and grime surface, the lit sides, the liquid render -- uses
+     * a negative z-index to sit under the copy. The backdrop-filter used to be
+     * what made the pane a stacking context; under liquid glass that filter is
+     * switched off, and every one of those layers silently escaped the pane
+     * and painted BEHIND the photograph the pane sits over. The liquid pane
+     * showed the raw photo, and none of its light.
+     */
+    isolation: isolate;
     /*
      * Thickness, kept deliberately faint. An earlier version drew it with heavy
      * inset shadows and the edge read as a painted bevel; the light is what
@@ -521,7 +565,7 @@
 
   .glass--bar {
     background-color: oklch(0.145 0.011 55 / 26%);
-    backdrop-filter: blur(28px) saturate(150%);
+    backdrop-filter: blur(28px) saturate(150%) var(--glass-bevel, );
     box-shadow:
       inset 0 1px 0 oklch(1 0 0 / 0.08),
       inset 0 -1px 0 oklch(1 0 0 / 0.03);
@@ -552,10 +596,10 @@
      */
     background: linear-gradient(
       to bottom,
-      oklch(1 0 0 / 0.16) 0%,
+      oklch(0.97 0.03 170 / 0.5) 0%,
       oklch(1 0 0 / 0.04) 3%,
       oklch(1 0 0 / 0.025) 97%,
-      oklch(1 0 0 / 0.12) 100%
+      oklch(0.97 0.03 170 / 0.4) 100%
     );
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
@@ -590,28 +634,50 @@
     /* Clipped to the pane's own corners; see --pane-radius in lib/edge-glow. */
     clip-path: inset(0 round var(--pane-radius, 0px));
     /*
-     * Dichroic.
+     * What the side of a clear sheet looks like.
      *
-     * Light crossing the thickness of the pane travels far enough for
-     * dispersion to separate it, which is why the cut edge of a plate runs
-     * blue through gold to violet along its length rather than being a neutral
-     * grey band.
+     * Photographs of cut float glass (stacked sheets, shelf edges) all show
+     * the same thing, and it is not a rainbow: the side is GREEN. The iron in
+     * soda-lime glass is invisible through the thin face and obvious through
+     * the long path of the edge, so the side reads a deep teal, darkest at the
+     * far corner where the path is longest. It is polished, so it also
+     * carries reflections -- pale streaks running parallel to the edge where
+     * the room is caught inside the thickness and bounced along it.
+     *
+     * Layers, near arris to far arris:
+     *   a pale internal-reflection streak, a narrower second one, the teal
+     *   body deepening with depth. Then, past the far arris, the same edge
+     *   seen again THROUGH the face -- the thin green echo line every
+     *   photograph of a clear sheet shows just inside its rim.
      */
-    background-image: linear-gradient(
-      100deg,
-      oklch(0.72 0.11 250 / 0.5) 0%,
-      oklch(0.8 0.07 200 / 0.3) 22%,
-      oklch(0.86 0.09 95 / 0.42) 48%,
-      oklch(0.78 0.1 330 / 0.34) 72%,
-      oklch(0.7 0.12 255 / 0.46) 100%
-    );
-    mix-blend-mode: plus-lighter;
+    --side: var(--side-top);
+    --echo: 5px;
+    height: calc(var(--side) + var(--echo) + 2px);
+    background-image:
+      linear-gradient(
+        var(--side-dir, to bottom),
+        transparent 0,
+        transparent calc(var(--side) + var(--echo)),
+        oklch(0.8 0.08 172 / 0.5) calc(var(--side) + var(--echo)),
+        oklch(0.8 0.08 172 / 0.5) calc(var(--side) + var(--echo) + 1px),
+        transparent calc(var(--side) + var(--echo) + 1px)
+      ),
+      linear-gradient(
+        var(--side-dir, to bottom),
+        oklch(0.9 0.05 168 / 0.1) 0,
+        oklch(0.95 0.06 168 / 0.72) calc(var(--side) * 0.22),
+        oklch(0.6 0.12 174 / 0.55) calc(var(--side) * 0.38),
+        oklch(0.86 0.09 170 / 0.55) calc(var(--side) * 0.58),
+        oklch(0.52 0.11 178 / 0.68) calc(var(--side) * 0.72),
+        oklch(0.45 0.1 182 / 0.8) var(--side),
+        transparent var(--side)
+      );
+    background-repeat: no-repeat;
   }
 
   /*
-   * The far arris sits at the inner boundary of the side face — the corner
-   * where the side meets the back surface, seen THROUGH the glass, hence
-   * dimmer than the near one.
+   * The far arris: where the side meets the back surface, seen through the
+   * glass. A crisp pale-green line, dimmer than the near one.
    */
   .glass > .glass__side::after {
     content: "";
@@ -619,28 +685,34 @@
     left: 0;
     right: 0;
     height: 1px;
-    background: oklch(1 0 0 / 0.16);
+    background: oklch(0.92 0.06 170 / 0.55);
   }
 
   .glass > .glass__side--top {
     top: 0;
-    height: var(--side-top);
-    opacity: calc((0.35 + 0.65 * var(--pane-top, 0.18)) * (0.1 + 0.9 * var(--wind, 0)));
+    --side: var(--side-top);
+    --side-dir: to bottom;
+    /*
+     * Always there: the side of a sheet does not appear only when a lamp is
+     * on it. Tilt (which side faces you) sets how much of it you see; the
+     * charge only brightens it a little.
+     */
+    opacity: calc((0.65 + 0.35 * var(--pane-top, 0.18)) * (0.8 + 0.2 * var(--wind, 0)));
   }
 
   .glass > .glass__side--top::after {
-    bottom: 0;
+    top: var(--side-top);
   }
 
   .glass > .glass__side--bottom {
     bottom: 0;
-    height: var(--side-bottom);
-    opacity: calc((0.35 + 0.65 * var(--pane-bottom, 0.18)) * (0.1 + 0.9 * var(--wind, 0)));
-    /* The far corner of the bottom face is its upper boundary. */
+    --side: var(--side-bottom);
+    --side-dir: to top;
+    opacity: calc((0.65 + 0.35 * var(--pane-bottom, 0.18)) * (0.8 + 0.2 * var(--wind, 0)));
   }
 
   .glass > .glass__side--bottom::after {
-    top: 0;
+    bottom: var(--side-bottom);
   }
 
   .glass--bar {
@@ -1005,6 +1077,27 @@
  * twice. The shader has its own tint and opacity for this -- and with the
  * blur gone, those two finally have something visible to act on.
  */
+/*
+ * The CSS ROOM REFLECTION comes off a liquid pane too.
+ *
+ * Same mistake as the backdrop-filter, found the same way. `.glass__reflection`
+ * screen-blends an HDRI of a room onto the pane. Behind a tint and a 26px blur
+ * that reads as a faint gleam, which is what it is for. With both of those
+ * gone it is the loudest thing on the pane: an unrefracted, undistorted
+ * photograph of a room sitting on top of the refracted page, drowning it --
+ * reported as "what's with the background image, it's not even being
+ * refracted", and it is also why the photograph underneath stopped reading as
+ * continuing under the glass.
+ *
+ * It cannot be refracted, either: liquidglass samples what is BEHIND the pane,
+ * and this layer is ON it. Two reflection systems stacked, and the wrong one
+ * wins. The shader has its own fresnel and specular, and with the blur gone
+ * those finally have something to act on.
+ */
+.glass[data-liquid] > .glass__reflection {
+  display: none;
+}
+
 .glass[data-liquid] {
   /*
    * ONE property, unprefixed. Do not add `-webkit-backdrop-filter` here.
@@ -1866,6 +1959,19 @@ span:has(> .photo-surface) {
    * Two strips could never show much. They were as tall as the side face,
    * which is a few pixels, so the bend had nowhere to happen.
    */
+  /*
+   * Retired, along with the bokeh pass above: both were backdrop-filters on a
+   * CHILD of the pane, and a child of an isolated pane cannot see past it (see
+   * `.glass`). The bokeh sat underneath this layer and was covered by it, so
+   * neither ever showed what it was built to show. The bend now happens in
+   * the pane's own backdrop pass. Kept in the markup, hidden, so nothing that
+   * queries for them breaks.
+   */
+  .glass > .glass__refract,
+  .glass > .glass__bokeh {
+    display: none;
+  }
+
   .glass > .glass__refract {
     position: absolute;
     inset: 0;
@@ -2160,15 +2266,17 @@ span:has(> .photo-surface) {
  * that has the whole scrolling document behind it.
  */
 :root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu) {
-  /* The shader samples the capture itself; a blur here would blur it twice. */
+  /*
+   * The shader samples the capture itself; a blur here would blur it twice.
+   * Unprefixed only -- the same Lightning CSS trap as `.glass[data-liquid]`:
+   * writing both compiled to the -webkit- one alone, which Chrome ignores.
+   */
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   /* Its own background would sit between the capture and the shader output. */
   background: transparent;
 }
 
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__refract,
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__side {
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__refract {
   display: none;
 }
 
@@ -2178,8 +2286,19 @@ span:has(> .photo-surface) {
  * same reason the grime did: things standing on a surface cannot have that
  * surface in front of them.
  */
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas {
-  z-index: -2;
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas:not(.glass__surface):not(.glass__under) {
+  /*
+   * The LIBRARY's canvas only, and !important because it writes z-index:-1
+   * inline. This used to match every canvas in the pane -- including our own
+   * .glass__surface, the layer the light and the grime are drawn into -- and
+   * never beat the library's inline value. So the surface dropped to -2, the
+   * opaque liquid render sat at -1 on top of it, and a fully charged liquid
+   * pane showed no light at all: 44 brightness against 78 for the same pane
+   * in CSS mode, and hiding the surface layer changed nothing, because it
+   * was already buried. That is why liquid mode had "hardly any" edge bloom
+   * or light on the glass.
+   */
+  z-index: -3 !important;
 }
 
 /*
@@ -2286,13 +2405,15 @@ span:has(> .photo-surface) {
 /* Three bars, drawn rather than imported, because one glyph is not worth a
    request and an icon font is not worth a dependency. Bars rather than dots:
    a hamburger says "this opens a menu" to everyone, which is what it does. */
+/*
+ * Four dots, not three bars. Three bars is the phone menu's icon, and on a
+ * phone both sit in the same header -- two identical hamburgers doing
+ * different things, which the visual check caught at 390px.
+ */
 .dev-nav__dots {
-  width: 1.05rem;
-  height: 0.7rem;
-  background:
-    linear-gradient(currentColor, currentColor) 0 0 / 100% 1.5px no-repeat,
-    linear-gradient(currentColor, currentColor) 0 50% / 100% 1.5px no-repeat,
-    linear-gradient(currentColor, currentColor) 0 100% / 100% 1.5px no-repeat;
+  width: 0.8rem;
+  height: 0.8rem;
+  background: radial-gradient(circle, currentColor 0 1.6px, transparent 2px) 0 0 / 50% 50%;
 }
 
 .dev-nav__menu {
@@ -2419,6 +2540,15 @@ span:has(> .photo-surface) {
  */
 .custom-cursor[data-pilot] {
   mix-blend-mode: normal;
+  /*
+   * In front of its own light. The lamp canvas (.cursor-light) shares z-index
+   * 9999 with the cursor and comes later in the page, so once the pilot sat
+   * exactly at the lamp's centre the screen-blended white core painted over
+   * it and the red vanished. The red element is the source; its glow goes
+   * round it, not over it. Still under the afterimages (10000+), which come
+   * later in the page.
+   */
+  z-index: 10000;
 }
 
 .custom-cursor[data-pilot] .custom-cursor__dot {
@@ -2582,7 +2712,18 @@ span:has(> .photo-surface) {
  * The way in. Amber, in the site's own eyebrow treatment, because that is
  * what this page uses for "do this next" everywhere else.
  */
+/*
+ * Out of flow, so the word stays dead centre on the pane whether or not this
+ * is showing. In flow, its arrival pushed the word 22px up the moment the
+ * page was ready -- exactly the frame you are looking at it.
+ */
 .site-loader__enter {
+  position: absolute;
+  top: calc(50% + 1.6rem);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: max-content;
   padding: 8px 4px;
   background: none;
   border: 0;
@@ -2606,3 +2747,85 @@ span:has(> .photo-surface) {
   }
 }
 
+
+/*
+ * Nothing scrolls sideways.
+ *
+ * The pane light layer sits at `inset: -90px` so a lit edge can throw light
+ * past the pane, and on a full-width band that means 90px beyond the viewport
+ * on each side. The section wrapper's `overflow: hidden` used to absorb that;
+ * moving the clip inward -- so the bloom could escape upward, which it must --
+ * left the overhang contributing to the document's scroll width. Measured:
+ * scrollWidth 1370 against a 1280 viewport, exactly the 90px bleed.
+ *
+ * `clip` rather than `hidden`, and on one axis only. `hidden` would make this
+ * a scroll container, which breaks sticky positioning and scroll restoration;
+ * `clip` does neither. And clipping only x leaves `overflow-y: visible`, so
+ * the vertical spill -- the part that actually had somewhere to go -- is
+ * untouched. There is no page to the left of the left edge, so nothing is
+ * lost horizontally.
+ */
+#main-content {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+/* While the shutter is being wound by a held press: see shutter-charge.ts. */
+html.is-winding,
+html.is-winding * {
+  user-select: none;
+}
+
+/*
+ * A seam band's layers, above the photographs that run on underneath it.
+ * On the children, never the band itself -- see SeamSection in PhotoSection.
+ * Same z for all three; document order keeps the pane on top of its light.
+ */
+[data-seam] > .bokeh-field,
+[data-seam] > .transmitted,
+[data-seam] > .glass {
+  z-index: 1;
+}
+
+/*
+ * Under liquid glass only, the band itself is lifted too.
+ *
+ * The library builds each pane's scene from the root's children in paint
+ * order and stops at the pane's own section -- so the photograph AFTER a band
+ * in the document never made it into the band's scene, and the lower half of
+ * the glass refracted nothing. A z-index puts the band after both neighbours
+ * in that order. (Not in CSS mode: there a z-indexed band would cut the CSS
+ * backdrop off at itself -- see SeamSection.)
+ */
+:root[data-glass="raster"] [data-seam] {
+  z-index: 1;
+}
+
+/* The light through the glass, on the photographs. See FloorLight.tsx. */
+.floor-light {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floor-light {
+    display: none;
+  }
+}
+
+/*
+ * The light under a pane, drawn inside it: above the glass's own render
+ * (the frost, or the liquid canvas at -3), below its text. See FloorLight.
+ */
+.glass > .glass__under {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+  pointer-events: none;
+}

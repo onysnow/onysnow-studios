@@ -167,6 +167,39 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
      */
     if (holding && performance.now() - heldSince >= HOLD_GESTURE_MS) endedAHold = true;
     holding = false;
+    setWinding(false);
+  }
+
+  /*
+   * A hold is not a text selection.
+   *
+   * Holding the button and moving is also exactly how you drag-select, so
+   * winding the shutter across the category cards painted them amber with
+   * selection -- measured, not guessed: the visual check caught "Cosplay" and
+   * "Street" highlighted mid-charge. Once a press has lasted long enough to be
+   * a hold, the page stops selecting and whatever got selected on the way in
+   * is dropped. A quick press-and-drag is still a selection, so copying the
+   * studio's email address keeps working.
+   */
+  let winding = false;
+  function setWinding(on: boolean) {
+    if (on === winding) return;
+    winding = on;
+    document.documentElement.classList.toggle("is-winding", on);
+    if (on) window.getSelection()?.removeAllRanges();
+  }
+  function onSelectStart(event: Event) {
+    if (winding) event.preventDefault();
+  }
+  /*
+   * Nor is it a drag. Pressing on a photograph and moving lifts a ghost copy
+   * of it, and the browser cancels the pointer the moment that starts -- which
+   * ends the hold after a few pixels of movement.
+   */
+  function onDragStart(event: DragEvent) {
+    if (holding && (event.target as Element | null)?.closest?.("img, picture")) {
+      event.preventDefault();
+    }
   }
 
   function frame(now: number) {
@@ -253,6 +286,7 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
        */
       if (holding) {
         charge = Math.max(charge, (now - heldSince) / HOLD_FULL_MS);
+        if (now - heldSince >= HOLD_GESTURE_MS) setWinding(true);
       }
       charge = Math.max(0, Math.min(1, charge));
 
@@ -272,6 +306,8 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
   window.addEventListener("pointerdown", onDown, { passive: true });
   window.addEventListener("pointerup", release, { passive: true });
   window.addEventListener("pointercancel", release, { passive: true });
+  document.addEventListener("selectstart", onSelectStart);
+  document.addEventListener("dragstart", onDragStart);
   window.addEventListener("blur", release);
   document.addEventListener("visibilitychange", release);
   raf = requestAnimationFrame(frame);
@@ -301,6 +337,7 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
        * the meter refills under your finger. The next shot needs a new press.
        */
       holding = false;
+      setWinding(false);
       lastReported = -1;
       onCharge?.(0, false);
     },
@@ -311,6 +348,9 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", release);
       window.removeEventListener("pointercancel", release);
+      document.removeEventListener("selectstart", onSelectStart);
+      document.removeEventListener("dragstart", onDragStart);
+      setWinding(false);
       window.removeEventListener("blur", release);
       document.removeEventListener("visibilitychange", release);
     },

@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Img } from "@/components/site/Img";
 import { Reveal } from "@/components/site/Reveal";
 import { ScrambleText } from "@/components/site/ScrambleText";
-import { ParallaxScene } from "@/components/site/ParallaxScene";
+import { ParallaxScene, SEAM_ROOM } from "@/components/site/ParallaxScene";
 import { RichText } from "@/components/site/RichText";
 import { Container, Grid, Section } from "@/components/site/layout";
 import { PhotoSection } from "@/components/site/PhotoSection";
@@ -101,7 +101,7 @@ function HomePage() {
   return (
     <>
       {/* Hero */}
-      <section data-photo className="relative min-h-[92svh]">
+      <section data-photo className="relative min-h-[92svh]" style={SEAM_ROOM}>
         {/*
          * The clip wraps the PICTURE, not the section -- same reasoning as
          * ParallaxScene, and this is the hero's own copy of that structure.
@@ -120,12 +120,19 @@ function HomePage() {
             <Img
               image={hero}
               eager
-              className="h-[105svh] w-full"
+              className="h-[calc(105svh+var(--seam-below,0px))] w-full"
               imgClassName="scale-105 object-[72%_center] sm:object-center"
               sizes="100vw"
             />
           </motion.div>
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-background/25" />
+          {/*
+            Fades to 60%, not to solid background. The photograph now runs on
+            under the first glass band (see SeamSection), and a fade to solid
+            put a black strip exactly where the glass is meant to show the rest
+            of the picture. The text keeps its contrast from the band of
+            darkening it sits in.
+          */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-background/20 to-background/25" />
           <div className="image-vignette absolute inset-0" />
         </div>
         <div className="relative flex min-h-[92svh] flex-col justify-end px-5 pb-14 sm:px-8 lg:px-12 lg:pb-20">
@@ -154,7 +161,7 @@ function HomePage() {
       </section>
 
       {/* Intro */}
-      <PhotoSection image={bandOne} depth="subtle">
+      <PhotoSection seam image={bandOne} depth="subtle">
         <Section size="base">
           <Container>
             <Reveal className="grid gap-10 lg:grid-cols-[.4fr_1fr]">
@@ -193,7 +200,7 @@ function HomePage() {
       />
 
       {/* Disciplines — compact, with a thumbnail so the layout reads at a glance */}
-      <PhotoSection image={bandTwo} depth="standard">
+      <PhotoSection seam image={bandTwo} depth="standard">
         <Section size="sm">
           <Container>
             <Reveal>
@@ -250,7 +257,7 @@ function HomePage() {
       />
 
       {/* Selected work — a horizontal wheel, no container around it */}
-      <PhotoSection image={bandThree} depth="standard">
+      <PhotoSection seam image={bandThree} depth="standard">
         <Section size="sm">
           <Container>
             <Carousel opts={{ align: "start", loop: true }} className="w-full">
@@ -343,7 +350,7 @@ function HomePage() {
         is all the separation three short quotes need.
       */}
       {quotes.length > 0 ? (
-        <PhotoSection image={bandFive} depth="standard">
+        <PhotoSection seam image={bandFive} depth="standard">
           <Section size="base">
             <Container>
               <Reveal>
@@ -397,7 +404,7 @@ function HomePage() {
         </Section>
       </ParallaxScene>
 
-      <PhotoSection image={bandFour} depth="deep">
+      <PhotoSection seam image={bandFour} depth="deep">
         <Section size="lg" className="text-center">
           <Container width="content">
             <Reveal>

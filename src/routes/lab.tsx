@@ -10,6 +10,7 @@ import {
   applyTuning,
   isPerMode,
   resetTuning,
+  loadSavedTuning,
   restoreTuning,
   serializeTuning,
   setValueIn,
@@ -110,25 +111,9 @@ function Lab() {
   const [, redraw] = useState(0);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORE);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Record<string, unknown>;
-        if (parsed["css"] || parsed["raster"]) {
-          restoreTuning(parsed as Parameters<typeof restoreTuning>[0]);
-        } else {
-          // A store written before the sets were split. One set of numbers,
-          // which were tuned against whichever mode was up at the time --
-          // seed BOTH from it rather than guessing which, so nothing is lost
-          // and the two start out agreeing.
-          const flat = parsed as Record<string, number>;
-          restoreTuning({ css: flat, raster: flat });
-        }
-      }
-    } catch {
-      // A blocked or corrupt store is not a reason to fail to open the page.
-    }
-    applyTuning();
+    // The same loader the rest of the site uses, so the lab cannot drift from
+    // what everyone else gets.
+    loadSavedTuning();
     redraw((n) => n + 1);
   }, []);
 
@@ -279,10 +264,10 @@ function Lab() {
                   These drive the rasterised glass shader, which only runs in liquid mode. In CSS
                   mode the panes are backdrop-filter and an SVG displacement map and none of this
                   reaches them, so moving these does nothing to the preview above. Switch the glass
-                  to make them live. Bevel depth has the most leverage of anything here: across the
-                  flat face of a pane the surface normal is (0,&nbsp;0,&nbsp;1), so refraction,
-                  fresnel and every specular are exactly zero there. All of the glass lives on the
-                  edge.
+                  to make them live. Edge width (under Glass shape) has the most leverage on this
+                  glass: across the flat face of a pane the surface normal is (0,&nbsp;0,&nbsp;1),
+                  so refraction, fresnel and every specular are exactly zero there. All of the glass
+                  lives on the edge.
                 </p>
                 <div className="mt-6 opacity-60">{rows}</div>
               </details>
@@ -308,10 +293,10 @@ function Lab() {
               </h2>
               {group === "Liquid glass" ? (
                 <p className="mb-5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                  The rasterised glass shader, live right now. Bevel depth has the most leverage of
-                  anything here: across the flat face of a pane the surface normal is
-                  (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular are exactly zero
-                  there. All of the glass lives on the edge.
+                  The rasterised glass shader, live right now. Edge width (under Glass shape) has
+                  the most leverage of anything here: across the flat face of a pane the surface
+                  normal is (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular are
+                  exactly zero there. All of the glass lives on the edge.
                 </p>
               ) : null}
               {rows}

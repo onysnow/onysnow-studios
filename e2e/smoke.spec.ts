@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * One pass per public route.
@@ -125,15 +125,26 @@ test("photographs are actually visible, not left behind their placeholders", asy
     // that broke.
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await page.waitForTimeout(1200);
-
-    const hidden = await page.evaluate(() =>
-      [...document.querySelectorAll("img")]
-        .filter((img) => img.complete && img.naturalWidth > 20 && !img.hasAttribute("aria-hidden"))
-        .filter((img) => Number(getComputedStyle(img).opacity) < 0.9)
-        .map((img) => img.currentSrc.slice(-48)),
-    );
-    expect(hidden, `loaded photographs stuck transparent on ${path}`).toEqual([]);
+    /*
+     * Polled, not a fixed wait. The fade is 700ms from whenever the file
+     * lands, and on a slow link a photograph can land after any fixed wait
+     * and be caught mid-fade at 0.3 -- which is not the bug. The bug is a
+     * photograph that STAYS at zero, and that still fails here.
+     */
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() =>
+            [...document.querySelectorAll("img")]
+              .filter(
+                (img) => img.complete && img.naturalWidth > 20 && !img.hasAttribute("aria-hidden"),
+              )
+              .filter((img) => Number(getComputedStyle(img).opacity) < 0.9)
+              .map((img) => img.currentSrc.slice(-48)),
+          ),
+        { message: `loaded photographs stuck transparent on ${path}`, timeout: 8000 },
+      )
+      .toEqual([]);
   }
 });
 

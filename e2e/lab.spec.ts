@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * The tuning page.
@@ -16,7 +16,7 @@ import { expect, test } from "@playwright/test";
  */
 async function openLab(page: import("@playwright/test").Page) {
   await page.goto("/lab");
-  await page.locator("#knob-grimeAmount").waitFor({ state: "attached" });
+  await page.locator("#knob-transmit").waitFor({ state: "attached" });
 }
 
 test.describe("/lab", () => {
@@ -33,21 +33,43 @@ test.describe("/lab", () => {
   test("moving a control changes what the effects read", async ({ page }) => {
     await openLab(page);
 
+    /*
+     * `transmit` -> `--tune-transmit`, which styles.css actually consumes
+     * (the transmitted-light layer's opacity).
+     *
+     * This used to drive `grimeAmount` -> `--tune-grime`, and it passed for as
+     * long as that knob existed -- while nothing in the stylesheet ever read
+     * `--tune-grime`. It proved the slider wrote a variable and said nothing
+     * about whether the variable went anywhere. The knob was removed as dead;
+     * this now exercises one with a real consumer, and asserts the consumer
+     * too, so it cannot quietly go back to testing a wire to nowhere.
+     */
     const read = () =>
       page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--tune-grime").trim(),
+        getComputedStyle(document.documentElement).getPropertyValue("--tune-transmit").trim(),
       );
 
     const before = await read();
     await page.evaluate(() => {
-      const el = document.getElementById("knob-grimeAmount") as HTMLInputElement;
+      const el = document.getElementById("knob-transmit") as HTMLInputElement;
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setter.call(el, "1.2");
+      setter.call(el, "0.9");
       el.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     await expect.poll(read).not.toBe(before);
-    expect(await read()).toBe("1.2");
+    expect(await read()).toBe("0.9");
+
+    const consumed = await page.evaluate(() =>
+      [...document.styleSheets].some((sheet) => {
+        try {
+          return [...sheet.cssRules].some((r) => r.cssText.includes("var(--tune-transmit"));
+        } catch {
+          return false;
+        }
+      }),
+    );
+    expect(consumed, "--tune-transmit must be read by some rule, or this tests nothing").toBe(true);
   });
 
   test("previews on the real components, not a swatch", async ({ page }) => {
