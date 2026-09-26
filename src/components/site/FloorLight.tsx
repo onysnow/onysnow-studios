@@ -7,7 +7,6 @@ import {
   MAX_FLOOR_PANES,
 } from "@/lib/floor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
-import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 import { t } from "@/lib/tuning";
 
 /**
@@ -90,26 +89,10 @@ export function FloorLight() {
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
     const uPenumbra = U("uPenumbra");
+    const uView = U("uView");
     const uCount = U("uCount");
     const uRect = U("uRect");
     const uSeed = U("uSeed");
-    const uHasSurface = U("uHasSurface");
-    gl.uniform1i(U("uSurface"), 0);
-    gl.uniform1f(uHasSurface, 0);
-
-    const surface = gl.createTexture();
-    const img = new Image();
-    img.onload = () => {
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, surface);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.useProgram(program);
-      gl.uniform1f(uHasSurface, 1);
-    };
-    img.src = assetUrl(SITE_ASSETS.glassSurface);
 
     let scale = 1;
     const resize = () => {
@@ -131,6 +114,40 @@ export function FloorLight() {
     let wasLit = false;
 
     /*
+     * What is under a pane is drawn INTO the pane as well.
+     *
+     * The page-wide canvas sits beneath the glass, which is physically where
+     * this light is -- and then the frost smears it to nothing and liquid
+     * glass paints over it. So the part that falls under each pane is copied
+     * into a layer inside that pane, above the glass's own render and below
+     * its text: the light is still computed on the floor, seen through the
+     * glass with the bevel's bend applied (uView), and it stays crisp enough
+     * to read as the bottom of a pool rather than a glow.
+     */
+    const under = new Map<HTMLElement, HTMLCanvasElement>();
+    const underFor = (el: HTMLElement, w: number, h: number) => {
+      let layer = under.get(el);
+      if (!layer || !layer.isConnected) {
+        layer = document.createElement("canvas");
+        layer.className = "glass__under";
+        layer.setAttribute("aria-hidden", "true");
+        el.insertBefore(layer, el.firstChild);
+        under.set(el, layer);
+      }
+      if (layer.width !== w || layer.height !== h) {
+        layer.width = w;
+        layer.height = h;
+      }
+      return layer;
+    };
+    const clearUnder = () => {
+      for (const layer of under.values()) {
+        layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
+      }
+    };
+    const drawnPanes: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
+
+    /*
      * Dynamic only while there is something to show. The liquid glass
      * re-renders a pane every frame while a dynamic contributor overlaps it,
      * which is exactly right while the light moves and pure waste otherwise.
@@ -146,6 +163,7 @@ export function FloorLight() {
         if (wasLit) {
           gl.clearColor(0, 0, 0, 0);
           gl.clear(gl.COLOR_BUFFER_BIT);
+          clearUnder();
           wasLit = false;
           setLive(false);
         }
@@ -158,12 +176,14 @@ export function FloorLight() {
 
       const vh = document.documentElement.clientHeight || window.innerHeight;
       let n = 0;
+      drawnPanes.length = 0;
       for (const pane of glassGeometry(now)) {
         if (n >= MAX_FLOOR_PANES) break;
         if (pane.y + pane.h < -200 || pane.y > vh + 200) continue;
         if (pane.w < 120 || pane.h < 40) continue; // buttons and menus throw nothing worth drawing
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
+        drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
         n += 1;
       }
 
@@ -177,6 +197,7 @@ export function FloorLight() {
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
+      gl.uniform1f(uView, t("floorView"));
       // The same penumbra the cast shadows use: light size * gap / height.
       gl.uniform1f(
         uPenumbra,
@@ -185,11 +206,29 @@ export function FloorLight() {
       gl.uniform1i(uCount, n);
       gl.uniform4fv(uRect, rects);
       gl.uniform1fv(uSeed, seeds);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, surface);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      // Same task as the draw, so the buffer is still there to copy from.
+      for (const pane of drawnPanes) {
+        const w = Math.max(1, Math.round(pane.w * scale));
+        const h = Math.max(1, Math.round(pane.h * scale));
+        const layer = underFor(pane.el, w, h);
+        const ctx = layer.getContext("2d");
+        if (!ctx) continue;
+        ctx.clearRect(0, 0, w, h);
+        // Clamp the source to the buffer: a pane half off-screen must not
+        // ask drawImage for pixels that do not exist.
+        const sx = pane.x * scale;
+        const sy = pane.y * scale;
+        const cx = Math.max(0, Math.floor(sx));
+        const cy = Math.max(0, Math.floor(sy));
+        const cw = Math.min(canvas.width, Math.ceil(sx + w)) - cx;
+        const ch = Math.min(canvas.height, Math.ceil(sy + h)) - cy;
+        if (cw <= 0 || ch <= 0) continue;
+        ctx.drawImage(canvas, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
+      }
       return true;
     };
 
@@ -211,6 +250,7 @@ export function FloorLight() {
     return () => {
       loop.stop();
       stopCharge();
+      for (const layer of under.values()) layer.remove();
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
       window.removeEventListener("resize", resize);

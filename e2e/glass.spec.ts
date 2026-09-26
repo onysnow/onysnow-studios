@@ -39,35 +39,40 @@ test.describe("glass", () => {
     expect(facts.childBackdrops).toEqual([]);
   });
 
-  test("holding still lights the glass, not just the ring", async ({ page }) => {
+  test("holding still sends light through the glass, not onto its face", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
-    await page.evaluate(() => window.scrollTo(0, 700));
+    const band = page.locator("[data-seam] .glass").first();
+    await band.scrollIntoViewIfNeeded();
     await page.waitForTimeout(600);
-
-    const band = page.locator("main .glass").first();
     const box = await band.boundingBox();
     expect(box).not.toBeNull();
     await page.mouse.move(box!.x + box!.width * 0.7, box!.y + box!.height * 0.4, { steps: 5 });
 
-    const lit = () =>
-      band.evaluate((el) => {
-        const cv = el.querySelector<HTMLCanvasElement>("canvas.glass__surface");
-        if (!cv) return 0;
+    const sum = (selector: string) =>
+      band.evaluate((el, sel) => {
+        const cv = el.querySelector<HTMLCanvasElement>(sel);
+        if (!cv || !cv.width) return 0;
         const d = cv.getContext("2d")!.getImageData(0, 0, cv.width, cv.height).data;
-        let sum = 0;
-        for (let i = 0; i < d.length; i += 4 * 101) sum += d[i]! + d[i + 1]! + d[i + 2]!;
-        return sum;
-      });
+        let total = 0;
+        for (let i = 0; i < d.length; i += 4 * 101) total += d[i + 3]!;
+        return total;
+      }, selector);
 
-    const before = await lit();
+    const before = await sum("canvas.glass__under");
     // No pointer movement from here on: this is the hold trigger on its own.
     await page.mouse.down();
     await page.waitForTimeout(2800);
-    const during = await lit();
+    const under = await sum("canvas.glass__under");
     await page.mouse.up();
 
-    expect(during).toBeGreaterThan(before * 1.5 + 1000);
+    // The pool of light and shadow lands under the pane...
+    expect(under).toBeGreaterThan(before + 1000);
+    // ...and it is drawn beneath the glass's text, not over it.
+    const z = await band.evaluate(
+      (el) => getComputedStyle(el.querySelector("canvas.glass__under")!).zIndex,
+    );
+    expect(Number(z)).toBeLessThan(0);
   });
 
   test("a band sits over the join, with both photographs running on under it", async ({ page }) => {

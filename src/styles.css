@@ -2249,7 +2249,7 @@ span:has(> .photo-surface) {
  * same reason the grime did: things standing on a surface cannot have that
  * surface in front of them.
  */
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas:not(.glass__surface) {
+:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas:not(.glass__surface):not(.glass__under) {
   /*
    * The LIBRARY's canvas only, and !important because it writes z-index:-1
    * inline. This used to match every canvas in the pane -- including our own
@@ -2769,4 +2769,17 @@ html.is-winding * {
   .floor-light {
     display: none;
   }
+}
+
+/*
+ * The light under a pane, drawn inside it: above the glass's own render
+ * (the frost, or the liquid canvas at -3), below its text. See FloorLight.
+ */
+.glass > .glass__under {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+  pointer-events: none;
 }

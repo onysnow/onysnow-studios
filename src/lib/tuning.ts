@@ -420,10 +420,19 @@ export const tuning: Record<string, Knob> = {
     max: 25,
     step: 0.5,
   },
+  faceLight: {
+    label: "Light on the glass",
+    group: "Glass",
+    value: 0,
+    min: 0,
+    max: 2,
+    step: 0.05,
+    hint: "The flashlight: a pool of light on the FACE of the pane that follows the cursor. Off by default -- the light is meant to be under the glass, shining through it.",
+  },
   sheen: {
     label: "Surface sheen",
     group: "Glass",
-    value: 5.2,
+    value: 0,
     min: 0,
     max: 10,
     step: 0.1,
@@ -553,6 +562,15 @@ export const tuning: Record<string, Knob> = {
     hint: "The emitter's radius. This is what sets the penumbra.",
   },
 
+  floorView: {
+    label: "Bend under glass",
+    group: "Shadows",
+    value: 1,
+    min: 0,
+    max: 3,
+    step: 0.05,
+    hint: "How hard the glass bends the light and shadow you see through it, at its top and bottom edges.",
+  },
   floorGap: {
     label: "Glass height",
     group: "Shadows",
@@ -574,7 +592,7 @@ export const tuning: Record<string, Knob> = {
   floorLight: {
     label: "Light through glass",
     group: "Shadows",
-    value: 0.14,
+    value: 0.2,
     min: 0,
     max: 1,
     step: 0.01,
@@ -592,7 +610,7 @@ export const tuning: Record<string, Knob> = {
   floorCaustics: {
     label: "Caustics",
     group: "Shadows",
-    value: 1,
+    value: 1.3,
     min: 0,
     max: 3,
     step: 0.05,
@@ -601,7 +619,7 @@ export const tuning: Record<string, Knob> = {
   floorReach: {
     label: "Light reach",
     group: "Shadows",
-    value: 520,
+    value: 400,
     min: 120,
     max: 1400,
     step: 10,

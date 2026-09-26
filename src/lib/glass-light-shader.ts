@@ -65,6 +65,7 @@ uniform float uGrimeSpecks; // tunable
 uniform float uGrimeFloor;  // tunable
 uniform float uSideReach;   // tunable
 uniform float uSheen;       // tunable
+uniform float uFaceLight;   // tunable: the flashlight on the face, off by default
 uniform float uSheenReach;  // tunable
 uniform float uArris;       // tunable
 
@@ -495,7 +496,12 @@ void main() {
 
 
   // ---- Light scattered into the body, and off the grime ----
-  vec3 face = vec3(inside * (direct * 0.9));
+  /*
+   * The flashlight -- a pool of the lamp on the face of the pane -- is behind
+   * a knob that defaults to zero. The light is meant to be UNDER the glass,
+   * coming through it (FloorLight), not painted across its surface.
+   */
+  vec3 face = vec3(inside * (direct * 0.9) * uFaceLight);
 
   /*
    * The grime, raked by the light.
@@ -546,7 +552,7 @@ void main() {
    * scatters whatever is passing through the pane, not only what grazes it.
    * Small, but it stops the surface vanishing entirely between sweeps.
    */
-  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2) * unlit);
+  face += vec3(inside * direct * (smear * 0.5 + glint * 1.2) * unlit * uFaceLight);
 
 
   /*
@@ -563,7 +569,7 @@ void main() {
     1.6 / (1.0 + (rNear * rNear) / 520.0),
     1.6 / (1.0 + (rNear * rNear) / 450.0)
   ) + vec3(0.3) / (1.0 + (rFar * rFar) / 2600.0);
-  vec3 mirror = inside * image * (0.24 + 0.76 * fresnel) * (13.0 + glint * 14.0);
+  vec3 mirror = inside * image * (0.24 + 0.76 * fresnel) * (13.0 + glint * 14.0) * uFaceLight;
 
   /*
    * ---- The broad sheen ----

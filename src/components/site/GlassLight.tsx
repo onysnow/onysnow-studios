@@ -145,6 +145,7 @@ export function GlassLight({
     const occRect = new Float32Array(MAX_OCCLUDERS * 4);
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
     const uSheen = U("uSheen");
+    const uFaceLight = U("uFaceLight");
     const uSheenReach = U("uSheenReach");
     const uArris = U("uArris");
 
@@ -334,6 +335,7 @@ export function GlassLight({
       gl.uniform1f(uSideReach, t("sideReach"));
       gl.uniform1f(uRestEdge, t("restEdge"));
       gl.uniform1f(uSheen, t("sheen"));
+      gl.uniform1f(uFaceLight, t("faceLight"));
       gl.uniform1f(uSheenReach, t("sheenFalloff"));
       gl.uniform1f(uArris, t("arris"));
       gl.activeTexture(gl.TEXTURE0);
