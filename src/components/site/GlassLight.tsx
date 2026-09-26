@@ -438,6 +438,31 @@ export function GlassLight({
           ctx.clearRect(0, 0, layer.width, layer.height);
           if (cw > 0 && ch > 0) {
             ctx.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
+
+            /*
+             * Glare: the glow of the edge carried PAST the edge.
+             *
+             * The highlight lives in the bevel, inside the glass, and most of
+             * the shader's terms stop at the rim because the glass does. The
+             * glow that makes a lit edge read as bright does not: it is the
+             * lens spreading the hottest light a little in every direction,
+             * and it has no idea where the pane ends. Without it the warm
+             * glow above a lit bottom edge stopped dead on the line and read
+             * as clipped.
+             *
+             * So a blurred copy of this same light is added over itself --
+             * the standard bloom pass -- which spreads the bright part of the
+             * rim out over the photograph beyond as much as into the glass.
+             */
+            const spill = t("rimGlare");
+            if (spill > 0) {
+              ctx.save();
+              ctx.globalCompositeOperation = "lighter";
+              ctx.globalAlpha = Math.min(spill, 1);
+              ctx.filter = `blur(${Math.round(t("rimGlareSize") * scale)}px)`;
+              ctx.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
+              ctx.restore();
+            }
           }
           drawn.add(layer);
           allLayers.add(layer);

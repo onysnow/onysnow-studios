@@ -456,6 +456,24 @@ export const tuning: Record<string, Knob> = {
     hint: "How far the light has to travel before the pane's edges stop catching it. Grazing surfaces hold their reflectance over a much wider range of angles than a face-on one, so this is deliberately broader than the face's falloff.",
   },
 
+  rimGlare: {
+    label: "Edge glare",
+    group: "Glass",
+    value: 0.8,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "The glow of a lit edge spilling past the rim onto the photograph beyond, the way a bright edge glares in a lens. 0 stops the glow at the glass.",
+  },
+  rimGlareSize: {
+    label: "Edge glare size",
+    group: "Glass",
+    value: 16,
+    min: 2,
+    max: 60,
+    step: 1,
+    hint: "How far the glare spreads, in pixels.",
+  },
   arris: {
     label: "Edge glow",
     group: "Glass",

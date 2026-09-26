@@ -233,6 +233,31 @@ export function FloorLight() {
         if (cw <= 0 || ch <= 0) continue;
         ctx.drawImage(canvas, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
       }
+
+      /*
+       * And then taken OUT of the page-wide canvas under each pane.
+       *
+       * Left in, the light under a pane was counted twice: once in the pane's
+       * own layer above, and again through the glass -- the CSS frost blurs
+       * this canvas into the pane, and liquid glass captures it into its
+       * render. Inside the pane came out about twice as bright as the same
+       * light just outside it, so the glow stopped dead at the rim and read
+       * as clipped. Now each point of the floor is drawn exactly once: under
+       * the glass by the pane's layer, everywhere else by this canvas.
+       */
+      if (drawnPanes.length) {
+        gl.enable(gl.SCISSOR_TEST);
+        for (const pane of drawnPanes) {
+          const x0 = Math.max(0, Math.floor(pane.x * scale));
+          const x1 = Math.min(canvas.width, Math.ceil((pane.x + pane.w) * scale));
+          const y1 = Math.min(canvas.height, Math.ceil((pane.y + pane.h) * scale));
+          const y0 = Math.max(0, Math.floor(pane.y * scale));
+          if (x1 <= x0 || y1 <= y0) continue;
+          gl.scissor(x0, canvas.height - y1, x1 - x0, y1 - y0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+        }
+        gl.disable(gl.SCISSOR_TEST);
+      }
       return true;
     };
 
