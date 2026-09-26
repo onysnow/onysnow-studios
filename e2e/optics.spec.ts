@@ -2,6 +2,8 @@ import { expect, test } from "./fixtures";
 import { EDGE_PROFILE_GLSL } from "../src/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "../src/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "../src/effects/optics/transmission.glsl";
+import { HEX_TILE_GLSL } from "../src/effects/optics/hex-tile.glsl";
+import { hexBlend, hexWeights } from "../src/effects/optics/hex-tile";
 import {
   frostSpread,
   irradianceFalloff,
@@ -48,6 +50,15 @@ type Case = {
 };
 
 const CASES: Case[] = [
+  {
+    name: "hexWeights (nearest-cell weight after the contrast blend)",
+    glsl: "hexW(vec2(x, 0.37 * x + 0.11))",
+    ts: (x) => Math.max(...hexBlend(hexWeights(x, 0.37 * x + 0.11).w)),
+    from: 0,
+    to: 3,
+    lo: 0,
+    hi: 1,
+  },
   {
     name: "irradianceFalloff",
     glsl: "irradianceFalloff(x, 300.0)",
@@ -235,7 +246,12 @@ void main() {
           return { values: Array.from({ length: N }, (_, i) => px[i * 4]! / 255) };
         },
         {
-          chunk: EDGE_PROFILE_GLSL + REFLECTION_GLSL + TRANSMISSION_GLSL,
+          chunk:
+            EDGE_PROFILE_GLSL +
+            REFLECTION_GLSL +
+            TRANSMISSION_GLSL +
+            HEX_TILE_GLSL +
+            "float hexW(vec2 st) { vec3 w; vec2 a; vec2 b; vec2 c; hexWeights(st, w, a, b, c); vec3 k = hexBlend(w); return max(k.x, max(k.y, k.z)); }",
           c: { ...c, ts: undefined },
           N,
         },
