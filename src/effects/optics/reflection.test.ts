@@ -5,6 +5,7 @@ import {
   ggx,
   lampReflection,
   LAMP_POWER_PER_GAIN,
+  LAMP_REFLECTION_ENABLED,
   reflectanceNormal,
 } from "./reflection";
 import { REFLECTION_GLSL } from "./reflection.glsl";
@@ -99,5 +100,9 @@ describe("no glare settings", () => {
     const s = lampReflection(0, 0, 230, LAMP_POWER_PER_GAIN * 8, FLOAT_GLASS.ior, 0.6);
     expect(s).toBeGreaterThan(0.2);
     expect(s).toBeLessThan(0.6);
+  });
+
+  it("is switched off on the site, by request, with the code kept", () => {
+    expect(LAMP_REFLECTION_ENABLED).toBe(false);
   });
 });

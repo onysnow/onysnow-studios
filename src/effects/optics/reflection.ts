@@ -109,3 +109,12 @@ export function lampReflection(
  * the small blown-out image of the lamp that real clear glass gives.
  */
 export const LAMP_POWER_PER_GAIN = 94_500;
+
+/**
+ * The lamp's reflection on the face is switched OFF, by request.
+ *
+ * It reads as a flashlight on the glass: a bright disc that follows the lamp.
+ * The code stays and is tested; this is the one switch. Off means the glass
+ * passes no lamp power to the reflection, so nothing of it is drawn.
+ */
+export const LAMP_REFLECTION_ENABLED = false;

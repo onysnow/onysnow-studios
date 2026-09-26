@@ -5,7 +5,7 @@ import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
 import { FLOAT_GLASS } from "@/effects/materials/presets";
-import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
+import { LAMP_POWER_PER_GAIN, LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -343,7 +343,8 @@ export function GlassLight({
       gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1f(uFrost, t("glassBlur"));
       gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
-      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
+      // Off by request (it reads as a flashlight); see LAMP_REFLECTION_ENABLED.
+      gl.uniform1f(uLampPower, LAMP_REFLECTION_ENABLED ? LAMP_POWER_PER_GAIN * t("coreGain") : 0);
       gl.uniform1f(uArris, t("arris"));
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, surface);
