@@ -30,6 +30,8 @@ export interface GlassConfig {
 	refraction: number;
 	/** Chromatic aberration — color fringing at edges */
 	chromAberration: number;
+	/** LOCAL: extra defocus across the bevel, on top of the frost. 0 = none. */
+	edgeBlur: number;
 	/** Edge highlight intensity (inner glow / rim lighting) */
 	edgeHighlight: number;
 	/** Specular highlight intensity (Blinn-Phong) */
@@ -79,6 +81,7 @@ export const DEFAULTS: GlassConfig = {
 	blurAmount: 0.00,
 	refraction: 0.69,
 	chromAberration: 0.05,
+	edgeBlur: 0,               // LOCAL
 	edgeHighlight: 0.05,
 	specular: 0.00,
 	fresnel: 1.00,
