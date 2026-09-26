@@ -130,18 +130,18 @@ float causticAt(vec2 x, float seed) {
  *   photograph behind is seen through that same frost, so the light on it
  *   reads soft.
  *
- *   The BEVEL is clear, polished and angled: a prism. It throws the light
- *   that hits it sideways, so the floor right under it goes dark, and that
- *   light lands in a bright line a little further in -- split into its
- *   colours, because a prism bends blue more than red. Seen through the
- *   clear bevel that line is sharp; seen through the frost it is soft.
+ *   The BEVEL is clear, polished and angled: a prism. It turns the light
+ *   that crosses it inward, so the floor right under it goes dark and that
+ *   light lands further in as a band -- sharp-edged, brighter than the light
+ *   around it because it is squeezed into less room, and fringed with colour
+ *   at its edges because a prism bends blue more than red.
  *
  * All of it moves as the light moves, because where the ray crosses the
  * glass (Q) moves with the light.
  *
  * Returns the light added (per colour) in rgb and the light taken away in a.
  */
-vec4 floorAt(vec2 P, float lit, float seenFrost) {
+vec4 floorAt(vec2 P, float lit) {
   float dist2 = dot(P - uLight, P - uLight);
   float R = uReach;
   float pool = exp(-dist2 / (R * R)) * lit;
@@ -163,31 +163,44 @@ vec4 floorAt(vec2 P, float lit, float seenFrost) {
     // A band as wide as the page has no sides to cast: top and bottom only.
     bool straight = r.z >= uViewport.x / uScale - 1.0;
     float d = straight ? hs.y - abs(q.y) : min(hs.x - abs(q.x), hs.y - abs(q.y));
-    // Looking through frost, even the shadow's edge is out of focus.
-    float pen = max(uPenumbra, 2.0) + seenFrost * uFrost * 36.0;
+    // The shadow's edge is as soft as the light is big, and no softer.
+    float pen = max(uPenumbra, 2.0);
     if (d <= -pen) continue;
     float inGlass = smoothstep(-pen, pen, d);
     d = max(d, 0.0);
-    float x = d / max(uBevel, 1.0);
-    float onFace = smoothstep(0.85, 1.1, x);
+    float W = max(uBevel, 1.0);
+    float x = d / W;
+    float soft = pen / W;
 
-    // Clear bevel: straight through less ~8% reflected. Frosted face: the
-    // beam is spread (poolFrost) and a little more goes back the way it came.
-    vec3 through = mix(vec3(pool * 0.92), vec3(poolFrost * (1.0 - 0.18 * uFrost)), onFace);
+    /*
+     * The face: flat, frosted. Straight on through, but the frost spreads
+     * the beam (poolFrost) and sends a little back.
+     */
+    float onFace = smoothstep(1.0 - soft, 1.0 + soft, x);
+    vec3 through = vec3(poolFrost * (1.0 - 0.18 * uFrost) * onFace);
 
-    // The bevel as a prism: dark where it throws the light away...
-    float thrown = 1.0 - smoothstep(0.0, 0.5, x);
-    through *= 1.0 - 0.65 * thrown;
-
-    // ...and a bright line where that light comes down, one per colour. Red
-    // is bent least and lands furthest out; blue most. Width: the light's own
-    // size, and the frost if that is what the eye is looking through.
-    float w = 0.09 + seenFrost * uFrost * 0.3;
-    float gain = 1.7 * pool * (0.09 / w) * step(x, 1.5);
-    float spread = 0.07 * uPrism;
-    vec3 xs = vec3(0.62 - spread, 0.62, 0.62 + spread);
-    vec3 z = (vec3(x) - xs) / w;
-    through += gain * exp(-z * z) * vec3(1.0, 0.95, 1.05);
+    /*
+     * The bevel: a clear, polished strip, angled. Every ray through it is
+     * turned inward by about the same amount, so the light that crossed the
+     * strip lands as a BAND -- the strip's own shape, moved -- not a line.
+     * Under the strip itself that leaves a gap with nothing in it: the dark
+     * part of the shadow. The facet is very slightly curved, so the band is
+     * narrower than the strip it came through, and the same light in less
+     * room is brighter by exactly that ratio: 1 / (1 - converge). Where the
+     * band lands on top of light already coming straight through the face,
+     * the two add, and that overlap is the brightest thing on the floor.
+     *
+     * The prism bends blue more than red, so the band lands a little
+     * further in for blue: white in the middle, colour only at its edges.
+     */
+    float converge = 0.35;
+    float width = 1.0 - converge;
+    float shift = 0.55;
+    float split = 0.05 * uPrism;
+    vec3 from = vec3(shift - split, shift, shift + split);
+    vec3 band = smoothstep(from - soft, from + soft, vec3(x))
+              * (1.0 - smoothstep(from + width - soft, from + width + soft, vec3(x)));
+    through += band * pool * 0.92 / width;
 
     // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {
@@ -211,12 +224,9 @@ void main() {
    * Seen THROUGH a pane, the floor is bent by it on the way back to the eye.
    * Near an edge the bevel pulls in what lies beyond it -- the same lensing
    * the glass does to the photograph -- so the light and shadow under the
-   * glass are bowed toward the rim instead of sitting flat. And whether the
-   * eye is looking through the clear bevel or the frosted face decides how
-   * sharp what it sees can be.
+   * glass are bowed toward the rim instead of sitting flat.
    */
   vec2 look = P;
-  float seenFrost = 0.0;
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
     vec4 r = uRect[i];
@@ -231,11 +241,10 @@ void main() {
     float bend = (1.0 - x) * (1.0 - x) * uBevel * 0.9 * uView;
     vec2 outward = dy < dx ? vec2(0.0, sign(q.y)) : vec2(sign(q.x), 0.0);
     look = P + outward * bend;
-    seenFrost = smoothstep(0.85, 1.1, d / max(uBevel, 1.0));
     break;
   }
 
-  vec4 f = floorAt(look, lit, seenFrost);
+  vec4 f = floorAt(look, lit);
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = vec3(1.0) - exp(-f.rgb * 1.15);
   float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
