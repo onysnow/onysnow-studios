@@ -366,6 +366,15 @@
 .custom-cursor[data-state="link"] .custom-cursor__dot {
   opacity: 0;
 }
+/*
+ * ...unless it is lit. Over a link the resting dot hides so it does not sit
+ * on the words, but once the shutter is charging the dot is the pilot light,
+ * the source of everything the glass is doing, and it stays -- otherwise the
+ * lamp over any photograph (they are all links) had no pilot at all.
+ */
+.custom-cursor[data-state="link"][data-pilot] .custom-cursor__dot {
+  opacity: 1;
+}
 
 /*
  * Over a photograph: a wider ring, and deliberately NOT filled.
@@ -2531,6 +2540,15 @@ span:has(> .photo-surface) {
  */
 .custom-cursor[data-pilot] {
   mix-blend-mode: normal;
+  /*
+   * In front of its own light. The lamp canvas (.cursor-light) shares z-index
+   * 9999 with the cursor and comes later in the page, so once the pilot sat
+   * exactly at the lamp's centre the screen-blended white core painted over
+   * it and the red vanished. The red element is the source; its glow goes
+   * round it, not over it. Still under the afterimages (10000+), which come
+   * later in the page.
+   */
+  z-index: 10000;
 }
 
 .custom-cursor[data-pilot] .custom-cursor__dot {

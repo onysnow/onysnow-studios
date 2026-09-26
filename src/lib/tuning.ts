@@ -683,15 +683,6 @@ export const tuning: Record<string, Knob> = {
     step: 0.01,
     hint: "Per-frame fraction of the remaining distance. Lower trails more. 0.16 settles in about 0.29s — roughly twice the reference's lag, which is deliberate.",
   },
-  dotEase: {
-    label: "Dot follow",
-    group: "Cursor",
-    value: 0.2,
-    min: 0.05,
-    max: 1,
-    step: 0.01,
-    hint: "Keep this at about 1.25x the ring's. Further apart and the dot runs ahead of the ring and the light, which is what made it look off-centre.",
-  },
 
   // ---- What the flash leaves on the retina ----
   transmit: {
