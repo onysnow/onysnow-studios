@@ -90,6 +90,8 @@ export function FloorLight() {
     const uCaustics = U("uCaustics");
     const uPenumbra = U("uPenumbra");
     const uView = U("uView");
+    const uFrost = U("uFrost");
+    const uPrism = U("uPrism");
     const uCount = U("uCount");
     const uRect = U("uRect");
     const uSeed = U("uSeed");
@@ -198,6 +200,8 @@ export function FloorLight() {
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
+      gl.uniform1f(uFrost, t("glassBlur"));
+      gl.uniform1f(uPrism, t("floorPrism"));
       // The same penumbra the cast shadows use: light size * gap / height.
       gl.uniform1f(
         uPenumbra,

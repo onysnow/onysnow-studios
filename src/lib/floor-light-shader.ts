@@ -64,6 +64,8 @@ uniform float uShadowGain;
 uniform float uCaustics;
 uniform float uPenumbra;
 uniform float uView;
+uniform float uFrost;
+uniform float uPrism;
 
 uniform int uCount;
 uniform vec4 uRect[${MAX_FLOOR_PANES}];
@@ -112,18 +114,47 @@ float causticAt(vec2 x, float seed) {
 }
 
 /*
- * Light and shadow arriving at one point of the photograph.
- * x: light added, y: light taken away.
+ * Light and shadow arriving at one point of the photograph, as the eye sees
+ * it back through the glass.
+ *
+ * WHAT KIND OF GLASS
+ *
+ * These panes are flat sheets, frosted on the face, with a polished clear
+ * bevel round the edge. That decides everything the light does:
+ *
+ *   The FACE is flat, so it focuses nothing. There is no pattern to throw --
+ *   a pool-floor net only happens when the surface is wavy (see causticAt,
+ *   off unless "Glass waviness" is raised for rolled or hammered glass). What
+ *   the frost does instead is scatter: the beam going through comes out as a
+ *   wider, dimmer spread of the same light, a little is sent back, and the
+ *   photograph behind is seen through that same frost, so the light on it
+ *   reads soft.
+ *
+ *   The BEVEL is clear, polished and angled: a prism. It throws the light
+ *   that hits it sideways, so the floor right under it goes dark, and that
+ *   light lands in a bright line a little further in -- split into its
+ *   colours, because a prism bends blue more than red. Seen through the
+ *   clear bevel that line is sharp; seen through the frost it is soft.
+ *
+ * All of it moves as the light moves, because where the ray crosses the
+ * glass (Q) moves with the light.
+ *
+ * Returns the light added (per colour) in rgb and the light taken away in a.
  */
-vec2 floorAt(vec2 P, float lit) {
-  float dist = length(P - uLight);
-  float pool = exp(-(dist * dist) / (uReach * uReach)) * lit;
-  if (pool < 0.002) return vec2(0.0);
+vec4 floorAt(vec2 P, float lit, float seenFrost) {
+  float dist2 = dot(P - uLight, P - uLight);
+  float R = uReach;
+  float pool = exp(-dist2 / (R * R)) * lit;
+  // The same light after the frost has spread it: wider, and dimmer by the
+  // same area, so no light is made up.
+  float Rf = R * (1.0 + 0.9 * uFrost);
+  float poolFrost = exp(-dist2 / (Rf * Rf)) * (R * R) / (Rf * Rf) * lit;
+  if (max(pool, poolFrost) < 0.002) return vec4(0.0);
 
   // Back along the ray to the glass plane.
   vec2 Q = P + (uLight - P) * (uGap / max(uHeight, uGap + 1.0));
 
-  float through = 1.0;
+  vec3 light = vec3(pool);
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
     vec4 r = uRect[i];
@@ -132,34 +163,44 @@ vec2 floorAt(vec2 P, float lit) {
     // A band as wide as the page has no sides to cast: top and bottom only.
     bool straight = r.z >= uViewport.x / uScale - 1.0;
     float d = straight ? hs.y - abs(q.y) : min(hs.x - abs(q.x), hs.y - abs(q.y));
-    float pen = max(uPenumbra, 2.0);
+    // Looking through frost, even the shadow's edge is out of focus.
+    float pen = max(uPenumbra, 2.0) + seenFrost * uFrost * 36.0;
     if (d <= -pen) continue;
-    // How much of the light's disc sees this point through the glass: the
-    // shadow's own edge is soft by exactly the penumbra, like any other.
     float inGlass = smoothstep(-pen, pen, d);
     d = max(d, 0.0);
-
-    // Straight through the face, less what the glass reflects and keeps.
-    float t = 0.86;
-
-    // The bevel as a lens: dark where it throws light away, a bright seam
-    // where that light comes down.
     float x = d / max(uBevel, 1.0);
-    float thrown = 1.0 - smoothstep(0.0, 0.5, x);
-    float seam = exp(-pow((x - 0.62) / 0.11, 2.0));
-    t *= 1.0 - 0.6 * thrown;
-    t += 2.0 * seam * step(x, 1.4);
+    float onFace = smoothstep(0.85, 1.1, x);
 
-    // The face's own lenses -- see causticAt().
+    // Clear bevel: straight through less ~8% reflected. Frosted face: the
+    // beam is spread (poolFrost) and a little more goes back the way it came.
+    vec3 through = mix(vec3(pool * 0.92), vec3(poolFrost * (1.0 - 0.18 * uFrost)), onFace);
+
+    // The bevel as a prism: dark where it throws the light away...
+    float thrown = 1.0 - smoothstep(0.0, 0.5, x);
+    through *= 1.0 - 0.65 * thrown;
+
+    // ...and a bright line where that light comes down, one per colour. Red
+    // is bent least and lands furthest out; blue most. Width: the light's own
+    // size, and the frost if that is what the eye is looking through.
+    float w = 0.09 + seenFrost * uFrost * 0.3;
+    float gain = 1.7 * pool * (0.09 / w) * step(x, 1.5);
+    float spread = 0.07 * uPrism;
+    vec3 xs = vec3(0.62 - spread, 0.62, 0.62 + spread);
+    vec3 z = (vec3(x) - xs) / w;
+    through += gain * exp(-z * z) * vec3(1.0, 0.95, 1.05);
+
+    // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {
-      t *= causticAt(Q - r.xy, uSeed[i]);
+      through *= causticAt(Q - r.xy, uSeed[i]);
     }
 
-    through = mix(1.0, t, inGlass);
+    light = mix(vec3(pool), through, inGlass);
     break;
   }
 
-  return vec2(pool * uLightGain * through, pool * uShadowGain * max(1.0 - through, 0.0));
+  vec3 add = light * uLightGain;
+  float lost = max(pool - dot(light, vec3(0.3333)), 0.0);
+  return vec4(add, lost * uShadowGain);
 }
 
 void main() {
@@ -170,9 +211,12 @@ void main() {
    * Seen THROUGH a pane, the floor is bent by it on the way back to the eye.
    * Near an edge the bevel pulls in what lies beyond it -- the same lensing
    * the glass does to the photograph -- so the light and shadow under the
-   * glass are stretched and bowed toward the rim instead of sitting flat.
+   * glass are bowed toward the rim instead of sitting flat. And whether the
+   * eye is looking through the clear bevel or the frosted face decides how
+   * sharp what it sees can be.
    */
   vec2 look = P;
+  float seenFrost = 0.0;
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
     vec4 r = uRect[i];
@@ -187,16 +231,15 @@ void main() {
     float bend = (1.0 - x) * (1.0 - x) * uBevel * 0.9 * uView;
     vec2 outward = dy < dx ? vec2(0.0, sign(q.y)) : vec2(sign(q.x), 0.0);
     look = P + outward * bend;
+    seenFrost = smoothstep(0.85, 1.1, d / max(uBevel, 1.0));
     break;
   }
 
-  vec2 f = floorAt(look, lit);
-  // Film, not a calculator: bright lines roll off instead of clipping flat,
-  // so a knot of crossed caustics stays a line and does not become a blob.
-  float add = 1.0 - exp(-f.x * 1.15);
-  float take = f.y;
-  float a = clamp(add + take, 0.0, 1.0);
-  vec3 warm = vec3(1.0, 0.92, 0.8);
-  gl_FragColor = vec4(warm * clamp(add, 0.0, 1.0), a);
+  vec4 f = floorAt(look, lit, seenFrost);
+  // Film, not a calculator: bright light rolls off instead of clipping flat.
+  vec3 add = vec3(1.0) - exp(-f.rgb * 1.15);
+  float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
+  vec3 warm = vec3(1.0, 0.94, 0.84);
+  gl_FragColor = vec4(warm * add, a);
 }
 `;
