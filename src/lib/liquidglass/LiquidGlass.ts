@@ -1308,7 +1308,8 @@ export class LiquidGlass {
 	}
 
 	private _childHasDynamicContent(child: HTMLElement): boolean {
-		if (child.hasAttribute('data-dynamic')) return true;
+		// LOCAL: data-dynamic="idle" is a dynamic contributor that is not moving right now.
+		if (child.hasAttribute('data-dynamic')) return child.getAttribute('data-dynamic') !== 'idle';
 		if (child.tagName === 'VIDEO') return true;
 		return child.querySelector('[data-dynamic], video') !== null;
 	}

@@ -108,4 +108,19 @@ test.describe("glass", () => {
       )
       .toBeGreaterThan(300);
   });
+
+  test("the light through the glass switches on with the charge and off without it", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const floor = page.locator("canvas.floor-light");
+    await expect(floor).toHaveAttribute("data-dynamic", "idle");
+    await page.mouse.move(400, 400, { steps: 3 });
+    await page.mouse.down();
+    await expect(floor).toHaveAttribute("data-dynamic", "", { timeout: 5000 });
+    await page.mouse.up();
+    // Released, the charge bleeds away and the layer parks again.
+    await expect(floor).toHaveAttribute("data-dynamic", "idle", { timeout: 15_000 });
+  });
 });

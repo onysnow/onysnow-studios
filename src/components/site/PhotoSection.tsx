@@ -132,7 +132,7 @@ function SeamSection({
      */
     <div ref={ref} data-photo data-seam className={cn("relative", className)}>
       <BokehField />
-      <TransmittedLight />
+      {/* No TransmittedLight: the page-wide FloorLight draws the light through this glass. */}
       <GlassSection overlap={false}>{children}</GlassSection>
     </div>
   );
