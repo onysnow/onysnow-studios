@@ -139,7 +139,9 @@ export function Glass({
        * has to know about it.
        */
       const copy = [...el.querySelectorAll<HTMLElement>("h1, h2, h3, h4, p, blockquote")];
-      const letGo = copy.map((node) => registerLitSurface(node));
+      // Type throws a glyph-shaped shadow (text-shadow), never a box: it does
+    // not block the light on the glass as a rectangle.
+    const letGo = copy.map((node) => registerLitSurface(node, { occludes: false }));
 
       release.current = () => {
         observer.disconnect();

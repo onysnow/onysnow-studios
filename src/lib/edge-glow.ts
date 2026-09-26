@@ -529,7 +529,24 @@ function onLeave() {
  * over it, in its own coordinates, plus `--lit-near` for how close it is.
  * What the surface does with that is the stylesheet's business.
  */
-export function registerLitSurface(el: HTMLElement) {
+export type LitSurfaceOptions = {
+  /**
+   * Whether this surface blocks the light as a solid rectangle.
+   *
+   * True for a photograph: an opaque print stops the lamp over its whole
+   * box. False for type: a line of text blocks light only where its glyphs
+   * are, and its glyph-shaped shadow is already drawn by text-shadow. As a
+   * rectangle it cut a square hole in the light on the glass -- a box-shaped
+   * shadow round every heading and paragraph that no real type throws.
+   */
+  occludes?: boolean;
+};
+
+const nonOccluding = new WeakSet<HTMLElement>();
+
+export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions = {}) {
+  if (options.occludes === false) nonOccluding.add(el);
+  else nonOccluding.delete(el);
   litSurfaces.add(el);
   litSurface(el);
   if (frame) cancelAnimationFrame(frame);
@@ -626,7 +643,7 @@ function litSurface(el: HTMLElement, rect?: DOMRect) {
    *   - it is in PANE-LOCAL pixels, because that is the space the shader
    *     already works in for this pane.
    */
-  const pane = el.closest<HTMLElement>(".glass");
+  const pane = nonOccluding.has(el) ? null : el.closest<HTMLElement>(".glass");
   if (pane && alpha > 0.01) {
     const list = occluders.get(pane) ?? [];
     if (list.length < MAX_OCCLUDERS) {
