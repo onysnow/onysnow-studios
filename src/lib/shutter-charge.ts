@@ -108,6 +108,13 @@ const NO_HOLD = 'input, textarea, select, button, [role="button"], [role="slider
 
 type Sample = { x: number; y: number; t: number };
 
+/**
+ * Whether moving the pointer (circling it quickly in one spot) winds the
+ * shutter. OFF, by request: for now only press-and-hold charges the flash.
+ * The movement trigger's code stays, behind this switch.
+ */
+export const MOVEMENT_WINDS = false;
+
 export type ShutterChargeHandlers = {
   /** 0 → 1, every frame the value changes. */
   onCharge?: (charge: number, armed: boolean) => void;
@@ -269,7 +276,7 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
       // Held at full until spent, so the glow stays up while you choose a target.
       charge = 1;
     } else {
-      if (local && speed > MIN_SPEED) {
+      if (MOVEMENT_WINDS && local && speed > MIN_SPEED) {
         const strength = Math.min(1, (speed - MIN_SPEED) / (REF_SPEED - MIN_SPEED));
         charge += strength * GAIN * dt;
       }

@@ -1,6 +1,7 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { HEX_TILE_GLSL } from "@/effects/optics/hex-tile.glsl";
+import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 
 /**
  * Fragment shader for one pane of glass.
@@ -79,6 +80,19 @@ uniform float uIor;
 uniform float uFrost;
 uniform float uLightHeight; // CSS pixels above the glass
 uniform float uLampPower;
+
+/*
+ * The room the face reflects (see effects/optics/environment.ts): an HDR
+ * equirectangular band, log-encoded, with mip levels filtered in linear
+ * light. Causes only: the room, the camera's distance, and how rough the
+ * front face is.
+ */
+uniform sampler2D uRoom;
+uniform float uHasRoom;
+uniform float uRoomWidth;       // texels round the full 360 degrees
+uniform float uCameraDistance;  // CSS pixels from the screen
+uniform float uFrontRoughness;  // GGX alpha of the face you look at
+uniform float uRoomExposure;    // how brightly lit the room is (1: middle grey)
 uniform float uArris;       // tunable
 
 uniform sampler2D uBackdrop;  // the photograph behind this pane
@@ -141,6 +155,7 @@ uniform vec3  uCool;
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
 ${HEX_TILE_GLSL}
+${ENVIRONMENT_GLSL}
 
 /*
  * How much of the light is blocked at this point on the pane.
@@ -667,6 +682,31 @@ void main() {
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.
+  /*
+   * ---- The room, reflected by the face ----
+   *
+   * Not gated on the lamp: the room is lit whether or not the shutter is
+   * wound, and glass reflects it either way. How much is Fresnel from the
+   * material -- 4.2% straight on, rising toward grazing, and rising again at
+   * the rim where the bevel turns the surface away -- and what is the room's
+   * own brightness, lamps and all. In a dark room that is a faint image with
+   * the lamps standing out of it, which is what a window at night shows.
+   *
+   * The level of the room image is set by the face's roughness: the blur it
+   * puts on the reflected direction, converted to texels. The room is
+   * magnified on screen, so the bias is that level minus how magnified it is.
+   */
+  vec2 fromCentre = frag - 0.5 * uViewport / uScale;
+  float cosView = uCameraDistance / length(vec3(fromCentre, uCameraDistance));
+  float reflectance = fresnelSchlick(cosView, uIor);
+  reflectance += (1.0 - reflectance) * fresnel;
+  float texelsPerPx = uRoomWidth / (6.28318530718 * uCameraDistance) / uScale;
+  float roomBias = roomLod(uFrontRoughness, uRoomWidth) - log2(max(texelsPerPx, 1e-4));
+  vec3 room = decodeRadiance(
+    texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
+  );
+  colour += inside * reflectance * room * uRoomExposure * uHasRoom;
+
   colour = toneMapGlass(colour);
 
   /*

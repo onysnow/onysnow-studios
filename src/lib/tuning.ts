@@ -78,6 +78,21 @@ export const tuning: Record<string, Knob> = {
     glassKey: "zRadius",
     hint: "How wide the rounded-over edge of the glass is, in pixels. Everything the edge does follows from it: how far it bends what is behind it, where its highlight sits, and where the bright seam and dark rim of its shadow fall. Panes can set their own.",
   },
+  // ---- The room the glass reflects ----
+  //
+  // A cause: how brightly lit the room you are standing in is, which is what
+  // the glass reflects (at ~4%, rising at grazing). 1 is a room lit like the
+  // screen -- photographic middle grey. Brighter rooms reflect more; a window
+  // at night shows the room because outside is darker than 4% of it.
+  roomBrightness: {
+    label: "Room brightness",
+    group: "Environment",
+    value: 1,
+    min: 0,
+    max: 8,
+    step: 0.1,
+    hint: "How brightly lit the room reflected in the glass is. The glass's own reflectance (from its material) and the room's lamps do the rest; there is no reflection strength setting.",
+  },
   // ---- The rasterised glass ----
   //
   // These are the shader's own uniforms, not CSS. They only do anything in
@@ -470,54 +485,6 @@ export const tuning: Record<string, Knob> = {
   },
 
   // ---- CSS-side ----
-  reflectionBase: {
-    label: "Reflection, at rest",
-    group: "Reflection",
-    value: 0.16,
-    min: 0,
-    max: 1,
-    step: 0.01,
-    cssVar: "--tune-reflect-base",
-  },
-  reflectionLit: {
-    label: "Reflection, lit",
-    group: "Reflection",
-    value: 0.5,
-    min: 0,
-    max: 1.5,
-    step: 0.02,
-    cssVar: "--tune-reflect-lit",
-  },
-  reflectionZoom: {
-    label: "Reflection zoom",
-    group: "Reflection",
-    value: 210,
-    min: 60,
-    max: 600,
-    step: 10,
-    cssVar: "--tune-reflect-zoom",
-    cssUnit: "vh",
-  },
-  reflectionThrowX: {
-    label: "Parallax, across",
-    group: "Reflection",
-    value: 1100,
-    min: 0,
-    max: 3000,
-    step: 50,
-    cssVar: "--tune-reflect-x",
-    cssUnit: "px",
-  },
-  reflectionThrowY: {
-    label: "Parallax, down",
-    group: "Reflection",
-    value: 750,
-    min: 0,
-    max: 2000,
-    step: 50,
-    cssVar: "--tune-reflect-y",
-    cssUnit: "px",
-  },
   displacement: {
     label: "Refraction",
     group: "Reflection",
@@ -740,7 +707,7 @@ export const tuning: Record<string, Knob> = {
   grimeFloor: {
     label: "Grime clarity",
     group: "Glass",
-    value: 0.46,
+    value: 0.34,
     min: 0,
     max: 0.9,
     step: 0.01,

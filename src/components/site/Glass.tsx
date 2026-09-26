@@ -219,8 +219,12 @@ export function Glass({
       <span aria-hidden="true" className="glass__side glass__side--bottom" />
       {/* Reflectivity rising toward the rim, the way glass does at grazing angles. */}
       <span aria-hidden="true" className="glass__fresnel" />
-      {/* The room, reflected. Always there; parallaxes against the pointer. */}
-      <span aria-hidden="true" className="glass__reflection" />
+      {/*
+        The room it reflects is drawn by the glass light pass (GlassLight),
+        from the room's real brightness and the glass's Fresnel -- in both
+        glass modes. It used to be a CSS layer here; see effects/optics/
+        environment.ts for why that could not be both physical and visible.
+      */}
       {/* The specular band the shutter flash sweeps across the panel. */}
       <span aria-hidden="true" className="glass__glare" />
       {children}

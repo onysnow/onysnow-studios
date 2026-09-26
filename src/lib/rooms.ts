@@ -26,7 +26,7 @@ const KEY = "onysnow:room";
  * page would paint the CSS fallback and then visibly swap rooms on every
  * single load, which is precisely the thing worth avoiding.
  */
-export function roomScript(sources?: readonly string[]) {
+export function roomScript(sources?: readonly string[], hdrSources?: readonly string[]) {
   /*
    * The URLs are baked in at render time, not looked up by the script.
    *
@@ -40,6 +40,12 @@ export function roomScript(sources?: readonly string[]) {
    * not require replacing six.
    */
   const urls = ROOMS.map((name, i) => sources?.[i] || `/rooms/${name}.jpg`);
+  /*
+   * The same room in real brightness, for the glass shader's reflection (see
+   * effects/optics/environment.ts). Same index, so the glass and the paper
+   * always show the same room. Published as data-room-hdr on <html>.
+   */
+  const hdr = ROOMS.map((name, i) => hdrSources?.[i] || `/rooms-hdr/${name}.jpg`);
   return (
     `(function(){try{` +
     `var r=${JSON.stringify(urls)};` +
@@ -48,7 +54,9 @@ export function roomScript(sources?: readonly string[]) {
     // returning null, so the random pick above stands as the fallback.
     `try{var p=parseInt(localStorage.getItem(${JSON.stringify(KEY)}),10);` +
     `if(!isNaN(p))i=(p+1)%r.length;localStorage.setItem(${JSON.stringify(KEY)},String(i));}catch(e){}` +
+    `var h=${JSON.stringify(hdr)};` +
     `document.documentElement.style.setProperty("--room",'url("'+r[i]+'")');` +
+    `document.documentElement.setAttribute("data-room-hdr",h[i]);` +
     `}catch(e){}})();`
   );
 }

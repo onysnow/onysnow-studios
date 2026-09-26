@@ -136,7 +136,7 @@ test.describe("plastic on the glass", () => {
     "The effect layer is suppressed outside Chromium.",
   );
 
-  test("the orange button throws its shadow away from the lamp, and has no fixed drop shadow", async ({
+  test("the orange button passes orange light behind it, thrown away from the lamp", async ({
     page,
   }) => {
     await page.goto("/?glass=css");
@@ -146,27 +146,31 @@ test.describe("plastic on the glass", () => {
     await page.waitForTimeout(800);
     const box = (await button.boundingBox())!;
 
-    // Unlit: no shadow at all -- a lamp that is off throws nothing.
-    const unlit = await button.evaluate((el) => getComputedStyle(el).boxShadow);
-    expect(unlit === "none" || /rgba\(150, 62, 6, 0\)/.test(unlit)).toBe(true);
+    // No generic drop shadow: what lands behind it is light, not darkness.
+    expect(await button.evaluate((el) => getComputedStyle(el).boxShadow)).toBe("none");
+    const light = () =>
+      button.evaluate((el) => {
+        const cs = getComputedStyle(el, "::before");
+        const m = new DOMMatrixReadOnly(cs.transform === "none" ? undefined : cs.transform);
+        return { x: m.m41, opacity: Number(cs.opacity), blend: cs.mixBlendMode };
+      });
+    // Unlit: nothing passes through a lamp that is off.
+    expect((await light()).opacity).toBe(0);
 
-    const offsetX = async (x: number, y: number) => {
+    const litFrom = async (x: number, y: number) => {
       await page.mouse.move(x, y, { steps: 4 });
       await page.mouse.down();
       await page.waitForTimeout(2200);
-      const shadow = await button.evaluate((el) => getComputedStyle(el).boxShadow);
+      const l = await light();
       await page.mouse.up();
       await page.waitForTimeout(600);
-      // "rgba(...) Xpx Ypx Bpx": the first length is the horizontal throw.
-      return Number.parseFloat(
-        shadow
-          .replace(/rgba?\([^)]*\)/, "")
-          .trim()
-          .split(/\s+/)[0] ?? "0",
-      );
+      return l;
     };
 
-    expect(await offsetX(box.x - 80, box.y + box.height / 2)).toBeGreaterThan(0.5);
-    expect(await offsetX(box.x + box.width + 80, box.y + box.height / 2)).toBeLessThan(-0.5);
+    const fromLeft = await litFrom(box.x - 80, box.y + box.height / 2);
+    expect(fromLeft.blend).toBe("plus-lighter");
+    expect(fromLeft.opacity).toBeGreaterThan(0);
+    expect(fromLeft.x).toBeGreaterThan(0.5);
+    expect((await litFrom(box.x + box.width + 80, box.y + box.height / 2)).x).toBeLessThan(-0.5);
   });
 });

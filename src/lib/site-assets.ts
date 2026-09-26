@@ -59,6 +59,23 @@ export const ROOM_KEYS = [
   "room_station_url",
 ] as const;
 
+/**
+ * The same six rooms in real brightness -- the files the glass reflects.
+ *
+ * Log-encoded HDR JPEGs (2048 x 512, the band round eye level), made from an
+ * .hdr or .exr with art-source/rooms/build_hdr_rooms.py. An ordinary photo
+ * uploaded here would read as far too bright: the encoding is not sRGB.
+ * Same order as ROOMS and ROOM_KEYS.
+ */
+export const ROOM_HDR_KEYS = [
+  "room_metro_hdr_url",
+  "room_aquarium_hdr_url",
+  "room_studio_hdr_url",
+  "room_lobby_hdr_url",
+  "room_fireplace_hdr_url",
+  "room_station_hdr_url",
+] as const;
+
 export function assetUrl(asset: (typeof SITE_ASSETS)[keyof typeof SITE_ASSETS]): string {
   if (typeof document === "undefined") return asset.fallback;
   const set = document.documentElement.dataset[asset.attr];

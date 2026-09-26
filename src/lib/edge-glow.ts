@@ -625,6 +625,9 @@ function litSurface(el: HTMLElement, rect?: DOMRect) {
    * these to catch the light on the edge that faces it (see .plastic).
    */
   el.style.setProperty("--lit-on", lit.toFixed(3));
+  // The lamp's bright core, whose mirror image a glossy surface shows: the
+  // emitter's radius less its glow, about two fifths of "Light size".
+  el.style.setProperty("--lamp-core", `${(t("shadowSoftness") * 0.35).toFixed(1)}px`);
   const awayX = centreX - pointerX;
   const awayY = centreY - pointerY;
   el.style.setProperty(
