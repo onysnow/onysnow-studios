@@ -1,4 +1,5 @@
 import { bevelField } from "./bevel-map";
+import { FLOAT_GLASS } from "@/effects/materials/presets";
 
 /**
  * One displacement map per pane geometry, shared by every pane that matches.
@@ -22,8 +23,8 @@ const MAX_EDGE = 320;
 /** How thick the slab is behind that edge, in CSS pixels. */
 export const GLASS_THICKNESS = 18;
 
-/** Ordinary soda-lime glass. */
-export const GLASS_IOR = 1.5;
+/** Soda-lime float glass: the same index the reflection on the face uses. */
+export const GLASS_IOR = FLOAT_GLASS.ior;
 
 export type PaneGeometry = {
   width: number;

@@ -1,5 +1,7 @@
 import { expect, test } from "./fixtures";
 import { EDGE_PROFILE_GLSL } from "../src/effects/optics/edge-profile.glsl";
+import { REFLECTION_GLSL } from "../src/effects/optics/reflection.glsl";
+import { fresnelSchlick, ggx, lampReflection } from "../src/effects/optics/reflection";
 import {
   edgeBand,
   fresnelRise,
@@ -38,6 +40,42 @@ type Case = {
 };
 
 const CASES: Case[] = [
+  {
+    name: "fresnelSchlick",
+    glsl: "fresnelSchlick(x, 1.518)",
+    ts: (x) => fresnelSchlick(x, 1.518),
+    from: 0,
+    to: 1,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "ggx",
+    glsl: "ggx(x, 0.38)",
+    ts: (x) => ggx(x, 0.38),
+    from: 0.5,
+    to: 1,
+    lo: 0,
+    hi: 2.5,
+  },
+  {
+    name: "lampReflection (frosted)",
+    glsl: "lampReflection(vec2(x, 0.4 * x), 230.0, 756000.0, 1.518, 0.6)",
+    ts: (x) => lampReflection(x, 0.4 * x, 230, 756000, 1.518, 0.6),
+    from: -400,
+    to: 400,
+    lo: 0,
+    hi: 0.4,
+  },
+  {
+    name: "lampReflection (clear)",
+    glsl: "lampReflection(vec2(x, 0.0), 230.0, 756000.0, 1.518, 0.0)",
+    ts: (x) => lampReflection(x, 0, 230, 756000, 1.518, 0),
+    from: -60,
+    to: 60,
+    lo: 0,
+    hi: 4,
+  },
   {
     name: "roundedBox",
     glsl: "roundedBox(vec2(x, 0.3 * x - 20.0), vec2(50.0, 30.0), 12.0)",
@@ -143,7 +181,7 @@ void main() {
           gl.readPixels(0, 0, N, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
           return { values: Array.from({ length: N }, (_, i) => px[i * 4]! / 255) };
         },
-        { chunk: EDGE_PROFILE_GLSL, c: { ...c, ts: undefined }, N },
+        { chunk: EDGE_PROFILE_GLSL + REFLECTION_GLSL, c: { ...c, ts: undefined }, N },
       );
 
       expect(gpu.error, "the chunk compiles in a real WebGL context").toBeUndefined();

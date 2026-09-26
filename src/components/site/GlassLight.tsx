@@ -4,6 +4,8 @@ import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
+import { FLOAT_GLASS } from "@/effects/materials/presets";
+import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -145,9 +147,10 @@ export function GlassLight({
      */
     const occRect = new Float32Array(MAX_OCCLUDERS * 4);
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
-    const uSheen = U("uSheen");
-    const uFaceLight = U("uFaceLight");
-    const uSheenReach = U("uSheenReach");
+    const uIor = U("uIor");
+    const uFrost = U("uFrost");
+    const uLightHeight = U("uLightHeight");
+    const uLampPower = U("uLampPower");
     const uArris = U("uArris");
 
     // The site's amber and teal in linear light — the shader works in linear
@@ -335,9 +338,12 @@ export function GlassLight({
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uSideReach, t("sideReach"));
       gl.uniform1f(uRestEdge, t("restEdge"));
-      gl.uniform1f(uSheen, t("sheen"));
-      gl.uniform1f(uFaceLight, t("faceLight"));
-      gl.uniform1f(uSheenReach, t("sheenFalloff"));
+      // The reflection on the face, from causes: the glass, its frost, and
+      // the lamp's height above the glass and its brightness.
+      gl.uniform1f(uIor, FLOAT_GLASS.ior);
+      gl.uniform1f(uFrost, t("glassBlur"));
+      gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
+      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
       gl.uniform1f(uArris, t("arris"));
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, surface);

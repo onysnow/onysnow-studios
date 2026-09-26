@@ -140,15 +140,18 @@ describe("the shader actually uses it", () => {
     expect(src).toContain("uniform float uOccCount");
   });
 
-  it("multiplies BOTH grime terms by the unlit factor", () => {
+  it("cuts every grime term, and the lamp's reflection, where something blocks the light", () => {
     /*
-     * The rake and the ambient scatter. Missing either one leaves grime
-     * visible inside a shadow, which is the bug this replaced.
+     * Missing any one leaves light visible inside a shadow, which is the bug
+     * this replaced. The ambient grime scatter was removed with the glare
+     * settings (it was scaled by one that sat at zero) and returns with the
+     * smudge layer; whatever grime terms exist must all carry the factor.
      */
-    const rake = src.match(/face \+= vec3\(inside \* rake \*[^;]*\);/)?.[0] ?? "";
-    const scatter = src.match(/face \+= vec3\(inside \* direct \*[^;]*\);/)?.[0] ?? "";
-    expect(rake).toContain("unlit");
-    expect(scatter).toContain("unlit");
+    const grime = src.match(/face \+= vec3\(inside \*[^;]*\);/g) ?? [];
+    expect(grime.length).toBeGreaterThan(0);
+    for (const term of grime) expect(term).toContain("unlit");
+    const mirror = src.match(/vec3 mirror = [^;]*;/)?.[0] ?? "";
+    expect(mirror).toContain("blocked");
   });
 
   it("bounds the loop with a constant, as GLSL ES 1.0 requires", () => {
