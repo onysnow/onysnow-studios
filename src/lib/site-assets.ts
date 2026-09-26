@@ -23,6 +23,14 @@
 export const SITE_ASSETS = {
   /** The smudge and scratch map the glass shader and cursor light sample. */
   glassSurface: { key: "glass_surface_url", attr: "glassSurface", fallback: "/glass-surface.jpg" },
+  /**
+   * The glass's surface layers, one photograph each: where the smudge film is,
+   * and where the scratches are. Greyscale, the mark's amount in the
+   * brightness, black where the glass is clean. Must tile without a seam; any
+   * size (it is fitted to a power of two), shown one texel per CSS pixel.
+   */
+  glassSmudge: { key: "glass_smudge_url", attr: "glassSmudge", fallback: "/glass-smudge.jpg" },
+  glassScratch: { key: "glass_scratch_url", attr: "glassScratch", fallback: "/glass-scratch.jpg" },
 } as const;
 
 /**

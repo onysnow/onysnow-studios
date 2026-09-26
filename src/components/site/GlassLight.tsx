@@ -5,7 +5,7 @@ import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge } from "@/lib/edge-glow";
 import { t } from "@/lib/tuning";
 import { FLOAT_GLASS } from "@/effects/materials/presets";
-import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
+import { LAMP_POWER_PER_GAIN, LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -158,7 +158,12 @@ export function GlassLight({
     const toLinear = (c: number) => Math.pow(c, 2.2);
     gl.uniform3f(U("uWarm"), toLinear(1.0), toLinear(0.68), toLinear(0.3));
     gl.uniform3f(U("uCool"), toLinear(0.35), toLinear(0.78), toLinear(0.82));
-    gl.uniform1i(U("uSurface"), 0);
+    gl.uniform1i(U("uSmudge"), 0);
+    gl.uniform1i(U("uScratch"), 2);
+    const uSmudgeTile = U("uSmudgeTile");
+    const uScratchTile = U("uScratchTile");
+    gl.uniform1f(uSmudgeTile, 1024);
+    gl.uniform1f(uScratchTile, 2048);
     gl.uniform1i(U("uBackdrop"), 1);
     gl.uniform1f(uHasSurface, 0);
 
@@ -186,28 +191,61 @@ export function GlassLight({
      * no surface detail until it arrives, and it never loads at all for
      * somebody who never winds the shutter.
      */
-    const surface = gl.createTexture();
     let surfaceRequested = false;
-    const requestSurface = () => {
-      if (surfaceRequested) return;
-      surfaceRequested = true;
+    let layersLoaded = 0;
+    /** Smudge on texture unit 0, scratch on unit 2. */
+    const layers = new Map<number, WebGLTexture>();
+    /*
+     * One surface layer: a seamless greyscale photograph, repeated (the shader
+     * hex-tiles it, so the repeat is never visible). WebGL1 can only repeat a
+     * power-of-two texture, so an uploaded image of any other size is drawn
+     * onto the nearest power-of-two canvas first -- an admin upload must never
+     * be able to turn the layer black.
+     */
+    const loadLayer = (unit: number, src: string, tile: WebGLUniformLocation | null) => {
       const img = new Image();
+      img.crossOrigin = "anonymous";
       img.onload = () => {
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, surface);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+        const side = Math.min(2048, 2 ** Math.round(Math.log2(Math.max(img.width, img.height, 1))));
+        let source: TexImageSource = img;
+        if (img.width !== side || img.height !== side) {
+          const c = document.createElement("canvas");
+          c.width = side;
+          c.height = side;
+          c.getContext("2d")?.drawImage(img, 0, 0, side, side);
+          source = c;
+        }
+        const tex = gl.createTexture();
+        if (!tex) return;
+        layers.set(unit, tex);
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
         /*
-         * No mipmaps. The map is an atlas of four cells, and a minified level
-         * blends them into one another — every pane would end up wearing an
-         * average of all four rather than the one it was given.
+         * No mipmaps: the map is shown at one texel per CSS pixel, so it is
+         * never minified, and a hex-tile's offset jumps between cells would
+         * pick the wrong mip level along every cell border.
          */
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.useProgram(program);
-        gl.uniform1f(uHasSurface, 1);
+        gl.uniform1f(tile, side);
+        layersLoaded += 1;
+        if (layersLoaded === 2) gl.uniform1f(uHasSurface, 1);
       };
-      img.src = assetUrl(SITE_ASSETS.glassSurface);
+      img.src = src;
+    };
+    /*
+     * The photographed surface layers, fetched lazily: the shader falls back
+     * to no surface detail until both arrive, and they never load at all for
+     * somebody who never winds the shutter.
+     */
+    const requestSurface = () => {
+      if (surfaceRequested) return;
+      surfaceRequested = true;
+      loadLayer(0, assetUrl(SITE_ASSETS.glassSmudge), uSmudgeTile);
+      loadLayer(2, assetUrl(SITE_ASSETS.glassScratch), uScratchTile);
     };
 
     /*
@@ -343,10 +381,13 @@ export function GlassLight({
       gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1f(uFrost, t("glassBlur"));
       gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
-      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
+      // Off by request (it reads as a flashlight); see LAMP_REFLECTION_ENABLED.
+      gl.uniform1f(uLampPower, LAMP_REFLECTION_ENABLED ? LAMP_POWER_PER_GAIN * t("coreGain") : 0);
       gl.uniform1f(uArris, t("arris"));
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, surface);
+      for (const [unit, tex] of layers) {
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+      }
 
       for (const pane of panes) {
         // Offscreen panes cost nothing but a rectangle test.
@@ -520,7 +561,7 @@ export function GlassLight({
       gl.deleteShader(vs);
       gl.deleteShader(fs);
       gl.deleteBuffer(buffer);
-      gl.deleteTexture(surface);
+      for (const tex of layers.values()) gl.deleteTexture(tex);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
     };
   }, [chargeRef, positionRef, generation]);

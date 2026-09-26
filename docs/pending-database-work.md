@@ -125,3 +125,19 @@ That field was dropped when migration `20260921214942` redefined the function
 to return only `is_admin`, so the read produced `undefined`, coerced to
 `false`, and the flag was permanently false. Nothing consumed it. Removed —
 there is no first-admin claim left to report once item 1 is applied.
+
+---
+
+## Glass smudge and scratch layers (admin uploads)
+
+**Migration:** `supabase/migrations/20260926120000_glass_surface_layers.sql`
+**Urgency:** none. Until it runs the site uses the shipped files
+(`public/glass-smudge.jpg`, `public/glass-scratch.jpg`); it only adds the two
+upload rows to the settings page.
+
+Confirm:
+
+```sql
+select key, label, kind from public.site_settings
+where key in ('glass_smudge_url', 'glass_scratch_url');
+```

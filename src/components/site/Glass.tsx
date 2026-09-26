@@ -139,7 +139,17 @@ export function Glass({
        * has to know about it.
        */
       const copy = [...el.querySelectorAll<HTMLElement>("h1, h2, h3, h4, p, blockquote")];
-      const letGo = copy.map((node) => registerLitSurface(node));
+      // Type throws a glyph-shaped shadow (text-shadow), never a box: it does
+      // not block the light on the glass as a rectangle.
+      const letGo = copy.map((node) => registerLitSurface(node, { occludes: false }));
+      /*
+       * Plastic resting on the pane (the orange buttons) is lit too: it catches
+       * the lamp on its edge and throws a coloured shadow. Not an occluder --
+       * it is translucent, so it tints the light rather than blocking it.
+       */
+      for (const node of el.querySelectorAll<HTMLElement>(".plastic")) {
+        letGo.push(registerLitSurface(node, { occludes: false }));
+      }
 
       release.current = () => {
         observer.disconnect();

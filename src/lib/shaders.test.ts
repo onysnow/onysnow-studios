@@ -79,7 +79,10 @@ describe("no generated noise in the glass", () => {
   });
 
   it("gets its texture from the supplied photographs instead", () => {
-    // Sampled from the smudge/scratch images, not synthesised.
-    expect(GLASS_LIGHT_FRAGMENT_SHADER).toContain("uniform sampler2D uSurface");
+    // Sampled from the smudge and scratch photographs, not synthesised. The
+    // hex-tiling's per-cell offsets only choose which part of a photograph a
+    // patch of glass shows; they add nothing to the image.
+    expect(GLASS_LIGHT_FRAGMENT_SHADER).toContain("uniform sampler2D uSmudge");
+    expect(GLASS_LIGHT_FRAGMENT_SHADER).toContain("uniform sampler2D uScratch");
   });
 });

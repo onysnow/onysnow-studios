@@ -1,6 +1,16 @@
 import { expect, test } from "./fixtures";
 import { EDGE_PROFILE_GLSL } from "../src/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "../src/effects/optics/reflection.glsl";
+import { TRANSMISSION_GLSL } from "../src/effects/optics/transmission.glsl";
+import { HEX_TILE_GLSL } from "../src/effects/optics/hex-tile.glsl";
+import { hexBlend, hexWeights } from "../src/effects/optics/hex-tile";
+import {
+  frostSpread,
+  irradianceFalloff,
+  penumbraAcross,
+  slantSpread,
+  transmittance,
+} from "../src/effects/optics/transmission";
 import { fresnelSchlick, ggx, lampReflection } from "../src/effects/optics/reflection";
 import {
   edgeBand,
@@ -40,6 +50,60 @@ type Case = {
 };
 
 const CASES: Case[] = [
+  {
+    name: "hexWeights (nearest-cell weight after the contrast blend)",
+    glsl: "hexW(vec2(x, 0.37 * x + 0.11))",
+    ts: (x) => Math.max(...hexBlend(hexWeights(x, 0.37 * x + 0.11).w)),
+    from: 0,
+    to: 3,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "irradianceFalloff",
+    glsl: "irradianceFalloff(x, 300.0)",
+    ts: (x) => irradianceFalloff(x, 300),
+    from: -900,
+    to: 900,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "transmittance",
+    glsl: "transmittance(x, 1.518)",
+    ts: (x) => transmittance(x, 1.518),
+    from: 0,
+    to: 1,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "penumbraAcross",
+    glsl: "penumbraAcross(46.0, 70.0, 300.0, x, 0.8)",
+    ts: (x) => penumbraAcross(46, 70, 300, x, 0.8),
+    from: 0.1,
+    to: 1,
+    lo: 0,
+    hi: 120,
+  },
+  {
+    name: "frostSpread",
+    glsl: "frostSpread(0.6, 1.518, 70.0, x)",
+    ts: (x) => frostSpread(0.6, 1.518, 70, x),
+    from: 0.3,
+    to: 1,
+    lo: 0,
+    hi: 150,
+  },
+  {
+    name: "slantSpread",
+    glsl: "slantSpread(x)",
+    ts: (x) => slantSpread(x),
+    from: 0.05,
+    to: 1,
+    lo: 0,
+    hi: 7,
+  },
   {
     name: "fresnelSchlick",
     glsl: "fresnelSchlick(x, 1.518)",
@@ -181,7 +245,16 @@ void main() {
           gl.readPixels(0, 0, N, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
           return { values: Array.from({ length: N }, (_, i) => px[i * 4]! / 255) };
         },
-        { chunk: EDGE_PROFILE_GLSL + REFLECTION_GLSL, c: { ...c, ts: undefined }, N },
+        {
+          chunk:
+            EDGE_PROFILE_GLSL +
+            REFLECTION_GLSL +
+            TRANSMISSION_GLSL +
+            HEX_TILE_GLSL +
+            "float hexW(vec2 st) { vec3 w; vec2 a; vec2 b; vec2 c; hexWeights(st, w, a, b, c); vec3 k = hexBlend(w); return max(k.x, max(k.y, k.z)); }",
+          c: { ...c, ts: undefined },
+          N,
+        },
       );
 
       expect(gpu.error, "the chunk compiles in a real WebGL context").toBeUndefined();

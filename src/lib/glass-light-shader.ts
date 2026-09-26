@@ -1,5 +1,6 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
+import { HEX_TILE_GLSL } from "@/effects/optics/hex-tile.glsl";
 
 /**
  * Fragment shader for one pane of glass.
@@ -85,8 +86,17 @@ uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
 uniform float uImageAspect;   // intrinsic width / height
 
-uniform sampler2D uSurface;   // R specks, G smears, B wear
+/*
+ * The surface layers, photographed: where the smudge film is and how thick,
+ * and where the scratches are. Each is a greyscale map, the mark's amount in
+ * its brightness, swappable from the admin portal.
+ */
+uniform sampler2D uSmudge;
+uniform sampler2D uScratch;
 uniform float uHasSurface;
+/* How many CSS pixels one repeat of each map covers: one texel per pixel. */
+uniform float uSmudgeTile;
+uniform float uScratchTile;
 
 uniform vec3  uWarm;
 uniform vec3  uCool;
@@ -130,6 +140,7 @@ uniform vec3  uCool;
  */
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
+${HEX_TILE_GLSL}
 
 /*
  * How much of the light is blocked at this point on the pane.
@@ -169,27 +180,30 @@ float occlusionAt(vec2 local) {
 }
 
 /*
- * The surface, photographed. A 2x2 atlas of four different pieces of glass.
+ * The surface, photographed, and laid over the pane with no repeat to spot.
  *
- * It used to be one cell per pane, repeated every 340px. On a full-width pane
- * that is the same four scratches four times over, and under a charged light
- * they lined up along the lit edge as identical tick marks at exactly 340px
- * spacing -- a pattern, which is the one thing a real scratch never is.
+ * It was a 2x2 atlas of four cells, each tile mirrored and re-picked so the
+ * same scratch did not line up every 340px. It still repeated on a grid. Now
+ * each layer is one seamless photograph hex-tiled (see effects/optics/
+ * hex-tile.ts): every hexagon of the pane reads its own patch, and the three
+ * around each point blend with no border. Nothing here is generated -- the
+ * offsets only choose which part of the photograph a patch of glass shows.
  *
- * Now each repeat of the tile takes a different cell AND is mirrored on odd
- * rows and columns, so neighbouring tiles never show the same mark in the
- * same place. The tile is also twice the size, so a full-width pane is two
- * or three tiles across rather than four. All four cells are photographs;
- * nothing here is generated.
+ * R: scratches. G: smudge. B: wear -- the same smudge photograph at four
+ * times the scale, a slow variation in how handled each part of the pane is.
  */
-vec3 surfaceAt(vec2 uv, float seed) {
-  vec2 tile = floor(uv);
-  float pick = mod(seed + tile.x + 3.0 * tile.y, 4.0);
-  vec2 cell = vec2(mod(pick, 2.0), floor(pick * 0.5));
-  vec2 f = fract(uv);
-  f = mix(f, 1.0 - f, mod(abs(tile), 2.0));
-  vec2 inCell = f * 0.49 + 0.005;
-  return texture2D(uSurface, (inCell + cell) * 0.5).rgb;
+vec3 surfaceAt(vec2 local, float seed) {
+  vec2 shift = vec2(seed * 0.37, seed * 0.61);
+  float scratch = hexTile(uScratch, local / uScratchTile + shift).r;
+  float smudge = hexTile(uSmudge, local / uSmudgeTile + shift).r;
+  /*
+   * Handled glass is never perfectly clean, so wear has a floor: a third,
+   * rising where the smudge film is -- the same spread the old packed map's
+   * wear channel had, which the grime's strength was tuned against.
+   */
+  float film = hexTile(uSmudge, local / (uSmudgeTile * 4.0) + shift.yx).r;
+  float wear = 0.33 + 0.67 * smoothstep(0.0, 0.5, film);
+  return vec3(scratch, smudge, wear);
 }
 
 void main() {
@@ -339,7 +353,7 @@ void main() {
   float specular = pow(ndl, 24.0) * bevel * direct * 3.0;
 
   // ---- The surface ----
-  vec3 surf = surfaceAt((frag - uRect.xy) / 680.0, uSeed) * uHasSurface;
+  vec3 surf = surfaceAt(frag - uRect.xy, uSeed) * uHasSurface;
   float handled = 0.35 + 0.95 * surf.b;
 
   /*

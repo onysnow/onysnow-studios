@@ -535,14 +535,14 @@
      * this pane's geometry, and only where url() filters are supported;
      * elsewhere it is unset and this is the plain frost.
      */
-    backdrop-filter: blur(30px) saturate(150%) var(--glass-bevel, );
+    backdrop-filter: blur(30px) saturate(150%) var(--glass-bevel,);
     /*
      * Not inherited. Custom properties cascade, so a small pane INSIDE a big
      * one -- the round toggle in the header -- was picking up the header's
      * 1440x64 bevel map and bending itself by it. Each pane's own value is
      * set inline by <Glass>, which beats this.
      */
-    --glass-bevel: initial;    /*
+    --glass-bevel: initial; /*
      * A stacking context of its own, in every mode. Every layer inside a pane
      * -- the light and grime surface, the lit sides, the liquid render -- uses
      * a negative z-index to sit under the copy. The backdrop-filter used to be
@@ -565,7 +565,7 @@
 
   .glass--bar {
     background-color: oklch(0.145 0.011 55 / 26%);
-    backdrop-filter: blur(28px) saturate(150%) var(--glass-bevel, );
+    backdrop-filter: blur(28px) saturate(150%) var(--glass-bevel,);
     box-shadow:
       inset 0 1px 0 oklch(1 0 0 / 0.08),
       inset 0 -1px 0 oklch(1 0 0 / 0.03);
@@ -1176,6 +1176,86 @@ span:has(> .photo-surface) {
 .glass blockquote {
   text-shadow: calc(var(--cast-x, 0px) * 0.42) calc(var(--cast-y, 0px) * 0.42)
     calc(var(--cast-blur, 0px) * 0.6 + 1px) rgba(0, 0, 0, calc(var(--cast-alpha, 0) * 0.55));
+}
+
+/*
+ * Plastic: the orange buttons.
+ *
+ * A thin sheet of coloured plastic resting on the glass. Three things follow
+ * from what it is, and none of them is a setting:
+ *
+ *   GLOSS. Plastic reflects like glass does -- about 4% straight on (acrylic
+ *   n = 1.49), rising at grazing -- so the lamp catches the edge that faces
+ *   it, brightest when the lamp is lit and near. Its face would also show a
+ *   sharp image of the lamp; that is the face reflection, which is switched
+ *   off site-wide (LAMP_REFLECTION_ENABLED) and stays off here too.
+ *
+ *   LIGHT THROUGH IT. The pigment absorbs blue and green and passes red and
+ *   orange, so the plastic glows orange where the lamp is behind and near it.
+ *   Its two faces are flat and parallel: a ray comes out at the angle it went
+ *   in, shifted sideways by a fraction of the sheet's thickness. So nothing
+ *   bends -- no band, no seam, no caustic -- the light is only coloured.
+ *
+ *   ITS SHADOW. Not black: the light that gets through is orange, so the
+ *   patch it throws on the glass is dimmer AND orange-tinted, offset away
+ *   from the lamp and as soft as the lamp's size makes it (the same cast
+ *   vector every surface on the pane uses). It stands off the glass less
+ *   than a mounted print, hence half the throw.
+ *
+ * This replaces a generic drop shadow (shadow-lg), which pointed the same way
+ * whatever the lamp was doing.
+ */
+.plastic {
+  position: relative;
+  isolation: isolate;
+  box-shadow: calc(var(--cast-x, 0px) * 0.5) calc(var(--cast-y, 0px) * 0.5)
+    calc(var(--cast-blur, 0px) * 0.5 + 1px) rgb(150 62 6 / calc(var(--cast-alpha, 0) * 0.9));
+}
+
+/* The lamp's light through the plastic: an orange glow, nothing bent. */
+.plastic::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    circle 160px at var(--lit-x, 50%) var(--lit-y, 50%),
+    oklch(0.86 0.13 62 / 0.9) 0%,
+    oklch(0.78 0.16 55 / 0.35) 45%,
+    transparent 100%
+  );
+  opacity: calc(var(--lit-on, 0) * var(--lit-near, 0));
+}
+
+/* The edge facing the lamp catching it: a thin rim, brightest toward the lamp. */
+.plastic::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    var(--lit-angle, 180deg),
+    rgb(255 255 255 / calc(0.12 + 0.6 * var(--lit-on, 0) * var(--lit-near, 0))) 0%,
+    rgb(255 255 255 / 0.05) 45%,
+    transparent 70%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plastic::before {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2286,7 +2366,9 @@ span:has(> .photo-surface) {
  * same reason the grime did: things standing on a surface cannot have that
  * surface in front of them.
  */
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > canvas:not(.glass__surface):not(.glass__under) {
+:root[data-glass="raster"]
+  .glass:not(.glass--bar):not(.glass-toggle)
+  > canvas:not(.glass__surface):not(.glass__under) {
   /*
    * The LIBRARY's canvas only, and !important because it writes z-index:-1
    * inline. This used to match every canvas in the pane -- including our own
@@ -2746,7 +2828,6 @@ span:has(> .photo-surface) {
     transform: none;
   }
 }
-
 
 /*
  * Nothing scrolls sideways.

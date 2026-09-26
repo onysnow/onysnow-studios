@@ -99,6 +99,8 @@ export function warmSite(
     ),
     ...[...document.images].map(warmImage),
     fetchFile(assetUrl(SITE_ASSETS.glassSurface)),
+    fetchFile(assetUrl(SITE_ASSETS.glassSmudge)),
+    fetchFile(assetUrl(SITE_ASSETS.glassScratch)),
     ...FLARES.map((name) => fetchFile(flareUrl(name))),
     ...SOUNDS.map(fetchFile),
   ];

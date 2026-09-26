@@ -56,6 +56,8 @@ export function CustomCss() {
    * other URL out of the portal.
    */
   const glassSurface = safeHref(data?.[SITE_ASSETS.glassSurface.key] ?? "");
+  const glassSmudge = safeHref(data?.[SITE_ASSETS.glassSmudge.key] ?? "");
+  const glassScratch = safeHref(data?.[SITE_ASSETS.glassScratch.key] ?? "");
 
   /*
    * Whatever the lab last saved, applied to the real site.
@@ -79,9 +81,14 @@ export function CustomCss() {
 
     root.style.setProperty("--display-scale", displayScale(scale));
 
-    if (glassSurface) root.dataset[SITE_ASSETS.glassSurface.attr] = glassSurface;
-    else delete root.dataset[SITE_ASSETS.glassSurface.attr];
-  }, [font, scale, glassSurface]);
+    const publish = (asset: { attr: string }, url: string) => {
+      if (url) root.dataset[asset.attr] = url;
+      else delete root.dataset[asset.attr];
+    };
+    publish(SITE_ASSETS.glassSurface, glassSurface);
+    publish(SITE_ASSETS.glassSmudge, glassSmudge);
+    publish(SITE_ASSETS.glassScratch, glassScratch);
+  }, [font, scale, glassSurface, glassSmudge, glassScratch]);
 
   const css = safeCustomCss(data?.["custom_css"]);
   if (!css.trim()) return null;
