@@ -1,8 +1,10 @@
 import { useEffect, useCallback, useRef, type ElementType, type ReactNode } from "react";
-import { registerEdgeGlow } from "@/lib/edge-glow";
+import { paneEdgeWidth, registerEdgeGlow } from "@/lib/edge-glow";
 import { requestBevelFilter } from "@/lib/bevel-filters";
 import { registerLitSurface } from "@/lib/edge-glow";
 import { registerPane } from "@/lib/glass-panes";
+import { onTuningApplied } from "@/lib/tuning";
+import { EDGE_WIDTH_ATTR } from "@/effects/optics/edge-profile";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,6 +32,10 @@ const BEVEL_SUPPORTED =
  * to how glass behaves is a change here and nowhere else.
  *
  * `variant="bar"` is the thin fixed bars: less tint, shallower bezel.
+ *
+ * `edgeWidth` is how wide this pane's rounded-over edge is, in CSS pixels.
+ * Leave it out and the pane uses the "Edge width" knob. It is a cause: the
+ * bend, the light on the edge and the edge of the shadow all follow from it.
  */
 export function Glass({
   children,
@@ -38,12 +44,14 @@ export function Glass({
   variant = "panel",
   /** Pulls the band up over whatever it follows, so its top edge has a photograph behind it. */
   overlap = false,
+  edgeWidth,
 }: {
   children: ReactNode;
   className?: string;
   as?: ElementType;
   variant?: "panel" | "bar";
   overlap?: boolean;
+  edgeWidth?: number;
 }) {
   /*
    * A callback ref, NOT useRef plus an empty-dependency effect.
@@ -71,65 +79,78 @@ export function Glass({
    */
   const node = useRef<HTMLElement | null>(null);
 
-  const attach = useCallback((el: HTMLElement | null) => {
-    node.current = el;
-    release.current?.();
-    if (!el) {
-      release.current = null;
-      return;
-    }
+  const attach = useCallback(
+    (el: HTMLElement | null) => {
+      node.current = el;
+      release.current?.();
+      if (!el) {
+        release.current = null;
+        return;
+      }
 
-    const unregister = registerEdgeGlow(el);
+      const unregister = registerEdgeGlow(el);
 
-    /*
-     * The bevel map depends on the pane's size and corner radius.
-     *
-     * It used to be one baked PNG stretched over every pane, which meant a
-     * 64px bar and a 400px band were bent by the same profile -- so the bevel
-     * was a different physical depth on each, which is the one thing a bevel
-     * is not. The map is computed per geometry now (lib/bevel-map.ts), so the
-     * pane has to ask for the filter that matches it and point its refraction
-     * layer at it. Until that resolves, the CSS fallback in styles.css stands.
-     */
-    const fit = () => {
-      const rect = el.getBoundingClientRect();
-      const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
-      // Full-width bands bend at the top and bottom only: no sides, no corners.
-      const straight =
-        rect.width >= (document.documentElement.clientWidth || window.innerWidth) - 1;
-      const id = requestBevelFilter({ width: rect.width, height: rect.height, radius, straight });
       /*
-       * Onto the pane itself, as a variable the stylesheet folds into the
-       * pane's own backdrop-filter. Not onto the refraction layer, which is
-       * a child and cannot see past the pane (see `.glass` in styles.css);
-       * and not as an inline backdrop-filter, which would beat the rules that
-       * switch the CSS frost off under liquid glass.
+       * The bevel map depends on the pane's size and corner radius.
+       *
+       * It used to be one baked PNG stretched over every pane, which meant a
+       * 64px bar and a 400px band were bent by the same profile -- so the bevel
+       * was a different physical depth on each, which is the one thing a bevel
+       * is not. The map is computed per geometry now (lib/bevel-map.ts), so the
+       * pane has to ask for the filter that matches it and point its refraction
+       * layer at it. Until that resolves, the CSS fallback in styles.css stands.
        */
-      if (id && BEVEL_SUPPORTED) el.style.setProperty("--glass-bevel", `url("#${id}")`);
-    };
+      const fit = () => {
+        const rect = el.getBoundingClientRect();
+        const radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+        // Full-width bands bend at the top and bottom only: no sides, no corners.
+        const straight =
+          rect.width >= (document.documentElement.clientWidth || window.innerWidth) - 1;
+        const id = requestBevelFilter({
+          width: rect.width,
+          height: rect.height,
+          radius,
+          edgeWidth: edgeWidth ?? paneEdgeWidth(el),
+          straight,
+        });
+        /*
+         * Onto the pane itself, as a variable the stylesheet folds into the
+         * pane's own backdrop-filter. Not onto the refraction layer, which is
+         * a child and cannot see past the pane (see `.glass` in styles.css);
+         * and not as an inline backdrop-filter, which would beat the rules that
+         * switch the CSS frost off under liquid glass.
+         */
+        if (id && BEVEL_SUPPORTED) el.style.setProperty("--glass-bevel", `url("#${id}")`);
+      };
 
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(el);
+      fit();
+      const observer = new ResizeObserver(fit);
+      observer.observe(el);
+      // The edge width is a knob too; a new width is a new map.
+      const stopTuning = onTuningApplied(fit);
 
-    /*
-     * The copy resting on the pane casts a shadow too.
-     *
-     * Registered per block rather than once for the whole panel: the light is
-     * a cursor a few hundred pixels away, not the sun, so the direction it
-     * throws a heading at one end of a full-width band is visibly not the
-     * direction it throws a paragraph at the other. Done here so no call site
-     * has to know about it.
-     */
-    const copy = [...el.querySelectorAll<HTMLElement>("h1, h2, h3, h4, p, blockquote")];
-    const letGo = copy.map((node) => registerLitSurface(node));
+      /*
+       * The copy resting on the pane casts a shadow too.
+       *
+       * Registered per block rather than once for the whole panel: the light is
+       * a cursor a few hundred pixels away, not the sun, so the direction it
+       * throws a heading at one end of a full-width band is visibly not the
+       * direction it throws a paragraph at the other. Done here so no call site
+       * has to know about it.
+       */
+      const copy = [...el.querySelectorAll<HTMLElement>("h1, h2, h3, h4, p, blockquote")];
+      const letGo = copy.map((node) => registerLitSurface(node));
 
-    release.current = () => {
-      observer.disconnect();
-      for (const stop of letGo) stop();
-      unregister();
-    };
-  }, []);
+      release.current = () => {
+        observer.disconnect();
+        stopTuning();
+        for (const stop of letGo) stop();
+        unregister();
+      };
+      // A new edge width on the pane is a new bevel map, so re-fit when it changes.
+    },
+    [edgeWidth],
+  );
 
   /*
    * Tell the rasterised glass this pane exists, and that it is safe to touch.
@@ -163,6 +184,7 @@ export function Glass({
        * paint, so the race just moved.
        */
       suppressHydrationWarning
+      {...(edgeWidth !== undefined ? { [EDGE_WIDTH_ATTR]: edgeWidth } : {})}
       className={cn(
         "glass",
         variant === "bar" && "glass--bar",

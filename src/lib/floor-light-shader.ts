@@ -1,3 +1,5 @@
+import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
+
 /**
  * The light that goes THROUGH the glass and lands on the photographs behind.
  *
@@ -58,7 +60,6 @@ uniform float uCharge;
 uniform float uGap;
 uniform float uHeight;
 uniform float uReach;
-uniform float uBevel;
 uniform float uLightGain;
 uniform float uShadowGain;
 uniform float uCaustics;
@@ -70,6 +71,14 @@ uniform float uPrism;
 uniform int uCount;
 uniform vec4 uRect[${MAX_FLOOR_PANES}];
 uniform float uSeed[${MAX_FLOOR_PANES}];
+/*
+ * Each pane's edge width, in CSS pixels. The same width the bend and the
+ * light on the glass use -- it used to be a knob of its own ("Shadow edge",
+ * 90) so the shadow's rim sat somewhere other than the edge that cast it.
+ */
+uniform float uEdge[${MAX_FLOOR_PANES}];
+
+${EDGE_PROFILE_GLSL}
 
 /*
  * The bottom of the pool, worked out rather than drawn.
@@ -168,7 +177,7 @@ vec4 floorAt(vec2 P, float lit) {
     if (d <= -pen) continue;
     float inGlass = smoothstep(-pen, pen, d);
     d = max(d, 0.0);
-    float W = max(uBevel, 1.0);
+    float W = max(uEdge[i], 1.0);
     float x = d / W;
     float soft = pen / W;
 
@@ -237,8 +246,8 @@ void main() {
     float dx = straight ? 1e5 : hs.x - abs(q.x);
     float d = min(dx, dy);
     if (d <= 0.0) continue;
-    float x = clamp(d / max(uBevel, 1.0), 0.0, 1.0);
-    float bend = (1.0 - x) * (1.0 - x) * uBevel * 0.9 * uView;
+    float x = edgeBand(d, uEdge[i]);
+    float bend = (1.0 - x) * (1.0 - x) * uEdge[i] * 0.9 * uView;
     vec2 outward = dy < dx ? vec2(0.0, sign(q.y)) : vec2(sign(q.x), 0.0);
     look = P + outward * bend;
     break;
@@ -246,7 +255,7 @@ void main() {
 
   vec4 f = floorAt(look, lit);
   // Film, not a calculator: bright light rolls off instead of clipping flat.
-  vec3 add = vec3(1.0) - exp(-f.rgb * 1.15);
+  vec3 add = toneMapFilm(f.rgb);
   float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
   vec3 warm = vec3(1.0, 0.94, 0.84);
   gl_FragColor = vec4(warm * add, a);

@@ -118,6 +118,7 @@ export function GlassLight({
     const uCharge = U("uCharge");
     const uRect = U("uRect");
     const uRadius = U("uRadius");
+    const uEdgeWidth = U("uEdgeWidth");
     const uStraight = U("uStraight");
     const uTilt = U("uTilt");
     const uSeed = U("uSeed");
@@ -352,6 +353,7 @@ export function GlassLight({
 
         gl.uniform4f(uRect, pane.x, pane.y, pane.w, pane.h);
         gl.uniform1f(uRadius, pane.r);
+        gl.uniform1f(uEdgeWidth, pane.e);
         gl.uniform1f(uStraight, pane.w >= viewportWidth() - 1 ? 1 : 0);
         gl.uniform1f(uTilt, pane.t);
         gl.uniform1f(uSeed, pane.s);

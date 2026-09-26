@@ -1,3 +1,5 @@
+import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
+
 /**
  * Fragment shader for one pane of glass.
  *
@@ -57,6 +59,7 @@ uniform float uOccCount;
 
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
+uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one edge every effect shares
 uniform float uStraight;      // 1: a full-width band -- top and bottom edges only
 uniform float uTilt;          // -1 looking up at it, 1 looking down at it
 uniform float uSeed;
@@ -87,7 +90,6 @@ uniform vec3  uCool;
 #define CHROM_ABERRATION 0.05
 #define EDGE_HIGHLIGHT 0.05
 #define FRESNEL 1.0
-#define Z_RADIUS 40.0   // bevel depth in CSS pixels
 #define MAX_BEND 34.0   // peak displacement at the rim, CSS pixels
 
 /*
@@ -113,12 +115,12 @@ uniform vec3  uCool;
 #define SIDE_DISPERSION 7.0
 
 
-/* Signed distance to a rounded rectangle. Negative inside, zero on the edge. */
-float roundedBox(vec2 p, vec2 halfSize, float radius) {
-  float r = min(radius, min(halfSize.x, halfSize.y));
-  vec2 q = abs(p) - halfSize + r;
-  return min(max(q.x, q.y), 0.0) + length(max(q, vec2(0.0))) - r;
-}
+/*
+ * The edge: rounded box, band, Fresnel rise and tonemap, from the shared
+ * optics library -- the same edge the CSS bend and the light under the glass
+ * are drawn from. Its width is uEdgeWidth, per pane; there is no width here.
+ */
+${EDGE_PROFILE_GLSL}
 
 /*
  * How much of the light is blocked at this point on the pane.
@@ -212,7 +214,7 @@ void main() {
   vec2 grad = normalize(vec2(dx, dy) + 1e-6);
 
   float depth = -d;                       // positive inside
-  float band = clamp(depth / Z_RADIUS, 0.0, 1.0);
+  float band = edgeBand(depth, uEdgeWidth);
 
   /*
    * A displacement CURVE, not the raw derivative of the height field.
@@ -273,7 +275,7 @@ void main() {
    * a flat pane the grazing angles are the rim, so reflectivity climbs there.
    */
   float facing = clamp(depth / max(min(halfSize.x, halfSize.y), 1.0), 0.0, 1.0);
-  float fresnel = FRESNEL * pow(1.0 - facing, 5.0);
+  float fresnel = FRESNEL * fresnelRise(facing);
 
   // ---- The light, and how far it reaches this point ----
   float dl = distance(frag, uLight);
@@ -664,8 +666,7 @@ void main() {
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.
-  colour = colour / (1.0 + abs(colour));
-  colour = sign(colour) * pow(abs(colour), vec3(1.0 / 2.2));
+  colour = toneMapGlass(colour);
 
   /*
    * NO GRAIN HERE. Deliberately, and permanently.

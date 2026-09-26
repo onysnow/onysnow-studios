@@ -264,10 +264,10 @@ function Lab() {
                   These drive the rasterised glass shader, which only runs in liquid mode. In CSS
                   mode the panes are backdrop-filter and an SVG displacement map and none of this
                   reaches them, so moving these does nothing to the preview above. Switch the glass
-                  to make them live. Bevel depth has the most leverage of anything here: across the
-                  flat face of a pane the surface normal is (0,&nbsp;0,&nbsp;1), so refraction,
-                  fresnel and every specular are exactly zero there. All of the glass lives on the
-                  edge.
+                  to make them live. Edge width (under Glass shape) has the most leverage on this
+                  glass: across the flat face of a pane the surface normal is (0,&nbsp;0,&nbsp;1),
+                  so refraction, fresnel and every specular are exactly zero there. All of the glass
+                  lives on the edge.
                 </p>
                 <div className="mt-6 opacity-60">{rows}</div>
               </details>
@@ -293,10 +293,10 @@ function Lab() {
               </h2>
               {group === "Liquid glass" ? (
                 <p className="mb-5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                  The rasterised glass shader, live right now. Bevel depth has the most leverage of
-                  anything here: across the flat face of a pane the surface normal is
-                  (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular are exactly zero
-                  there. All of the glass lives on the edge.
+                  The rasterised glass shader, live right now. Edge width (under Glass shape) has
+                  the most leverage of anything here: across the flat face of a pane the surface
+                  normal is (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular are
+                  exactly zero there. All of the glass lives on the edge.
                 </p>
               ) : null}
               {rows}

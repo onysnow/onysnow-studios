@@ -19,16 +19,26 @@ import { bevelField } from "./bevel-map";
 /** The map is smooth, so it can be computed small and stretched back up. */
 const MAX_EDGE = 320;
 
-/** How wide the rounded-over edge is, in CSS pixels. */
-export const BEZEL_WIDTH = 26;
-
 /** How thick the slab is behind that edge, in CSS pixels. */
 export const GLASS_THICKNESS = 18;
 
 /** Ordinary soda-lime glass. */
 export const GLASS_IOR = 1.5;
 
-export type PaneGeometry = { width: number; height: number; radius: number; straight?: boolean };
+export type PaneGeometry = {
+  width: number;
+  height: number;
+  radius: number;
+  /**
+   * How wide this pane's rounded-over edge is, in CSS pixels.
+   *
+   * There is no width of its own here any more (it was a fixed 26). The pane
+   * says how wide its edge is and this map bends by exactly that, so the bend
+   * lands where the light and the shadow of the same edge do.
+   */
+  edgeWidth: number;
+  straight?: boolean;
+};
 
 export type BevelEntry = {
   id: string;
@@ -51,13 +61,14 @@ function bucket(n: number): number {
 }
 
 function keyFor(g: PaneGeometry): string {
-  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}${g.straight ? "s" : ""}`;
+  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}e${Math.round(g.edgeWidth)}${g.straight ? "s" : ""}`;
 }
 
 function encode(
   width: number,
   height: number,
   radius: number,
+  edgeWidth: number,
   straight = false,
 ): { href: string; scale: number } | null {
   if (typeof document === "undefined") return null;
@@ -69,7 +80,7 @@ function encode(
   const h = Math.max(8, Math.round(height * scale));
 
   const field = bevelField(w, h, radius * scale, {
-    bezelWidth: BEZEL_WIDTH * scale,
+    bezelWidth: edgeWidth * scale,
     thickness: GLASS_THICKNESS * scale,
     ior: GLASS_IOR,
     straight,
@@ -104,7 +115,13 @@ export function requestBevelFilter(g: PaneGeometry): string | null {
   const existing = cache.get(key);
   if (existing) return existing.id;
 
-  const encoded = encode(bucket(g.width), bucket(g.height), g.radius, g.straight ?? false);
+  const encoded = encode(
+    bucket(g.width),
+    bucket(g.height),
+    g.radius,
+    Math.round(g.edgeWidth),
+    g.straight ?? false,
+  );
   if (!encoded) return null;
 
   const entry: BevelEntry = { id: `glass-bevel-${key}`, ...encoded };

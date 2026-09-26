@@ -15,6 +15,7 @@
  */
 
 import { getGlassMode, onGlassMode } from "./glass-mode";
+import { DEFAULT_EDGE_WIDTH, readEdgeWidth } from "@/effects/optics/edge-profile";
 
 export type Knob = {
   label: string;
@@ -56,6 +57,27 @@ export type Knob = {
 };
 
 export const tuning: Record<string, Knob> = {
+  // ---- The glass's shape ----
+  //
+  // A cause, not a result: how wide the rounded-over edge of a pane is. The
+  // bend, the light on the edge and the edge of its shadow all work out their
+  // own values from this one number, in both glass modes, so they cannot land
+  // in different places again. A pane can set its own with data-edge-width;
+  // this is the width for every pane that does not.
+  //
+  // It replaces three knobs that were each a different width for the same
+  // edge: "Bevel depth" (150, the liquid bend), "Shadow edge" (90) and the
+  // fixed 26 of the CSS bend.
+  edgeWidth: {
+    label: "Edge width",
+    group: "Glass shape",
+    value: DEFAULT_EDGE_WIDTH,
+    min: 4,
+    max: 200,
+    step: 1,
+    glassKey: "zRadius",
+    hint: "How wide the rounded-over edge of the glass is, in pixels. Everything the edge does follows from it: how far it bends what is behind it, where its highlight sits, and where the bright seam and dark rim of its shadow fall. Panes can set their own.",
+  },
   // ---- The rasterised glass ----
   //
   // These are the shader's own uniforms, not CSS. They only do anything in
@@ -178,17 +200,6 @@ export const tuning: Record<string, Knob> = {
     glassKey: "edgeHighlight",
     modes: "raster",
     hint: "The inner stroke and rim glow. Trim rather than optics.",
-  },
-  glassDepth: {
-    label: "Bevel depth",
-    group: "Liquid glass",
-    value: 150,
-    min: 4,
-    max: 260,
-    step: 2,
-    glassKey: "zRadius",
-    modes: "raster",
-    hint: "How far the edge rounds over. EVERY optical term lives here -- across the flat face the normal is (0,0,1) and refraction, fresnel and specular are all exactly zero. Too small and the pane is a blurred rectangle.",
   },
   glassCornerBand: {
     label: "Corner, bands",
@@ -598,15 +609,6 @@ export const tuning: Record<string, Knob> = {
     step: 2,
     hint: "How far the glass stands off the photograph behind it. The further, the further its shadow and caustics fall from the pane.",
   },
-  floorBevel: {
-    label: "Shadow edge",
-    group: "Shadows",
-    value: 90,
-    min: 10,
-    max: 260,
-    step: 2,
-    hint: "The width of the bevel as a lens: the dark rim of the glass's shadow and the bright seam of light just inside it.",
-  },
   floorLight: {
     label: "Light through glass",
     group: "Shadows",
@@ -971,6 +973,20 @@ export function loadSavedTuning() {
 /** Shorthand for the loops: `t("coreGain")`. */
 export const t = (key: keyof typeof tuning | string): number => tuning[key]?.value ?? 0;
 
+const appliedListeners = new Set<() => void>();
+
+/**
+ * Called after every change is applied.
+ *
+ * For the few things that cannot read a knob inside a loop -- the CSS bevel
+ * map is built once per pane geometry, so a new edge width has to ask for a
+ * new one.
+ */
+export function onTuningApplied(fn: () => void): () => void {
+  appliedListeners.add(fn);
+  return () => appliedListeners.delete(fn);
+}
+
 /** Mirrors the CSS-side knobs onto the document element. */
 export function applyTuning() {
   if (typeof document === "undefined") return;
@@ -980,6 +996,7 @@ export function applyTuning() {
     root.setProperty(knob.cssVar, `${knob.value}${knob.cssUnit ?? ""}`);
   }
   applyGlassConfig();
+  for (const fn of appliedListeners) fn();
 }
 
 /**
@@ -1005,6 +1022,8 @@ export function applyGlassConfig() {
       if (knob.glassScope === "bar" && !isBar) continue;
       config[knob.glassKey] = knob.value;
     }
+    // The edge is the pane's own: its attribute wins over the knob.
+    config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);
     const next = JSON.stringify(config);
     if (pane.dataset["config"] !== next) pane.dataset["config"] = next;
   }

@@ -34,93 +34,19 @@
  * was wrong. `interiorIsNeutral` below is the guard.
  */
 
-/** Signed distance to a rounded rectangle. Negative inside. */
-export function roundedRectSDF(
-  px: number,
-  py: number,
-  halfW: number,
-  halfH: number,
-  radius: number,
-): number {
-  const r = Math.min(radius, Math.min(halfW, halfH));
-  const qx = Math.abs(px) - halfW + r;
-  const qy = Math.abs(py) - halfH + r;
-  const outside = Math.hypot(Math.max(qx, 0), Math.max(qy, 0));
-  return Math.min(Math.max(qx, qy), 0) + outside - r;
-}
-
-/**
- * The bevel's cross-section, as a height in [0, 1] across its width.
- *
- * `x` is 0 at the outer edge and 1 where the bevel meets the flat face. The
- * circular profile is the default and is what a rounded-over edge is; the
- * squircle is the shape this used to approximate the circle with, kept because
- * it is a flatter, more industrial edge and worth having as a choice.
- *
- * Profiles from jeantimex/glass-effect-webgpu (ISC).
+/*
+ * The SDF, the height profile and the Snell offset used to be defined here,
+ * and again -- differently -- in each shader. They live in the shared optics
+ * library now, so the bend this map draws and the light the shaders draw are
+ * computed from the same edge. Re-exported so existing imports keep working.
  */
-export type SurfaceProfile = "circle" | "squircle";
-
-export function surfaceHeight(x: number, profile: SurfaceProfile = "circle"): number {
-  const t = Math.min(1, Math.max(0, x));
-  if (profile === "squircle") return Math.pow(1 - Math.pow(1 - t, 4), 0.25);
-  return Math.sqrt(1 - Math.pow(1 - t, 2));
-}
-
-function surfaceDerivative(x: number, profile: SurfaceProfile): number {
-  const dx = 0.001;
-  const a = Math.max(x - dx, 0);
-  const b = Math.min(x + dx, 1);
-  return (surfaceHeight(b, profile) - surfaceHeight(a, profile)) / Math.max(b - a, 1e-6);
-}
-
-/**
- * How far the backdrop moves under a point on the bevel, in pixels.
- *
- * This is the part the first version faked. It took the gradient of the height
- * field, normalised it against the steepest slope on the pane and multiplied
- * by a chosen 40px -- so the displacement was a shape scaled by a number
- * somebody picked, and the number had to be re-picked whenever anything else
- * changed.
- *
- * Snell's law instead: refract the viewing ray at the surface, then follow it
- * through the glass it still has to cross and see where it comes out. The
- * answer falls out of the two quantities that actually determine it -- how
- * thick the glass is and what it is made of -- and is in real pixels, so
- * nothing needs scaling to taste.
- *
- * Method from jeantimex/glass-effect-webgpu (ISC).
- */
-export function refractionOffset(
-  x: number,
-  bezelWidth: number,
-  thickness: number,
-  ior: number,
-  profile: SurfaceProfile = "circle",
-): number {
-  const eta = 1 / ior;
-  const height = surfaceHeight(x, profile);
-  const slope = surfaceDerivative(x, profile);
-
-  // Surface normal, pointing back out of the glass.
-  const magnitude = Math.hypot(slope, 1);
-  const nx = -slope / magnitude;
-  const ny = -1 / magnitude;
-
-  const dotNI = ny;
-  const k = 1 - eta * eta * (1 - dotNI * dotNI);
-  // Total internal reflection: nothing gets through along this ray.
-  if (k < 0) return 0;
-
-  const kSqrt = Math.sqrt(k);
-  const rx = -(eta * dotNI + kSqrt) * nx;
-  const ry = eta - (eta * dotNI + kSqrt) * ny;
-  if (Math.abs(ry) < 1e-3) return 0;
-
-  // The ray still has the bevel's own height plus the slab to cross.
-  const remaining = height * bezelWidth + thickness;
-  return rx * (remaining / ry);
-}
+import {
+  refractionOffset,
+  roundedRectSDF,
+  type SurfaceProfile,
+} from "@/effects/optics/edge-profile";
+export { refractionOffset, roundedRectSDF, surfaceHeight } from "@/effects/optics/edge-profile";
+export type { SurfaceProfile } from "@/effects/optics/edge-profile";
 
 export type BevelField = {
   width: number;

@@ -84,7 +84,7 @@ export function FloorLight() {
     const uGap = U("uGap");
     const uHeight = U("uHeight");
     const uReach = U("uReach");
-    const uBevel = U("uBevel");
+    const uEdge = U("uEdge");
     const uLightGain = U("uLightGain");
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
@@ -113,6 +113,7 @@ export function FloorLight() {
 
     const rects = new Float32Array(MAX_FLOOR_PANES * 4);
     const seeds = new Float32Array(MAX_FLOOR_PANES);
+    const edges = new Float32Array(MAX_FLOOR_PANES);
     let wasLit = false;
 
     /*
@@ -185,6 +186,7 @@ export function FloorLight() {
         if (pane.w < 120 || pane.h < 40) continue; // buttons and menus throw nothing worth drawing
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
+        edges[n] = pane.e;
         drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
         n += 1;
       }
@@ -195,7 +197,6 @@ export function FloorLight() {
       gl.uniform1f(uGap, t("floorGap"));
       gl.uniform1f(uHeight, t("shadowHeight"));
       gl.uniform1f(uReach, t("floorReach"));
-      gl.uniform1f(uBevel, t("floorBevel"));
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
@@ -210,6 +211,7 @@ export function FloorLight() {
       gl.uniform1i(uCount, n);
       gl.uniform4fv(uRect, rects);
       gl.uniform1fv(uSeed, seeds);
+      gl.uniform1fv(uEdge, edges);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
