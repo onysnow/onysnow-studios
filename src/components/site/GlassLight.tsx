@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
+import {
+  beginPass,
+  buildProgram,
+  fullScreenTriangle,
+  onSharedGlLoss,
+  sharedGl,
+} from "@/effects/engine/gl";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
 import { onCharge } from "@/effects/light/lights";
@@ -64,7 +71,6 @@ export function GlassLight({
   chargeRef: { current: number };
   positionRef: { current: { x: number; y: number } };
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   /* Bumped when a lost GL context returns; see CursorLight for why this is
      the whole recovery path. */
   const [generation, setGeneration] = useState(0);
@@ -75,47 +81,19 @@ export function GlassLight({
     // device the charge can never leave zero. Nothing to do but not start.
     if (!window.matchMedia?.("(pointer: fine)").matches) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: false,
-    });
-    if (!gl) return;
-
-    const compile = (type: number, source: string) => {
-      const shader = gl.createShader(type)!;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("glass shader:", gl.getShaderInfoLog(shader));
-        return null;
-      }
-      return shader;
-    };
-
-    const vs = compile(gl.VERTEX_SHADER, LIGHT_VERTEX_SHADER);
-    const fs = compile(gl.FRAGMENT_SHADER, GLASS_LIGHT_FRAGMENT_SHADER);
-    if (!vs || !fs) return;
-
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("glass link:", gl.getProgramInfoLog(program));
-      return;
-    }
+    /*
+     * The shared context (effects/engine/gl). Its buffer is offscreen, as
+     * this pass's own canvas already was: each pane's region is copied out
+     * of it into that pane's surface layer.
+     */
+    const shared = sharedGl();
+    if (!shared) return;
+    const { gl } = shared;
+    const canvas = shared.canvas;
+    const program = buildProgram(gl, LIGHT_VERTEX_SHADER, GLASS_LIGHT_FRAGMENT_SHADER, "glass");
+    if (!program) return;
     gl.useProgram(program);
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const aPosition = gl.getAttribLocation(program, "aPosition");
-    gl.enableVertexAttribArray(aPosition);
-    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+    const quad = fullScreenTriangle(gl, program);
 
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
@@ -186,24 +164,7 @@ export function GlassLight({
     gl.uniform1i(U("uBackdropBelow"), 4);
     gl.uniform1f(uHasSurface, 0);
 
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.clearColor(0, 0, 0, 0);
-
     let scale = 1;
-    const resize = () => {
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
-      const w = Math.round(viewportWidth() * scale);
-      const h = Math.round(viewportHeight() * scale);
-      if (canvas.width === w && canvas.height === h) return;
-      canvas.width = w;
-      canvas.height = h;
-      gl.viewport(0, 0, w, h);
-      gl.uniform2f(uViewport, w, h);
-      gl.uniform1f(uScale, scale);
-    };
-    resize();
-    window.addEventListener("resize", resize);
 
     /*
      * The photographed surface map, fetched lazily: the shader falls back to
@@ -379,7 +340,6 @@ export function GlassLight({
     const allLayers = new Set<HTMLCanvasElement>();
 
     let wasLit = false;
-    canvas.style.opacity = "0";
 
     /* Returns whether there is still something to draw; false parks the loop. */
     /*
@@ -432,8 +392,15 @@ export function GlassLight({
       const panes = glassGeometry(now);
       const { x, y } = positionRef.current;
 
-      gl.disable(gl.SCISSOR_TEST);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      const bw = Math.round(viewportWidth() * scale);
+      const bh = Math.round(viewportHeight() * scale);
+      if (!beginPass(bw, bh)) return false;
+      quad.bind();
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.uniform2f(uViewport, bw, bh);
+      gl.uniform1f(uScale, scale);
       gl.enable(gl.SCISSOR_TEST);
       gl.uniform2f(uLight, x, y);
       gl.uniform1f(uCharge, charge);
@@ -647,31 +614,25 @@ export function GlassLight({
     });
     loop.wake();
 
-    const onLost = (event: Event) => {
-      event.preventDefault();
-      loop.stop();
-    };
-    const onRestored = () => setGeneration((g) => g + 1);
-    canvas.addEventListener("webglcontextlost", onLost);
-    canvas.addEventListener("webglcontextrestored", onRestored);
+    const stopLoss = onSharedGlLoss(
+      () => loop.stop(),
+      () => setGeneration((g) => g + 1),
+    );
 
     return () => {
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
       stopTuning();
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestored);
-      window.removeEventListener("resize", resize);
+      stopLoss();
       gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      gl.deleteBuffer(buffer);
+      quad.delete();
       for (const tex of layers.values()) gl.deleteTexture(tex);
       if (room) gl.deleteTexture(room);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
     };
   }, [chargeRef, positionRef, generation]);
 
-  return <canvas ref={canvasRef} aria-hidden="true" className="glass-light" />;
+  // Nothing of its own to show: it draws into each pane's surface layer.
+  return null;
 }

@@ -1704,25 +1704,10 @@ span:has(> .photo-surface) {
  * so this only has to place it and let it accumulate.
  */
 /*
- * The glass light canvas.
- *
- * Viewport-sized and `plus-lighter`, so what it draws ADDS to the panels
- * underneath rather than covering them — which is the only way an edge that is
- * both catching the light and carrying its reflection can sum past white.
- * Below the cursor light: this is that light landing on something, so it
- * cannot be brighter than the source.
+ * The glass light has no canvas of its own any more: it draws into the shared
+ * WebGL context (effects/engine/gl) and copies each pane's light into that
+ * pane's surface layer (.glass__surface).
  */
-.glass-light {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 9997;
-  pointer-events: none;
-  mix-blend-mode: plus-lighter;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-}
 
 /*
  * The lens flare footage.

@@ -38,7 +38,8 @@ import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/opti
  *
  * WHAT IT DRAWS
  *
- * Premultiplied light and shadow in one pass: white where light is added,
+ * Light and shadow in one pass (worked out premultiplied, written straight
+ * for the shared context): white where light is added,
  * black where it is taken away. The canvas sits above the photographs and
  * below the panes, so in CSS mode the pane's own frost and bevel then bend
  * this too, exactly as they bend the photograph under it.
@@ -325,6 +326,13 @@ void main() {
   vec3 add = toneMapFilm(f.rgb);
   float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
   vec3 warm = vec3(1.0, 0.94, 0.84);
-  gl_FragColor = vec4(warm * add, a);
+  /*
+   * Worked out premultiplied (the light is at most the coverage, so this is
+   * a valid premultiplied colour), written straight: the shared context
+   * (effects/engine/gl) is not premultiplied, and the browser multiplies it
+   * back in when it copies the buffer out.
+   */
+  vec3 light = warm * add;
+  gl_FragColor = vec4(a > 0.0 ? light / a : vec3(0.0), a);
 }
 `;

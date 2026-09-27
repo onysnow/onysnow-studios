@@ -9,6 +9,15 @@ import {
   MAX_FLOOR_PANES,
 } from "@/lib/floor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
+import {
+  beginPass,
+  blitAll,
+  buildProgram,
+  clear2d,
+  fullScreenTriangle,
+  onSharedGlLoss,
+  sharedGl,
+} from "@/effects/engine/gl";
 import { t } from "@/lib/tuning";
 import { FLOAT_GLASS } from "@/effects/materials/presets";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
@@ -44,42 +53,15 @@ export function FloorLight() {
     const canvas = ref.current;
     if (!canvas) return;
 
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      premultipliedAlpha: true,
-      antialias: false,
-    });
-    if (!gl) return;
-
-    const compile = (type: number, source: string) => {
-      const shader = gl.createShader(type)!;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("floor light shader:", gl.getShaderInfoLog(shader));
-        return null;
-      }
-      return shader;
-    };
-    const vs = compile(gl.VERTEX_SHADER, FLOOR_VERTEX_SHADER);
-    const fs = compile(gl.FRAGMENT_SHADER, FLOOR_FRAGMENT_SHADER);
-    if (!vs || !fs) return;
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("floor light link:", gl.getProgramInfoLog(program));
-      return;
-    }
+    // The shared context (effects/engine/gl); this canvas is a 2D copy of it.
+    const shared = sharedGl();
+    if (!shared) return;
+    const { gl } = shared;
+    const buffer = shared.canvas;
+    const program = buildProgram(gl, FLOOR_VERTEX_SHADER, FLOOR_FRAGMENT_SHADER, "floor light");
+    if (!program) return;
     gl.useProgram(program);
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const aPosition = gl.getAttribLocation(program, "aPosition");
-    gl.enableVertexAttribArray(aPosition);
-    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+    const quad = fullScreenTriangle(gl, program);
 
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
@@ -132,19 +114,6 @@ export function FloorLight() {
     const uSeed = U("uSeed");
 
     let scale = 1;
-    const resize = () => {
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
-      const w = Math.round((document.documentElement.clientWidth || window.innerWidth) * scale);
-      const h = Math.round((document.documentElement.clientHeight || window.innerHeight) * scale);
-      if (canvas.width === w && canvas.height === h) return;
-      canvas.width = w;
-      canvas.height = h;
-      gl.viewport(0, 0, w, h);
-      gl.uniform2f(uViewport, w, h);
-      gl.uniform1f(uScale, scale);
-    };
-    resize();
-    window.addEventListener("resize", resize);
 
     const rects = new Float32Array(MAX_FLOOR_PANES * 4);
     const seeds = new Float32Array(MAX_FLOOR_PANES);
@@ -197,8 +166,7 @@ export function FloorLight() {
       const charge = lightState.charge;
       if (charge <= 0.002) {
         if (wasLit) {
-          gl.clearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
+          clear2d(canvas);
           clearUnder();
           wasLit = false;
           setLive(false);
@@ -224,7 +192,13 @@ export function FloorLight() {
         n += 1;
       }
 
-      gl.useProgram(program);
+      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      const bw = Math.round((document.documentElement.clientWidth || window.innerWidth) * scale);
+      const bh = Math.round(vh * scale);
+      if (!beginPass(bw, bh)) return false;
+      quad.bind();
+      gl.uniform2f(uViewport, bw, bh);
+      gl.uniform1f(uScale, scale);
       gl.uniform2f(uLight, lightState.x, lightState.y);
       gl.uniform1f(uCharge, charge);
       gl.uniform1f(uGap, t("floorGap"));
@@ -249,8 +223,6 @@ export function FloorLight() {
       gl.uniform4fv(uRect, rects);
       gl.uniform1fv(uSeed, seeds);
       gl.uniform1fv(uEdge, edges);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Same task as the draw, so the buffer is still there to copy from.
@@ -267,10 +239,10 @@ export function FloorLight() {
         const sy = pane.y * scale;
         const cx = Math.max(0, Math.floor(sx));
         const cy = Math.max(0, Math.floor(sy));
-        const cw = Math.min(canvas.width, Math.ceil(sx + w)) - cx;
-        const ch = Math.min(canvas.height, Math.ceil(sy + h)) - cy;
+        const cw = Math.min(buffer.width, Math.ceil(sx + w)) - cx;
+        const ch = Math.min(buffer.height, Math.ceil(sy + h)) - cy;
         if (cw <= 0 || ch <= 0) continue;
-        ctx.drawImage(canvas, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
+        ctx.drawImage(buffer, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
       }
 
       /*
@@ -288,15 +260,17 @@ export function FloorLight() {
         gl.enable(gl.SCISSOR_TEST);
         for (const pane of drawnPanes) {
           const x0 = Math.max(0, Math.floor(pane.x * scale));
-          const x1 = Math.min(canvas.width, Math.ceil((pane.x + pane.w) * scale));
-          const y1 = Math.min(canvas.height, Math.ceil((pane.y + pane.h) * scale));
+          const x1 = Math.min(buffer.width, Math.ceil((pane.x + pane.w) * scale));
+          const y1 = Math.min(buffer.height, Math.ceil((pane.y + pane.h) * scale));
           const y0 = Math.max(0, Math.floor(pane.y * scale));
           if (x1 <= x0 || y1 <= y0) continue;
-          gl.scissor(x0, canvas.height - y1, x1 - x0, y1 - y0);
+          gl.scissor(x0, buffer.height - y1, x1 - x0, y1 - y0);
           gl.clear(gl.COLOR_BUFFER_BIT);
         }
         gl.disable(gl.SCISSOR_TEST);
       }
+      // What is left is the floor outside the glass, onto the page.
+      blitAll(buffer, canvas);
       return true;
     };
 
@@ -307,13 +281,10 @@ export function FloorLight() {
     const stopCharge = onCharge(wake);
     loop.wake();
 
-    const onLost = (event: Event) => {
-      event.preventDefault();
-      loop.stop();
-    };
-    const onRestored = () => setGeneration((g) => g + 1);
-    canvas.addEventListener("webglcontextlost", onLost);
-    canvas.addEventListener("webglcontextrestored", onRestored);
+    const stopLoss = onSharedGlLoss(
+      () => loop.stop(),
+      () => setGeneration((g) => g + 1),
+    );
 
     return () => {
       loop.stop();
@@ -322,9 +293,9 @@ export function FloorLight() {
       for (const tex of layers.values()) gl.deleteTexture(tex);
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
-      window.removeEventListener("resize", resize);
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestored);
+      stopLoss();
+      gl.deleteProgram(program);
+      quad.delete();
     };
   }, [generation]);
 

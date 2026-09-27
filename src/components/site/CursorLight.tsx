@@ -2,6 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { onCharge } from "@/effects/light/lights";
 import { sleepingLoop } from "@/lib/gl-loop";
+import {
+  beginPass,
+  blitAll,
+  buildProgram,
+  clear2d,
+  fullScreenTriangle,
+  onSharedGlLoss,
+  sharedGl,
+} from "@/effects/engine/gl";
 import { t } from "@/lib/tuning";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
@@ -73,46 +82,20 @@ export function CursorLight({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: false,
-    });
+    /*
+     * The shared context (effects/engine/gl): the lens is drawn into it and
+     * copied onto this canvas, which is now a plain 2D one.
+     */
+    const shared = sharedGl();
     // No WebGL: the page simply goes without the light rather than falling
     // back to something that doesn't work.
-    if (!gl) return;
+    if (!shared) return;
+    const { gl } = shared;
 
-    const compile = (type: number, source: string) => {
-      const shader = gl.createShader(type)!;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("cursor light shader:", gl.getShaderInfoLog(shader));
-        return null;
-      }
-      return shader;
-    };
-
-    const vs = compile(gl.VERTEX_SHADER, LIGHT_VERTEX_SHADER);
-    const fs = compile(gl.FRAGMENT_SHADER, LIGHT_FRAGMENT_SHADER);
-    if (!vs || !fs) return;
-
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("cursor light link:", gl.getProgramInfoLog(program));
-      return;
-    }
+    const program = buildProgram(gl, LIGHT_VERTEX_SHADER, LIGHT_FRAGMENT_SHADER, "cursor light");
+    if (!program) return;
     gl.useProgram(program);
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const aPosition = gl.getAttribLocation(program, "aPosition");
-    gl.enableVertexAttribArray(aPosition);
-    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+    const quad = fullScreenTriangle(gl, program);
 
     const uCharge = gl.getUniformLocation(program, "uCharge");
     const uClosed = gl.getUniformLocation(program, "uClosed");
@@ -141,20 +124,14 @@ export function CursorLight({
     const uGhostGain = gl.getUniformLocation(program, "uGhostGain");
     const uHaloGain = gl.getUniformLocation(program, "uHaloGain");
 
-    let scale = 1;
-    const resize = () => {
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
-      const w = Math.round(viewportWidth() * scale);
-      const h = Math.round(viewportHeight() * scale);
-      if (canvas.width === w && canvas.height === h) return;
-      canvas.width = w;
-      canvas.height = h;
-      gl.viewport(0, 0, w, h);
-      gl.uniform2f(uViewport, w, h);
-      gl.uniform1f(uScale, scale);
+    const size = () => {
+      const scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      return {
+        scale,
+        w: Math.round(viewportWidth() * scale),
+        h: Math.round(viewportHeight() * scale),
+      };
     };
-    resize();
-    window.addEventListener("resize", resize);
 
     /*
      * The same photographed surface the panes wear, reused here to give the
@@ -184,9 +161,6 @@ export function CursorLight({
       img.src = assetUrl(SITE_ASSETS.glassSurface);
     };
 
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
     const start = performance.now();
     let wasLit = false;
     canvas.style.opacity = "0";
@@ -196,8 +170,7 @@ export function CursorLight({
       const charge = chargeRef.current;
       if (charge <= 0.002) {
         if (wasLit) {
-          gl.clearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
+          clear2d(canvas);
           canvas.style.opacity = "0";
           wasLit = false;
         }
@@ -207,6 +180,15 @@ export function CursorLight({
         canvas.style.opacity = "1";
         wasLit = true;
       }
+
+      const { scale, w, h } = size();
+      const pass = beginPass(w, h);
+      if (!pass) return false;
+      quad.bind();
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.uniform2f(uViewport, w, h);
+      gl.uniform1f(uScale, scale);
 
       const closed = closedRef.current;
       const { x, y } = positionRef.current;
@@ -223,9 +205,9 @@ export function CursorLight({
       gl.uniform1f(uSpread, t("spread"));
       gl.uniform1f(uGhostGain, t("ghostGain"));
       gl.uniform1f(uHaloGain, t("haloGain"));
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // Same step as the draw: the next pass clears the buffer.
+      blitAll(pass.canvas, canvas);
       return true;
     };
 
@@ -242,29 +224,19 @@ export function CursorLight({
     const stopCharge = onCharge(wake);
     loop.wake();
 
-    /*
-     * `preventDefault` is not optional: without it the browser does not even
-     * attempt to restore the context, and the canvas stays dead for good.
-     */
-    const onLost = (event: Event) => {
-      event.preventDefault();
-      loop.stop();
-    };
-    const onRestored = () => setGeneration((g) => g + 1);
-    canvas.addEventListener("webglcontextlost", onLost);
-    canvas.addEventListener("webglcontextrestored", onRestored);
+    // Lost with the shared context; rebuilt when it comes back.
+    const stopLoss = onSharedGlLoss(
+      () => loop.stop(),
+      () => setGeneration((g) => g + 1),
+    );
 
     return () => {
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestored);
-      window.removeEventListener("resize", resize);
+      stopLoss();
       gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      gl.deleteBuffer(buffer);
+      quad.delete();
       gl.deleteTexture(grit);
     };
   }, [chargeRef, closedRef, positionRef, generation]);
