@@ -744,6 +744,68 @@ export const tuning: Record<string, Knob> = {
 };
 
 /*
+ * ---- Results, not causes (optics plan step 7) ----
+ *
+ * The rule Ony set: he sets CAUSES -- the light, the glass, its shape and
+ * surface, where it sits, the room, the camera -- and physics sets the
+ * EFFECTS. A knob for an effect lets the picture disagree with itself: turn
+ * up "Fresnel" and the face reflects more than its own index of refraction
+ * says it can, while every other term still uses the index.
+ *
+ * These are those knobs. Each is now a model constant, calibrated and
+ * locked: it keeps the value it has here, it has no control in /lab, and a
+ * value saved in the browser from before cannot override it. The values are
+ * the ones the site already looked right with, so nothing on the page moves.
+ * Where the cause that should set it does not exist yet (paper matteness,
+ * lens quality), the result waits for that cause rather than keeping a
+ * slider in the meantime.
+ *
+ * Each entry says what it follows from.
+ */
+export const RESULTS: Readonly<Record<string, string>> = {
+  restEdge:
+    "the edge's brightness at rest: the room it reflects, through Fresnel at the glass's IOR",
+  glassRefraction: "how far the liquid glass bends: its IOR and thickness",
+  glassEdgeBlur: "the softness of the bend at the rim: the edge profile",
+  glassSpecular: "the gloss: Fresnel at the glass's IOR, and its frost",
+  glassDistortion: "surface roughness beyond the frost: the glass's waviness",
+  glassFresnel: "the reflectance: the glass's IOR",
+  glassEdge: "the rim highlight: the lamp and the edge profile",
+  glassSaturation: "the colour through the glass: its tint and absorption",
+  glassSpecTight: "the highlight's size: the lamp's size and the frost",
+  glassLightX: "where the highlight sits: the lamp's position",
+  glassLightY: "where the highlight sits: the lamp's position",
+  glassOpacity: "how much of the scene shows through: the glass is clear",
+  glassShadow: "the shadow's darkness: the light and the gap",
+  glassShadowSpread: "the shadow's softness: the light's size and the gap",
+  glassShadowY: "the shadow's offset: the light's position and the gap",
+  glassBrightness: "the pane's brightness: the room and the light",
+  coreFalloff: "the core's tightness: the lamp's size",
+  ghostGain: "the lens ghosts: the lens's quality",
+  haloGain: "the halo: the lens's quality",
+  rimGlare: "the glare past the rim: the camera's lens and the light",
+  rimGlareSize: "the glare's reach: the camera's lens",
+  displacement: "the refraction of the CSS glass: IOR and thickness",
+  shadowStrength: "the content's shadow: the light and the content's depth",
+  floorView: "the bend of the floor seen through the glass: IOR, thickness and gap",
+  floorLight: "the light through the glass: the lamp's power and the absorption",
+  floorShadow: "the glass's shadow: its edge profile and absorption",
+  floorPrism: "the rainbow at the shadow's edge: the dispersion",
+  transmit: "the CSS pool of light through the glass: the lamp and the absorption",
+  transmitReach: "that pool's spread: the lamp's height and size",
+  transmitCore: "that pool's caustic core: the edge profile and the lamp",
+  paperGloss: "the paper's specular: its matteness (off)",
+  paperCore: "the paper's specular size: its matteness",
+  paperSheen: "the paper's sheen: its matteness",
+  paperReach: "the paper's sheen spread: its matteness and the lamp's height",
+  paperRoom: "the paper's reflection of the room: its matteness",
+  grimeFloor: "how clear the unmarked glass is: the smudge and scratch amounts",
+};
+
+/** Whether a knob is a result: locked, with no control. */
+export const isResult = (key: string): boolean => Object.hasOwn(RESULTS, key);
+
+/*
  * ---- Two sets of values, one per glass mode ----
  *
  * WHY
@@ -805,7 +867,8 @@ export function valueIn(key: string, mode: TuningMode): number {
 /** Set a knob's value in a given mode, loaded or not. */
 export function setValueIn(key: string, mode: TuningMode, value: number) {
   const knob = tuning[key];
-  if (!knob) return;
+  // A result is locked: nothing sets it, including a value saved before.
+  if (!knob || isResult(key)) return;
   if (mode === activeMode || !isPerMode(knob)) {
     knob.value = value;
     applyTuning();
@@ -961,6 +1024,7 @@ export function applyGlassConfig() {
 export function serializeTuning() {
   const byGroup: Record<string, string[]> = {};
   for (const [key, knob] of Object.entries(tuning)) {
+    if (isResult(key)) continue;
     // Both sets for anything kept twice, so pasting this back does not
     // silently bake one mode's numbers into the other.
     const line = isPerMode(knob)

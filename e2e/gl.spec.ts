@@ -102,4 +102,44 @@ test.describe("the light passes share one WebGL context", () => {
     await page.mouse.up();
     await expect.poll(() => inked(page, "canvas.floor-light"), { timeout: 15_000 }).toBe(0);
   });
+
+  /*
+   * Step 7: the light under a pane follows THAT pane's causes. A pane that
+   * stands higher off the photograph throws its light and shadow further, so
+   * raising one pane's gap changes what lands under it.
+   */
+  test("the light under a pane follows that pane's own gap", async ({ page }) => {
+    await page.goto("/?glass=css");
+    await page.waitForLoadState("networkidle");
+    const band = page.locator("[data-seam] .glass").first();
+    await band.scrollIntoViewIfNeeded();
+    const box = (await band.boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.8, { steps: 4 });
+    await page.mouse.down();
+    const under = band.locator(':scope > canvas[data-layer="pane:under"]');
+    await expect(under).toHaveCount(1, { timeout: 10_000 });
+    const picture = () =>
+      under.evaluate((c: HTMLCanvasElement) => {
+        const d = c.getContext("2d")!.getImageData(0, 0, c.width, c.height).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 97) sum += d[i]!;
+        return sum;
+      });
+    // Held long enough to settle, then read twice to be sure it has.
+    await expect
+      .poll(
+        async () => {
+          const a = await picture();
+          await page.waitForTimeout(800);
+          return a > 0 && a === (await picture());
+        },
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    const before = await picture();
+
+    await band.evaluate((el) => el.setAttribute("data-gap", "260"));
+    await expect.poll(picture, { timeout: 15_000 }).not.toBe(before);
+    await page.mouse.up();
+  });
 });

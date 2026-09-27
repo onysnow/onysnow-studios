@@ -16,7 +16,7 @@ import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/opti
  *
  * THE GEOMETRY
  *
- * The pane stands `uGap` pixels off the photograph; the light is `uHeight`
+ * Each pane stands `uGap[i]` pixels off the photograph; the light is `uHeight`
  * above it. For a point P on the photograph, the ray back to the light
  * crosses the glass at Q = P + (L - P) * gap / height. Whatever the glass is
  * doing at Q decides what reaches P:
@@ -62,7 +62,6 @@ uniform float uScale;
 uniform vec2 uLight;
 uniform float uCharge;
 
-uniform float uGap;
 uniform float uHeight;
 uniform float uLightGain;
 uniform float uShadowGain;
@@ -74,9 +73,7 @@ uniform float uCaustics;
  * effects/optics/transmission.ts).
  */
 uniform float uLightSize;
-uniform float uIor;
 uniform float uView;
-uniform float uFrost;
 uniform float uPrism;
 
 uniform int uCount;
@@ -88,6 +85,14 @@ uniform float uSeed[${MAX_FLOOR_PANES}];
  * 90) so the shadow's rim sat somewhere other than the edge that cast it.
  */
 uniform float uEdge[${MAX_FLOOR_PANES}];
+/*
+ * What each pane is (effects/materials/pane-causes; optics plan step 7): how
+ * far it stands off the photograph, and its glass's index and frost. A pane
+ * declares these; nothing here is a setting.
+ */
+uniform float uGap[${MAX_FLOOR_PANES}];
+uniform float uIor[${MAX_FLOOR_PANES}];
+uniform float uFrost[${MAX_FLOOR_PANES}];
 
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
@@ -120,7 +125,7 @@ uniform vec2 uViewShift;
  * small: the determinant is floored by the penumbra, and a big soft lamp
  * gives soft cells while a tight one gives wire-thin lines.
  */
-float causticAt(vec2 x, float seed, float pen) {
+float causticAt(vec2 x, float seed, float pen, float gap) {
   x += vec2(seed * 613.0, seed * 389.0);
   float hxx = 0.0;
   float hyy = 0.0;
@@ -137,7 +142,7 @@ float causticAt(vec2 x, float seed, float pen) {
     hyy += curve * d.y * d.y;
     hxy += curve * d.x * d.y;
   }
-  float s = 3.5 * uCaustics * clamp(uGap / 70.0, 0.3, 2.5);
+  float s = 3.5 * uCaustics * clamp(gap / 70.0, 0.3, 2.5);
   float det = (1.0 + s * hxx) * (1.0 + s * hyy) - s * s * hxy * hxy;
   float soft = clamp(pen / 240.0, 0.03, 0.4);
   return clamp(1.0 / max(abs(det), soft), 0.2, 7.0);
@@ -185,20 +190,23 @@ vec4 floorAt(vec2 P, float lit) {
   float pool = irradianceFalloff(rLamp, uHeight) * lit;
   if (pool < 0.002) return vec4(0.0);
   vec2 radial = rLamp > 0.5 ? toP / rLamp : vec2(0.0, 1.0);
-  // Relative to straight on, so the glass passes today's light under the lamp
-  // and less at a slant, where more of it is reflected away.
-  float passes = transmittance(cosT, uIor) / transmittance(1.0, uIor);
-  float frostBlur = frostSpread(uFrost, uIor, uGap, cosT);
   float slant = slantSpread(cosT);
-  // A distance on the floor, as a distance on the glass plane.
-  float toGlass = max(uHeight - uGap, 1.0) / max(uHeight, 1.0);
-
-  // Back along the ray to the glass plane.
-  vec2 Q = P + (uLight - P) * (uGap / max(uHeight, uGap + 1.0));
 
   vec3 light = vec3(pool);
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
+    // This pane's own causes: how high it stands, what glass it is.
+    float gap = uGap[i];
+    float ior = uIor[i];
+    float frost = uFrost[i];
+    // Relative to straight on, so the glass passes today's light under the
+    // lamp and less at a slant, where more of it is reflected away.
+    float passes = transmittance(cosT, ior) / transmittance(1.0, ior);
+    float frostBlur = frostSpread(frost, ior, gap, cosT);
+    // A distance on the floor, as a distance on the glass plane.
+    float toGlass = max(uHeight - gap, 1.0) / max(uHeight, 1.0);
+    // Back along the ray to this pane's plane.
+    vec2 Q = P + (uLight - P) * (gap / max(uHeight, gap + 1.0));
     vec4 r = uRect[i];
     vec2 hs = r.zw * 0.5;
     vec2 q = Q - (r.xy + hs);
@@ -214,7 +222,7 @@ vec4 floorAt(vec2 P, float lit) {
     vec2 edgeNormal = straight || abs(q.y) - hs.y > abs(q.x) - hs.x
       ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
     float cosPhi = abs(dot(radial, edgeNormal));
-    float penFloor = penumbraAcross(uLightSize, uGap, uHeight, cosT, cosPhi);
+    float penFloor = penumbraAcross(uLightSize, gap, uHeight, cosT, cosPhi);
     float softFloor = sqrt(penFloor * penFloor + frostBlur * frostBlur);
     float pen = max(softFloor * toGlass, 1.0);
     if (d <= -pen) continue;
@@ -229,7 +237,7 @@ vec4 floorAt(vec2 P, float lit) {
      * the beam (see frostBlur above) and sends a little back.
      */
     float onFace = smoothstep(1.0 - soft, 1.0 + soft, x);
-    vec3 through = vec3(pool * passes * (1.0 - 0.18 * uFrost) * onFace);
+    vec3 through = vec3(pool * passes * (1.0 - 0.18 * frost) * onFace);
 
     /*
      * The bevel: a clear, polished strip, angled. Every ray through it is
@@ -275,7 +283,7 @@ vec4 floorAt(vec2 P, float lit) {
 
     // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {
-      through *= causticAt(Q - r.xy, uSeed[i], penFloor);
+      through *= causticAt(Q - r.xy, uSeed[i], penFloor, gap);
     }
 
     light = mix(vec3(pool), through, inGlass);

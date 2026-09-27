@@ -86,7 +86,10 @@ describe("the floor light uses the causes, not settings", () => {
     expect(src).not.toMatch(/\buReach\b|\buPenumbra\b/);
     expect(src).not.toMatch(/exp\(-dist2/);
     expect(src).toContain("irradianceFalloff(rLamp, uHeight)");
-    expect(src).toContain("penumbraAcross(uLightSize, uGap, uHeight, cosT, cosPhi)");
-    expect(src).toContain("frostSpread(uFrost, uIor, uGap, cosT)");
+    expect(src).toContain("penumbraAcross(uLightSize, gap, uHeight, cosT, cosPhi)");
+    expect(src).toContain("frostSpread(frost, ior, gap, cosT)");
+    // Each pane's own: step 7 reads the gap, index and frost per pane.
+    expect(src).toMatch(/uniform float uGap\[/);
+    expect(src).toMatch(/float gap = uGap\[i\]/);
   });
 });

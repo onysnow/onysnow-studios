@@ -19,7 +19,6 @@ import {
   sharedGl,
 } from "@/effects/engine/gl";
 import { t } from "@/lib/tuning";
-import { FLOAT_GLASS } from "@/effects/materials/presets";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
@@ -69,13 +68,14 @@ export function FloorLight() {
     const uLight = U("uLight");
     const uCharge = U("uCharge");
     const uGap = U("uGap");
+    const uIor = U("uIor");
+    const uFrost = U("uFrost");
     const uHeight = U("uHeight");
     const uEdge = U("uEdge");
     const uLightGain = U("uLightGain");
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
     const uLightSize = U("uLightSize");
-    const uIor = U("uIor");
     const uGrimeFloor = U("uGrimeFloor");
     const uViewShift = U("uViewShift");
     /*
@@ -107,7 +107,6 @@ export function FloorLight() {
       loadSurfaceLayer(gl, 1, assetUrl(SITE_ASSETS.glassScratch), done(1, uScratchTile));
     };
     const uView = U("uView");
-    const uFrost = U("uFrost");
     const uPrism = U("uPrism");
     const uCount = U("uCount");
     const uRect = U("uRect");
@@ -118,6 +117,10 @@ export function FloorLight() {
     const rects = new Float32Array(MAX_FLOOR_PANES * 4);
     const seeds = new Float32Array(MAX_FLOOR_PANES);
     const edges = new Float32Array(MAX_FLOOR_PANES);
+    // Each pane's own causes (effects/materials/pane-causes): gap, index, frost.
+    const gaps = new Float32Array(MAX_FLOOR_PANES);
+    const iors = new Float32Array(MAX_FLOOR_PANES);
+    const frosts = new Float32Array(MAX_FLOOR_PANES);
     let wasLit = false;
 
     /*
@@ -188,6 +191,9 @@ export function FloorLight() {
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
         edges[n] = pane.e;
+        gaps[n] = pane.causes.gap;
+        iors[n] = pane.causes.material.ior;
+        frosts[n] = pane.causes.material.frost;
         drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
         n += 1;
       }
@@ -201,17 +207,14 @@ export function FloorLight() {
       gl.uniform1f(uScale, scale);
       gl.uniform2f(uLight, lightState.x, lightState.y);
       gl.uniform1f(uCharge, charge);
-      gl.uniform1f(uGap, t("floorGap"));
       gl.uniform1f(uHeight, t("shadowHeight"));
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
-      gl.uniform1f(uFrost, t("glassBlur"));
       gl.uniform1f(uPrism, t("floorPrism"));
       // Causes only: how sharp and bright each point is follows from these.
       gl.uniform1f(uLightSize, t("shadowSoftness"));
-      gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform2f(uViewShift, viewState.shiftX, viewState.shiftY);
       requestLayers();
@@ -223,6 +226,9 @@ export function FloorLight() {
       gl.uniform4fv(uRect, rects);
       gl.uniform1fv(uSeed, seeds);
       gl.uniform1fv(uEdge, edges);
+      gl.uniform1fv(uGap, gaps);
+      gl.uniform1fv(uIor, iors);
+      gl.uniform1fv(uFrost, frosts);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Same task as the draw, so the buffer is still there to copy from.
