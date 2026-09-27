@@ -1,3 +1,5 @@
+import { addTask, ORDER } from "@/effects/engine/scheduler";
+
 /**
  * A render loop that stops when there is nothing left to draw.
  *
@@ -18,24 +20,15 @@
  * rate anyway, so a moving cursor costs exactly what the old loop cost and a
  * still one costs nothing.
  */
-export function sleepingLoop(step: (now: number) => boolean) {
-  let frame = 0;
-
-  const tick = (now: number) => {
-    // Cleared before stepping, so a `wake` from inside `step` is not mistaken
-    // for the loop already running and dropped.
-    frame = 0;
-    if (step(now)) frame = requestAnimationFrame(tick);
-  };
-
+export function sleepingLoop(
+  step: (now: number) => boolean,
+  name = "pass",
+  order: number = ORDER.passes,
+) {
+  // One loop for the page now (effects/engine/scheduler): this is a task in it.
+  const task = addTask(name, order, (now) => step(now));
   return {
-    wake() {
-      if (frame) return;
-      frame = requestAnimationFrame(tick);
-    },
-    stop() {
-      if (frame) cancelAnimationFrame(frame);
-      frame = 0;
-    },
+    wake: () => task.wake(),
+    stop: () => task.stop(),
   };
 }

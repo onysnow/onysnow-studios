@@ -628,7 +628,7 @@ export function GlassLight({
       return true;
     };
 
-    const loop = sleepingLoop(step);
+    const loop = sleepingLoop(step, "glass-light");
     const wake = () => loop.wake();
     window.addEventListener("pointermove", wake, { passive: true });
     /*

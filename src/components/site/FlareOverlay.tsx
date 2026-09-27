@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { addTask, ORDER } from "@/effects/engine/scheduler";
 
 /**
  * The lens flare, as footage.
@@ -146,7 +147,6 @@ export function FlareOverlay({
       }
     };
 
-    let frame = 0;
     let lastX = 0;
     let lastY = 0;
     let prevX = 0;
@@ -154,12 +154,11 @@ export function FlareOverlay({
     let smoothSpeed = 0;
     /* Signed travel, in clip-seconds. Right and down advance; left and up rewind. */
     let scrub = 0;
-    const tick = () => {
-      frame = requestAnimationFrame(tick);
+    const tick = (): boolean => {
       const charge = chargeRef.current;
       if (charge <= 0.002) {
         if (started) for (const v of videos) v.style.opacity = "0";
-        return;
+        return true;
       }
       start();
 
@@ -264,6 +263,7 @@ export function FlareOverlay({
           }
         }
       }
+      return true;
     };
     /*
      * No clips, no loop.
@@ -275,10 +275,12 @@ export function FlareOverlay({
      * is the cost lib/gl-loop.ts exists to avoid; the shaders adopted it and
      * this never did.
      */
-    if (ACTIVE.length > 0) frame = requestAnimationFrame(tick);
+    // A task in the page's one loop (effects/engine/scheduler), only when armed.
+    const task = ACTIVE.length > 0 ? addTask("flare", ORDER.overlay, () => tick()) : null;
+    task?.wake();
 
     return () => {
-      cancelAnimationFrame(frame);
+      task?.stop();
       for (const v of videos) {
         v.pause();
         v.remove();

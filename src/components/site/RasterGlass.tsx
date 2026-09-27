@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { adoptLayer } from "@/effects/engine/compositor";
+import { addTask, ORDER } from "@/effects/engine/scheduler";
 import { applyGlassConfig } from "@/lib/tuning";
 import { onPane } from "@/lib/glass-panes";
 
@@ -79,7 +80,11 @@ import { onPane } from "@/lib/glass-panes";
 const RASTER_PANES =
   ".glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu):not(.site-loader__pane)";
 
-type Instance = { destroy: () => void };
+type Instance = {
+  destroy: () => void;
+  setFrameDriver: (driver: { wake(): void } | null) => void;
+  tick: () => boolean;
+};
 
 /*
  * NO configuration. Upstream's defaults, exactly as the library ships them.
@@ -113,6 +118,33 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
 
     let live = true;
     const instances: Instance[] = [];
+
+    /*
+     * The library's frames come from the page's one loop (effects/engine/
+     * scheduler), not its own. It used to render every frame for the life of
+     * the page -- one of the loops that kept an idle page awake. Now it runs
+     * a frame when something changes: the library wakes it for what it
+     * notices itself (mutations, captures landing, a drag), and this wakes it
+     * for what moves the panes or what is behind them (scroll, resize, the
+     * pointer, a data-dynamic contributor starting or stopping). It sleeps
+     * again when a frame re-renders nothing.
+     */
+    const frames = addTask("liquid", ORDER.liquid, () => {
+      let more = false;
+      for (const instance of instances) more = instance.tick() || more;
+      return more;
+    });
+    const driver = { wake: () => frames.wake() };
+    const wake = driver.wake;
+    window.addEventListener("scroll", wake, { passive: true });
+    window.addEventListener("resize", wake);
+    window.addEventListener("pointermove", wake, { passive: true });
+    const dynamic = new MutationObserver(wake);
+    dynamic.observe(document.body, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-dynamic"],
+    });
 
     /*
      * Marks the document so the stylesheet can stand down.
@@ -188,6 +220,7 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
             return;
           }
           instances.push(instance);
+          instance.setFrameDriver(driver);
 
           /*
            * THE CSS GLASS COMES OFF THIS PANE NOW.
@@ -266,6 +299,7 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
      */
     const sizes = new ResizeObserver((entries) => {
       for (const entry of entries) initPane(entry.target as HTMLElement);
+      wake();
     });
     const stopListening = onPane((pane) => {
       if (!live) return;
@@ -280,6 +314,11 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
       live = false;
       stopListening();
       sizes.disconnect();
+      frames.stop();
+      dynamic.disconnect();
+      window.removeEventListener("scroll", wake);
+      window.removeEventListener("resize", wake);
+      window.removeEventListener("pointermove", wake);
       for (const instance of instances) {
         try {
           instance.destroy();

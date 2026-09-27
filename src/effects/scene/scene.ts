@@ -35,6 +35,7 @@ import { CAMERA_DISTANCE } from "@/effects/optics/environment";
 import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
 import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
 import { commitLights, cursorLamp, movePointer, onLightChange } from "@/effects/light/lights";
+import { addTask, ORDER } from "@/effects/engine/scheduler";
 
 /* ======================================================================
  * What the passes read
@@ -649,21 +650,27 @@ function writeSurface(s: SurfaceReading, light: SurfaceLight) {
  * The frame
  * ====================================================================== */
 
-let frame = 0;
 let bound = false;
 
+/*
+ * The scene is one task in the page's one loop (effects/engine/scheduler),
+ * run after the input and the charge and before the passes, and only on
+ * frames where something moved: the lamp, the page, or a registration.
+ */
+let task: ReturnType<typeof addTask> | null = null;
+
 function schedule() {
-  if (!frame) frame = requestAnimationFrame(run);
+  task ??= addTask("scene", ORDER.scene, (now) => {
+    run(now);
+    return false;
+  });
+  task.wake();
 }
 
-/** Put the frame after everything that registered this tick. */
-function reschedule() {
-  if (frame) cancelAnimationFrame(frame);
-  frame = requestAnimationFrame(run);
-}
+/** Registrations arrive in bursts; they all land in the same next frame. */
+const reschedule = schedule;
 
 function run(now = performance.now()) {
-  frame = 0;
   // 1. commit
   commitLights();
   // 2. read

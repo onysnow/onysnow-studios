@@ -300,7 +300,7 @@ export function FloorLight() {
       return true;
     };
 
-    const loop = sleepingLoop(step);
+    const loop = sleepingLoop(step, "floor-light");
     const wake = () => loop.wake();
     window.addEventListener("pointermove", wake, { passive: true });
     window.addEventListener("scroll", wake, { passive: true });

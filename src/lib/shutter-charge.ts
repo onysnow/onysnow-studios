@@ -1,3 +1,4 @@
+import { addTask, ORDER } from "@/effects/engine/scheduler";
 /**
  * Winding the shutter with sustained fast pointer movement.
  *
@@ -126,14 +127,22 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
   let armed = false;
   let lastFrame = performance.now();
   let lastReported = -1;
-  let raf = 0;
   let stopped = false;
+  /*
+   * A task in the page's one loop (effects/engine/scheduler). It needs frames
+   * only while something can change the charge: a press held, a charge
+   * draining, or (with the movement trigger on) pointer samples to read.
+   * Otherwise it sleeps; a press or a move wakes it.
+   */
+  let task: ReturnType<typeof addTask> | null = null;
+  const wake = () => task?.wake();
   let holding = false;
   let heldSince = 0;
   let endedAHold = false;
 
   function onMove(event: PointerEvent) {
     samples.push({ x: event.clientX, y: event.clientY, t: performance.now() });
+    if (MOVEMENT_WINDS) wake();
   }
 
   /*
@@ -152,6 +161,7 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
     if (node?.closest?.(NO_HOLD)) return;
     holding = true;
     heldSince = performance.now();
+    wake();
   }
 
   /*
@@ -175,6 +185,7 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
     if (holding && performance.now() - heldSince >= HOLD_GESTURE_MS) endedAHold = true;
     holding = false;
     setWinding(false);
+    wake();
   }
 
   /*
@@ -209,8 +220,8 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
     }
   }
 
-  function frame(now: number) {
-    if (stopped) return;
+  function frame(now: number): boolean {
+    if (stopped) return false;
     /*
      * ONE time base, wall clock, capped at a quarter second.
      *
@@ -306,7 +317,10 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
       onCharge?.(rounded, armed);
     }
 
-    raf = requestAnimationFrame(frame);
+    // Asleep once nothing can move the charge: not held, drained (or armed
+    // and waiting to be spent), and no movement samples to read.
+    const draining = !armed && charge > 0;
+    return holding || draining || (MOVEMENT_WINDS && samples.length > 0);
   }
 
   window.addEventListener("pointermove", onMove, { passive: true });
@@ -317,7 +331,8 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
   document.addEventListener("dragstart", onDragStart);
   window.addEventListener("blur", release);
   document.addEventListener("visibilitychange", release);
-  raf = requestAnimationFrame(frame);
+  task = addTask("shutter-charge", ORDER.charge, (now) => frame(now));
+  task.wake();
 
   return {
     isArmed: () => armed,
@@ -350,7 +365,7 @@ export function watchShutterCharge({ onCharge }: ShutterChargeHandlers) {
     },
     stop: () => {
       stopped = true;
-      cancelAnimationFrame(raf);
+      task?.stop();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", release);

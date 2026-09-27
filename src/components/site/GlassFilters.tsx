@@ -1,5 +1,5 @@
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { t } from "@/lib/tuning";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { onTuningApplied, t } from "@/lib/tuning";
 import { bevelFilterSnapshot, subscribeBevelFilters, type BevelEntry } from "@/lib/bevel-filters";
 
 /** Stable empty array: the server renders no computed maps. */
@@ -198,51 +198,47 @@ export function GlassFilters() {
    * invalidates the filter and re-rasterises every pane behind it.
    */
   const host = useRef<SVGSVGElement>(null);
-  useEffect(() => {
-    let frame = 0;
-    let last = -1;
-    let seen = -1;
+  /*
+   * Applied when something changes, not polled.
+   *
+   * This re-checked the knob and the number of filters on every animation
+   * frame, forever -- one of the loops that kept an idle page waking sixty
+   * times a second (optics plan step 5). The two things it watches both
+   * announce themselves: the knob through onTuningApplied, the filters by
+   * React rendering a new set (the effect below runs after each).
+   *
+   * Queried rather than held in refs: there is one filter per pane geometry,
+   * created as panes mount and resize. The scale within each still runs
+   * 0.94 / 1.00 / 1.07 -- the same map read three times at slightly different
+   * strengths, which is what makes the dispersion follow the surface normal
+   * instead of a fixed axis. Written only when it differs: setting an
+   * attribute invalidates the filter and re-rasterises every pane behind it.
+   */
+  const applied = useRef({ want: -1, count: -1 });
+  const apply = useCallback(() => {
+    const want = t("displacement");
+    const count = host.current?.querySelectorAll("filter").length ?? 0;
+    if (want === applied.current.want && count === applied.current.count) return;
+    applied.current = { want, count };
     /*
-     * Queried rather than held in refs.
-     *
-     * There is no longer one filter: there is one per pane geometry, created
-     * as panes mount and resize, so a fixed array of three refs cannot reach
-     * them. The scale within each filter still runs 0.94 / 1.00 / 1.07 -- the
-     * same map read three times at slightly different strengths, which is what
-     * makes the dispersion follow the surface normal instead of a fixed axis.
+     * The physical scale comes from the registry rather than off the DOM:
+     * each map encodes its offsets as a fraction of its own largest one, and
+     * Snell gives that largest one in real pixels, so the scale belongs to
+     * the glass and the knob multiplies it.
      */
+    const physical = new Map(bevelFilterSnapshot().map((b) => [b.id, b.scale]));
     const mult = [0.94, 1, 1.07];
-    const tick = () => {
-      frame = requestAnimationFrame(tick);
-      const want = t("displacement");
-      // Also when a pane has just added a filter: a new one renders with its
-      // own scale but not the knob's multiplier, and an early return on the
-      // knob alone left it uncorrected.
-      const count = host.current?.querySelectorAll("filter").length ?? 0;
-      if (want === last && count === seen) return;
-      last = want;
-      seen = count;
-      /*
-       * The physical scale comes from the registry rather than off the DOM.
-       *
-       * Each map encodes its offsets as a fraction of its own largest one, and
-       * Snell gives that largest one in real pixels -- so the scale belongs to
-       * the glass, not to a number somebody picked, and the knob multiplies it.
-       * Reading it back from a `data-` attribute meant it had to survive React
-       * putting it on an SVG element, which it did not; the registry already
-       * knows it.
-       */
-      const physical = new Map(bevelFilterSnapshot().map((b) => [b.id, b.scale]));
-      host.current?.querySelectorAll("filter").forEach((filter) => {
-        const base = physical.get(filter.id) ?? FALLBACK_DISPLACEMENT;
-        filter.querySelectorAll("feDisplacementMap").forEach((node, i) => {
-          node.setAttribute("scale", String(base * want * (mult[i] ?? 1)));
-        });
+    host.current?.querySelectorAll("filter").forEach((filter) => {
+      const base = physical.get(filter.id) ?? FALLBACK_DISPLACEMENT;
+      filter.querySelectorAll("feDisplacementMap").forEach((node, i) => {
+        node.setAttribute("scale", String(base * want * (mult[i] ?? 1)));
       });
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    });
   }, []);
+  useEffect(() => onTuningApplied(apply), [apply]);
+  useEffect(() => {
+    apply();
+  }, [apply, bevels]);
 
   return (
     <svg

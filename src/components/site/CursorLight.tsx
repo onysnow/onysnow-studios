@@ -229,7 +229,7 @@ export function CursorLight({
       return true;
     };
 
-    const loop = sleepingLoop(step);
+    const loop = sleepingLoop(step, "cursor-light");
     const wake = () => loop.wake();
     window.addEventListener("pointermove", wake, { passive: true });
     /*
