@@ -474,6 +474,21 @@ void main() {
   vec3 sideLight = mirrorTop * fTop * onTop + mirrorBot * fBot * onBot;
 
   /*
+   * What the side RELAYS: looking along the slab, light from under the pane
+   * reaches you by total internal reflection -- the photograph there,
+   * squeezed and flipped into the side, the light and dark blocks of the
+   * reference photos. Same geometry as the mirror, turned inward. Unlike the
+   * reflections it HAS crossed the glass, so it is left for the side layer to
+   * absorb (added after the division below).
+   */
+  vec2 relayTop = vec2(frag.x - xLean * (uGap + zTop), topY + mirrorReach(dTop, topT, uGap, PANE_THICKNESS));
+  vec2 relayBot = vec2(frag.x - xLean * (uGap + zBot), botY - mirrorReach(dBot, botT, uGap, PANE_THICKNESS));
+  vec3 relayed = RELAY_GAIN * (
+    texture2D(uBackdrop, coverUv(relayTop, uImage, uImageAspect)).rgb * uHasBackdrop * onTop * (1.0 - fTop)
+    + texture2D(uBackdropBelow, coverUv(relayBot, uImageBelow, uImageBelowAspect)).rgb * uHasBelow * onBot * (1.0 - fBot)
+  );
+
+  /*
    * The echo: through the face just inside the edge, the side seen again by
    * total internal reflection -- a paler copy of the edge displaced inward by
    * the side's height, its light having crossed the side twice.
@@ -673,6 +688,7 @@ void main() {
   absorbed *= (1.0 - farArrisLoss(abs(dTop - topT))) * (1.0 - farArrisLoss(abs(dBot - botT)));
   absorbed = mix(vec3(1.0), absorbed, withinX);
   colour /= pow(max(absorbed, vec3(0.05)), vec3(1.0 / 2.2));
+  colour += relayed;
 
   /*
    * NO GRAIN HERE. Deliberately, and permanently.

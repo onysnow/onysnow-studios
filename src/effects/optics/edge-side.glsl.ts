@@ -5,6 +5,7 @@ import {
   ECHO_GAIN,
   FAR_ARRIS_LOSS,
   PANE_THICKNESS,
+  RELAY_GAIN,
   SIDE_ABSORB,
   SIDE_GUIDED_DEPTH,
   SIDE_MIN_PX,
@@ -36,6 +37,7 @@ export const EDGE_SIDE_GLSL = /* glsl */ `
 #define SIDE_GUIDED_DEPTH ${f(SIDE_GUIDED_DEPTH)}
 #define FAR_ARRIS_LOSS ${f(FAR_ARRIS_LOSS)}
 #define ECHO_GAIN ${f(ECHO_GAIN)}
+#define RELAY_GAIN ${f(RELAY_GAIN)}
 
 /* How much of a side face is in view; top is 1.0 for the top side. */
 float sideOpen(float tilt, float top) {

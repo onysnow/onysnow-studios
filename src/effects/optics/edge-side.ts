@@ -51,8 +51,16 @@ export const ARRIS_RADIUS = 1.5;
  * Beer-Lambert absorption of soda-lime glass, per unit of path, red / green /
  * blue. Iron takes red most, blue next, green least: invisible through a few
  * millimetres of face, the whole colour of a long path through the side.
+ *
+ * Measured from Ony's five reference photographs of clear float glass (sides
+ * seen against a white ground, so each pixel over the ground's white is the
+ * side's transmittance): optical depth blue / green 1.2-1.35 in every photo,
+ * red / green 2-4.5 (red clips to 0 in the darkest sides), green 0.5 through
+ * the paler middle of a side to 1.3 at its most saturated. With the path
+ * lengths below this gives exactly that range. (It was 1.15 / 0.28 / 0.55,
+ * from the written notes: far too pale, and too yellow -- blue / green 2.)
  */
-export const SIDE_ABSORB: readonly [number, number, number] = [1.15, 0.28, 0.55];
+export const SIDE_ABSORB: readonly [number, number, number] = [2.7, 0.9, 1.2];
 
 /**
  * How much of each side face is in view. Which of the two you can see depends
@@ -122,7 +130,8 @@ export function sideTransmittance(depth: number): [number, number, number] {
  * the light passing it away from you, so it is a thin DARKER line, not a
  * bright one. The fraction lost at `fromFar` px from it.
  */
-export const FAR_ARRIS_LOSS = 0.45;
+// Measured across the far arris in the photos: about 0.55 of the light lost.
+export const FAR_ARRIS_LOSS = 0.55;
 export function farArrisLoss(fromFar: number): number {
   const u = fromFar / ARRIS_RADIUS;
   return FAR_ARRIS_LOSS * Math.exp(-u * u);
@@ -155,6 +164,22 @@ export function sideCosine(side: number, thickness: number): number {
   const r = Math.max(side, 0) / Math.max(thickness, 1);
   return r / Math.sqrt(1 + r * r);
 }
+
+/*
+ * ---- What the side relays ----
+ *
+ * The photographs' strongest feature: along its length a side face is a run
+ * of light and dark BLOCKS. Looking into the side you look along the slab,
+ * and light reaches you from far inside it, bounced between the two faces by
+ * total internal reflection -- so you see what lies under the pane, squeezed
+ * into the side and flipped, tinted by the long path. Same geometry as the
+ * mirror, turned inward: it reaches into the pane by mirrorReach().
+ *
+ * How much of the side's light comes this way, relative to the straight view
+ * through it. Set against the photos, where the blocks swing from dark teal
+ * to near white along one side.
+ */
+export const RELAY_GAIN = 0.6;
 
 export function mirrorReach(depth: number, side: number, gap: number, thickness: number): number {
   return side * (1 + Math.max(gap, 0) / Math.max(thickness, 1)) - depth;
