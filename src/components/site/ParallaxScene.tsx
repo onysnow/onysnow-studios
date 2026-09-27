@@ -95,12 +95,19 @@ export function ParallaxScene({
           {...(children ? {} : { "aria-hidden": true })}
         >
           {/* Oversized so the translation never reveals an edge. */}
-          <Img
-            image={image}
-            className="h-[128%] w-full"
-            sizes="100vw"
-            imgClassName="object-cover"
-          />
+          {/*
+            data-view-shift: moved by the viewpoint (see effects/optics/
+            viewpoint.ts) -- the photograph is behind the glass, so it slides
+            under it as the eye moves.
+          */}
+          <div data-view-shift="" suppressHydrationWarning className="view-shift absolute inset-0">
+            <Img
+              image={image}
+              className="h-[128%] w-full"
+              sizes="100vw"
+              imgClassName="object-cover"
+            />
+          </div>
         </motion.div>
         {scrim === "none" ? null : <div className={cn("absolute inset-0", SCRIM[scrim])} />}
         <div className="image-vignette pointer-events-none absolute inset-0" />

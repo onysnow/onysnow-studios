@@ -2848,3 +2848,23 @@ html.is-winding * {
 .transmitted {
   display: none;
 }
+
+/*
+ * The photographs behind the glass, moved by the viewpoint.
+ *
+ * They sit a gap behind the pane, so as the eye moves (with the pointer, see
+ * effects/optics/viewpoint.ts) they slide under it by gap / (distance + gap)
+ * of the eye's movement -- through the bevel, where you watch it bend them.
+ * Oversized by exactly as much as the largest slide these settings can make
+ * (--view-scale, from oversizeFor), so it never shows an edge. Things
+ * resting ON the glass are in its plane and do not move.
+ */
+.view-shift {
+  transform: translate(var(--view-x, 0px), var(--view-y, 0px)) scale(var(--view-scale, 1));
+}
+
+@media (prefers-reduced-motion: reduce), (max-width: 767px) {
+  .view-shift {
+    transform: none;
+  }
+}

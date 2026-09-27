@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge } from "@/lib/edge-glow";
+import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge, viewState } from "@/lib/edge-glow";
 import { onTuningApplied, t } from "@/lib/tuning";
 import { FLOAT_GLASS, frontRoughness } from "@/effects/materials/presets";
 import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
@@ -169,6 +169,7 @@ export function GlassLight({
     const uCameraDistance = U("uCameraDistance");
     const uFrontRoughness = U("uFrontRoughness");
     const uRoomExposure = U("uRoomExposure");
+    const uEye = U("uEye");
     gl.uniform1f(uHasRoom, 0);
     const uScratchTile = U("uScratchTile");
     gl.uniform1f(uSmudgeTile, 1024);
@@ -393,6 +394,8 @@ export function GlassLight({
      */
     let restingDrawn = false;
     let restingStamp = -1;
+    let restingEyeX = Number.NaN;
+    let restingEyeY = Number.NaN;
 
     const step = (now: number) => {
       const charge = chargeRef.current;
@@ -400,7 +403,14 @@ export function GlassLight({
 
       if (!lit) {
         // Already settled and nothing has moved: park without redrawing.
-        if (!wasLit && restingDrawn && geometryStamp() === restingStamp) return false;
+        /*
+         * Already settled and nothing has moved -- including the viewpoint,
+         * which moves the photographs under the glass and the room in it.
+         */
+        const eyeStill = viewState.eyeX === restingEyeX && viewState.eyeY === restingEyeY;
+        if (!wasLit && restingDrawn && eyeStill && geometryStamp() === restingStamp) return false;
+        restingEyeX = viewState.eyeX;
+        restingEyeY = viewState.eyeY;
         wasLit = false;
         restingDrawn = true;
         restingStamp = geometryStamp();
@@ -440,6 +450,7 @@ export function GlassLight({
       );
       gl.uniform1f(uFrontRoughness, frontRoughness(FLOAT_GLASS, t("glassBlur")));
       gl.uniform1f(uRoomExposure, t("roomBrightness"));
+      gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
       if (room) {
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_2D, room);

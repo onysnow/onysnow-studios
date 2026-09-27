@@ -94,6 +94,8 @@ ${TRANSMISSION_GLSL}
 ${SURFACE_LAYERS_GLSL}
 /* How dirty the pane is: the same clarity threshold the marks on the face use. */
 uniform float uGrimeFloor;
+/* How far the viewpoint moves the photograph behind the glass, CSS px. */
+uniform vec2 uViewShift;
 #define SMUDGE_EXTINCTION ${SMUDGE_EXTINCTION.toFixed(3)}
 #define SMUDGE_SCATTER ${SMUDGE_SCATTER.toFixed(3)}
 #define SCRATCH_FOCUS ${SCRATCH_FOCUS.toFixed(3)}
@@ -312,7 +314,13 @@ void main() {
     break;
   }
 
-  vec4 f = floorAt(look, lit);
+  /*
+   * The photograph is a gap behind the glass, so from where the viewer's eye
+   * is it appears moved by uViewShift (see effects/optics/viewpoint.ts). The
+   * lamp and the glass are where they are; the point of the photograph seen
+   * here is back along that shift.
+   */
+  vec4 f = floorAt(look - uViewShift, lit);
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = toneMapFilm(f.rgb);
   float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);

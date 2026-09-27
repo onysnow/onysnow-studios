@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { glassGeometry, lightState, onCharge } from "@/lib/edge-glow";
+import { glassGeometry, lightState, onCharge, viewState } from "@/lib/edge-glow";
 import {
   FLOOR_FRAGMENT_SHADER,
   FLOOR_VERTEX_SHADER,
@@ -93,6 +93,7 @@ export function FloorLight() {
     const uLightSize = U("uLightSize");
     const uIor = U("uIor");
     const uGrimeFloor = U("uGrimeFloor");
+    const uViewShift = U("uViewShift");
     /*
      * The pane's smudge and scratch layers, the same files the light on the
      * glass reads, so the marks that catch the lamp are the marks that dim
@@ -238,6 +239,7 @@ export function FloorLight() {
       gl.uniform1f(uLightSize, t("shadowSoftness"));
       gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
+      gl.uniform2f(uViewShift, viewState.shiftX, viewState.shiftY);
       requestLayers();
       for (const [unit, tex] of layers) {
         gl.activeTexture(gl.TEXTURE0 + unit);

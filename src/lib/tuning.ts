@@ -93,6 +93,22 @@ export const tuning: Record<string, Knob> = {
     step: 0.1,
     hint: "How brightly lit the room reflected in the glass is. The glass's own reflectance (from its material) and the room's lamps do the rest; there is no reflection strength setting.",
   },
+  // ---- The camera ----
+  //
+  // Where the viewer is. The eye moves with the pointer by this fraction, and
+  // everything behind the glass slides under it by the real parallax of the
+  // gap (see effects/optics/viewpoint.ts). Behaviour of the cursor, not a
+  // result: how far anything moves follows from this, the gap and the
+  // camera's distance.
+  viewFollow: {
+    label: "Viewpoint follows pointer",
+    group: "Camera",
+    value: 0.6,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "0 is a fixed eye straight in front of the screen; 1 puts the eye right over the pointer. The photographs behind the glass slide under it by the parallax of the glass's height -- which is how you see the edge bend them.",
+  },
   // ---- The rasterised glass ----
   //
   // These are the shader's own uniforms, not CSS. They only do anything in

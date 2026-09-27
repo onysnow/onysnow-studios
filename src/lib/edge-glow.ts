@@ -44,8 +44,18 @@ let pointerY = -9999;
 import { t } from "./tuning";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { castShadow } from "./cast-shadow";
+import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
+import { CAMERA_DISTANCE } from "@/effects/optics/environment";
 
 export const lightState = { x: -9999, y: -9999, charge: 0 };
+
+/**
+ * Where the viewer's eye is (relative to the viewport's middle) and how far
+ * that moves what is behind the glass. See effects/optics/viewpoint.ts. Read
+ * by the passes that draw on the photographs and in the reflection.
+ */
+export const viewState = { eyeX: 0, eyeY: 0, shiftX: 0, shiftY: 0 };
+let viewIdle = 0;
 
 /**
  * Called by whoever owns the shutter gesture.
@@ -451,6 +461,46 @@ function apply() {
     "--reflect-y",
     (pointerY / (document.documentElement.clientHeight || window.innerHeight) - 0.5).toFixed(3),
   );
+  /*
+   * The viewpoint. The eye follows the pointer by the camera's follow
+   * fraction, and the photographs -- a gap behind the glass -- slide on it by
+   * gap / (distance + gap) of that, so what is behind the glass moves under
+   * the bevel and you can watch it bend.
+   */
+  const vw = document.documentElement.clientWidth || window.innerWidth;
+  const vh = document.documentElement.clientHeight || window.innerHeight;
+  const eye = eyeOffset(pointerX, pointerY, vw, vh, t("viewFollow"));
+  const shift = behindGlassShift(eye, t("floorGap"), CAMERA_DISTANCE * vw);
+  viewState.eyeX = eye.x;
+  viewState.eyeY = eye.y;
+  // Set from the first pass, before the pointer moves, so the photographs
+  // never visibly re-scale when the eye first moves.
+  const scale = oversizeFor(vw, vh, t("viewFollow"), t("floorGap"), CAMERA_DISTANCE * vw).toFixed(
+    4,
+  );
+  if (root.getPropertyValue("--view-scale") !== scale) root.setProperty("--view-scale", scale);
+  if (shift.x !== viewState.shiftX || shift.y !== viewState.shiftY) {
+    viewState.shiftX = shift.x;
+    viewState.shiftY = shift.y;
+    root.setProperty("--view-x", `${shift.x.toFixed(2)}px`);
+    root.setProperty("--view-y", `${shift.y.toFixed(2)}px`);
+    /*
+     * The liquid glass redraws a pane only when something behind it is known
+     * to be moving. Mark the shifted photographs as moving while they move,
+     * and idle a moment after, so the glass follows them live and stops
+     * spending frames the moment they settle.
+     */
+    for (const el of document.querySelectorAll<HTMLElement>("[data-view-shift]")) {
+      el.dataset["dynamic"] = "";
+    }
+    window.clearTimeout(viewIdle);
+    viewIdle = window.setTimeout(() => {
+      for (const el of document.querySelectorAll<HTMLElement>("[data-view-shift]")) {
+        el.dataset["dynamic"] = "idle";
+      }
+    }, 300);
+  }
+
   // Refreshes the shared cache as a side effect, so the shader's call this
   // frame is free.
   glassGeometry(now);

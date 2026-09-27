@@ -93,6 +93,7 @@ uniform float uRoomWidth;       // texels round the full 360 degrees
 uniform float uCameraDistance;  // CSS pixels from the screen
 uniform float uFrontRoughness;  // GGX alpha of the face you look at
 uniform float uRoomExposure;    // how brightly lit the room is (1: middle grey)
+uniform vec2  uEye;             // the viewer's eye, from the viewport middle, CSS px
 uniform float uArris;       // tunable
 
 uniform sampler2D uBackdrop;  // the photograph behind this pane
@@ -664,7 +665,9 @@ void main() {
    * puts on the reflected direction, converted to texels. The room is
    * magnified on screen, so the bias is that level minus how magnified it is.
    */
-  vec2 fromCentre = frag - 0.5 * uViewport / uScale;
+  // The reflected ray runs from the eye: (point - eye), so the room slides
+  // across the face as the viewpoint moves.
+  vec2 fromCentre = frag - 0.5 * uViewport / uScale - uEye;
   float cosView = uCameraDistance / length(vec3(fromCentre, uCameraDistance));
   float reflectance = fresnelSchlick(cosView, uIor);
   reflectance += (1.0 - reflectance) * fresnel;
