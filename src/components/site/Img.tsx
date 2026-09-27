@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { photoSrcSet, photoUrl, type PhotoSources } from "@/lib/photo-url";
-import { registerLitSurface } from "@/lib/edge-glow";
+import { registerLitSurface } from "@/effects/scene/scene";
 
 /** Minimal shape needed to render a stored photograph. */
 export type ImgSource = {

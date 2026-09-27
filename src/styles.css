@@ -494,7 +494,7 @@
    *
    * Apply `.glass` for the surface. Add `.glass--bar` for the thin fixed bars,
    * which need less tint and a shallower bezel. Register the element with
-   * lib/edge-glow.ts to have its rim lit by the cursor.
+   * effects/scene/scene.ts to have its rim lit by the cursor.
    *
    * Built from how glass actually behaves, per the liquid-glass technique
    * write-ups: the rim highlight is DIRECTIONAL — its brightness varies with
@@ -587,7 +587,7 @@
    * ===================================================================== */
   /*
    * The side faces (<Glass> renders them as siblings AFTER the pane, and
-   * lib/edge-glow places them on its top and bottom edges).
+   * effects/scene/scene places them on its top and bottom edges).
    *
    * The window through a side: what is behind the pane, absorbed over the
    * long path of glass the light crossed -- saturated teal by the near arris,
@@ -957,7 +957,7 @@
  * Things resting on the pane cast a shadow onto it.
  *
  * `--cast-x`, `--cast-y`, `--cast-blur` and `--cast-alpha` are computed per
- * element in lib/edge-glow.ts, from the light's real position rather than from
+ * element in effects/scene/scene.ts, from the light's real position rather than from
  * a fixed direction. The offset is `gap * lateral / height` and the penumbra is
  * `lightRadius * gap / distance` -- so the shadow swings around as the cursor
  * passes, and SHARPENS as the light moves away rather than softening, which is

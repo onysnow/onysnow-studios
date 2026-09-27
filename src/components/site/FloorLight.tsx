@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-import { glassGeometry, lightState, onCharge, viewState } from "@/lib/edge-glow";
+import { glassGeometry, viewState } from "@/effects/scene/scene";
+import { lightState, onCharge } from "@/effects/light/lights";
 import {
   FLOOR_FRAGMENT_SHADER,
   FLOOR_VERTEX_SHADER,

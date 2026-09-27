@@ -76,7 +76,7 @@ export function sideOpen(tilt: number, top: boolean): number {
 
 /**
  * The side face's height on screen, CSS pixels: the CSS side layers are
- * placed at it (lib/edge-glow) and the shader draws to it. The thin fixed
+ * placed at it (effects/scene/scene) and the shader draws to it. The thin fixed
  * bars (.glass--bar, the header) are thinner glass.
  */
 export const SIDE_MIN_PX = 3;

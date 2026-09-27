@@ -21,7 +21,7 @@ import {
  *
  * Every prop is a CAUSE. The bend, the light on the edge, the light through
  * the glass and under it, and the side faces all follow from them, and every
- * pass reads the same description (lib/edge-glow measures it once, from the
+ * pass reads the same description (effects/scene/scene measures it once, from the
  * element's attributes -- effects/materials/pane-causes).
  *
  * Leave a prop out and the pane is today's glass: frosted float, 18 px thick,

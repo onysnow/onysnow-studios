@@ -6,9 +6,14 @@ import {
   type ElementType,
   type ReactNode,
 } from "react";
-import { paneCauses, paneEdgeWidth, registerEdgeGlow, registerPaneSides } from "@/lib/edge-glow";
+import {
+  paneCauses,
+  paneEdgeWidth,
+  registerLitSurface,
+  registerPaneSides,
+  registerScenePane,
+} from "@/effects/scene/scene";
 import { requestBevelFilter } from "@/lib/bevel-filters";
-import { registerLitSurface } from "@/lib/edge-glow";
 import { registerPane } from "@/lib/glass-panes";
 import { onTuningApplied } from "@/lib/tuning";
 import { EDGE_WIDTH_ATTR } from "@/effects/optics/edge-profile";
@@ -125,7 +130,7 @@ export function Glass({
         return;
       }
 
-      const unregister = registerEdgeGlow(el);
+      const unregister = registerScenePane(el);
 
       /*
        * The bevel map depends on the pane's size and corner radius.
@@ -213,7 +218,7 @@ export function Glass({
 
   /*
    * Its side faces, placed on its edges by the same pass that measures it
-   * (lib/edge-glow). In an effect because they are siblings, attached after
+   * (effects/scene/scene). In an effect because they are siblings, attached after
    * the pane's own ref runs.
    */
   useEffect(() => {

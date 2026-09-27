@@ -432,7 +432,7 @@ void main() {
    *
    * Which of the two you can see depends on where the pane sits against your
    * eye, so they open against each other as the page scrolls; their heights
-   * match the CSS side layers' (lib/edge-glow placeSides). Every boundary is
+   * match the CSS side layers' (effects/scene/scene writeSides). Every boundary is
    * eased over the arris radius: nothing on a real edge is a hard step.
    *
    * The window through the side -- the photograph behind it, absorbed over
@@ -440,7 +440,7 @@ void main() {
    * subtracts, and this canvas can only add. What this adds is what the side
    * REFLECTS, and the echo.
    */
-  // Whole pixels, as the CSS side layers are placed (lib/edge-glow).
+  // Whole pixels, as the CSS side layers are placed (effects/scene/scene).
   float topT = floor(sideHeight(sideOpen(uTilt, 1.0), uBar, uThickness) + 0.5);
   float botT = floor(sideHeight(sideOpen(uTilt, 0.0), uBar, uThickness) + 0.5);
   float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z) * inside;

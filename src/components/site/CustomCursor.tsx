@@ -1,4 +1,4 @@
-import { reportCharge } from "@/lib/edge-glow";
+import { reportCharge } from "@/effects/light/lights";
 import { CameraIris } from "./CameraIris";
 import { t } from "@/lib/tuning";
 import { useEffect, useRef } from "react";

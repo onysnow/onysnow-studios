@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
-import { onCharge } from "@/lib/edge-glow";
+import { onCharge } from "@/effects/light/lights";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { t } from "@/lib/tuning";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";

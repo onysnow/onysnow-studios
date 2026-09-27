@@ -5,7 +5,7 @@ import { MATERIAL_ATTR, materialById, type Material } from "./presets";
  * A pane's own causes, as its element carries them (optics plan step 2).
  *
  * <Pane> writes them onto the element; the pass that measures panes
- * (lib/edge-glow) reads them back here, once per measure, and every optical
+ * (effects/scene/scene) reads them back here, once per measure, and every optical
  * pass takes them from that one reading. A pane that says nothing gets
  * today's glass: the frosted-float material, 18 px thick, the page's gap, and
  * the full surface layers -- so writing a pane with no props changes nothing.

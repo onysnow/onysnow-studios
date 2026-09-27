@@ -1,0 +1,792 @@
+/**
+ * The scene: every pane of glass and every surface resting on it, measured
+ * once a frame (optics plan step 3; replaces lib/edge-glow.ts).
+ *
+ * WHAT IT DOES, IN ORDER, EACH FRAME
+ *
+ *   1. commit    the lights' pending positions (effects/light/lights.ts)
+ *   2. read      every rect, offset and backdrop box the frame needs -- all of
+ *                them, before anything is written
+ *   3. compute   the viewpoint and what each surface's shadow blocks, from the
+ *                readings and the lights; no DOM at all
+ *   4. write     the CSS custom properties and the side-face layers
+ *
+ * and passes (GlassLight, FloorLight) read the frozen snapshot of step 2
+ * through glassGeometry().
+ *
+ * WHY THE ORDER IS THE WHOLE POINT
+ *
+ * Writing a style and then reading layout makes the browser resolve every
+ * style on the page before it can answer. The page has 19 backdrop-filters and
+ * dozens of blend modes, so each of those costs a lot. The old pass read and
+ * wrote interleaved -- side-face offsets were read in the middle of each pane's
+ * writes, and a lit surface's corner radius in the middle of its own -- and a
+ * pointer move cost about ten style recalculations a frame. Reading
+ * everything first costs one; the writes afterwards dirty style once, for the
+ * next frame to resolve in its own time. e2e/scene.spec.ts holds it there.
+ *
+ * No React here; components register elements and the engine does the rest.
+ */
+import { t } from "@/lib/tuning";
+import { castShadow } from "@/lib/cast-shadow";
+import { readEdgeWidth } from "@/effects/optics/edge-profile";
+import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
+import { CAMERA_DISTANCE } from "@/effects/optics/environment";
+import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
+import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
+import { commitLights, cursorLamp, movePointer, onLightChange } from "@/effects/light/lights";
+
+/* ======================================================================
+ * What the passes read
+ * ====================================================================== */
+
+/**
+ * Where the viewer's eye is (relative to the viewport's middle) and how far
+ * that moves what is behind the glass. See effects/optics/viewpoint.ts.
+ */
+export const viewState = { eyeX: 0, eyeY: 0, shiftX: 0, shiftY: 0 };
+
+export const MAX_OCCLUDERS = 6;
+
+/** Something standing on a pane, as the shape of the shadow it throws on it. */
+export type Occluder = {
+  cx: number;
+  cy: number;
+  hw: number;
+  hh: number;
+  radius: number;
+  blur: number;
+  alpha: number;
+};
+
+/** A pane of glass, as measured this frame. */
+export type GlassRect = {
+  /** The element, so a pass can reach the pane's own surface layer. */
+  el: HTMLElement;
+  /** Top-left corner and size, in CSS pixels, viewport-relative. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Corner radius, in CSS pixels. */
+  r: number;
+  /** How wide this pane's rounded-over edge is, CSS px: its data-edge-width or the knob. */
+  e: number;
+  /**
+   * The photograph behind this pane (the one above, for a band on a seam),
+   * and where it is drawn: refraction samples it from somewhere else, so it
+   * is bound as a texture.
+   */
+  src: string;
+  ix: number;
+  iy: number;
+  iw: number;
+  ih: number;
+  /** Intrinsic aspect, for the object-fit: cover mapping. */
+  ia: number;
+  /** The photograph BELOW the pane, which its bottom side face reflects. */
+  below: { src: string; x: number; y: number; w: number; h: number; a: number } | null;
+  /** What this pane is, as <Pane> declared it (effects/materials/pane-causes). */
+  causes: PaneCauses;
+  /**
+   * What is standing on this pane, as shadow shapes in pane-local pixels,
+   * already displaced by each one's cast vector: where the shadows LAND.
+   */
+  occ: readonly Occluder[];
+  /** Which surface this pane wears, 0-3, kept for the element's life. */
+  s: number;
+  /**
+   * Viewing angle onto the pane, -1 to 1: positive when it is below eye level
+   * and you see its top side, negative above. Scrolling carries it across.
+   */
+  t: number;
+};
+
+/* ======================================================================
+ * Registries
+ * ====================================================================== */
+
+const panes = new Set<HTMLElement>();
+
+/**
+ * Surfaces that want to know where the light is standing on them: the
+ * photographs and copy resting ON the glass, and the plastic buttons.
+ */
+const litSurfaces = new Set<HTMLElement>();
+const nonOccluding = new WeakSet<HTMLElement>();
+
+/** Each pane's two side faces, siblings of it (see .glass-side). */
+type SideLayers = {
+  top: HTMLElement;
+  bottom: HTMLElement;
+  /** Whether the pane is position: fixed; asked once, in a frame's read phase. */
+  fixed: boolean | null;
+  last: string;
+};
+const sideLayers = new WeakMap<HTMLElement, SideLayers>();
+
+/** How far outside a panel the cursor can be and still count as near it. */
+const REACH = 320;
+
+/* ======================================================================
+ * Things read once and kept
+ * ====================================================================== */
+
+/*
+ * Corner radii do not change as the page scrolls, and getComputedStyle is the
+ * expensive half of reading them. Cleared on resize (a breakpoint can change
+ * them) and when a pane registers.
+ */
+const radii = new WeakMap<HTMLElement, number>();
+
+function cornerRadius(el: HTMLElement) {
+  const known = radii.get(el);
+  if (known !== undefined) return known;
+  const raw = getComputedStyle(el).borderTopLeftRadius;
+  const value = Number.parseFloat(raw);
+  const px = Number.isFinite(value) && !raw.includes("%") ? value : 0;
+  radii.set(el, px);
+  return px;
+}
+
+const seeds = new WeakMap<HTMLElement, number>();
+let nextSeed = 0;
+
+function surfaceSeed(el: HTMLElement) {
+  let seed = seeds.get(el);
+  if (seed === undefined) {
+    seed = nextSeed % 4;
+    nextSeed += 1;
+    seeds.set(el, seed);
+  }
+  return seed;
+}
+
+/**
+ * The smallest rendition of a photograph, for use as a refraction texture.
+ *
+ * The texture is a second fetch (a texture needs CORS, the page's <img> is
+ * requested without), and it is only ever sampled inside a bevel a few dozen
+ * pixels deep or squeezed into a side face, so the smallest stored variant
+ * carries more detail than the effect can show.
+ */
+function smallestVariant(img: HTMLImageElement): string {
+  const set = img.getAttribute("srcset");
+  if (!set) return img.currentSrc || img.src;
+  let best = "";
+  let bestWidth = Infinity;
+  for (const entry of set.split(",")) {
+    const [url, descriptor] = entry.trim().split(/\s+/);
+    const width = Number.parseInt(descriptor ?? "", 10);
+    if (url && Number.isFinite(width) && width < bestWidth) {
+      bestWidth = width;
+      best = url;
+    }
+  }
+  return best || img.currentSrc || img.src;
+}
+
+/**
+ * The photograph a pane is sitting on: the nearest photographic scene's.
+ *
+ * A seam band has no photograph of its own -- the ones above and below carry
+ * on under it (see PhotoSection). The face and the top side take the one
+ * above, falling back to the one below; the bottom side takes the one below,
+ * which is what it faces.
+ */
+function backdropOf(el: HTMLElement, side: "above" | "below"): HTMLImageElement | null {
+  let scene = el.closest("[data-photo]");
+  if (!scene) return null;
+  if (scene.hasAttribute("data-seam")) {
+    const up = scene.previousElementSibling;
+    const down = scene.nextElementSibling;
+    const [first, second] = side === "above" ? [up, down] : [down, up];
+    scene = first?.hasAttribute("data-photo")
+      ? first
+      : second?.hasAttribute("data-photo")
+        ? second
+        : null;
+    if (!scene) return null;
+  }
+  const images = scene.querySelectorAll<HTMLImageElement>("img[src]");
+  for (let i = images.length - 1; i >= 0; i -= 1) {
+    const img = images[i];
+    // Skip the blurred placeholder, which is an inline data URI.
+    if (img && !img.src.startsWith("data:") && img.naturalWidth > 0) return img;
+  }
+  return null;
+}
+
+/* ======================================================================
+ * Per-pane causes
+ * ====================================================================== */
+
+/** How wide a pane's edge is: its own data-edge-width, else the "Edge width" knob. */
+export function paneEdgeWidth(el: HTMLElement): number {
+  return readEdgeWidth(el, t("edgeWidth"));
+}
+
+/** A pane's causes, with the page's settings for whatever it does not say. */
+export function paneCauses(el: HTMLElement): PaneCauses {
+  return readPaneCauses(el, { frost: t("glassBlur"), gap: t("floorGap") });
+}
+
+/**
+ * How far the panel is from eye level, as a fraction of half the viewport:
+ * clamped, and eased so the middle of the screen is a broad flat region
+ * rather than a point the thickness flips across.
+ */
+function paneTilt(r: DOMRect, viewportHeight: number) {
+  const middle = viewportHeight / 2;
+  const offset = (r.top + r.height / 2 - middle) / middle;
+  const clamped = Math.max(-1, Math.min(1, offset));
+  return clamped * Math.abs(clamped);
+}
+
+function sideHeightsAt(
+  el: HTMLElement,
+  r: DOMRect,
+  thickness: number,
+  viewportHeight: number,
+): { top: number; bottom: number } {
+  const tilt = paneTilt(r, viewportHeight);
+  const bar = el.classList.contains("glass--bar");
+  return {
+    top: Math.round(sideHeight(sideOpen(tilt, true), bar, thickness)),
+    bottom: Math.round(sideHeight(sideOpen(tilt, false), bar, thickness)),
+  };
+}
+
+/** How tall each of a pane's side faces shows right now, whole CSS pixels. */
+export function paneSideHeights(
+  el: HTMLElement,
+  r: DOMRect = el.getBoundingClientRect(),
+): { top: number; bottom: number } {
+  return sideHeightsAt(el, r, paneCauses(el).thickness, window.innerHeight);
+}
+
+/* ======================================================================
+ * 2. Read
+ * ====================================================================== */
+
+type ImageReading = { img: HTMLImageElement; rect: DOMRect };
+
+type PaneReading = {
+  el: HTMLElement;
+  rect: DOMRect;
+  radius: number;
+  causes: PaneCauses;
+  /** Offset-parent box, for placing the side faces; null for none / fixed panes. */
+  offset: { x: number; y: number; w: number; h: number } | null;
+  above: ImageReading | null;
+  below: ImageReading | null;
+};
+
+type SurfaceReading = {
+  el: HTMLElement;
+  rect: DOMRect;
+  radius: number;
+  /** The pane it stands on, if it blocks light; null if it does not. */
+  pane: HTMLElement | null;
+};
+
+type SceneReading = {
+  panes: PaneReading[];
+  surfaces: SurfaceReading[];
+  viewportWidth: number;
+  /** The viewport's client height (the view's frame). */
+  viewportHeight: number;
+  /** window.innerHeight: what a pane's tilt is measured against. */
+  innerHeight: number;
+};
+
+function readImage(img: HTMLImageElement | null): ImageReading | null {
+  return img ? { img, rect: img.getBoundingClientRect() } : null;
+}
+
+function readPane(el: HTMLElement, withOffsets = true): PaneReading {
+  const layers = withOffsets ? sideLayers.get(el) : undefined;
+  if (layers && layers.fixed === null) layers.fixed = getComputedStyle(el).position === "fixed";
+  return {
+    el,
+    rect: el.getBoundingClientRect(),
+    radius: cornerRadius(el),
+    causes: paneCauses(el),
+    offset:
+      layers && !layers.fixed
+        ? { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight }
+        : null,
+    above: readImage(backdropOf(el, "above")),
+    below: readImage(backdropOf(el, "below")),
+  };
+}
+
+function readSurface(el: HTMLElement): SurfaceReading {
+  return {
+    el,
+    rect: el.getBoundingClientRect(),
+    radius: cornerRadius(el),
+    pane: nonOccluding.has(el) ? null : el.closest<HTMLElement>(".glass"),
+  };
+}
+
+/**
+ * Every layout read the frame needs, and nothing else. The surfaces are only
+ * needed by the frame's own writes, so a snapshot taken for a pass skips them.
+ */
+function readScene(withSurfaces = true): SceneReading {
+  const root = document.documentElement;
+  return {
+    panes: [...panes].map((el) => readPane(el, withSurfaces)),
+    surfaces: withSurfaces ? [...litSurfaces].map(readSurface) : [],
+    viewportWidth: root.clientWidth || window.innerWidth,
+    viewportHeight: root.clientHeight || window.innerHeight,
+    innerHeight: window.innerHeight,
+  };
+}
+
+/* ======================================================================
+ * The snapshot the passes read
+ * ====================================================================== */
+
+let snapshot: GlassRect[] = [];
+let snapshotAt = -1;
+let snapshotVersion = -1;
+/*
+ * How long a snapshot may stand in for a fresh reading. Panes only move on
+ * scroll, resize and registration (all of which invalidate it) and the
+ * backdrops only when the eye moves (which runs a scene frame and replaces
+ * it), so this is a safety net for layout shifts nothing announces -- an
+ * image loading above a pane, a font arriving.
+ */
+const SNAPSHOT_MAX_AGE = 120;
+/** What is standing on each pane, from the last frame's light. */
+let occlusion = new Map<HTMLElement, Occluder[]>();
+const EMPTY_OCCLUDERS: readonly Occluder[] = [];
+
+/**
+ * Bumped whenever the geometry is invalidated -- scroll, resize, a pane
+ * registering or leaving. The light pass uses it to know whether its resting
+ * frame is still valid.
+ */
+let version = 0;
+
+export function geometryStamp(): number {
+  return version;
+}
+
+function invalidate() {
+  snapshotAt = -1;
+  version += 1;
+}
+
+function imageFields(reading: ImageReading | null) {
+  if (!reading) return null;
+  const { img, rect } = reading;
+  return {
+    src: smallestVariant(img),
+    x: rect.left,
+    y: rect.top,
+    w: rect.width,
+    h: rect.height,
+    a: img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+  };
+}
+
+function freeze(reading: SceneReading): GlassRect[] {
+  const out: GlassRect[] = [];
+  for (const p of reading.panes) {
+    const r = p.rect;
+    if (r.width <= 0 || r.height <= 0) continue;
+    const above = imageFields(p.above);
+    out.push({
+      el: p.el,
+      x: r.left,
+      y: r.top,
+      w: r.width,
+      h: r.height,
+      r: p.radius,
+      e: paneEdgeWidth(p.el),
+      t: paneTilt(r, reading.innerHeight),
+      s: surfaceSeed(p.el),
+      src: above?.src ?? "",
+      ix: above?.x ?? 0,
+      iy: above?.y ?? 0,
+      iw: above?.w ?? 1,
+      ih: above?.h ?? 1,
+      ia: above?.a ?? 1,
+      below: imageFields(p.below),
+      causes: p.causes,
+      occ: occlusion.get(p.el) ?? EMPTY_OCCLUDERS,
+    });
+  }
+  return out;
+}
+
+/**
+ * Where the glass is, right now: the frame's frozen snapshot.
+ *
+ * The scene's frame replaces it; scrolling, resizing and registration
+ * invalidate it. Asked for when it is invalid or old (a pass drawing on its
+ * own schedule), it takes a fresh reading -- panes only, reads only.
+ */
+export function glassGeometry(now = performance.now()): readonly GlassRect[] {
+  const age = now - snapshotAt;
+  if (snapshotAt >= 0 && snapshotVersion === version && age >= 0 && age < SNAPSHOT_MAX_AGE) {
+    return snapshot;
+  }
+  snapshot = freeze(readScene(false));
+  snapshotAt = now;
+  snapshotVersion = version;
+  return snapshot;
+}
+
+/* ======================================================================
+ * 3. Compute
+ * ====================================================================== */
+
+/** Eased nearness of the lamp to a rect, 0 to 1, over `reach` pixels. */
+function nearness(r: DOMRect, x: number, y: number, reach: number) {
+  const dx = Math.max(r.left - x, 0, x - r.right);
+  const dy = Math.max(r.top - y, 0, y - r.bottom);
+  const near = Math.max(0, 1 - Math.hypot(dx, dy) / reach);
+  return near * near;
+}
+
+type SurfaceLight = {
+  near: number;
+  cast: { x: number; y: number; blur: number };
+  alpha: number;
+  lit: number;
+  angle: number;
+};
+
+/**
+ * How the lamp falls on a surface resting on the glass, and the shadow it
+ * throws: offset = gap * lateral / height, penumbra = lightRadius * gap /
+ * distance (see lib/cast-shadow). Only while the lamp is lit -- the same
+ * smoothstep of the charge the glass shader uses, so the shadow never leads
+ * or lags the light that casts it.
+ */
+function lightOnSurface(r: DOMRect): SurfaceLight {
+  const x = cursorLamp.x;
+  const y = cursorLamp.y;
+  const near = nearness(r, x, y, 420);
+  const centreX = r.left + r.width / 2;
+  const centreY = r.top + r.height / 2;
+  const cast = castShadow({
+    gap: t("shadowGap"),
+    height: t("shadowHeight"),
+    lightRadius: t("shadowSoftness"),
+    lateralX: centreX - x,
+    lateralY: centreY - y,
+  });
+  const c = cursorLamp.charge;
+  const lit = c * c * (3 - 2 * c);
+  const alpha = near * lit * t("shadowStrength");
+  // Which way the light comes from, as a CSS gradient angle pointing AWAY
+  // from it, so a gradient's 0% sits on the side facing the lamp.
+  const angle = (Math.atan2(centreX - x, -(centreY - y)) * 180) / Math.PI;
+  return { near, cast, alpha, lit, angle };
+}
+
+/**
+ * What is standing on each pane, as the shapes of the shadows it throws: in
+ * the pane's own pixels, displaced by the cast vector, with the same penumbra
+ * the visible shadow has. Rebuilt every frame -- it follows the light.
+ */
+function occludersFor(
+  reading: SceneReading,
+  lightOn: readonly SurfaceLight[],
+): Map<HTMLElement, Occluder[]> {
+  const paneRects = new Map(reading.panes.map((p) => [p.el, p.rect] as const));
+  const out = new Map<HTMLElement, Occluder[]>();
+  reading.surfaces.forEach((s, i) => {
+    const light = lightOn[i];
+    if (!s.pane || !light || light.alpha <= 0.01) return;
+    const paneRect = paneRects.get(s.pane);
+    if (!paneRect) return;
+    const list = out.get(s.pane) ?? [];
+    if (list.length >= MAX_OCCLUDERS) return;
+    const r = s.rect;
+    list.push({
+      cx: r.left - paneRect.left + r.width / 2 + light.cast.x,
+      cy: r.top - paneRect.top + r.height / 2 + light.cast.y,
+      hw: r.width / 2,
+      hh: r.height / 2,
+      radius: s.radius,
+      // Never zero, or the hole has a hard edge no real shadow has.
+      blur: Math.max(light.cast.blur, 1),
+      alpha: light.alpha,
+    });
+    out.set(s.pane, list);
+  });
+  return out;
+}
+
+/* ======================================================================
+ * 4. Write
+ * ====================================================================== */
+
+let viewIdle = 0;
+
+function writeView(reading: SceneReading) {
+  const root = document.documentElement.style;
+  const vw = reading.viewportWidth;
+  const vh = reading.viewportHeight;
+  const x = cursorLamp.x;
+  const y = cursorLamp.y;
+  // Where the viewer is, as a fraction of the viewport from its centre.
+  root.setProperty("--reflect-x", (x / vw - 0.5).toFixed(3));
+  root.setProperty("--reflect-y", (y / vh - 0.5).toFixed(3));
+  /*
+   * The viewpoint. The eye follows the pointer by the camera's follow
+   * fraction, and the photographs -- a gap behind the glass -- slide on it by
+   * gap / (distance + gap) of that, so what is behind the glass moves under
+   * the bevel and you can watch it bend.
+   */
+  const eye = eyeOffset(x, y, vw, vh, t("viewFollow"));
+  const shift = behindGlassShift(eye, t("floorGap"), CAMERA_DISTANCE * vw);
+  viewState.eyeX = eye.x;
+  viewState.eyeY = eye.y;
+  // Set from the first frame, so the photographs never visibly re-scale when
+  // the eye first moves.
+  const scale = oversizeFor(vw, vh, t("viewFollow"), t("floorGap"), CAMERA_DISTANCE * vw).toFixed(
+    4,
+  );
+  if (root.getPropertyValue("--view-scale") !== scale) root.setProperty("--view-scale", scale);
+  if (shift.x === viewState.shiftX && shift.y === viewState.shiftY) return;
+  viewState.shiftX = shift.x;
+  viewState.shiftY = shift.y;
+  root.setProperty("--view-x", `${shift.x.toFixed(2)}px`);
+  root.setProperty("--view-y", `${shift.y.toFixed(2)}px`);
+  /*
+   * The liquid glass redraws a pane only when something behind it is known
+   * to be moving. Mark the shifted photographs as moving while they move, and
+   * idle a moment after, so the glass follows them live and stops spending
+   * frames the moment they settle.
+   */
+  for (const el of document.querySelectorAll<HTMLElement>("[data-view-shift]")) {
+    el.dataset["dynamic"] = "";
+  }
+  window.clearTimeout(viewIdle);
+  viewIdle = window.setTimeout(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("[data-view-shift]")) {
+      el.dataset["dynamic"] = "idle";
+    }
+  }, 300);
+}
+
+/**
+ * Lay a pane's side faces on its top and bottom edges: against its offset
+ * parent -- which is theirs too -- so they scroll with it for free, or the
+ * viewport for a fixed pane. Written only when something changed.
+ */
+function writeSides(p: PaneReading, viewportHeight: number) {
+  const layers = sideLayers.get(p.el);
+  if (!layers) return;
+  if (layers.fixed === null) return;
+  const r = p.rect;
+  const box = layers.fixed ? { x: r.left, y: r.top, w: r.width, h: r.height } : p.offset;
+  if (!box) return;
+  const sides = sideHeightsAt(p.el, r, p.causes.thickness, viewportHeight);
+  const { x, y, w, h } = box;
+  const key = `${x},${y},${w},${h},${sides.top},${sides.bottom},${p.radius}`;
+  if (key === layers.last) return;
+  layers.last = key;
+  const position = layers.fixed ? "fixed" : "absolute";
+  const set = (layer: HTMLElement, top: number, height: number, round: string) => {
+    layer.style.position = position;
+    layer.style.transform = `translate(${x}px, ${top}px)`;
+    layer.style.width = `${w}px`;
+    layer.style.height = `${height}px`;
+    layer.style.borderRadius = round;
+  };
+  set(layers.top, y, sides.top, `${p.radius}px ${p.radius}px 0 0`);
+  set(layers.bottom, y + h - sides.bottom, sides.bottom, `0 0 ${p.radius}px ${p.radius}px`);
+}
+
+function writePane(p: PaneReading, viewportHeight: number) {
+  const el = p.el;
+  const r = p.rect;
+  const x = cursorLamp.x;
+  const y = cursorLamp.y;
+  // How near the cursor is, eased; the lighting itself is the shader's job.
+  el.style.setProperty("--glow-on", nearness(r, x, y, REACH).toFixed(3));
+  writeSides(p, viewportHeight);
+  // The corner radius, for layers the utility classes cannot tell it to.
+  el.style.setProperty("--pane-radius", `${p.radius}px`);
+  // Where this pane sits in the viewport, for anything positioned in viewport space.
+  el.style.setProperty("--pane-x", `${Math.round(r.left)}px`);
+  el.style.setProperty("--pane-y", `${Math.round(r.top)}px`);
+  // Where the light is standing, in the pane's own coordinates.
+  el.style.setProperty("--lit-x", `${Math.round(x - r.left)}px`);
+  el.style.setProperty("--lit-y", `${Math.round(y - r.top)}px`);
+}
+
+function writeSurface(s: SurfaceReading, light: SurfaceLight) {
+  const el = s.el;
+  const r = s.rect;
+  if (r.width === 0 || r.height === 0) return;
+  el.style.setProperty("--lit-x", `${Math.round(cursorLamp.x - r.left)}px`);
+  el.style.setProperty("--lit-y", `${Math.round(cursorLamp.y - r.top)}px`);
+  el.style.setProperty("--lit-near", light.near.toFixed(3));
+  el.style.setProperty("--cast-x", `${light.cast.x.toFixed(1)}px`);
+  el.style.setProperty("--cast-y", `${light.cast.y.toFixed(1)}px`);
+  el.style.setProperty("--cast-blur", `${light.cast.blur.toFixed(1)}px`);
+  el.style.setProperty("--cast-alpha", light.alpha.toFixed(3));
+  el.style.setProperty("--lit-on", light.lit.toFixed(3));
+  // The lamp's bright core, whose mirror image a glossy surface shows: the
+  // emitter's radius less its glow, about two fifths of "Light size".
+  el.style.setProperty("--lamp-core", `${(t("shadowSoftness") * 0.35).toFixed(1)}px`);
+  el.style.setProperty("--lit-angle", `${light.angle.toFixed(1)}deg`);
+  // For the room reflection, offset for the surface's height above the glass.
+  el.style.setProperty("--surface-x", `${Math.round(r.left)}px`);
+  el.style.setProperty("--surface-y", `${Math.round(r.top)}px`);
+}
+
+/* ======================================================================
+ * The frame
+ * ====================================================================== */
+
+let frame = 0;
+let bound = false;
+
+function schedule() {
+  if (!frame) frame = requestAnimationFrame(run);
+}
+
+/** Put the frame after everything that registered this tick. */
+function reschedule() {
+  if (frame) cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(run);
+}
+
+function run(now = performance.now()) {
+  frame = 0;
+  // 1. commit
+  commitLights();
+  // 2. read
+  const reading = readScene();
+  // 3. compute
+  const lightOn = reading.surfaces.map((s) => lightOnSurface(s.rect));
+  occlusion = occludersFor(reading, lightOn);
+  snapshot = freeze(reading);
+  snapshotAt = typeof now === "number" ? now : performance.now();
+  snapshotVersion = version;
+  // 4. write
+  writeView(reading);
+  for (const p of reading.panes) writePane(p, reading.innerHeight);
+  reading.surfaces.forEach((s, i) => {
+    const light = lightOn[i];
+    if (light) writeSurface(s, light);
+  });
+  /*
+   * One number per pane still, for the CSS layers that cannot test a shape
+   * per pixel; the shader gets the real occluders.
+   */
+  for (const p of reading.panes) {
+    let strongest = 0;
+    for (const o of occlusion.get(p.el) ?? []) strongest = Math.max(strongest, o.alpha);
+    p.el.style.setProperty("--occluded", strongest.toFixed(3));
+  }
+}
+
+function bind() {
+  if (bound) return;
+  bound = true;
+  window.addEventListener(
+    "pointermove",
+    (event: PointerEvent) => movePointer(event.clientX, event.clientY),
+    { passive: true },
+  );
+  document.addEventListener("pointerleave", () => movePointer(-9999, -9999));
+  onLightChange(schedule);
+  // Scrolling moves panes under a stationary lamp.
+  window.addEventListener(
+    "scroll",
+    () => {
+      invalidate();
+      schedule();
+    },
+    { passive: true },
+  );
+  window.addEventListener("resize", () => {
+    for (const el of panes) radii.delete(el);
+    invalidate();
+    schedule();
+  });
+}
+
+/* ======================================================================
+ * Registration
+ * ====================================================================== */
+
+/**
+ * Add a pane of glass to the scene. Measured by the next frame, which is
+ * re-armed after the last arrival: panes mount in bursts (the header with the
+ * layout, the bands with the route), and a frame already pending would
+ * otherwise miss the late ones.
+ *
+ * Not measured on the spot. Mounting is a burst of fifty-odd registrations,
+ * and measuring each as it arrived was a read after the last one's writes --
+ * a style recalculation per element. The next frame measures them all in one
+ * read, a frame later.
+ */
+export function registerScenePane(el: HTMLElement) {
+  panes.add(el);
+  radii.delete(el);
+  invalidate();
+  bind();
+  reschedule();
+  return () => {
+    panes.delete(el);
+    invalidate();
+  };
+}
+
+export type LitSurfaceOptions = {
+  /**
+   * Whether this surface blocks the light as a solid rectangle: true for a
+   * photograph, false for type (whose glyph-shaped shadow is text-shadow) and
+   * for translucent plastic.
+   */
+  occludes?: boolean;
+};
+
+/** Add a surface resting on the glass; it is told where the light falls on it. */
+export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions = {}) {
+  if (options.occludes === false) nonOccluding.add(el);
+  else nonOccluding.delete(el);
+  litSurfaces.add(el);
+  bind();
+  reschedule();
+  return () => {
+    litSurfaces.delete(el);
+  };
+}
+
+/** Give a pane its two side faces (siblings of it; see .glass-side). */
+export function registerPaneSides(el: HTMLElement, top: HTMLElement, bottom: HTMLElement) {
+  sideLayers.set(el, { top, bottom, fixed: null, last: "" });
+  // Laid on the pane by the next frame, with everything else.
+  reschedule();
+  return () => {
+    sideLayers.delete(el);
+  };
+}
+
+/**
+ * The panes reacting to the shutter flash: a glare across each face and the
+ * rim flaring. The attribute is removed and re-added around a forced reflow,
+ * because re-applying an animation an element already has does nothing.
+ */
+export function flashPanes() {
+  for (const el of panes) {
+    el.removeAttribute("data-flash");
+    // Reading layout here is the point: it flushes the removal.
+    void el.offsetWidth;
+    el.setAttribute("data-flash", "");
+    window.setTimeout(() => el.removeAttribute("data-flash"), 1100);
+  }
+}

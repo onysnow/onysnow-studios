@@ -62,12 +62,17 @@ test.describe("glass", () => {
     const before = await sum("canvas.glass__under");
     // No pointer movement from here on: this is the hold trigger on its own.
     await page.mouse.down();
-    await page.waitForTimeout(2800);
-    const under = await sum("canvas.glass__under");
+    /*
+     * The pool of light and shadow lands under the pane. Waited for, not
+     * sampled at a fixed moment: the software renderer the suite runs on
+     * takes seconds to draw a pass's first lit frame, and a fixed 2.8 s
+     * sample caught it charging (lit 0.44, pass live) with nothing drawn yet
+     * about half the time -- on every version, not a fault in the light.
+     */
+    await expect
+      .poll(() => sum("canvas.glass__under"), { timeout: 15_000, intervals: [500] })
+      .toBeGreaterThan(before + 1000);
     await page.mouse.up();
-
-    // The pool of light and shadow lands under the pane...
-    expect(under).toBeGreaterThan(before + 1000);
     // ...and it is drawn beneath the glass's text, not over it.
     const z = await band.evaluate(
       (el) => getComputedStyle(el.querySelector("canvas.glass__under")!).zIndex,
