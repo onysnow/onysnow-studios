@@ -1,5 +1,6 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
+import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 
@@ -65,11 +66,12 @@ uniform float uRadius;        // corner radius, CSS pixels
 uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one edge every effect shares
 uniform float uStraight;      // 1: a full-width band -- top and bottom edges only
 uniform float uTilt;          // -1 looking up at it, 1 looking down at it
+uniform float uBar;           // 1: a thin fixed bar (.glass--bar), thinner glass
 uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
 uniform float uGrimeFloor;  // tunable
-uniform float uSideReach;   // tunable
+uniform float uGap;         // CSS px from the glass back to the photographs
 /*
  * The lamp's reflection on the face comes from causes only: what the glass is
  * made of (uIor), how frosted its surface is (uFrost), how high the lamp is
@@ -80,6 +82,8 @@ uniform float uIor;
 uniform float uFrost;
 uniform float uLightHeight; // CSS pixels above the glass
 uniform float uLampPower;
+uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
+uniform float uLightSize;   // the lamp's radius, CSS pixels
 
 /*
  * The room the face reflects (see effects/optics/environment.ts): an HDR
@@ -94,12 +98,19 @@ uniform float uCameraDistance;  // CSS pixels from the screen
 uniform float uFrontRoughness;  // GGX alpha of the face you look at
 uniform float uRoomExposure;    // how brightly lit the room is (1: middle grey)
 uniform vec2  uEye;             // the viewer's eye, from the viewport middle, CSS px
-uniform float uArris;       // tunable
 
 uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
 uniform float uImageAspect;   // intrinsic width / height
+/*
+ * The photograph BELOW the pane, for a band on a seam between two: its bottom
+ * side face looks down at it. The same image as uBackdrop otherwise.
+ */
+uniform sampler2D uBackdropBelow;
+uniform float uHasBelow;
+uniform vec4  uImageBelow;
+uniform float uImageBelowAspect;
 
 
 uniform vec3  uWarm;
@@ -115,26 +126,10 @@ uniform vec3  uCool;
 #define MAX_BEND 34.0   // peak displacement at the rim, CSS pixels
 
 /*
- * The side face is a different optical path from the face, and the numbers
- * below are why it has to look different rather than merely brighter.
- *
- * Through the FACE you look at near-normal incidence and the path through the
- * glass is the pane's thickness — a few millimetres. Through the SIDE you are
- * looking ALONG the pane, so the path is its width: two or three orders of
- * magnitude further. Everything that scales with path length therefore
- * explodes: dispersion separates the channels visibly instead of fringing
- * them, and absorption stops being negligible.
- *
- * That absorption is why the cut edge of ordinary glass is green. Iron in
- * soda-lime absorbs red most, blue next, green least, and over a few
- * millimetres you cannot see it at all — over a few hundred you see nothing
- * else. These are Beer-Lambert coefficients in that order.
+ * The side face and the arris -- their absorption, the mirror, the glints and
+ * the echo -- are modelled in effects/optics/edge-side.ts (optics plan step 8,
+ * from the reference photographs), shared with the CSS side layers.
  */
-#define SIDE_ABSORB vec3(1.15, 0.28, 0.55)
-/* How much of the scene is squeezed into the thin band, in backdrop UV. */
-#define SIDE_SPAN 0.42
-/* Dispersion scales with path length, and the side's path is enormous. */
-#define SIDE_DISPERSION 7.0
 
 
 /*
@@ -144,6 +139,7 @@ uniform vec3  uCool;
  */
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
+${EDGE_SIDE_GLSL}
 ${SURFACE_LAYERS_GLSL}
 ${ENVIRONMENT_GLSL}
 
@@ -189,6 +185,16 @@ float occlusionAt(vec2 local) {
  * surfaceAt() in the shared surface-layers chunk, which the light under the
  * glass reads too (see effects/optics/surface-layers.glsl.ts).
  */
+
+/* Where a page point falls in an object-fit: cover image (x, y, w, h). */
+vec2 coverUv(vec2 pt, vec4 image, float aspect) {
+  vec2 rel = (pt - image.xy) / max(image.zw, vec2(1.0));
+  float boxAspect = image.z / max(image.w, 1.0);
+  vec2 scale = boxAspect > aspect
+    ? vec2(1.0, boxAspect / aspect)
+    : vec2(aspect / boxAspect, 1.0);
+  return (rel - 0.5) / scale + 0.5;
+}
 
 void main() {
   // gl_FragCoord counts up from the bottom; the page counts down from the top.
@@ -290,26 +296,6 @@ void main() {
   float spill = exp(-dl / 280.0);
   float reach = direct + spill * 0.11;
 
-  /*
-   * ---- Grazing reach ----
-   *
-   * The side faces hold their highlight far longer than the flat face does,
-   * and the falloff they ride has to say so.
-   *
-   * Fresnel at near-normal incidence is a tight lobe: the face only throws the
-   * source back at you when the geometry lines up, so its specular dies
-   * quickly as the light moves off. At grazing incidence reflectance is close
-   * to 1 across a wide spread of angles -- which is why a pane of glass seen
-   * edge-on is a mirror at almost any angle, and why the last thing you see as
-   * a light leaves a sheet of glass is its edges still lit.
-   *
-   * The sides were riding the direct term, which is half strength at 60px and
-   * 2% by 400px. That is the face's lobe, and on the sides it made the edges
-   * go out at the same moment the face did. Weighted toward the broad term,
-   * they keep about eight times the reach at 400px for the same brightness
-   * directly under the light.
-   */
-  float grazing = direct * 0.3 + spill * uSideReach;
   float ambient = direct + spill * 0.14;
   /*
    * Grime rides the BROAD falloff, not the core.
@@ -358,149 +344,145 @@ void main() {
   float glint = smoothstep(uGrimeFloor, uGrimeFloor + 0.42, surf.r) * 3.4 * handled;
   float smear = smoothstep(uGrimeFloor * 0.85, uGrimeFloor * 0.85 + 0.5, surf.g) * 1.25 * handled;
 
-  // ---- The lit arris ----
+  /*
+   * ---- The arris ----
+   *
+   * The eased corner between the face and the side (effects/optics/
+   * edge-side.ts). It holds every normal from the face's to the side's, so it
+   * mirrors the lamp wherever the half-vector falls in that arc: a soft band
+   * 1-2 px wide, brightest beside the lamp and gone along the rest of the
+   * edge -- the short glints of the reference photos. Its width is the
+   * corner's radius; its length is the lamp's size.
+   *
+   * The pixel's nearest point on the outline, and the outward normal there,
+   * come from the same SDF as everything else.
+   */
   float ad = abs(d);
-  float filament = exp(-ad / 2.8);
-  float flare = exp(-ad / 15.0);
-  float haze = exp(-ad / 48.0);
   float arrisWear = 0.62 + 0.9 * surf.b * uHasSurface + 0.38 * (1.0 - uHasSurface);
-
+  vec2 viewCentre = 0.5 * uViewport / uScale;
+  vec3 eye = vec3(viewCentre + uEye, uCameraDistance);
+  vec3 lamp = vec3(uLight, uLightHeight);
+  vec2 onEdge = frag - grad * d;
+  float blockedEdge = occlusionAt(onEdge - uRect.xy);
+  float arrisLamp = arrisGlint(onEdge, grad, lamp, uLightSize, eye, uFrontRoughness, uLampPower, uIor)
+    * arrisWear * (1.0 - blockedEdge);
   /*
-   * Only the edges that are actually in view.
-   *
-   * The SDF's gradient is the outward normal of the perimeter, so its Y
-   * component is 1 along the top and bottom and 0 along the left and right.
-   * Weighting by it lights the two faces the viewer can see and leaves the
-   * other two alone.
-   *
-   * These bands run the full width of the page: their left and right edges are
-   * off-screen, or butted against the viewport. There is no vertical arris to
-   * catch anything, so drawing one put a bright teal line -- the thickness
-   * tint, exp(-SIDE_ABSORB) -- down the inside of every pane's right edge,
-   * which read as a layer stopping short of the container.
+   * The camera's bloom round that highlight: a lens spreads a bright line
+   * into a glow, and the glow is what tells you the line is bright rather
+   * than merely pale. It follows the highlight -- there is no glow where the
+   * arris is not lit. (It used to ride the lamp's distance, which lit the
+   * whole width of a pane white whenever the lamp was near.)
    */
-  /*
-   * All four edges, at full strength on the top and bottom and a little
-   * softer on the sides -- a vertical arris IS there, it is just seen more
-   * obliquely. The bright line inboard of the right edge was never this
-   * term being wrong; it was the drawing buffer being sized from a viewport
-   * width that included the scrollbar.
-   */
-  // Distinct from the Fresnel 'facing' above: that is how square-on you are
-  // to the pane, this is how square-on the EDGE is to the light.
-  float edgeFacing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
-  vec3 rim = vec3(filament * uArris * arrisWear + flare * 4.6 + haze * 0.34) * reach * edgeFacing;
+  float bloom = exp(-ad / 15.0) * 0.35 + exp(-ad / 48.0) * 0.05;
+  vec3 rim = vec3(arrisLamp * (arrisProfile(ad) + bloom));
 
   /*
    * ---- Light piped through the pane ----
    *
    * A pane is a light guide. Light that gets into it is trapped by total
    * internal reflection between the two faces and travels until it reaches an
-   * edge, where the angle finally breaks and it escapes — which is the entire
-   * principle of an edge-lit acrylic sign, and why the far edge of a pane
-   * glows when you put a torch anywhere on it.
+   * edge, where the angle finally breaks and it escapes -- the principle of an
+   * edge-lit acrylic sign, and why the far edge of a pane glows when you put a
+   * torch anywhere on it. It escapes AT the arris, so it has the arris's
+   * width, and it goes green on the way: the path is the pane's width.
    *
-   * The rim above only knows about light arriving at each point directly
-   * through the air, so the edges away from the source stayed dark. This is
-   * the other path: how much is COUPLING into the pane at all, carried along
-   * it with the very low loss that total internal reflection implies.
-   *
-   * The attenuation length is long for the same reason — each bounce loses
-   * almost nothing — so this reaches edges the direct term cannot, and it
-   * goes green on the way, because the path is now measured in the width of
-   * the pane rather than its thickness.
+   * Only scattered light is trapped. Light crossing clear glass leaves by the
+   * far face at the angle it came in; it takes a rough surface -- the frost,
+   * the grime -- to throw some of it past the critical angle. So how much is
+   * piped follows the frost, and a clear pane pipes almost nothing. (It was
+   * the same for every pane, with a 15 px glow of its own, which lit the
+   * whole width of the edge white whenever the lamp was near.)
    */
   float toPane = roundedBox(uLight - (uRect.xy + halfSize), halfSize, uRadius);
-  float couple = exp(-max(toPane, 0.0) / 130.0);
+  float couple = exp(-max(toPane, 0.0) / 130.0) * uFrost;
   float piped = couple * exp(-dl / 780.0);
   vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
+  rim += pipedTint * arrisProfile(ad) * 1.7 * arrisWear * piped;
+
   /*
-   * Kept well under the direct term. Piped light has bounced its way along
-   * the pane and lost energy at every interface; if it arrives as bright as
-   * light coming straight through the air, the edge stops reading as glass
-   * and starts reading as a neon outline.
+   * ---- The room, in the arris ----
+   *
+   * Not gated on the lamp. The corner turns through a quarter circle in a
+   * pixel or two, so it reflects a whole swath of the room -- for a top edge,
+   * up to the ceiling and its lights -- which is why a pane's rim is bright
+   * in any lit room. Four normals across the arc, each with its own Fresnel,
+   * each blurred over its eighth of the arc.
    */
-  rim += pipedTint * (filament * 1.7 * arrisWear + flare * 0.8) * piped * edgeFacing;
+  vec3 ray = normalize(vec3(onEdge, 0.0) - eye);
+  float texelsPerPx = uRoomWidth / (6.28318530718 * uCameraDistance) / uScale;
+  float arcBias = roomLod(0.3927, uRoomWidth) - log2(max(texelsPerPx, 1e-4));
+  vec3 arrisRoom = vec3(0.0);
+  for (int k = 0; k < 4; k++) {
+    float th = (float(k) + 0.5) * 0.3926990817;
+    vec3 n = vec3(grad * sin(th), cos(th));
+    vec3 r = reflect(ray, n);
+    /*
+     * Only the part of the arc that throws your line of sight back out into
+     * the room reflects the room. Toward the side, the reflected ray runs on
+     * into the page, onto the photograph -- the side's mirror, below.
+     */
+    arrisRoom += step(0.0, r.z) * fresnelSchlick(dot(-ray, n), uIor)
+      * decodeRadiance(texture2D(uRoom, roomUvDir(r), arcBias).rgb);
+  }
+  arrisRoom *= 0.25 * arrisProfile(ad) * uRoomExposure * uHasRoom;
 
   /*
    * ---- The side faces ----
-   * Which of the pane's two side faces you can see depends on where it sits
-   * relative to your eye, so they open against each other as the page scrolls.
+   *
+   * Which of the two you can see depends on where the pane sits against your
+   * eye, so they open against each other as the page scrolls; their heights
+   * match the CSS side layers' (lib/edge-glow placeSides). Every boundary is
+   * eased over the arris radius: nothing on a real edge is a hard step.
+   *
+   * The window through the side -- the photograph behind it, absorbed over
+   * the long path -- is the CSS multiply layer (.glass__side): absorption
+   * subtracts, and this canvas can only add. What this adds is what the side
+   * REFLECTS, and the echo.
    */
-  float topOpen = 0.18 + 0.82 * max(0.0, uTilt);
-  float botOpen = 0.18 + 0.82 * max(0.0, -uTilt);
-  float topT = 3.0 + 13.0 * topOpen;
-  float botT = 3.0 + 13.0 * botOpen;
-  /*
-   * Within the pane's width AND inside its rounded outline. The width test
-   * alone is a rectangle, which at the corners describes a region the pane
-   * has already curved out of.
-   */
+  // Whole pixels, as the CSS side layers are placed (lib/edge-glow).
+  float topT = floor(sideHeight(sideOpen(uTilt, 1.0), uBar) + 0.5);
+  float botT = floor(sideHeight(sideOpen(uTilt, 0.0), uBar) + 0.5);
   float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z) * inside;
   float dTop = frag.y - uRect.y;
   float dBot = (uRect.y + uRect.w) - frag.y;
-  float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
-  float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
-  float farTop = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
-  float farBot = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
-  /*
-   * The side face has no colour of its own.
-   *
-   * It used to carry a spectrum swept along the pane's LENGTH, which made a
-   * rainbow band running the whole width of every section whether or not
-   * anything was lighting it. Nothing produces that. The colour in a glass
-   * edge comes from what is BEHIND it — refracted, dispersed and absorbed over
-   * a long path — and that is computed below. What the light contributes is a
-   * glare, and a glare is only where the light is.
-   *
-   * So this is white, and it is driven by the direct term rather than reach:
-   * reach includes the wide scatter term, which is what was smearing the
-   * highlight along the entire band instead of putting it where the source is.
-   */
-  float sideGlare = (glareTop * topOpen + glareBot * botOpen) * withinX;
-  rim += vec3(sideGlare) * 11.0 * grazing * edgeFacing;
-  rim += vec3((farTop * topOpen + farBot * botOpen) * withinX) * 5.0 * direct;
+  float onTop = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dTop)
+    * (1.0 - smoothstep(topT - ARRIS_RADIUS, topT + ARRIS_RADIUS, dTop)) * withinX;
+  float onBot = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dBot)
+    * (1.0 - smoothstep(botT - ARRIS_RADIUS, botT + ARRIS_RADIUS, dBot)) * withinX;
 
   /*
-   * ---- What you see THROUGH the side face ----
-   *
-   * Not a tint on the band: the scene itself, seen end-on through the glass.
-   *
-   * Three things happen to it and all three follow from the path length. It
-   * is compressed, because a tall slice of what is behind the pane has to fit
-   * into a band a few pixels deep. It separates into colour, because
-   * dispersion accumulates over the path and the side's path is the width of
-   * the pane. And it goes green, because absorption accumulates too, and iron
-   * in soda-lime glass takes the red out first.
+   * The side as a mirror. You see it at a grazing angle, so it reflects
+   * strongly -- Fresnel from how grazing the look is, which is how thin the
+   * side shows (sideCosine) -- and what it reflects is what
+   * faces it: the photograph above the top edge, the one below the bottom
+   * edge, reached by following the ray off the side to the photograph the
+   * gap behind (mirrorReach). Its light and dark blocks are that photograph,
+   * flipped and squeezed, so the pattern changes along the edge and moves as
+   * your eye does.
    */
-  float onTop = step(0.0, dTop) * step(dTop, topT) * withinX;
-  float onBot = step(0.0, dBot) * step(dBot, botT) * withinX;
-  float across = mix(1.0 - clamp(dBot / botT, 0.0, 1.0),
-                     clamp(dTop / topT, 0.0, 1.0),
-                     step(0.5, onTop));
-  float onSide = max(onTop * topOpen, onBot * botOpen);
-
-  float disp = SIDE_DISPERSION * 0.0035;
-  vec2 sideUv = vec2(uvBase.x, uvBase.y + (across - 0.5) * SIDE_SPAN);
-  vec3 throughSide = vec3(
-    texture2D(uBackdrop, sideUv - vec2(0.0, disp)).r,
-    texture2D(uBackdrop, sideUv).g,
-    texture2D(uBackdrop, sideUv + vec2(0.0, disp)).b
-  ) * exp(-SIDE_ABSORB);
+  float xLean = (frag.x - eye.x) / uCameraDistance;
+  float topY = uRect.y;
+  float botY = uRect.y + uRect.w;
+  float fTop = fresnelSchlick(sideCosine(topT, PANE_THICKNESS), uIor);
+  float fBot = fresnelSchlick(sideCosine(botT, PANE_THICKNESS), uIor);
+  float zTop = PANE_THICKNESS * (1.0 - clamp(dTop / topT, 0.0, 1.0));
+  float zBot = PANE_THICKNESS * (1.0 - clamp(dBot / botT, 0.0, 1.0));
+  vec2 seenTop = vec2(frag.x + xLean * (uGap + zTop), topY - mirrorReach(dTop, topT, uGap, PANE_THICKNESS));
+  vec2 seenBot = vec2(frag.x + xLean * (uGap + zBot), botY + mirrorReach(dBot, botT, uGap, PANE_THICKNESS));
+  vec3 mirrorTop = texture2D(uBackdrop, coverUv(seenTop, uImage, uImageAspect)).rgb * uHasBackdrop;
+  vec3 mirrorBot = texture2D(uBackdropBelow, coverUv(seenBot, uImageBelow, uImageBelowAspect)).rgb * uHasBelow;
+  vec3 sideLight = mirrorTop * fTop * onTop + mirrorBot * fBot * onBot;
 
   /*
-   * Total internal reflection at the arris. Past the critical angle — about
-   * 41 degrees for n = 1.5 — glass reflects everything, which is why the very
-   * corner of a plate is the brightest part of it in any light.
+   * The echo: through the face just inside the edge, the side seen again by
+   * total internal reflection -- a paler copy of the edge displaced inward by
+   * the side's height, its light having crossed the side twice.
    */
-  /*
-   * It REFLECTS, though; it does not emit. Adding white here put a constant
-   * bright line along every edge whether or not anything was lighting it,
-   * which is the same mistake as the painted rainbow. It multiplies what is
-   * already coming through instead.
-   */
-  float tir = exp(-across * 5.0);
-  throughSide *= 1.0 + tir * 2.2;
+  vec3 behindBelow = texture2D(uBackdropBelow, coverUv(frag, uImageBelow, uImageBelowAspect)).rgb * uHasBelow;
+  vec3 echoTint = exp(-SIDE_ABSORB * 2.0 * SIDE_PATH_MIN) * ECHO_GAIN;
+  sideLight += echoTint * withinX * (
+    straight * uHasBackdrop * echoProfile(dTop, topT) + behindBelow * echoProfile(dBot, botT)
+  );
 
 
 
@@ -575,7 +557,7 @@ void main() {
    *
    * Blocked by whatever is standing on the glass between it and the lamp.
    */
-  float reflected = lampReflection(frag - uLight, uLightHeight, uLampPower, uIor, uFrost);
+  float reflected = lampReflection(frag - uLight, uLightHeight, uLampPower * uFaceLamp, uIor, uFrost);
   vec3 mirror = inside * vec3(1.0, 0.94, 0.84) * reflected * (1.0 - blocked);
 
   /*
@@ -589,14 +571,13 @@ void main() {
 
   /*
    * What the glass does to the photograph is not gated on the charge. A pane
-   * bends and absorbs what is behind it whether or not anybody is shining
-   * anything at it, and the side face is the strongest example — that is the
-   * band you can genuinely see THROUGH, along the pane's whole width. It was
-   * in the lit path, so the edge went blank the moment the shutter was idle.
+   * bends, absorbs and reflects what is around it whether or not anybody is
+   * shining anything at it: the side's mirror and echo, and the room in the
+   * arris, are there with the shutter idle.
    *
-   * It is also untinted. The colour in it belongs to the photograph and to
-   * the absorption; warming it by distance from the cursor would paint the
-   * light's colour onto something the light is not responsible for.
+   * They are also untinted. Their colour belongs to the photograph, the room
+   * and the absorption; warming it by distance from the cursor would paint
+   * the light's colour onto something the light is not responsible for.
    */
   /*
    * The face's refraction is NOT done here, and cannot be.
@@ -609,11 +590,11 @@ void main() {
    * which samples the backdrop from another position and composites behind the
    * content where it can actually replace it.
    *
-   * The side face stays, because it is genuinely additive: a thin band of the
-   * scene compressed and absorbed, laid over the edge rather than replacing
-   * anything.
+   * What the side face and the arris REFLECT stays here, because reflection
+   * is genuinely additive: it lands on top of what is seen through them. The
+   * absorption through the side is the CSS multiply layer.
    */
-  vec3 colour = throughSide * onSide * uHasBackdrop * 2.6;
+  vec3 colour = sideLight + arrisRoom;
   colour += (tint * (rim + face) + mirror) * lit;
   /*
    * The specular is the LIGHT, so it is gated on the light. The bevel's edge
@@ -671,7 +652,6 @@ void main() {
   float cosView = uCameraDistance / length(vec3(fromCentre, uCameraDistance));
   float reflectance = fresnelSchlick(cosView, uIor);
   reflectance += (1.0 - reflectance) * fresnel;
-  float texelsPerPx = uRoomWidth / (6.28318530718 * uCameraDistance) / uScale;
   float roomBias = roomLod(uFrontRoughness, uRoomWidth) - log2(max(texelsPerPx, 1e-4));
   vec3 room = decodeRadiance(
     texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
@@ -679,6 +659,20 @@ void main() {
   colour += inside * reflectance * room * uRoomExposure * uHasRoom;
 
   colour = toneMapGlass(colour);
+
+  /*
+   * The CSS side layers multiply everything under them by the side's
+   * transmittance -- this pass included, since it is drawn inside the pane.
+   * What the side and the arris REFLECT has not crossed the glass and must
+   * not be absorbed, so it is divided by the same factor here, in the same
+   * encoding the layers multiply in, and comes out as computed.
+   */
+  vec3 absorbed = vec3(1.0);
+  if (dTop >= 0.0 && dTop < topT) absorbed *= sideTransmittance(dTop);
+  if (dBot >= 0.0 && dBot < botT) absorbed *= sideTransmittance(dBot);
+  absorbed *= (1.0 - farArrisLoss(abs(dTop - topT))) * (1.0 - farArrisLoss(abs(dBot - botT)));
+  absorbed = mix(vec3(1.0), absorbed, withinX);
+  colour /= pow(max(absorbed, vec3(0.05)), vec3(1.0 / 2.2));
 
   /*
    * NO GRAIN HERE. Deliberately, and permanently.

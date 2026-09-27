@@ -1,11 +1,37 @@
-import { useEffect, useCallback, useRef, type ElementType, type ReactNode } from "react";
-import { paneEdgeWidth, registerEdgeGlow } from "@/lib/edge-glow";
+import {
+  useEffect,
+  useCallback,
+  useRef,
+  type CSSProperties,
+  type ElementType,
+  type ReactNode,
+} from "react";
+import { paneEdgeWidth, registerEdgeGlow, registerPaneSides } from "@/lib/edge-glow";
 import { requestBevelFilter } from "@/lib/bevel-filters";
 import { registerLitSurface } from "@/lib/edge-glow";
 import { registerPane } from "@/lib/glass-panes";
 import { onTuningApplied } from "@/lib/tuning";
 import { EDGE_WIDTH_ATTR } from "@/effects/optics/edge-profile";
+import { FAR_ARRIS_SPAN, farArrisGradientCss, sideGradientCss } from "@/effects/optics/edge-side";
 import { cn } from "@/lib/utils";
+
+/*
+ * The side faces' colours, worked out once from the absorption model
+ * (effects/optics/edge-side.ts). Each gradient runs from the face's front
+ * arris inward; the far-arris line straddles the corner.
+ */
+const SIDE_STYLE = {
+  top: {
+    backgroundImage: sideGradientCss("to bottom"),
+    "--far-arris": farArrisGradientCss("to bottom"),
+    "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
+  },
+  bottom: {
+    backgroundImage: sideGradientCss("to top"),
+    "--far-arris": farArrisGradientCss("to top"),
+    "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
+  },
+} as unknown as Record<"top" | "bottom", CSSProperties>;
 
 /**
  * SVG filters inside backdrop-filter are Chromium-only. Where they are not
@@ -78,6 +104,9 @@ export function Glass({
    * committed that subtree.
    */
   const node = useRef<HTMLElement | null>(null);
+  /* The side faces: siblings of the pane, rendered before it attaches. */
+  const sideTop = useRef<HTMLSpanElement | null>(null);
+  const sideBottom = useRef<HTMLSpanElement | null>(null);
 
   const attach = useCallback(
     (el: HTMLElement | null) => {
@@ -173,7 +202,18 @@ export function Glass({
     return registerPane(el);
   }, []);
 
-  return (
+  /*
+   * Its side faces, placed on its edges by the same pass that measures it
+   * (lib/edge-glow). In an effect because they are siblings, attached after
+   * the pane's own ref runs.
+   */
+  useEffect(() => {
+    const el = node.current;
+    if (!el || !sideTop.current || !sideBottom.current) return;
+    return registerPaneSides(el, sideTop.current, sideBottom.current);
+  }, []);
+
+  const pane = (
     <Tag
       ref={attach}
       /*
@@ -210,13 +250,6 @@ export function Glass({
         edges and neutral through the middle, which is what a bevel IS.
       */}
       <span aria-hidden="true" className="glass__refract" />
-      {/*
-        The two side faces — the actual thickness of the pane, between its
-        arrises. Which one you can see depends on where the panel sits relative
-        to your eye, so they open and close against each other as you scroll.
-      */}
-      <span aria-hidden="true" className="glass__side glass__side--top" />
-      <span aria-hidden="true" className="glass__side glass__side--bottom" />
       {/* Reflectivity rising toward the rim, the way glass does at grazing angles. */}
       <span aria-hidden="true" className="glass__fresnel" />
       {/*
@@ -229,5 +262,30 @@ export function Glass({
       <span aria-hidden="true" className="glass__glare" />
       {children}
     </Tag>
+  );
+
+  /*
+   * The two side faces -- the pane's thickness, between its arrises. Which one
+   * you can see depends on where the pane sits against your eye, so they open
+   * and close against each other as you scroll. Siblings AFTER the pane, not
+   * children: see .glass-side in styles.css for why only a sibling can absorb
+   * what is seen through them.
+   */
+  return (
+    <>
+      {pane}
+      <span
+        ref={sideTop}
+        aria-hidden="true"
+        className="glass-side glass-side--top"
+        style={SIDE_STYLE.top}
+      />
+      <span
+        ref={sideBottom}
+        aria-hidden="true"
+        className="glass-side glass-side--bottom"
+        style={SIDE_STYLE.bottom}
+      />
+    </>
   );
 }

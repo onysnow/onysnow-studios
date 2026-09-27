@@ -18,13 +18,18 @@ vec3 decodeRadiance(vec3 v) {
   return exp2(v * log2(1.0 + ROOM_LMAX)) - 1.0;
 }
 
-/* Where a point on a flat pane reflects into the room image; mirrored. */
-vec2 roomUv(vec2 p, float distance) {
-  float yaw = atan(p.x, distance);
-  float pitch = atan(-p.y, length(vec2(p.x, distance)));
+/* Where a reflected direction lands in the room image; mirrored. (x right, y down, z toward the viewer) */
+vec2 roomUvDir(vec3 r) {
+  float yaw = atan(r.x, r.z);
+  float pitch = atan(-r.y, length(r.xz));
   float u = 0.5 - yaw / 6.28318530718;
   float row = 0.5 - pitch / 3.14159265359;
   return vec2(u, (row - ROOM_TOP) / (ROOM_BOTTOM - ROOM_TOP));
+}
+
+/* Where a point on a flat pane reflects into the room image; mirrored. */
+vec2 roomUv(vec2 p, float distance) {
+  return roomUvDir(vec3(p, distance));
 }
 
 /* The mip level a reflection of roughness alpha samples, in a room width texels round. */

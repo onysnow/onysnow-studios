@@ -462,16 +462,6 @@ export const tuning: Record<string, Knob> = {
     max: 25,
     step: 0.5,
   },
-  sideReach: {
-    label: "Side reach",
-    group: "Glass",
-    value: 0.7,
-    min: 0,
-    max: 2,
-    step: 0.05,
-    hint: "How far the light has to travel before the pane's edges stop catching it. Grazing surfaces hold their reflectance over a much wider range of angles than a face-on one, so this is deliberately broader than the face's falloff.",
-  },
-
   rimGlare: {
     label: "Edge glare",
     group: "Glass",
@@ -490,16 +480,6 @@ export const tuning: Record<string, Knob> = {
     step: 1,
     hint: "How far the glare spreads, in pixels.",
   },
-  arris: {
-    label: "Edge glow",
-    group: "Glass",
-    value: 9.75,
-    min: 0,
-    max: 20,
-    step: 0.25,
-    hint: "The lit arris — the bright line along the pane's edge where the light catches the corner between the face and the side.",
-  },
-
   // ---- CSS-side ----
   displacement: {
     label: "Refraction",

@@ -130,6 +130,54 @@ test.describe("glass", () => {
   });
 });
 
+test.describe("the pane's edge", () => {
+  test.skip(
+    ({ browserName }) => browserName !== "chromium",
+    "The effect layer is suppressed outside Chromium.",
+  );
+
+  /*
+   * The side faces absorb what is seen through them, which only a layer
+   * OUTSIDE the pane can do: a pane is a stacking context, and a multiply
+   * layer inside one paints its colour flat instead of absorbing. So they are
+   * siblings, laid on the pane's edges by the pass that measures it.
+   */
+  test("its side faces sit on its top and bottom edges, outside it, absorbing", async ({
+    page,
+  }) => {
+    await page.goto("/?glass=css");
+    await page.waitForLoadState("networkidle");
+    const band = page.locator("[data-seam] .glass").first();
+    await band.scrollIntoViewIfNeeded();
+    const facts = async () =>
+      band.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const top = el.nextElementSibling as HTMLElement;
+        const bottom = top.nextElementSibling as HTMLElement;
+        const t = top.getBoundingClientRect();
+        const b = bottom.getBoundingClientRect();
+        return {
+          classes: [top.className, bottom.className],
+          topAt: Math.round(t.top - r.top),
+          bottomAt: Math.round(r.bottom - b.bottom),
+          widths: [Math.round(t.width - r.width), Math.round(b.width - r.width)],
+          heights: [t.height, b.height],
+          blend: getComputedStyle(top).mixBlendMode,
+          inside: el.querySelector(".glass-side") !== null,
+        };
+      });
+    await expect.poll(async () => (await facts()).heights[0]).toBeGreaterThan(0);
+    const f = await facts();
+    expect(f.classes[0]).toContain("glass-side--top");
+    expect(f.classes[1]).toContain("glass-side--bottom");
+    expect(f.topAt).toBe(0);
+    expect(f.bottomAt).toBe(0);
+    expect(f.widths).toEqual([0, 0]);
+    expect(f.blend).toBe("multiply");
+    expect(f.inside).toBe(false);
+  });
+});
+
 test.describe("plastic on the glass", () => {
   test.skip(
     ({ browserName }) => browserName !== "chromium",

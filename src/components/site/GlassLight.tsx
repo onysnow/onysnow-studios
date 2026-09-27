@@ -125,6 +125,7 @@ export function GlassLight({
     const uEdgeWidth = U("uEdgeWidth");
     const uStraight = U("uStraight");
     const uTilt = U("uTilt");
+    const uBar = U("uBar");
     const uSeed = U("uSeed");
     const uImage = U("uImage");
     const uImageAspect = U("uImageAspect");
@@ -133,7 +134,10 @@ export function GlassLight({
     const uGrimeRake = U("uGrimeRake");
     const uGrimeSpecks = U("uGrimeSpecks");
     const uGrimeFloor = U("uGrimeFloor");
-    const uSideReach = U("uSideReach");
+    const uGap = U("uGap");
+    const uHasBelow = U("uHasBelow");
+    const uImageBelow = U("uImageBelow");
+    const uImageBelowAspect = U("uImageBelowAspect");
     const uRestEdge = U("uRestEdge");
     const uOccRect = U("uOccRect");
     const uOccSoft = U("uOccSoft");
@@ -153,7 +157,8 @@ export function GlassLight({
     const uFrost = U("uFrost");
     const uLightHeight = U("uLightHeight");
     const uLampPower = U("uLampPower");
-    const uArris = U("uArris");
+    const uFaceLamp = U("uFaceLamp");
+    const uLightSize = U("uLightSize");
 
     // The site's amber and teal in linear light — the shader works in linear
     // and only returns to display space at the very end.
@@ -175,6 +180,7 @@ export function GlassLight({
     gl.uniform1f(uSmudgeTile, 1024);
     gl.uniform1f(uScratchTile, 2048);
     gl.uniform1i(U("uBackdrop"), 1);
+    gl.uniform1i(U("uBackdropBelow"), 4);
     gl.uniform1f(uHasSurface, 0);
 
     gl.enable(gl.BLEND);
@@ -433,16 +439,21 @@ export function GlassLight({
       gl.uniform1f(uGrimeRake, t("grimeRake"));
       gl.uniform1f(uGrimeSpecks, t("grimeSpecks"));
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
-      gl.uniform1f(uSideReach, t("sideReach"));
+      gl.uniform1f(uGap, t("floorGap"));
       gl.uniform1f(uRestEdge, t("restEdge"));
       // The reflection on the face, from causes: the glass, its frost, and
       // the lamp's height above the glass and its brightness.
       gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1f(uFrost, t("glassBlur"));
       gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
-      // Off by request (it reads as a flashlight); see LAMP_REFLECTION_ENABLED.
-      gl.uniform1f(uLampPower, LAMP_REFLECTION_ENABLED ? LAMP_POWER_PER_GAIN * t("coreGain") : 0);
-      gl.uniform1f(uArris, t("arris"));
+      /*
+       * The lamp's power reaches the arris glints whatever the switch says;
+       * the switch turns off only the face's own image of the lamp, which is
+       * off by request (it reads as a flashlight; see LAMP_REFLECTION_ENABLED).
+       */
+      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
+      gl.uniform1f(uFaceLamp, LAMP_REFLECTION_ENABLED ? 1 : 0);
+      gl.uniform1f(uLightSize, t("shadowSoftness"));
       requestRoom();
       gl.uniform1f(
         uCameraDistance,
@@ -468,12 +479,22 @@ export function GlassLight({
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.uniform1f(uHasBackdrop, texture ? 1 : 0);
+        // The photograph the bottom side face looks down at.
+        const below = pane.below ? requestBackdrop(pane.below.src) : null;
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, below);
+        gl.uniform1f(uHasBelow, below ? 1 : 0);
+        if (pane.below) {
+          gl.uniform4f(uImageBelow, pane.below.x, pane.below.y, pane.below.w, pane.below.h);
+          gl.uniform1f(uImageBelowAspect, pane.below.a);
+        }
 
         gl.uniform4f(uRect, pane.x, pane.y, pane.w, pane.h);
         gl.uniform1f(uRadius, pane.r);
         gl.uniform1f(uEdgeWidth, pane.e);
         gl.uniform1f(uStraight, pane.w >= viewportWidth() - 1 ? 1 : 0);
         gl.uniform1f(uTilt, pane.t);
+        gl.uniform1f(uBar, pane.el.classList.contains("glass--bar") ? 1 : 0);
         gl.uniform1f(uSeed, pane.s);
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
         gl.uniform1f(uImageAspect, pane.ia);

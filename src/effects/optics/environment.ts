@@ -66,8 +66,19 @@ export const ROOM_BOTTOM = 0.755;
  * behind the viewer.
  */
 export function roomUv(x: number, y: number, distance: number): [number, number] {
-  const yaw = Math.atan2(x, distance);
-  const pitch = Math.atan2(-y, Math.hypot(x, distance));
+  return roomUvDir(x, y, distance);
+}
+
+/**
+ * Where a reflected DIRECTION lands in the room image: x right, y down, z
+ * toward the viewer (back into the room behind them). A flat face reflects
+ * the ray to point (x, y) as (x, y, distance), which is roomUv; the eased
+ * corner of a pane turns its normal away from the face, so it reflects
+ * directions the face never does -- the ceiling, for a top edge.
+ */
+export function roomUvDir(rx: number, ry: number, rz: number): [number, number] {
+  const yaw = Math.atan2(rx, rz);
+  const pitch = Math.atan2(-ry, Math.hypot(rx, rz));
   // Mirrored: a point to the viewer's right reflects what is behind them on
   // their right, which is on the LEFT of a room photographed facing it.
   const u = 0.5 - yaw / (2 * Math.PI);

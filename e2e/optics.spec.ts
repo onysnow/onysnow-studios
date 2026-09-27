@@ -3,6 +3,19 @@ import { EDGE_PROFILE_GLSL } from "../src/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "../src/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "../src/effects/optics/transmission.glsl";
 import { HEX_TILE_GLSL } from "../src/effects/optics/hex-tile.glsl";
+import { EDGE_SIDE_GLSL } from "../src/effects/optics/edge-side.glsl";
+import { ENVIRONMENT_GLSL } from "../src/effects/optics/environment.glsl";
+import { roomUvDir } from "../src/effects/optics/environment";
+import {
+  arrisGlint,
+  arrisLine,
+  echoProfile,
+  farArrisLoss,
+  mirrorReach,
+  sideCosine,
+  sidePath,
+  sideTransmittance,
+} from "../src/effects/optics/edge-side";
 import { hexBlend, hexWeights } from "../src/effects/optics/hex-tile";
 import {
   frostSpread,
@@ -50,6 +63,97 @@ type Case = {
 };
 
 const CASES: Case[] = [
+  {
+    name: "sidePath",
+    glsl: "sidePath(x)",
+    ts: (x) => sidePath(x),
+    from: -1,
+    to: 16,
+    lo: 0,
+    hi: 2,
+  },
+  {
+    name: "sideTransmittance (red)",
+    glsl: "sideTransmittance(x).r",
+    ts: (x) => sideTransmittance(x)[0],
+    from: 0,
+    to: 16,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "farArrisLoss",
+    glsl: "farArrisLoss(x)",
+    ts: (x) => farArrisLoss(x),
+    from: -6,
+    to: 6,
+    lo: 0,
+    hi: 0.5,
+  },
+  {
+    name: "mirrorReach",
+    glsl: "mirrorReach(x, 12.0, 70.0, 18.0)",
+    ts: (x) => mirrorReach(x, 12, 70, 18),
+    from: 0,
+    to: 12,
+    lo: 0,
+    hi: 70,
+  },
+  {
+    name: "sideCosine",
+    glsl: "sideCosine(x, 18.0)",
+    ts: (x) => sideCosine(x, 18),
+    from: 0,
+    to: 20,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "arrisLine",
+    glsl: "arrisLine(x, 0.2)",
+    ts: (x) => arrisLine(x, 0.2),
+    from: 0,
+    to: 0.6,
+    lo: 0,
+    hi: 2,
+  },
+  {
+    name: "arrisGlint",
+    glsl: "arrisGlint(vec2(x, 0.0), vec2(0.0, -1.0), vec3(300.0, -80.0, 230.0), 46.0, vec3(640.0, 400.0, 1536.0), 0.02, 756000.0, 1.518)",
+    ts: (x) =>
+      arrisGlint([x, 0], 0, -1, [300, -80, 230], 46, [640, 400, 1536], 0.02, 756000, 1.518),
+    from: 0,
+    to: 800,
+    lo: 0,
+    hi: 0.3,
+  },
+  {
+    name: "echoProfile",
+    glsl: "echoProfile(x, 8.0)",
+    ts: (x) => echoProfile(x, 8),
+    from: 8,
+    to: 24,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "roomUvDir (u)",
+    glsl: "roomUvDir(vec3(x, -0.4 * x - 50.0, 300.0)).x",
+    ts: (x) => roomUvDir(x, -0.4 * x - 50, 300)[0],
+    from: -600,
+    to: 600,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "roomUvDir (v)",
+    glsl: "roomUvDir(vec3(x, -0.4 * x - 50.0, 300.0)).y",
+    ts: (x) => roomUvDir(x, -0.4 * x - 50, 300)[1],
+    from: -600,
+    to: 600,
+    lo: -1,
+    hi: 2,
+  },
   {
     name: "hexWeights (nearest-cell weight after the contrast blend)",
     glsl: "hexW(vec2(x, 0.37 * x + 0.11))",
@@ -249,6 +353,8 @@ void main() {
           chunk:
             EDGE_PROFILE_GLSL +
             REFLECTION_GLSL +
+            EDGE_SIDE_GLSL +
+            ENVIRONMENT_GLSL +
             TRANSMISSION_GLSL +
             HEX_TILE_GLSL +
             "float hexW(vec2 st) { vec3 w; vec2 a; vec2 b; vec2 c; hexWeights(st, w, a, b, c); vec3 k = hexBlend(w); return max(k.x, max(k.y, k.z)); }",
