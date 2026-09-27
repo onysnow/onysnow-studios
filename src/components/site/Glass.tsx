@@ -17,6 +17,7 @@ import { requestBevelFilter } from "@/lib/bevel-filters";
 import { registerPane } from "@/lib/glass-panes";
 import { onTuningApplied } from "@/lib/tuning";
 import { EDGE_WIDTH_ATTR } from "@/effects/optics/edge-profile";
+import { layerProps, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { FAR_ARRIS_SPAN, farArrisGradientCss, sideGradientCss } from "@/effects/optics/edge-side";
 import { cn } from "@/lib/utils";
 
@@ -27,11 +28,13 @@ import { cn } from "@/lib/utils";
  */
 const SIDE_STYLE = {
   top: {
+    zIndex: SIDE_LAYER_Z,
     backgroundImage: sideGradientCss("to bottom"),
     "--far-arris": farArrisGradientCss("to bottom"),
     "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
   },
   bottom: {
+    zIndex: SIDE_LAYER_Z,
     backgroundImage: sideGradientCss("to top"),
     "--far-arris": farArrisGradientCss("to top"),
     "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
@@ -259,15 +262,13 @@ export function Glass({
       )}
     >
       {/* Bright points behind the glass, thrown out of focus into discs. */}
-      <span aria-hidden="true" className="glass__bokeh" />
+      <span {...layerProps("pane:bokeh")} />
       {/*
         The bezel, bending and dispersing what is behind it. One layer over the
         whole pane: the displacement map carries the profile, pushing at the
         edges and neutral through the middle, which is what a bevel IS.
       */}
-      <span aria-hidden="true" className="glass__refract" />
-      {/* Reflectivity rising toward the rim, the way glass does at grazing angles. */}
-      <span aria-hidden="true" className="glass__fresnel" />
+      <span {...layerProps("pane:refraction")} />
       {/*
         The room it reflects is drawn by the glass light pass (GlassLight),
         from the room's real brightness and the glass's Fresnel -- in both
@@ -275,7 +276,7 @@ export function Glass({
         environment.ts for why that could not be both physical and visible.
       */}
       {/* The specular band the shutter flash sweeps across the panel. */}
-      <span aria-hidden="true" className="glass__glare" />
+      <span {...layerProps("pane:glare")} />
       {children}
     </Tag>
   );

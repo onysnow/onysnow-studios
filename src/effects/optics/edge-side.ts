@@ -287,7 +287,7 @@ export function echoProfile(depth: number, side: number): number {
  * ---- CSS ----
  *
  * The window through the side is a multiply layer over what is behind the
- * pane (.glass__side): absorption can only subtract, and the WebGL passes
+ * pane (.glass-side, a sibling after it): absorption can only subtract, and the WebGL passes
  * composite plus-lighter, which can only add. These build its gradients from
  * the functions above, so the CSS and the shader cannot disagree about what
  * colour the side is.

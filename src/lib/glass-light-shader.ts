@@ -436,7 +436,7 @@ void main() {
    * eased over the arris radius: nothing on a real edge is a hard step.
    *
    * The window through the side -- the photograph behind it, absorbed over
-   * the long path -- is the CSS multiply layer (.glass__side): absorption
+   * the long path -- is the CSS multiply layer (.glass-side): absorption
    * subtracts, and this canvas can only add. What this adds is what the side
    * REFLECTS, and the echo.
    */

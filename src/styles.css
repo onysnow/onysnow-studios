@@ -612,11 +612,11 @@
     width: 0;
     height: 0;
     /*
-     * Above the pane it belongs to. Liquid glass lifts a pane to z-index 1
-     * (its render is opaque), and a side left at auto sat underneath it,
-     * absorbing nothing anyone could see.
+     * Above the pane it belongs to (SIDE_LAYER_Z, written by <Glass> from the
+     * compositor). Liquid glass lifts a pane to z-index 1 (its render is
+     * opaque), and a side left at auto sat underneath it, absorbing nothing
+     * anyone could see.
      */
-    z-index: 2;
     pointer-events: none;
     background-repeat: no-repeat;
     mix-blend-mode: multiply;
@@ -1554,7 +1554,7 @@ span:has(> .photo-surface) {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  z-index: -3;
+  /* z-index: the compositor's (effects/engine/compositor PANE_LAYERS). */
   opacity: 0;
   mix-blend-mode: plus-lighter;
 }
@@ -1858,7 +1858,7 @@ span:has(> .photo-surface) {
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
-    z-index: -5;
+    /* z-index: the compositor's (effects/engine/compositor PANE_LAYERS). */
     backdrop-filter: brightness(2.1) contrast(3.2) saturate(1.25) blur(16px);
     mix-blend-mode: plus-lighter;
     opacity: 0.6;
@@ -1909,7 +1909,7 @@ span:has(> .photo-surface) {
      * different depths read as banding rather than as an edge.
      */
     pointer-events: none;
-    z-index: -4;
+    /* z-index: the compositor's (effects/engine/compositor PANE_LAYERS). */
     /*
      * Fallback first. SVG filters in backdrop-filter are Chromium-only —
      * Safari and Firefox support neither, and would silently render nothing
@@ -1942,13 +1942,6 @@ span:has(> .photo-surface) {
    * This is why a real pane has bright edges even in flat light, and none of
    * the other layers modelled it.
    */
-  /*
-   * No painted Fresnel wash. Reflectance toward the rim is the glass light
-   * pass's, from the material's index and where the eye is.
-   */
-  .glass > .glass__fresnel {
-    display: none;
-  }
 }
 
 /*
@@ -2198,22 +2191,14 @@ span:has(> .photo-surface) {
  * same reason the grime did: things standing on a surface cannot have that
  * surface in front of them.
  */
-:root[data-glass="raster"]
-  .glass:not(.glass--bar):not(.glass-toggle)
-  > canvas:not(.glass__surface):not(.glass__under) {
-  /*
-   * The LIBRARY's canvas only, and !important because it writes z-index:-1
-   * inline. This used to match every canvas in the pane -- including our own
-   * .glass__surface, the layer the light and the grime are drawn into -- and
-   * never beat the library's inline value. So the surface dropped to -2, the
-   * opaque liquid render sat at -1 on top of it, and a fully charged liquid
-   * pane showed no light at all: 44 brightness against 78 for the same pane
-   * in CSS mode, and hiding the surface layer changed nothing, because it
-   * was already buried. That is why liquid mode had "hardly any" edge bloom
-   * or light on the glass.
-   */
-  z-index: -3 !important;
-}
+/*
+ * The library's canvas is taken into the compositor's "pane:liquid" slot
+ * (effects/engine/compositor, adopted in RasterGlass), which writes its
+ * z-index with priority over the library's inline -1. That -1 once put the
+ * opaque liquid render ON TOP of the light layer, and a fully charged liquid
+ * pane showed no light at all -- the order is the compositor's now, in one
+ * list, rather than a rule here racing an inline style.
+ */
 
 /*
  * (The scene's floor is handled in the library now -- see the LOCAL note in
@@ -2413,7 +2398,7 @@ span:has(> .photo-surface) {
 .glass > .glass__surface {
   position: absolute;
   inset: -90px;
-  z-index: -1;
+  /* z-index: the compositor's (effects/engine/compositor PANE_LAYERS). */
   width: calc(100% + 180px);
   height: calc(100% + 180px);
   pointer-events: none;
@@ -2739,7 +2724,7 @@ html.is-winding * {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: -2;
+  /* z-index: the compositor's (effects/engine/compositor PANE_LAYERS). */
   pointer-events: none;
 }
 

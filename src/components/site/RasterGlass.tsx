@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { adoptLayer } from "@/effects/engine/compositor";
 import { applyGlassConfig } from "@/lib/tuning";
 import { onPane } from "@/lib/glass-panes";
 
@@ -212,6 +213,14 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
            * turning into a transparent hole.
            */
           pane.dataset["liquid"] = "on";
+          /*
+           * The library puts its canvas first in the pane and writes its own
+           * z-index inline. The compositor takes it into the "pane:liquid"
+           * slot, under the light layers, with a z-index the library cannot
+           * override.
+           */
+          const render = pane.querySelector<HTMLElement>(":scope > canvas:not([data-layer])");
+          if (render) adoptLayer(pane, "pane:liquid", render);
 
           /*
            * Hand the pane whatever the tuning panel currently holds.

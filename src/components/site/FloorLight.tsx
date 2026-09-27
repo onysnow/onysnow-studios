@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
 import { lightState, onCharge } from "@/effects/light/lights";
+import { paneCanvas } from "@/effects/engine/compositor";
 import {
   FLOOR_FRAGMENT_SHADER,
   FLOOR_VERTEX_SHADER,
@@ -165,10 +166,8 @@ export function FloorLight() {
     const underFor = (el: HTMLElement, w: number, h: number) => {
       let layer = under.get(el);
       if (!layer || !layer.isConnected) {
-        layer = document.createElement("canvas");
-        layer.className = "glass__under";
-        layer.setAttribute("aria-hidden", "true");
-        el.insertBefore(layer, el.firstChild);
+        // Its slot in the pane's stack is the compositor's (effects/engine/compositor).
+        layer = paneCanvas(el, "pane:under");
         under.set(el, layer);
       }
       if (layer.width !== w || layer.height !== h) {

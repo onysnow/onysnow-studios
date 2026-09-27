@@ -4,6 +4,7 @@ import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
 import { onCharge } from "@/effects/light/lights";
+import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
 import { frontRoughness } from "@/effects/materials/presets";
 import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
@@ -359,11 +360,9 @@ export function GlassLight({
 
     const surfaceFor = (el: HTMLElement, cssW: number, cssH: number) => {
       let layer = surfaces.get(el);
-      if (!layer) {
-        layer = document.createElement("canvas");
-        layer.className = "glass__surface";
-        layer.setAttribute("aria-hidden", "true");
-        el.insertBefore(layer, el.firstChild);
+      if (!layer || !layer.isConnected) {
+        // Its slot in the pane's stack is the compositor's (effects/engine/compositor).
+        layer = paneCanvas(el, "pane:surface");
         surfaces.set(el, layer);
       }
       const w = Math.max(1, Math.round(cssW * scale));
