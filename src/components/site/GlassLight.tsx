@@ -6,6 +6,7 @@ import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge } from "@/lib/edg
 import { onTuningApplied, t } from "@/lib/tuning";
 import { FLOAT_GLASS, frontRoughness } from "@/effects/materials/presets";
 import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
+import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { LAMP_POWER_PER_GAIN, LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
@@ -210,40 +211,14 @@ export function GlassLight({
      * onto the nearest power-of-two canvas first -- an admin upload must never
      * be able to turn the layer black.
      */
-    const loadLayer = (unit: number, src: string, tile: WebGLUniformLocation | null) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const side = Math.min(2048, 2 ** Math.round(Math.log2(Math.max(img.width, img.height, 1))));
-        let source: TexImageSource = img;
-        if (img.width !== side || img.height !== side) {
-          const c = document.createElement("canvas");
-          c.width = side;
-          c.height = side;
-          c.getContext("2d")?.drawImage(img, 0, 0, side, side);
-          source = c;
-        }
-        const tex = gl.createTexture();
-        if (!tex) return;
+    const loadLayer = (unit: number, src: string, tile: WebGLUniformLocation | null) =>
+      loadSurfaceLayer(gl, unit, src, (tex, side) => {
         layers.set(unit, tex);
-        gl.activeTexture(gl.TEXTURE0 + unit);
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-        /*
-         * No mipmaps: the map is shown at one texel per CSS pixel, so it is
-         * never minified, and a hex-tile's offset jumps between cells would
-         * pick the wrong mip level along every cell border.
-         */
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.useProgram(program);
         gl.uniform1f(tile, side);
         layersLoaded += 1;
         if (layersLoaded === 2) gl.uniform1f(uHasSurface, 1);
-      };
-      img.src = src;
-    };
+      });
     /*
      * The photographed surface layers, fetched lazily: the shader falls back
      * to no surface detail until both arrive, and they never load at all for

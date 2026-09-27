@@ -1,6 +1,6 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
-import { HEX_TILE_GLSL } from "@/effects/optics/hex-tile.glsl";
+import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 
 /**
@@ -100,17 +100,6 @@ uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
 uniform float uImageAspect;   // intrinsic width / height
 
-/*
- * The surface layers, photographed: where the smudge film is and how thick,
- * and where the scratches are. Each is a greyscale map, the mark's amount in
- * its brightness, swappable from the admin portal.
- */
-uniform sampler2D uSmudge;
-uniform sampler2D uScratch;
-uniform float uHasSurface;
-/* How many CSS pixels one repeat of each map covers: one texel per pixel. */
-uniform float uSmudgeTile;
-uniform float uScratchTile;
 
 uniform vec3  uWarm;
 uniform vec3  uCool;
@@ -154,7 +143,7 @@ uniform vec3  uCool;
  */
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
-${HEX_TILE_GLSL}
+${SURFACE_LAYERS_GLSL}
 ${ENVIRONMENT_GLSL}
 
 /*
@@ -195,31 +184,10 @@ float occlusionAt(vec2 local) {
 }
 
 /*
- * The surface, photographed, and laid over the pane with no repeat to spot.
- *
- * It was a 2x2 atlas of four cells, each tile mirrored and re-picked so the
- * same scratch did not line up every 340px. It still repeated on a grid. Now
- * each layer is one seamless photograph hex-tiled (see effects/optics/
- * hex-tile.ts): every hexagon of the pane reads its own patch, and the three
- * around each point blend with no border. Nothing here is generated -- the
- * offsets only choose which part of the photograph a patch of glass shows.
- *
- * R: scratches. G: smudge. B: wear -- the same smudge photograph at four
- * times the scale, a slow variation in how handled each part of the pane is.
+ * The surface, photographed, laid over the pane with no repeat to spot:
+ * surfaceAt() in the shared surface-layers chunk, which the light under the
+ * glass reads too (see effects/optics/surface-layers.glsl.ts).
  */
-vec3 surfaceAt(vec2 local, float seed) {
-  vec2 shift = vec2(seed * 0.37, seed * 0.61);
-  float scratch = hexTile(uScratch, local / uScratchTile + shift).r;
-  float smudge = hexTile(uSmudge, local / uSmudgeTile + shift).r;
-  /*
-   * Handled glass is never perfectly clean, so wear has a floor: a third,
-   * rising where the smudge film is -- the same spread the old packed map's
-   * wear channel had, which the grime's strength was tuned against.
-   */
-  float film = hexTile(uSmudge, local / (uSmudgeTile * 4.0) + shift.yx).r;
-  float wear = 0.33 + 0.67 * smoothstep(0.0, 0.5, film);
-  return vec3(scratch, smudge, wear);
-}
 
 void main() {
   // gl_FragCoord counts up from the bottom; the page counts down from the top.
