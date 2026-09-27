@@ -67,19 +67,20 @@ uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one 
 uniform float uStraight;      // 1: a full-width band -- top and bottom edges only
 uniform float uTilt;          // -1 looking up at it, 1 looking down at it
 uniform float uBar;           // 1: a thin fixed bar (.glass--bar), thinner glass
+uniform float uThickness;     // this pane's thickness, CSS px (its data-thickness)
 uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
 uniform float uGrimeFloor;  // tunable
-uniform float uGap;         // CSS px from the glass back to the photographs
+uniform float uGap;         // this pane's gap to the photographs behind it, CSS px
 /*
  * The lamp's reflection on the face comes from causes only: what the glass is
  * made of (uIor), how frosted its surface is (uFrost), how high the lamp is
  * above it (uLightHeight) and how bright it is (uLampPower). There is no
  * glare setting -- see effects/optics/reflection.ts.
  */
-uniform float uIor;
-uniform float uFrost;
+uniform float uIor;          // this pane's material
+uniform float uFrost;        // this pane's material
 uniform float uLightHeight; // CSS pixels above the glass
 uniform float uLampPower;
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
@@ -440,8 +441,8 @@ void main() {
    * REFLECTS, and the echo.
    */
   // Whole pixels, as the CSS side layers are placed (lib/edge-glow).
-  float topT = floor(sideHeight(sideOpen(uTilt, 1.0), uBar) + 0.5);
-  float botT = floor(sideHeight(sideOpen(uTilt, 0.0), uBar) + 0.5);
+  float topT = floor(sideHeight(sideOpen(uTilt, 1.0), uBar, uThickness) + 0.5);
+  float botT = floor(sideHeight(sideOpen(uTilt, 0.0), uBar, uThickness) + 0.5);
   float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z) * inside;
   float dTop = frag.y - uRect.y;
   float dBot = (uRect.y + uRect.w) - frag.y;
@@ -463,12 +464,12 @@ void main() {
   float xLean = (frag.x - eye.x) / uCameraDistance;
   float topY = uRect.y;
   float botY = uRect.y + uRect.w;
-  float fTop = fresnelSchlick(sideCosine(topT, PANE_THICKNESS), uIor);
-  float fBot = fresnelSchlick(sideCosine(botT, PANE_THICKNESS), uIor);
-  float zTop = PANE_THICKNESS * (1.0 - clamp(dTop / topT, 0.0, 1.0));
-  float zBot = PANE_THICKNESS * (1.0 - clamp(dBot / botT, 0.0, 1.0));
-  vec2 seenTop = vec2(frag.x + xLean * (uGap + zTop), topY - mirrorReach(dTop, topT, uGap, PANE_THICKNESS));
-  vec2 seenBot = vec2(frag.x + xLean * (uGap + zBot), botY + mirrorReach(dBot, botT, uGap, PANE_THICKNESS));
+  float fTop = fresnelSchlick(sideCosine(topT, uThickness), uIor);
+  float fBot = fresnelSchlick(sideCosine(botT, uThickness), uIor);
+  float zTop = uThickness * (1.0 - clamp(dTop / topT, 0.0, 1.0));
+  float zBot = uThickness * (1.0 - clamp(dBot / botT, 0.0, 1.0));
+  vec2 seenTop = vec2(frag.x + xLean * (uGap + zTop), topY - mirrorReach(dTop, topT, uGap, uThickness));
+  vec2 seenBot = vec2(frag.x + xLean * (uGap + zBot), botY + mirrorReach(dBot, botT, uGap, uThickness));
   vec3 mirrorTop = texture2D(uBackdrop, coverUv(seenTop, uImage, uImageAspect)).rgb * uHasBackdrop;
   vec3 mirrorBot = texture2D(uBackdropBelow, coverUv(seenBot, uImageBelow, uImageBelowAspect)).rgb * uHasBelow;
   vec3 sideLight = mirrorTop * fTop * onTop + mirrorBot * fBot * onBot;
@@ -481,8 +482,8 @@ void main() {
    * reflections it HAS crossed the glass, so it is left for the side layer to
    * absorb (added after the division below).
    */
-  vec2 relayTop = vec2(frag.x - xLean * (uGap + zTop), topY + mirrorReach(dTop, topT, uGap, PANE_THICKNESS));
-  vec2 relayBot = vec2(frag.x - xLean * (uGap + zBot), botY - mirrorReach(dBot, botT, uGap, PANE_THICKNESS));
+  vec2 relayTop = vec2(frag.x - xLean * (uGap + zTop), topY + mirrorReach(dTop, topT, uGap, uThickness));
+  vec2 relayBot = vec2(frag.x - xLean * (uGap + zBot), botY - mirrorReach(dBot, botT, uGap, uThickness));
   vec3 relayed = RELAY_GAIN * (
     texture2D(uBackdrop, coverUv(relayTop, uImage, uImageAspect)).rgb * uHasBackdrop * onTop * (1.0 - fTop)
     + texture2D(uBackdropBelow, coverUv(relayBot, uImageBelow, uImageBelowAspect)).rgb * uHasBelow * onBot * (1.0 - fBot)

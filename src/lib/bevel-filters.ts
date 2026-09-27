@@ -40,6 +40,8 @@ export type PaneGeometry = {
    */
   edgeWidth: number;
   straight?: boolean;
+  /** The pane's thickness, CSS px (its data-thickness); GLASS_THICKNESS if unsaid. */
+  thickness?: number;
 };
 
 export type BevelEntry = {
@@ -63,7 +65,8 @@ function bucket(n: number): number {
 }
 
 function keyFor(g: PaneGeometry): string {
-  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}e${Math.round(g.edgeWidth)}${g.straight ? "s" : ""}`;
+  const t = Math.round(g.thickness ?? GLASS_THICKNESS);
+  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}e${Math.round(g.edgeWidth)}${g.straight ? "s" : ""}${t === GLASS_THICKNESS ? "" : `t${t}`}`;
 }
 
 function encode(
@@ -72,6 +75,7 @@ function encode(
   radius: number,
   edgeWidth: number,
   straight = false,
+  thickness = GLASS_THICKNESS,
 ): { href: string; scale: number } | null {
   if (typeof document === "undefined") return null;
 
@@ -83,7 +87,7 @@ function encode(
 
   const field = bevelField(w, h, radius * scale, {
     bezelWidth: edgeWidth * scale,
-    thickness: GLASS_THICKNESS * scale,
+    thickness: thickness * scale,
     ior: GLASS_IOR,
     straight,
   });
@@ -123,6 +127,7 @@ export function requestBevelFilter(g: PaneGeometry): string | null {
     g.radius,
     Math.round(g.edgeWidth),
     g.straight ?? false,
+    Math.round(g.thickness ?? GLASS_THICKNESS),
   );
   if (!encoded) return null;
 

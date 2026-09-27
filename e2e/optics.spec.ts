@@ -13,6 +13,7 @@ import {
   farArrisLoss,
   mirrorReach,
   sideCosine,
+  sideHeight,
   sidePath,
   sideTransmittance,
 } from "../src/effects/optics/edge-side";
@@ -98,6 +99,15 @@ const CASES: Case[] = [
     to: 12,
     lo: 0,
     hi: 70,
+  },
+  {
+    name: "sideHeight (thickness)",
+    glsl: "sideHeight(0.4, 0.0, x)",
+    ts: (x) => sideHeight(0.4, false, x),
+    from: 4,
+    to: 40,
+    lo: 0,
+    hi: 20,
   },
   {
     name: "sideCosine",

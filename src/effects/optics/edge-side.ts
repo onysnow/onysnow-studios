@@ -1,3 +1,5 @@
+import { FROSTED_FLOAT } from "@/effects/materials/presets";
+
 /**
  * A pane's edge, rebuilt from the reference photographs (optics plan step 8).
  *
@@ -48,19 +50,19 @@ export const PANE_THICKNESS = 18;
 export const ARRIS_RADIUS = 1.5;
 
 /**
- * Beer-Lambert absorption of soda-lime glass, per unit of path, red / green /
- * blue. Iron takes red most, blue next, green least: invisible through a few
- * millimetres of face, the whole colour of a long path through the side.
+ * Beer-Lambert absorption of the glass, per unit of path, red / green /
+ * blue: the site's material's (effects/materials/presets). Iron takes red
+ * most, blue next, green least: invisible through a few millimetres of face,
+ * the whole colour of a long path through the side.
  *
  * Measured from Ony's five reference photographs of clear float glass (sides
  * seen against a white ground, so each pixel over the ground's white is the
  * side's transmittance): optical depth blue / green 1.2-1.35 in every photo,
  * red / green 2-4.5 (red clips to 0 in the darkest sides), green 0.5 through
  * the paler middle of a side to 1.3 at its most saturated. With the path
- * lengths below this gives exactly that range. (It was 1.15 / 0.28 / 0.55,
- * from the written notes: far too pale, and too yellow -- blue / green 2.)
+ * lengths below this gives exactly that range.
  */
-export const SIDE_ABSORB: readonly [number, number, number] = [2.7, 0.9, 1.2];
+export const SIDE_ABSORB: readonly [number, number, number] = FROSTED_FLOAT.absorb;
 
 /**
  * How much of each side face is in view. Which of the two you can see depends
@@ -81,8 +83,12 @@ export const SIDE_MIN_PX = 3;
 export const SIDE_RANGE_PX = 13;
 export const BAR_SIDE_MIN_PX = 2;
 export const BAR_SIDE_RANGE_PX = 7;
-export function sideHeight(open: number, bar = false): number {
-  return bar ? BAR_SIDE_MIN_PX + BAR_SIDE_RANGE_PX * open : SIDE_MIN_PX + SIDE_RANGE_PX * open;
+export function sideHeight(open: number, bar = false, thickness = PANE_THICKNESS): number {
+  const base = bar
+    ? BAR_SIDE_MIN_PX + BAR_SIDE_RANGE_PX * open
+    : SIDE_MIN_PX + SIDE_RANGE_PX * open;
+  // A thicker slab shows a proportionally taller side from the same angle.
+  return (base * Math.max(thickness, 0)) / PANE_THICKNESS;
 }
 
 /*

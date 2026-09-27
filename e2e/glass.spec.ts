@@ -178,6 +178,26 @@ test.describe("the pane's edge", () => {
   });
 });
 
+test.describe("every pane is one described piece of glass", () => {
+  // Optics plan step 2: <Pane> declares what each pane is, on the element
+  // every pass measures. Today's panes are all frosted float.
+  test("each pane carries its material, and its side faces follow it", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const panes = await page.$$eval("header.glass, main .glass:not(.glass-toggle)", (els) =>
+      els.map((el) => ({
+        material: el.getAttribute("data-material"),
+        sides: el.nextElementSibling?.classList.contains("glass-side--top") ?? false,
+      })),
+    );
+    expect(panes.length).toBeGreaterThan(2);
+    for (const pane of panes) {
+      expect(pane.material).toBe("frosted-float");
+      expect(pane.sides).toBe(true);
+    }
+  });
+});
+
 test.describe("plastic on the glass", () => {
   test.skip(
     ({ browserName }) => browserName !== "chromium",

@@ -4,7 +4,7 @@ import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge, viewState } from "@/lib/edge-glow";
 import { onTuningApplied, t } from "@/lib/tuning";
-import { FLOAT_GLASS, frontRoughness } from "@/effects/materials/presets";
+import { frontRoughness } from "@/effects/materials/presets";
 import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { LAMP_POWER_PER_GAIN, LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
@@ -126,6 +126,7 @@ export function GlassLight({
     const uStraight = U("uStraight");
     const uTilt = U("uTilt");
     const uBar = U("uBar");
+    const uThickness = U("uThickness");
     const uSeed = U("uSeed");
     const uImage = U("uImage");
     const uImageAspect = U("uImageAspect");
@@ -436,16 +437,8 @@ export function GlassLight({
       gl.enable(gl.SCISSOR_TEST);
       gl.uniform2f(uLight, x, y);
       gl.uniform1f(uCharge, charge);
-      gl.uniform1f(uGrimeRake, t("grimeRake"));
-      gl.uniform1f(uGrimeSpecks, t("grimeSpecks"));
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
-      gl.uniform1f(uGap, t("floorGap"));
       gl.uniform1f(uRestEdge, t("restEdge"));
-      // The reflection on the face, from causes: the glass, its frost, and
-      // the lamp's height above the glass and its brightness.
-      gl.uniform1f(uIor, FLOAT_GLASS.ior);
-      gl.uniform1f(uFrost, t("glassBlur"));
-      gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
       /*
        * The lamp's power reaches the arris glints whatever the switch says;
        * the switch turns off only the face's own image of the lamp, which is
@@ -459,7 +452,6 @@ export function GlassLight({
         uCameraDistance,
         CAMERA_DISTANCE * (document.documentElement.clientWidth || window.innerWidth),
       );
-      gl.uniform1f(uFrontRoughness, frontRoughness(FLOAT_GLASS, t("glassBlur")));
       gl.uniform1f(uRoomExposure, t("roomBrightness"));
       gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
       if (room) {
@@ -495,6 +487,21 @@ export function GlassLight({
         gl.uniform1f(uStraight, pane.w >= viewportWidth() - 1 ? 1 : 0);
         gl.uniform1f(uTilt, pane.t);
         gl.uniform1f(uBar, pane.el.classList.contains("glass--bar") ? 1 : 0);
+        /*
+         * What this pane is, as <Pane> declared it (effects/materials/
+         * pane-causes): its material, thickness, gap and surface layers. The
+         * lamp stands a fixed height above the photographs, so its height
+         * above THIS glass is that less this pane's gap.
+         */
+        const { material, thickness, gap, smudge, scratch } = pane.causes;
+        gl.uniform1f(uIor, material.ior);
+        gl.uniform1f(uFrost, material.frost);
+        gl.uniform1f(uFrontRoughness, frontRoughness(material, material.frost));
+        gl.uniform1f(uThickness, thickness);
+        gl.uniform1f(uGap, gap);
+        gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - gap, 1));
+        gl.uniform1f(uGrimeRake, t("grimeRake") * smudge);
+        gl.uniform1f(uGrimeSpecks, t("grimeSpecks") * scratch);
         gl.uniform1f(uSeed, pane.s);
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
         gl.uniform1f(uImageAspect, pane.ia);

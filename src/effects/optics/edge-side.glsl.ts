@@ -45,11 +45,12 @@ float sideOpen(float tilt, float top) {
   return SIDE_REST_OPEN + (1.0 - SIDE_REST_OPEN) * max(0.0, t);
 }
 
-/* The side face's height on screen, CSS pixels; bar is 1.0 for the thin fixed bars. */
-float sideHeight(float open, float bar) {
-  return bar > 0.5
+/* The side face's height on screen, CSS pixels; bar is 1.0 for the thin fixed bars. Scales with thickness. */
+float sideHeight(float open, float bar, float thickness) {
+  float base = bar > 0.5
     ? BAR_SIDE_MIN_PX + BAR_SIDE_RANGE_PX * open
     : SIDE_MIN_PX + SIDE_RANGE_PX * open;
+  return base * max(thickness, 0.0) / PANE_THICKNESS;
 }
 
 /* Path length through the side at depth px in from the front arris. */

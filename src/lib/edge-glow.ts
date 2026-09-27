@@ -47,6 +47,7 @@ import { castShadow } from "./cast-shadow";
 import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
 import { CAMERA_DISTANCE } from "@/effects/optics/environment";
 import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
+import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
 
 export const lightState = { x: -9999, y: -9999, charge: 0 };
 
@@ -147,6 +148,12 @@ export type GlassRect = {
    * one as `src`. Null when there is none.
    */
   below: { src: string; x: number; y: number; w: number; h: number; a: number } | null;
+  /**
+   * What this pane is: its material, thickness, gap and surface layers, as
+   * <Pane> declared them (effects/materials/pane-causes). Read once here so
+   * every pass takes the same description.
+   */
+  causes: PaneCauses;
   /**
    * Which surface this pane wears, 0-3. Assigned once and kept for the life of
    * the element, so a panel's grime does not change as the page scrolls — and
@@ -339,6 +346,11 @@ function placeSides(el: HTMLElement, r: DOMRect) {
   set(layers.bottom, y + h - sides.bottom, sides.bottom, `0 0 ${radius}px ${radius}px`);
 }
 
+/** A pane's causes, with the page's settings for whatever it does not say. */
+export function paneCauses(el: HTMLElement): PaneCauses {
+  return readPaneCauses(el, { frost: t("glassBlur"), gap: t("floorGap") });
+}
+
 /** How tall each of a pane's side faces shows right now, whole CSS pixels. */
 export function paneSideHeights(
   el: HTMLElement,
@@ -346,9 +358,10 @@ export function paneSideHeights(
 ): { top: number; bottom: number } {
   const tilt = paneTilt(r);
   const bar = el.classList.contains("glass--bar");
+  const { thickness } = paneCauses(el);
   return {
-    top: Math.round(sideHeight(sideOpen(tilt, true), bar)),
-    bottom: Math.round(sideHeight(sideOpen(tilt, false), bar)),
+    top: Math.round(sideHeight(sideOpen(tilt, true), bar, thickness)),
+    bottom: Math.round(sideHeight(sideOpen(tilt, false), bar, thickness)),
   };
 }
 
@@ -443,6 +456,7 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       ih: b?.height ?? 1,
       ia: img && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
       below: imageBox(backdropOf(el, "below")),
+      causes: paneCauses(el),
       occ: occluders.get(el) ?? EMPTY_OCCLUDERS,
     });
   }

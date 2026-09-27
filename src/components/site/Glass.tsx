@@ -6,7 +6,7 @@ import {
   type ElementType,
   type ReactNode,
 } from "react";
-import { paneEdgeWidth, registerEdgeGlow, registerPaneSides } from "@/lib/edge-glow";
+import { paneCauses, paneEdgeWidth, registerEdgeGlow, registerPaneSides } from "@/lib/edge-glow";
 import { requestBevelFilter } from "@/lib/bevel-filters";
 import { registerLitSurface } from "@/lib/edge-glow";
 import { registerPane } from "@/lib/glass-panes";
@@ -71,13 +71,21 @@ export function Glass({
   /** Pulls the band up over whatever it follows, so its top edge has a photograph behind it. */
   overlap = false,
   edgeWidth,
+  causes,
+  style,
 }: {
   children: ReactNode;
-  className?: string;
-  as?: ElementType;
-  variant?: "panel" | "bar";
-  overlap?: boolean;
-  edgeWidth?: number;
+  className?: string | undefined;
+  as?: ElementType | undefined;
+  variant?: "panel" | "bar" | undefined;
+  overlap?: boolean | undefined;
+  edgeWidth?: number | undefined;
+  /**
+   * The pane's own causes as element attributes (data-material,
+   * data-thickness, ...). Set by <Pane>; see effects/materials/pane-causes.
+   */
+  causes?: Record<string, string | number> | undefined;
+  style?: CSSProperties | undefined;
 }) {
   /*
    * A callback ref, NOT useRef plus an empty-dependency effect.
@@ -141,6 +149,7 @@ export function Glass({
           radius,
           edgeWidth: edgeWidth ?? paneEdgeWidth(el),
           straight,
+          thickness: paneCauses(el).thickness,
         });
         /*
          * Onto the pane itself, as a variable the stylesheet folds into the
@@ -235,6 +244,8 @@ export function Glass({
        */
       suppressHydrationWarning
       {...(edgeWidth !== undefined ? { [EDGE_WIDTH_ATTR]: edgeWidth } : {})}
+      {...causes}
+      style={style}
       className={cn(
         "glass",
         variant === "bar" && "glass--bar",

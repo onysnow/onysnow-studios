@@ -18,7 +18,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     env: {
       // photo-url builds its base from this; tests assert against a known value
       // rather than whatever happens to be in .env on the machine running them.
