@@ -1,3 +1,4 @@
+import { previewing } from "@/effects/engine/preview";
 import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
@@ -122,6 +123,9 @@ export function FloorLight() {
     const frosts = new Float32Array(MAX_FLOOR_PANES);
     // What a stack lets through relative to its bottom layer (1 for a pane on its own).
     const throughs = new Float32Array(MAX_FLOOR_PANES * 3);
+    const marks = new Float32Array(MAX_FLOOR_PANES * 2);
+    const uMarks = U("uMarks");
+    const uMarksProportional = U("uMarksProportional");
     const uThrough = U("uThrough");
     let wasLit = false;
 
@@ -199,6 +203,8 @@ export function FloorLight() {
         iors[n] = pane.causes.material.ior;
         frosts[n] = pane.causes.material.frost;
         throughs.set(pane.stack.throughScale, n * 3);
+        marks[n * 2] = pane.causes.scratch;
+        marks[n * 2 + 1] = pane.causes.smudge;
         drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
         n += 1;
       }
@@ -245,6 +251,8 @@ export function FloorLight() {
       gl.uniform1fv(uIor, iors);
       gl.uniform1fv(uFrost, frosts);
       gl.uniform3fv(uThrough, throughs);
+      gl.uniform2fv(uMarks, marks);
+      gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Same task as the draw, so the buffer is still there to copy from.

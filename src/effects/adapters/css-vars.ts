@@ -17,7 +17,7 @@ import type { Light } from "@/effects/light/lights";
 /** How the lamp falls on one surface resting on the glass (worked out by the scene). */
 export type SurfaceLight = {
   near: number;
-  cast: { x: number; y: number; blur: number };
+  cast: { x: number; y: number; blur: number; model?: import("@/effects/optics/shadow").Shadow };
   alpha: number;
   lit: number;
   angle: number;
@@ -51,6 +51,16 @@ export function writeSurfaceLight(el: HTMLElement, r: Box, lamp: Light, light: S
   el.style.setProperty("--cast-x", `${light.cast.x.toFixed(1)}px`);
   el.style.setProperty("--cast-y", `${light.cast.y.toFixed(1)}px`);
   el.style.setProperty("--cast-blur", `${light.cast.blur.toFixed(1)}px`);
+  /*
+   * With the shadow model (previewing), how much bigger than the thing its
+   * shadow is: a box-shadow spread, the mean of the two growths.
+   */
+  const model = light.cast.model;
+  if (model) {
+    const spread = ((model.scale - 1) * (r.width + r.height)) / 4;
+    el.style.setProperty("--cast-spread", `${spread.toFixed(1)}px`);
+    el.style.setProperty("--cast-scale", model.scale.toFixed(4));
+  }
   el.style.setProperty("--cast-alpha", light.alpha.toFixed(3));
   el.style.setProperty("--lit-on", light.lit.toFixed(3));
   // The lamp's bright core, whose mirror image a glossy surface shows: the

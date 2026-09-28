@@ -45,4 +45,22 @@ vec3 surfaceAt(vec2 local, float seed) {
   float wear = 0.33 + 0.67 * smoothstep(0.0, 0.5, film);
   return vec3(scratch, smudge, wear);
 }
+
+/*
+ * How much of each mark covers a point, 0 to 1: x scratches, y smudge. One
+ * function, so the light on the glass and the light through it agree.
+ *
+ * proportional 0: the approved look -- a clarity threshold (clarity = the
+ *   "Grime floor" setting): below it a mark is gone, above it nearly full.
+ * proportional 1 (previewing, ?try=marks): each pixel covers exactly as much
+ *   as its value in the layer says -- a faint mark blocks a little, a dense
+ *   one a lot, which is how much of the light it actually stops or bends.
+ */
+vec2 marksCover(vec3 surf, float clarity, float proportional) {
+  vec2 graded = vec2(
+    smoothstep(clarity, clarity + 0.42, surf.r),
+    smoothstep(clarity * 0.85, clarity * 0.85 + 0.5, surf.g)
+  );
+  return mix(graded, surf.rg, proportional);
+}
 `;

@@ -2,6 +2,7 @@ import { expect, test } from "./fixtures";
 import { EDGE_PROFILE_GLSL } from "../src/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "../src/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "../src/effects/optics/transmission.glsl";
+import { SHADOW_GLSL } from "../src/effects/optics/shadow.glsl";
 import { HEX_TILE_GLSL } from "../src/effects/optics/hex-tile.glsl";
 import { EDGE_SIDE_GLSL } from "../src/effects/optics/edge-side.glsl";
 import { ENVIRONMENT_GLSL } from "../src/effects/optics/environment.glsl";
@@ -26,6 +27,7 @@ import {
   transmittance,
 } from "../src/effects/optics/transmission";
 import { fresnelSchlick, ggx, lampReflection } from "../src/effects/optics/reflection";
+import { penumbraOf } from "../src/effects/optics/shadow";
 import {
   edgeBand,
   fresnelRise,
@@ -190,6 +192,15 @@ const CASES: Case[] = [
     to: 1,
     lo: 0,
     hi: 1,
+  },
+  {
+    name: "penumbraOf",
+    glsl: "penumbraOf(12.0, x, 0.6)",
+    ts: (x) => penumbraOf(12, x, 0.6),
+    from: 0.1,
+    to: 1,
+    lo: 0,
+    hi: 120,
   },
   {
     name: "penumbraAcross",
@@ -365,6 +376,7 @@ void main() {
             REFLECTION_GLSL +
             EDGE_SIDE_GLSL +
             ENVIRONMENT_GLSL +
+            SHADOW_GLSL +
             TRANSMISSION_GLSL +
             HEX_TILE_GLSL +
             "float hexW(vec2 st) { vec3 w; vec2 a; vec2 b; vec2 c; hexWeights(st, w, a, b, c); vec3 k = hexBlend(w); return max(k.x, max(k.y, k.z)); }",

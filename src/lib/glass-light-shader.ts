@@ -4,6 +4,7 @@ import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
+import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 
 /**
  * Fragment shader for one pane of glass.
@@ -58,6 +59,8 @@ uniform float uRestEdge;      // how much edge shows with nothing shining
 #define MAX_OCC 6
 uniform vec4 uOccRect[MAX_OCC];
 uniform vec4 uOccSoft[MAX_OCC];
+/* uOccDir: direction from the lamp to the shadow (xy) and the light's slant cosine (z). */
+uniform vec4 uOccDir[MAX_OCC];
 uniform float uOccCount;
 
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
@@ -71,6 +74,7 @@ uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
 uniform float uGrimeFloor;  // tunable
+uniform float uMarksProportional; // 1 while previewing ?try=marks
 uniform float uGap;         // this pane's gap to the photographs behind it, CSS px
 /*
  * The lamp's reflection on the face comes from causes only: what the glass is
@@ -157,6 +161,7 @@ ${REFLECTION_GLSL}
 ${EDGE_SIDE_GLSL}
 ${SURFACE_LAYERS_GLSL}
 ${ENVIRONMENT_GLSL}
+${SHADOW_GLSL}
 
 /*
  * How much of the light is blocked at this point on the pane.
@@ -176,32 +181,26 @@ ${ENVIRONMENT_GLSL}
  * loop condition fails to compile on some drivers, which is the kind of thing
  * that works everywhere you test it and not on somebody's laptop.
  */
-/* How much of the light at this point came through the layer above, 0 to 1. */
-float aboveCover(vec2 local) {
-  if (uAboveSoft.z < 0.5) return 0.0;
-  vec2 q = abs(local - uAboveRect.xy) - uAboveRect.zw + uAboveSoft.x;
-  float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - uAboveSoft.x;
-  float edge = max(uAboveSoft.y, 0.5);
-  return 1.0 - smoothstep(-edge, edge, d);
-}
-
 float occlusionAt(vec2 local) {
   float blocked = 0.0;
   for (int i = 0; i < MAX_OCC; i++) {
     if (float(i) >= uOccCount) continue;
     vec4 rect = uOccRect[i];
     vec4 soft = uOccSoft[i];
-
-    // Rounded-rectangle distance: negative inside, in pixels.
-    vec2 q = abs(local - rect.xy) - rect.zw + soft.x;
-    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - soft.x;
-
-    // The penumbra straddles the edge, so the shadow fades across it rather
-    // than stopping dead at the boundary.
-    float edge = max(soft.y, 0.5);
-    blocked = max(blocked, soft.z * (1.0 - smoothstep(-edge, edge, d)));
+    vec4 dir = uOccDir[i];
+    // The one shadow model's shape (effects/optics/shadow): the penumbra
+    // straddles the edge, so the shadow fades across it rather than stopping
+    // dead at the boundary, and stretches along the direction to the lamp.
+    float cover = shadowRect(local, rect.xy, rect.zw, soft.x, soft.y, dir.xy, dir.z);
+    blocked = max(blocked, soft.z * cover);
   }
   return clamp(blocked, 0.0, 1.0);
+}
+
+/* How much of the light at this point came through the layer above, 0 to 1: its shadow, by the same model. */
+float aboveCover(vec2 local) {
+  if (uAboveSoft.z < 0.5) return 0.0;
+  return shadowRect(local, uAboveRect.xy, uAboveRect.zw, uAboveSoft.x, uAboveSoft.y, vec2(0.0), 1.0);
 }
 
 /*
@@ -340,8 +339,9 @@ void main() {
    * marks rather than dimming them, which is the difference between cleaning
    * glass and looking at it in worse light.
    */
-  float glint = smoothstep(uGrimeFloor, uGrimeFloor + 0.42, surf.r) * 3.4 * handled;
-  float smear = smoothstep(uGrimeFloor * 0.85, uGrimeFloor * 0.85 + 0.5, surf.g) * 1.25 * handled;
+  vec2 cover = marksCover(surf, uGrimeFloor, uMarksProportional);
+  float glint = cover.x * 3.4 * handled;
+  float smear = cover.y * 1.25 * handled;
 
   /*
    * ---- The arris ----

@@ -29,6 +29,8 @@
  */
 import { t } from "@/lib/tuning";
 import { castShadow } from "@/lib/cast-shadow";
+import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
+import { previewing } from "@/effects/engine/preview";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
 import { camera } from "@/effects/camera/camera";
@@ -71,6 +73,14 @@ export type Occluder = {
   radius: number;
   blur: number;
   alpha: number;
+  /**
+   * The direction from the lamp to the shadow and the cosine of the light's
+   * slant there: the penumbra stretches along that direction by 1 / cos
+   * (effects/optics/shadow). 0, 0 and 1 give an even penumbra of `blur`.
+   */
+  dirX: number;
+  dirY: number;
+  cosTheta: number;
 };
 
 /** A pane of glass, as measured this frame. */
@@ -134,6 +144,8 @@ const panes = new Set<HTMLElement>();
  */
 const litSurfaces = new Set<HTMLElement>();
 const nonOccluding = new WeakSet<HTMLElement>();
+/** How far each surface stands off the glass, as a share of "Content depth" (1 if unset). */
+const standoffs = new WeakMap<HTMLElement, number>();
 
 /** Each pane's two side faces, siblings of it (see .glass-side). */
 type SideLayers = {
@@ -308,6 +320,8 @@ type SurfaceReading = {
   radius: number;
   /** The pane it stands on, if it blocks light; null if it does not. */
   pane: HTMLElement | null;
+  /** How far it stands off the glass, as a share of "Content depth". */
+  standoff: number;
 };
 
 type SceneReading = {
@@ -347,6 +361,7 @@ function readSurface(el: HTMLElement): SurfaceReading {
     rect: el.getBoundingClientRect(),
     radius: cornerRadius(el),
     pane: nonOccluding.has(el) ? null : el.closest<HTMLElement>(".glass"),
+    standoff: standoffs.get(el) ?? 1,
   };
 }
 
@@ -542,19 +557,43 @@ function nearness(r: DOMRect, x: number, y: number, reach: number) {
  * smoothstep of the charge the glass shader uses, so the shadow never leads
  * or lags the light that casts it.
  */
-function lightOnSurface(r: DOMRect): SurfaceLight {
+function lightOnSurface(r: DOMRect, standoff = 1): SurfaceLight {
   const x = cursorLamp.x;
   const y = cursorLamp.y;
   const near = nearness(r, x, y, 420);
   const centreX = r.left + r.width / 2;
   const centreY = r.top + r.height / 2;
-  const cast = castShadow({
-    gap: t("shadowGap"),
-    height: cursorLamp.height,
-    lightRadius: cursorLamp.radius,
-    lateralX: centreX - x,
-    lateralY: centreY - y,
-  });
+  /*
+   * Where its shadow lands and how soft. Previewing (?try=shadows): the one
+   * shadow model every shadow reads -- the shadow grows with the lamp's
+   * nearness and softens along the direction to the lamp. Otherwise the
+   * approved look: moved and evenly blurred.
+   */
+  const cast = previewing("shadows")
+    ? (() => {
+        const m = castByModel({
+          lampX: x,
+          lampY: y,
+          height: cursorLamp.height,
+          radius: cursorLamp.radius,
+          gap: t("shadowGap") * standoff,
+          x: centreX,
+          y: centreY,
+        });
+        return {
+          x: m.x - centreX,
+          y: m.y - centreY,
+          blur: isotropicBlur(m),
+          model: m,
+        };
+      })()
+    : castShadow({
+        gap: t("shadowGap"),
+        height: cursorLamp.height,
+        lightRadius: cursorLamp.radius,
+        lateralX: centreX - x,
+        lateralY: centreY - y,
+      });
   const c = cursorLamp.charge;
   const lit = c * c * (3 - 2 * c);
   const alpha = near * lit * t("shadowStrength");
@@ -583,15 +622,20 @@ function occludersFor(
     const list = out.get(s.pane) ?? [];
     if (list.length >= MAX_OCCLUDERS) return;
     const r = s.rect;
+    const model = light.cast.model;
+    const scale = model?.scale ?? 1;
     list.push({
       cx: r.left - paneRect.left + r.width / 2 + light.cast.x,
       cy: r.top - paneRect.top + r.height / 2 + light.cast.y,
-      hw: r.width / 2,
-      hh: r.height / 2,
-      radius: s.radius,
+      hw: (r.width / 2) * scale,
+      hh: (r.height / 2) * scale,
+      radius: s.radius * scale,
       // Never zero, or the hole has a hard edge no real shadow has.
-      blur: Math.max(light.cast.blur, 1),
+      blur: Math.max(model ? model.across : light.cast.blur, 1),
       alpha: light.alpha,
+      dirX: model?.dirX ?? 0,
+      dirY: model?.dirY ?? 0,
+      cosTheta: model?.cosTheta ?? 1,
     });
     out.set(s.pane, list);
   });
@@ -730,7 +774,7 @@ function run(now = performance.now()) {
   // 2. read
   const reading = readScene();
   // 3. compute
-  const lightOn = reading.surfaces.map((s) => lightOnSurface(s.rect));
+  const lightOn = reading.surfaces.map((s) => lightOnSurface(s.rect, s.standoff));
   occlusion = occludersFor(reading, lightOn);
   snapshot = freeze(reading);
   snapshotAt = typeof now === "number" ? now : performance.now();
@@ -813,12 +857,21 @@ export type LitSurfaceOptions = {
    * for translucent plastic.
    */
   occludes?: boolean;
+  /**
+   * How far it stands off the glass, as a share of "Content depth": 1 for a
+   * mounted print, less for a line of type or a thin sheet of plastic. A
+   * cause, like the gap: where its shadow lands, how much bigger than it the
+   * shadow is and how soft all follow from it (effects/optics/shadow).
+   */
+  standoff?: number;
 };
 
 /** Add a surface resting on the glass; it is told where the light falls on it. */
 export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions = {}) {
   if (options.occludes === false) nonOccluding.add(el);
   else nonOccluding.delete(el);
+  if (options.standoff !== undefined) standoffs.set(el, options.standoff);
+  else standoffs.delete(el);
   litSurfaces.add(el);
   bind();
   reschedule();

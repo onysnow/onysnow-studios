@@ -3,7 +3,7 @@ import { MAX_SLANT_SPREAD } from "./transmission";
 /**
  * The GLSL twins of transmission.ts. See that file for the physics.
  *
- * Needs REFLECTION_GLSL spliced in before it: it reuses fresnelSchlick and
+ * Needs SHADOW_GLSL and REFLECTION_GLSL spliced in before it: it reuses fresnelSchlick and
  * frostRoughness, so the frost that spreads the reflection on the face is the
  * same frost that blurs the light through it.
  *
@@ -30,12 +30,12 @@ float transmittance(float cosTheta, float ior) {
   return t * t;
 }
 
-/* Penumbra of a shadow edge on the floor; stretched at a slant toward the lamp. */
+/*
+ * Penumbra of a shadow edge on the floor: the one shadow model's
+ * (effects/optics/shadow), for a pane gap above the floor.
+ */
 float penumbraAcross(float lightSize, float gap, float height, float cosTheta, float cosPhi) {
-  float base = lightSize * gap / max(height - gap, 1.0);
-  float c = max(cosTheta, 0.05);
-  float p2 = cosPhi * cosPhi;
-  return base * sqrt(p2 / (c * c) + (1.0 - p2));
+  return penumbraOf(lightSize * gap / max(height - gap, 1.0), cosTheta, cosPhi);
 }
 
 /* How far frost has scattered the light by the time it reaches the floor. */

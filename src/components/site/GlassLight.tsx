@@ -13,6 +13,8 @@ import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
 import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
 import { castShadow } from "@/lib/cast-shadow";
+import { castShadow as castByModel } from "@/effects/optics/shadow";
+import { previewing } from "@/effects/engine/preview";
 import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
@@ -129,6 +131,8 @@ export function GlassLight({
     const uAboveSoft = U("uAboveSoft");
     const uOccRect = U("uOccRect");
     const uOccSoft = U("uOccSoft");
+    const uOccDir = U("uOccDir");
+    const uMarksProportional = U("uMarksProportional");
     const uOccCount = U("uOccCount");
 
     /*
@@ -141,6 +145,7 @@ export function GlassLight({
      */
     const occRect = new Float32Array(MAX_OCCLUDERS * 4);
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
+    const occDir = new Float32Array(MAX_OCCLUDERS * 4);
     const uIor = U("uIor");
     const uFrost = U("uFrost");
     const uFaceLamp = U("uFaceLamp");
@@ -423,6 +428,7 @@ export function GlassLight({
       const heights = packed.map((l) => l.height);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uRestEdge, t("restEdge"));
+      gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       /*
        * The lamp's power reaches the arris glints whatever the switch says;
        * the switch turns off only the face's own image of the lamp, which is
@@ -500,21 +506,40 @@ export function GlassLight({
         const lamp = packed[0];
         if (over && lamp) {
           const link = pane.stack.above;
-          const cast = castShadow({
-            gap: link?.kind === "air" ? link.gap : 0,
-            height: Math.max(heights[0]! - gap - thickness, 1),
-            lightRadius: lamp.radius,
-            lateralX: over.x + over.w / 2 - lamp.x,
-            lateralY: over.y + over.h / 2 - lamp.y,
-          });
+          const sep = link?.kind === "air" ? link.gap : 0;
+          const lampHeight = Math.max(heights[0]! - gap - thickness, 1);
+          const cx = over.x + over.w / 2;
+          const cy = over.y + over.h / 2;
+          // Previewing the one shadow model (?try=shadows): placed, grown and softened by it.
+          const m = previewing("shadows")
+            ? castByModel({
+                lampX: lamp.x,
+                lampY: lamp.y,
+                height: lampHeight,
+                radius: lamp.radius,
+                gap: sep,
+                x: cx,
+                y: cy,
+              })
+            : null;
+          const cast = m
+            ? { x: m.x - cx, y: m.y - cy, blur: m.across }
+            : castShadow({
+                gap: sep,
+                height: lampHeight,
+                lightRadius: lamp.radius,
+                lateralX: cx - lamp.x,
+                lateralY: cy - lamp.y,
+              });
+          const grow = m?.scale ?? 1;
           gl.uniform4f(
             uAboveRect,
-            over.x - pane.x + over.w / 2 + cast.x,
-            over.y - pane.y + over.h / 2 + cast.y,
-            over.w / 2,
-            over.h / 2,
+            cx - pane.x + cast.x,
+            cy - pane.y + cast.y,
+            (over.w / 2) * grow,
+            (over.h / 2) * grow,
           );
-          gl.uniform3f(uAboveSoft, Math.min(over.r, over.w / 2, over.h / 2), cast.blur, 1);
+          gl.uniform3f(uAboveSoft, Math.min(over.r, over.w / 2, over.h / 2) * grow, cast.blur, 1);
         } else {
           gl.uniform3f(uAboveSoft, 0, 0, 0);
         }
@@ -546,11 +571,16 @@ export function GlassLight({
           occSoft[k + 1] = o.blur;
           occSoft[k + 2] = o.alpha;
           occSoft[k + 3] = 0;
+          occDir[k] = o.dirX;
+          occDir[k + 1] = o.dirY;
+          occDir[k + 2] = o.cosTheta;
+          occDir[k + 3] = 0;
         }
         gl.uniform1f(uOccCount, count);
         if (count > 0) {
           gl.uniform4fv(uOccRect, occRect);
           gl.uniform4fv(uOccSoft, occSoft);
+          gl.uniform4fv(uOccDir, occDir);
         }
 
         // Scissor in device pixels, y counted from the bottom.

@@ -2,6 +2,7 @@ import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "@/effects/optics/transmission.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
+import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
@@ -98,9 +99,13 @@ uniform float uFrost[${MAX_FLOOR_PANES}];
  * on its own.
  */
 uniform vec3 uThrough[${MAX_FLOOR_PANES}];
+/* How much of the scratch (x) and smudge (y) layers each pane wears. */
+uniform vec2 uMarks[${MAX_FLOOR_PANES}];
+uniform float uMarksProportional; // 1 while previewing ?try=marks
 
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
+${SHADOW_GLSL}
 ${TRANSMISSION_GLSL}
 ${SURFACE_LAYERS_GLSL}
 /* How dirty the pane is: the same clarity threshold the marks on the face use. */
@@ -281,8 +286,24 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
      *                   groove is a tiny cylinder lens gathering the light.
      */
     vec3 marks = surfaceAt(Q - r.xy, uSeed[i]) * uHasSurface;
-    float smear = smoothstep(uGrimeFloor * 0.85, uGrimeFloor * 0.85 + 0.5, marks.g);
-    float groove = smoothstep(uGrimeFloor, uGrimeFloor + 0.42, marks.r);
+    vec2 cover = marksCover(marks, uGrimeFloor, uMarksProportional);
+    if (uMarksProportional > 0.5) {
+      /*
+       * Previewing (?try=marks). The marks stand off the photograph by the
+       * pane's gap, so their shadows soften by the same penumbra as every
+       * other shadow here (pen, on the glass plane): the pattern is averaged
+       * over it. And they are worn in the amounts the pane says.
+       */
+      vec2 o = vec2(pen * 0.5, 0.0);
+      vec3 around = surfaceAt(Q - r.xy + o, uSeed[i]) + surfaceAt(Q - r.xy - o, uSeed[i])
+                  + surfaceAt(Q - r.xy + o.yx, uSeed[i]) + surfaceAt(Q - r.xy - o.yx, uSeed[i]);
+      marks = (marks + around * uHasSurface) / 5.0;
+      cover = marksCover(marks, uGrimeFloor, 1.0) * uMarks[i];
+    }
+    // On the flat face only, never the bevel (Ony: no marks on the edges).
+    cover *= smoothstep(0.9, 1.0, x);
+    float groove = cover.x;
+    float smear = cover.y;
     through *= 1.0 - SMUDGE_EXTINCTION * smear;
     through += vec3(pool * passes * (SMUDGE_SCATTER * smear + SCRATCH_FOCUS * groove));
 
