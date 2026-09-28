@@ -247,3 +247,28 @@ test.describe("plastic on the glass", () => {
     expect((await litFrom(box.x + box.width + 80, box.y + box.height / 2)).x).toBeLessThan(-0.5);
   });
 });
+
+/*
+ * No light but the lamp (2026-09-28): with the room's lights off, the liquid
+ * glass library's own fixed light -- its gloss and rim highlight -- is out.
+ */
+test("the liquid glass's own highlights follow the room's light, which is off", async ({
+  page,
+}) => {
+  await page.goto("/?glass=raster");
+  await page.waitForLoadState("networkidle");
+  const read = () =>
+    page
+      .locator("[data-seam] .glass")
+      .first()
+      .evaluate(
+        (el) => JSON.parse((el as HTMLElement).dataset["config"] ?? "{}") as Record<string, number>,
+      );
+  // Written once the tuning is applied.
+  await expect
+    .poll(async () => (await read())["specular"], { timeout: 20_000 })
+    .not.toBeUndefined();
+  const config = await read();
+  expect(config["specular"]).toBe(0);
+  expect(config["edgeHighlight"]).toBe(0);
+});

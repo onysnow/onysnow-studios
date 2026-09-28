@@ -396,7 +396,19 @@ void main() {
    */
   float toPane = roundedBox(uLight - (uRect.xy + halfSize), halfSize, uRadius);
   float couple = exp(-max(toPane, 0.0) / 130.0) * uFrost;
-  float piped = couple * exp(-dl / 780.0);
+  /*
+   * How far it gets. Trapped light crosses the pane corner to corner, one
+   * bounce every 2 t tan(critical angle) -- about 1.8 thicknesses -- and at
+   * each bounce off the frosted face some of it is scattered back out: that
+   * is the same frost that trapped it. So a frosted pane is a poor guide and
+   * the glow dies within a few hundred pixels. And it spreads as it goes, in
+   * the plane of the pane, so it thins as 1 / distance on top of that.
+   * (It ran 780 px with no spreading, so the whole length of an edge lit up
+   * wherever the lamp was.)
+   */
+  float bounce = 1.8 * uThickness;
+  float escapeLength = bounce / max(0.25 * uFrost, 0.02);
+  float piped = couple * exp(-dl / escapeLength) / (1.0 + dl / (4.0 * uThickness));
   vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
   rim += pipedTint * arrisProfile(ad) * 1.7 * arrisWear * piped;
 
@@ -643,8 +655,14 @@ void main() {
    * resting highlight actually sits, and the level is a knob because how much
    * ambient a pane catches is a property of the room, not a fact.
    */
-  float restEdge = bevel * bevel * uRestEdge;
-  colour += vec3(EDGE_HIGHLIGHT) * (restEdge + bevel * lit) * inside;
+  /*
+   * Both follow a source. At rest the only one is the room -- so with the
+   * room's lights off (Room brightness 0) there is no resting edge at all --
+   * and the lamp's share follows the lamp's reach, so an edge across the
+   * page from it does not light up because the shutter is wound.
+   */
+  float restEdge = bevel * bevel * uRestEdge * uRoomExposure * uHasRoom;
+  colour += vec3(EDGE_HIGHLIGHT) * (restEdge + bevel * lit * reach) * inside;
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.

@@ -87,11 +87,14 @@ export const tuning: Record<string, Knob> = {
   roomBrightness: {
     label: "Room brightness",
     group: "Environment",
-    value: 1,
+    // The room's own lights are OFF: the lamp is the only source (Ony, 2026-09-28:
+    // "shouldn't be reflecting light when the light from my cursor is off and no
+    // other sources of light exist"). Raise it to light the room.
+    value: 0,
     min: 0,
     max: 8,
     step: 0.1,
-    hint: "How brightly lit the room reflected in the glass is. The glass's own reflectance (from its material) and the room's lamps do the rest; there is no reflection strength setting.",
+    hint: "How brightly the room's own lights light it; 0 is a dark room, with the lamp the only source. The glass's own reflectance (from its material) and the room's lamps do the rest; there is no reflection strength setting.",
   },
   // ---- The camera ----
   //
@@ -1012,6 +1015,17 @@ export function applyGlassConfig() {
       if (knob.glassScope === "band" && isBar) continue;
       if (knob.glassScope === "bar" && !isBar) continue;
       config[knob.glassKey] = knob.value;
+    }
+    /*
+     * The liquid glass library lights its own gloss and rim from a fixed light
+     * of its own (lightX/lightY), not from the lamp. The only light that
+     * exists besides the lamp is the room's, so that is what those two are
+     * scaled by: with the room dark they go out, and the lamp's own light on
+     * the glass is the GlassLight pass above it.
+     */
+    const roomLight = Math.min(tuning["roomBrightness"]!.value, 1);
+    for (const key of ["specular", "edgeHighlight"]) {
+      if (key in config) config[key] = config[key]! * roomLight;
     }
     // The edge is the pane's own: its attribute wins over the knob.
     config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);
