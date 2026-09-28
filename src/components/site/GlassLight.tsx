@@ -12,6 +12,7 @@ import {
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
 import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
+import { castShadow } from "@/lib/cast-shadow";
 import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
@@ -102,6 +103,8 @@ export function GlassLight({
     const uViewport = U("uViewport");
     const uScale = U("uScale");
     const lightLoc = lightLocations(gl, program);
+    const uLightIn = U("uLightIn");
+    const uReflectScale = U("uReflectScale");
     const uRect = U("uRect");
     const uRadius = U("uRadius");
     const uEdgeWidth = U("uEdgeWidth");
@@ -122,6 +125,8 @@ export function GlassLight({
     const uImageBelow = U("uImageBelow");
     const uImageBelowAspect = U("uImageBelowAspect");
     const uRestEdge = U("uRestEdge");
+    const uAboveRect = U("uAboveRect");
+    const uAboveSoft = U("uAboveSoft");
     const uOccRect = U("uOccRect");
     const uOccSoft = U("uOccSoft");
     const uOccCount = U("uOccCount");
@@ -443,6 +448,8 @@ export function GlassLight({
       for (const pane of panes) {
         // Offscreen panes cost nothing but a rectangle test.
         if (pane.y + pane.h < -BLEED || pane.y > viewportHeight() + BLEED) continue;
+        // A layer bonded to the one above is not a surface of its own: the top of the run draws it.
+        if (pane.stack.above?.kind === "bonded") continue;
 
         const texture = pane.src ? requestBackdrop(pane.src) : null;
         gl.activeTexture(gl.TEXTURE1);
@@ -479,6 +486,38 @@ export function GlassLight({
         // Each light's height above THIS glass: its height less the pane's gap.
         for (let k = 0; k < packed.length; k++) packed[k]!.height = Math.max(heights[k]! - gap, 1);
         uploadLights(gl, lightLoc, packed);
+        // Its place in a stack: what reaches it from above, and the stack's reflection.
+        gl.uniform3fv(uLightIn, pane.stack.lightIn);
+        gl.uniform3fv(uReflectScale, pane.stack.reflectScale);
+        /*
+         * And where that light lands: the layer above, thrown across the gap
+         * between them by the lamp the way anything resting on glass throws
+         * its shadow (lib/cast-shadow). Outside it the lamp reaches this pane
+         * directly. The first light places it; with more lights each would
+         * throw its own (a later step, when there are more).
+         */
+        const over = pane.stack.aboveRect;
+        const lamp = packed[0];
+        if (over && lamp) {
+          const link = pane.stack.above;
+          const cast = castShadow({
+            gap: link?.kind === "air" ? link.gap : 0,
+            height: Math.max(heights[0]! - gap - thickness, 1),
+            lightRadius: lamp.radius,
+            lateralX: over.x + over.w / 2 - lamp.x,
+            lateralY: over.y + over.h / 2 - lamp.y,
+          });
+          gl.uniform4f(
+            uAboveRect,
+            over.x - pane.x + over.w / 2 + cast.x,
+            over.y - pane.y + over.h / 2 + cast.y,
+            over.w / 2,
+            over.h / 2,
+          );
+          gl.uniform3f(uAboveSoft, Math.min(over.r, over.w / 2, over.h / 2), cast.blur, 1);
+        } else {
+          gl.uniform3f(uAboveSoft, 0, 0, 0);
+        }
         gl.uniform1f(uGrimeRake, t("grimeRake") * smudge);
         gl.uniform1f(uGrimeSpecks, t("grimeSpecks") * scratch);
         gl.uniform1f(uSeed, pane.s);

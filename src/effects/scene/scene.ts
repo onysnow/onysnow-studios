@@ -34,6 +34,13 @@ import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewp
 import { camera } from "@/effects/camera/camera";
 import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
 import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
+import {
+  placeStack,
+  readInterface,
+  SINGLE,
+  STACK_ATTR,
+  type StackPlacement,
+} from "@/effects/scene/graph";
 import { commitLights, cursorLamp, movePointer, onLightChange } from "@/effects/light/lights";
 import { addTask, ORDER } from "@/effects/engine/scheduler";
 import {
@@ -102,6 +109,12 @@ export type GlassRect = {
   occ: readonly Occluder[];
   /** Which surface this pane wears, 0-3, kept for the element's life. */
   s: number;
+  /**
+   * Where this pane stands in its stack and what light reaches it
+   * (effects/scene/graph). A pane on its own is a stack of one, and every
+   * factor in here is then exactly 1.
+   */
+  stack: StackPlacement;
   /**
    * Viewing angle onto the pane, -1 to 1: positive when it is below eye level
    * and you see its top side, negative above. Scrolling carries it across.
@@ -400,8 +413,55 @@ function imageFields(reading: ImageReading | null) {
   };
 }
 
+/**
+ * Each stacked pane's placement, and its causes as the stack makes them: a
+ * layer's gap is the height of its bottom face above the photographs, and a
+ * bonded run is one pane as thick as all of it (drawn by its top layer).
+ */
+function stacksOf(
+  reading: SceneReading,
+): Map<HTMLElement, { stack: StackPlacement; causes: PaneCauses }> {
+  const out = new Map<HTMLElement, { stack: StackPlacement; causes: PaneCauses }>();
+  const byStack = new Map<Element, PaneReading[]>();
+  for (const p of reading.panes) {
+    const host = p.el.parentElement?.closest(`[${STACK_ATTR}]`);
+    if (!host) continue;
+    const list = byStack.get(host) ?? [];
+    list.push(p);
+    byStack.set(host, list);
+  }
+  for (const [host, panes] of byStack) {
+    // Document order is bottom first.
+    panes.sort((a, b) =>
+      a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+    );
+    const link = readInterface(host);
+    const placed = placeStack(
+      panes.map((p) => p.causes),
+      link,
+    );
+    panes.forEach((p, i) => {
+      const up = panes[i + 1];
+      const stack = {
+        ...placed[i]!,
+        aboveRect: up
+          ? { x: up.rect.left, y: up.rect.top, w: up.rect.width, h: up.rect.height, r: up.radius }
+          : null,
+      };
+      let thickness = p.causes.thickness;
+      if (link.kind === "bonded" && i === panes.length - 1) {
+        thickness = panes.reduce((sum, q) => sum + q.causes.thickness, 0);
+      }
+      const zBottom = link.kind === "bonded" ? placed[0]!.zBottom : stack.zBottom;
+      out.set(p.el, { stack, causes: { ...p.causes, gap: zBottom, thickness } });
+    });
+  }
+  return out;
+}
+
 function freeze(reading: SceneReading): GlassRect[] {
   const out: GlassRect[] = [];
+  const stacked = stacksOf(reading);
   for (const p of reading.panes) {
     const r = p.rect;
     if (r.width <= 0 || r.height <= 0) continue;
@@ -423,9 +483,24 @@ function freeze(reading: SceneReading): GlassRect[] {
       ih: above?.h ?? 1,
       ia: above?.a ?? 1,
       below: imageFields(p.below),
-      causes: p.causes,
+      causes: stacked.get(p.el)?.causes ?? p.causes,
+      stack: stacked.get(p.el)?.stack ?? { ...SINGLE, zBottom: p.causes.gap },
       occ: occlusion.get(p.el) ?? EMPTY_OCCLUDERS,
     });
+  }
+  // Development only: what each stacked layer was given, for the e2e specs.
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    (window as unknown as { __stacks?: unknown }).__stacks = out
+      .filter((g) => g.stack.count > 1)
+      .map((g) => ({
+        interface: g.el.parentElement?.closest(`[${STACK_ATTR}]`)?.getAttribute("data-interface"),
+        index: g.stack.index,
+        count: g.stack.count,
+        zBottom: g.stack.zBottom,
+        lightIn: g.stack.lightIn,
+        throughScale: g.stack.throughScale,
+        hasAbove: g.stack.aboveRect !== null,
+      }));
   }
   return out;
 }

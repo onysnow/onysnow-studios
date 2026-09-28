@@ -87,10 +87,10 @@ export const tuning: Record<string, Knob> = {
   roomBrightness: {
     label: "Room brightness",
     group: "Environment",
-    // The room's own lights are OFF: the lamp is the only source (Ony, 2026-09-28:
-    // "shouldn't be reflecting light when the light from my cursor is off and no
-    // other sources of light exist"). Raise it to light the room.
-    value: 0,
+    // The room is lit again (Ony, 2026-09-28: "put it back"): its reflection
+    // and the resting edges are that light, so they are as bright as the room
+    // is. 0 is a dark room with the lamp the only source.
+    value: 1,
     min: 0,
     max: 8,
     step: 0.1,

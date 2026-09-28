@@ -77,8 +77,8 @@ export const cursorLamp: Light = {
 };
 
 /**
- * The room's own lights. Its gain is "Room brightness", 0 by default: a dark
- * room, the lamp the only source. It is always "burning"; its gain says how
+ * The room's own lights. Its gain is "Room brightness", 1 by default (0 is
+ * a dark room, the lamp the only source). It is always "burning"; its gain says how
  * much.
  */
 export const roomLight: Light = {

@@ -120,6 +120,9 @@ export function FloorLight() {
     const gaps = new Float32Array(MAX_FLOOR_PANES);
     const iors = new Float32Array(MAX_FLOOR_PANES);
     const frosts = new Float32Array(MAX_FLOOR_PANES);
+    // What a stack lets through relative to its bottom layer (1 for a pane on its own).
+    const throughs = new Float32Array(MAX_FLOOR_PANES * 3);
+    const uThrough = U("uThrough");
     let wasLit = false;
 
     /*
@@ -187,12 +190,15 @@ export function FloorLight() {
         if (n >= MAX_FLOOR_PANES) break;
         if (pane.y + pane.h < -200 || pane.y > vh + 200) continue;
         if (pane.w < 120 || pane.h < 40) continue; // buttons and menus throw nothing worth drawing
+        // A stack throws one shadow: its bottom layer's, carrying the whole stack (uThrough).
+        if (pane.stack.index > 0) continue;
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
         edges[n] = pane.e;
         gaps[n] = pane.causes.gap;
         iors[n] = pane.causes.material.ior;
         frosts[n] = pane.causes.material.frost;
+        throughs.set(pane.stack.throughScale, n * 3);
         drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
         n += 1;
       }
@@ -238,6 +244,7 @@ export function FloorLight() {
       gl.uniform1fv(uGap, gaps);
       gl.uniform1fv(uIor, iors);
       gl.uniform1fv(uFrost, frosts);
+      gl.uniform3fv(uThrough, throughs);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Same task as the draw, so the buffer is still there to copy from.

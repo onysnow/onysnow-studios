@@ -26,6 +26,8 @@ import {
 } from "@/lib/tuning";
 import { toggleGlassMode, useGlassMode } from "@/lib/glass-mode";
 import { Button } from "@/components/ui/button";
+import { Pane } from "@/effects/react/Pane";
+import { Stack } from "@/effects/react/Stack";
 
 /** One knob, bound to a given mode's copy of its value. */
 function KnobRow({
@@ -168,6 +170,38 @@ function Lab() {
               />
             </div>
           ) : null}
+        </div>
+      </PhotoSection>
+
+      {/*
+       * Stacks (light step E): the same two panes three ways. Lab only -- no
+       * live page uses a stack yet.
+       */}
+      <PhotoSection image={photos.data?.[2] ?? photo}>
+        <div className="mx-auto max-w-5xl px-6 py-16" data-lab-stacks>
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Stacks</p>
+          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+            Two panes, one resting on the other. With air between them each keeps its own surfaces
+            and the light bounces between them; bonded, they are one thick pane.
+          </p>
+          <div className="mt-8 grid gap-10 sm:grid-cols-3">
+            {(
+              [
+                ["air", 24, "Air, 24 px"],
+                ["contact", 0, "Contact"],
+                ["bonded", 0, "Bonded"],
+              ] as const
+            ).map(([link, gap, label]) => (
+              <Stack key={link} interface={link} gap={gap} className="relative h-56">
+                <Pane className="!absolute left-0 top-0 h-40 w-[80%] !p-4" thickness={18}>
+                  <span className="text-xs text-muted-foreground">below</span>
+                </Pane>
+                <Pane className="!absolute bottom-0 right-0 h-40 w-[80%] !p-4" thickness={18}>
+                  <span className="text-xs">{label}</span>
+                </Pane>
+              </Stack>
+            ))}
+          </div>
         </div>
       </PhotoSection>
 

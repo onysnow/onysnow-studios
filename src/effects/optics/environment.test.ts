@@ -92,25 +92,29 @@ describe("the reflection is worked out from causes", () => {
     ]) {
       expect(tuning[gone]).toBeUndefined();
     }
-    // The room's own lights are off by default: the lamp is the only source.
-    expect(tuning["roomBrightness"]?.value).toBe(0);
+    // The room is lit by default (Ony, 2026-09-28: "put it back").
+    expect(tuning["roomBrightness"]?.value).toBe(1);
   });
 
-  it("puts nothing on the edge at rest in a dark room, and keeps the lamp's share local", () => {
+  it("puts nothing on the edge at rest in a dark room; the piped light runs the edge", () => {
     const src = GLASS_LIGHT_FRAGMENT_SHADER;
     // The resting edge is the room, reflected: no room light, no edge.
     expect(src).toMatch(/restEdge = bevel \* bevel \* uRestEdge \* uRoomExposure/);
-    // The lamp's share of the edge highlight falls off with the lamp's reach.
-    expect(src).toContain("bevel * lit * reach");
-    // Piped light is scattered back out by the frost as it goes, and spreads.
-    expect(src).toMatch(/exp\(-dl \/ escapeLength\)/);
+    // The lamp's share of the edge highlight is its light on the bevel.
+    expect(src).toContain("lampEdge += bevel * lit;");
+    // Piped light runs the whole edge, as it did before cae9b1c.
+    expect(src).toContain("float piped = couple * exp(-dl / 780.0);");
+    // The marks are on the face only, never the bevel.
+    expect(src).toContain("float onFace = inside * smoothstep(0.9, 1.0, band);");
   });
 
   it("is drawn in the glass shader, from Fresnel, ungated by the lamp", () => {
     const src = GLASS_LIGHT_FRAGMENT_SHADER;
     expect(src.split(ENVIRONMENT_GLSL).length - 1).toBe(1);
     expect(src).toContain("fresnelSchlick(cosView, uIor)");
-    expect(src).toMatch(/colour \+= inside \* reflectance \* room \* uRoomExposure \* uHasRoom;/);
+    expect(src).toMatch(
+      /colour \+= inside \* reflectance \* room \* uRoomExposure \* uHasRoom \* uReflectScale;/,
+    );
   });
 
   it("the head script publishes the HDR room at the same index as the room", () => {

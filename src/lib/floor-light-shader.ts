@@ -92,6 +92,12 @@ uniform float uEdge[${MAX_FLOOR_PANES}];
 uniform float uGap[${MAX_FLOOR_PANES}];
 uniform float uIor[${MAX_FLOOR_PANES}];
 uniform float uFrost[${MAX_FLOOR_PANES}];
+/*
+ * For the bottom layer of a stack: what the whole stack lets through,
+ * relative to this layer alone (effects/scene/graph). Exactly 1 for a pane
+ * on its own.
+ */
+uniform vec3 uThrough[${MAX_FLOOR_PANES}];
 
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
@@ -285,7 +291,7 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
       through *= causticAt(Q - r.xy, uSeed[i], penFloor, gap);
     }
 
-    light = mix(vec3(pool), through, inGlass);
+    light = mix(vec3(pool), through * uThrough[i], inGlass);
     break;
   }
 
