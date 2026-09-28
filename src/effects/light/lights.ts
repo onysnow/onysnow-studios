@@ -98,6 +98,11 @@ export const roomLight: Light = {
 /** Every light in the scene. */
 export const lights: readonly Light[] = [cursorLamp, roomLight];
 
+/** The lights that stand at a point (the lamp; later the backlight and the rest). */
+export function pointLights(): Light[] {
+  return lights.filter((l) => l.kind === "point");
+}
+
 /** The lamp's radiant power, for the passes that work in real units. */
 export const lampPower = (light: Light = cursorLamp) => LAMP_POWER_PER_GAIN * light.gain;
 

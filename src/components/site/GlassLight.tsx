@@ -10,7 +10,8 @@ import {
 } from "@/effects/engine/gl";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
-import { cursorLamp, lampPower, onCharge, roomLight } from "@/effects/light/lights";
+import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
+import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
 import { frontRoughness } from "@/effects/materials/presets";
@@ -98,8 +99,7 @@ export function GlassLight({
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
     const uScale = U("uScale");
-    const uLight = U("uLight");
-    const uCharge = U("uCharge");
+    const lightLoc = lightLocations(gl, program);
     const uRect = U("uRect");
     const uRadius = U("uRadius");
     const uEdgeWidth = U("uEdgeWidth");
@@ -136,11 +136,7 @@ export function GlassLight({
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
     const uIor = U("uIor");
     const uFrost = U("uFrost");
-    const uLightHeight = U("uLightHeight");
-    const uLampPower = U("uLampPower");
     const uFaceLamp = U("uFaceLamp");
-    const uLightSize = U("uLightSize");
-    const uLampColour = U("uLampColour");
 
     // The site's amber and teal in linear light — the shader works in linear
     // and only returns to display space at the very end.
@@ -403,8 +399,21 @@ export function GlassLight({
       gl.uniform2f(uViewport, bw, bh);
       gl.uniform1f(uScale, scale);
       gl.enable(gl.SCISSOR_TEST);
-      gl.uniform2f(uLight, x, y);
-      gl.uniform1f(uCharge, charge);
+      /*
+       * The lights, packed once a frame; each pane then sets their height
+       * above ITS glass. The lamp is drawn where the cursor's light is (the
+       * eased follower) at the shutter's charge, as it always was.
+       */
+      const packed: PackedLight[] = pointLights().map((l) => ({
+        x: l === cursorLamp ? x : l.x,
+        y: l === cursorLamp ? y : l.y,
+        height: l.height,
+        colour: l.colour,
+        power: lampPower(l),
+        radius: l.radius,
+        charge: l === cursorLamp ? charge : l.charge,
+      }));
+      const heights = packed.map((l) => l.height);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uRestEdge, t("restEdge"));
       /*
@@ -412,10 +421,7 @@ export function GlassLight({
        * the switch turns off only the face's own image of the lamp, which is
        * off by request (it reads as a flashlight; see LAMP_REFLECTION_ENABLED).
        */
-      gl.uniform1f(uLampPower, lampPower(cursorLamp));
-      gl.uniform3fv(uLampColour, cursorLamp.colour);
       gl.uniform1f(uFaceLamp, LAMP_REFLECTION_ENABLED ? 1 : 0);
-      gl.uniform1f(uLightSize, cursorLamp.radius);
       requestRoom();
       gl.uniform1f(
         uCameraDistance,
@@ -468,7 +474,9 @@ export function GlassLight({
         gl.uniform1f(uFrontRoughness, frontRoughness(material, material.frost));
         gl.uniform1f(uThickness, thickness);
         gl.uniform1f(uGap, gap);
-        gl.uniform1f(uLightHeight, Math.max(cursorLamp.height - gap, 1));
+        // Each light's height above THIS glass: its height less the pane's gap.
+        for (let k = 0; k < packed.length; k++) packed[k]!.height = Math.max(heights[k]! - gap, 1);
+        uploadLights(gl, lightLoc, packed);
         gl.uniform1f(uGrimeRake, t("grimeRake") * smudge);
         gl.uniform1f(uGrimeSpecks, t("grimeSpecks") * scratch);
         gl.uniform1f(uSeed, pane.s);

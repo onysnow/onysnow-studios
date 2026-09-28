@@ -93,3 +93,30 @@ describe("the lights are the only source of light values", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/*
+ * Step B: every light-drawing pass declares the same lights and loops over
+ * them, so a light added to the list reaches every pass.
+ */
+describe("the passes loop over the lights", () => {
+  it("glass and floor include the lights chunk once and read no single-lamp uniform", async () => {
+    const { LIGHTS_GLSL } = await import("./light-uniforms");
+    const { GLASS_LIGHT_FRAGMENT_SHADER } = await import("@/lib/glass-light-shader");
+    const { FLOOR_FRAGMENT_SHADER } = await import("@/lib/floor-light-shader");
+    for (const src of [GLASS_LIGHT_FRAGMENT_SHADER, FLOOR_FRAGMENT_SHADER]) {
+      expect(src.split(LIGHTS_GLSL).length - 1).toBe(1);
+      expect(src).toMatch(/for \(int i = 0; i < MAX_LIGHTS; i\+\+\)/);
+      expect(src).toContain("if (i >= uLightCount) break;");
+      for (const gone of [
+        "uLight;",
+        "uCharge",
+        "uLightHeight",
+        "uLampPower",
+        "uLightSize",
+        "uLampColour",
+      ]) {
+        expect(src).not.toContain(gone);
+      }
+    }
+  });
+});

@@ -142,4 +142,22 @@ test.describe("the light passes share one WebGL context", () => {
     await expect.poll(picture, { timeout: 15_000 }).not.toBe(before);
     await page.mouse.up();
   });
+
+  /*
+   * Every pass's shader compiles and links in a real browser. A shader that
+   * fails leaves its pass silently dark -- the rest of the page carries on --
+   * so the only reliable sign is the error the pass logs. Caught in light
+   * step B: a rename broke the floor shader and every other test passed.
+   */
+  test("every light pass compiles", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("console", (m) => {
+      if (m.type() === "error" && /shader|link/i.test(m.text())) errors.push(m.text());
+    });
+    await page.goto("/?glass=css");
+    await page.waitForLoadState("networkidle");
+    await charge(page);
+    await expect.poll(() => inked(page, "canvas.floor-light")).toBeGreaterThan(1000);
+    expect(errors).toEqual([]);
+  });
 });

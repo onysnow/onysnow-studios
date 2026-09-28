@@ -85,8 +85,8 @@ describe("the floor light uses the causes, not settings", () => {
     const src = FLOOR_FRAGMENT_SHADER;
     expect(src).not.toMatch(/\buReach\b|\buPenumbra\b/);
     expect(src).not.toMatch(/exp\(-dist2/);
-    expect(src).toContain("irradianceFalloff(rLamp, uHeight)");
-    expect(src).toContain("penumbraAcross(uLightSize, gap, uHeight, cosT, cosPhi)");
+    expect(src).toContain("irradianceFalloff(rLamp, height)");
+    expect(src).toContain("penumbraAcross(radius, gap, height, cosT, cosPhi)");
     expect(src).toContain("frostSpread(frost, ior, gap, cosT)");
     // Each pane's own: step 7 reads the gap, index and frost per pane.
     expect(src).toMatch(/uniform float uGap\[/);

@@ -3,6 +3,7 @@ import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
+import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 
 /**
  * Fragment shader for one pane of glass.
@@ -42,8 +43,6 @@ precision highp float;
 
 uniform vec2  uViewport;      // device pixels
 uniform float uScale;         // device pixels per CSS pixel
-uniform vec2  uLight;         // CSS pixels, viewport-relative
-uniform float uCharge;        // 0 to 1
 uniform float uRestEdge;      // how much edge shows with nothing shining
 
 /*
@@ -76,16 +75,14 @@ uniform float uGap;         // this pane's gap to the photographs behind it, CSS
 /*
  * The lamp's reflection on the face comes from causes only: what the glass is
  * made of (uIor), how frosted its surface is (uFrost), how high the lamp is
- * above it (uLightHeight) and how bright it is (uLampPower). There is no
+ * above it and how bright it is (the lights: uLightPos, uLightPower). There is no
  * glare setting -- see effects/optics/reflection.ts.
  */
 uniform float uIor;          // this pane's material
 uniform float uFrost;        // this pane's material
-uniform float uLightHeight; // CSS pixels above the glass
-uniform float uLampPower;
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
-uniform float uLightSize;
-uniform vec3 uLampColour;   // the lamp's colour (effects/light/lights)   // the lamp's radius, CSS pixels
+// The lights: position, height above this pane, colour, power, size, charge.
+${LIGHTS_GLSL}
 
 /*
  * The room the face reflects (see effects/optics/environment.ts): an HDR
@@ -292,37 +289,12 @@ void main() {
   float facing = clamp(depth / max(min(halfSize.x, halfSize.y), 1.0), 0.0, 1.0);
   float fresnel = FRESNEL * fresnelRise(facing);
 
-  // ---- The light, and how far it reaches this point ----
-  float dl = distance(frag, uLight);
-  float direct = 1.0 / (1.0 + (dl * dl) / 3600.0);
-  float spill = exp(-dl / 280.0);
-  float reach = direct + spill * 0.11;
-
-  float ambient = direct + spill * 0.14;
   /*
-   * Grime rides the BROAD falloff, not the core.
-   *
-   * This was direct + spill * 0.035 -- so almost entirely the direct term,
-   * which is half strength at 60px and 2% by 400px. The smears therefore existed only
-   * in a tight pool directly under the cursor, which is precisely where the
-   * blown core whites everything out. Raising their strength could never fix
-   * that: the problem was reach, not amount.
-   *
-   * A smear catches any light crossing it, and at any distance the light
-   * reaching it is the wide scatter rather than the hot centre. So the spill
-   * term carries most of this now, and the direct term is pulled back so the
-   * area around the pointer stops blowing out.
+   * The lamp's own terms -- how far it reaches this point, the specular, the
+   * arris glint, the piped light, the grime it rakes, its image in the face
+   * -- are worked out per light in the loop over the lights below (step B of
+   * the light-system design), so every light in the list lights the glass.
    */
-  float rake = direct * 0.55 + spill * 0.6;
-
-  /*
-   * ---- Blinn-Phong specular ----
-   * The cursor light is a real source, so the pane answers it with a real
-   * highlight: half-vector against the surface normal, tightened by the bevel.
-   */
-  vec2 toLight = normalize(uLight - frag + 1e-6);
-  float ndl = max(dot(grad, toLight), 0.0);
-  float specular = pow(ndl, 24.0) * bevel * direct * 3.0;
 
   // ---- The surface ----
   vec3 surf = surfaceAt(frag - uRect.xy, uSeed) * uHasSurface;
@@ -363,55 +335,9 @@ void main() {
   float arrisWear = 0.62 + 0.9 * surf.b * uHasSurface + 0.38 * (1.0 - uHasSurface);
   vec2 viewCentre = 0.5 * uViewport / uScale;
   vec3 eye = vec3(viewCentre + uEye, uCameraDistance);
-  vec3 lamp = vec3(uLight, uLightHeight);
   vec2 onEdge = frag - grad * d;
   float blockedEdge = occlusionAt(onEdge - uRect.xy);
-  float arrisLamp = arrisGlint(onEdge, grad, lamp, uLightSize, eye, uFrontRoughness, uLampPower, uIor)
-    * arrisWear * (1.0 - blockedEdge);
-  /*
-   * The camera's bloom round that highlight: a lens spreads a bright line
-   * into a glow, and the glow is what tells you the line is bright rather
-   * than merely pale. It follows the highlight -- there is no glow where the
-   * arris is not lit. (It used to ride the lamp's distance, which lit the
-   * whole width of a pane white whenever the lamp was near.)
-   */
-  float bloom = exp(-ad / 15.0) * 0.35 + exp(-ad / 48.0) * 0.05;
-  vec3 rim = vec3(arrisLamp * (arrisProfile(ad) + bloom));
 
-  /*
-   * ---- Light piped through the pane ----
-   *
-   * A pane is a light guide. Light that gets into it is trapped by total
-   * internal reflection between the two faces and travels until it reaches an
-   * edge, where the angle finally breaks and it escapes -- the principle of an
-   * edge-lit acrylic sign, and why the far edge of a pane glows when you put a
-   * torch anywhere on it. It escapes AT the arris, so it has the arris's
-   * width, and it goes green on the way: the path is the pane's width.
-   *
-   * Only scattered light is trapped. Light crossing clear glass leaves by the
-   * far face at the angle it came in; it takes a rough surface -- the frost,
-   * the grime -- to throw some of it past the critical angle. So how much is
-   * piped follows the frost, and a clear pane pipes almost nothing. (It was
-   * the same for every pane, with a 15 px glow of its own, which lit the
-   * whole width of the edge white whenever the lamp was near.)
-   */
-  float toPane = roundedBox(uLight - (uRect.xy + halfSize), halfSize, uRadius);
-  float couple = exp(-max(toPane, 0.0) / 130.0) * uFrost;
-  /*
-   * How far it gets. Trapped light crosses the pane corner to corner, one
-   * bounce every 2 t tan(critical angle) -- about 1.8 thicknesses -- and at
-   * each bounce off the frosted face some of it is scattered back out: that
-   * is the same frost that trapped it. So a frosted pane is a poor guide and
-   * the glow dies within a few hundred pixels. And it spreads as it goes, in
-   * the plane of the pane, so it thins as 1 / distance on top of that.
-   * (It ran 780 px with no spreading, so the whole length of an edge lit up
-   * wherever the lamp was.)
-   */
-  float bounce = 1.8 * uThickness;
-  float escapeLength = bounce / max(0.25 * uFrost, 0.02);
-  float piped = couple * exp(-dl / escapeLength) / (1.0 + dl / (4.0 * uThickness));
-  vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
-  rim += pipedTint * arrisProfile(ad) * 1.7 * arrisWear * piped;
 
   /*
    * ---- The room, in the arris ----
@@ -521,7 +447,6 @@ void main() {
    * face, behind a setting that sat at zero. The lamp on the face is its
    * reflection, and that is now worked out from the material below.
    */
-  vec3 face = vec3(0.0);
 
   /*
    * The grime, raked by the light.
@@ -565,7 +490,6 @@ void main() {
   float blocked = occlusionAt(frag - uRect.xy);
   float unlit = 1.0 - blocked * 0.88;
 
-  face += vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
 
   /*
    * Grime also scatters the light passing THROUGH the pane, not only what
@@ -574,29 +498,7 @@ void main() {
    */
 
 
-  /*
-   * ---- The lamp, reflected by the face ----
-   *
-   * Glass reflects about 4% straight on -- ((n - 1) / (n + 1))^2 -- and more
-   * toward grazing. It was two settings, both at zero, so the pane reflected
-   * nothing. Now it is the material's reflectance, spread by the surface's
-   * roughness: polished glass gives a small, sharp, bright image of the lamp;
-   * frost spreads the same light into a wide, dim sheen. Neither end is
-   * tuned; both follow from uIor, uFrost and where the lamp is.
-   *
-   * Blocked by whatever is standing on the glass between it and the lamp.
-   */
-  float reflected = lampReflection(frag - uLight, uLightHeight, uLampPower * uFaceLamp, uIor, uFrost);
-  vec3 mirror = inside * uLampColour * reflected * (1.0 - blocked);
 
-  /*
-   * Everything the light does scales with the charge, and there is genuinely
-   * nothing at zero: glass does not glow, a light shining on it does. The
-   * refraction is NOT gated — a pane bends what is behind it whether or not
-   * anybody is shining anything at it.
-   */
-  float lit = uCharge * uCharge * (3.0 - 2.0 * uCharge);
-  vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
 
   /*
    * What the glass does to the photograph is not gated on the charge. A pane
@@ -623,8 +525,136 @@ void main() {
    * is genuinely additive: it lands on top of what is seen through them. The
    * absorption through the side is the CSS multiply layer.
    */
+  /*
+   * ---- Every light in the list ----
+   *
+   * Each light's contribution is worked out on its own and summed: light
+   * adds (superposition). With one light the sums are that light's terms
+   * exactly, so the page did not change when the loop arrived.
+   */
+  vec3 lampLight = vec3(0.0);     // (tint * (rim + face) + mirror) * lit, per light
+  vec3 lampSpecular = vec3(0.0);  // the Blinn-Phong highlight, per light
+  float lampEdge = 0.0;           // the bevel's share of each light
+  for (int i = 0; i < MAX_LIGHTS; i++) {
+    if (i >= uLightCount) break;
+    vec2 lightXY = uLightPos[i].xy;
+    float lightHeight = uLightPos[i].z;
+    float lightPower = uLightPower[i];
+    float charge = uLightCharge[i];
+
+    // ---- The light, and how far it reaches this point ----
+    float dl = distance(frag, lightXY);
+    float direct = 1.0 / (1.0 + (dl * dl) / 3600.0);
+    float spill = exp(-dl / 280.0);
+    float reach = direct + spill * 0.11;
+
+    /*
+     * Grime rides the BROAD falloff, not the core.
+     *
+     * This was direct + spill * 0.035 -- so almost entirely the direct term,
+     * which is half strength at 60px and 2% by 400px. The smears therefore existed only
+     * in a tight pool directly under the cursor, which is precisely where the
+     * blown core whites everything out. Raising their strength could never fix
+     * that: the problem was reach, not amount.
+     *
+     * A smear catches any light crossing it, and at any distance the light
+     * reaching it is the wide scatter rather than the hot centre. So the spill
+     * term carries most of this now, and the direct term is pulled back so the
+     * area around the pointer stops blowing out.
+     */
+    float rake = direct * 0.55 + spill * 0.6;
+
+    /*
+     * ---- Blinn-Phong specular ----
+     * The cursor light is a real source, so the pane answers it with a real
+     * highlight: half-vector against the surface normal, tightened by the bevel.
+     */
+    vec2 toLight = normalize(lightXY - frag + 1e-6);
+    float ndl = max(dot(grad, toLight), 0.0);
+    float specular = pow(ndl, 24.0) * bevel * direct * 3.0;
+
+
+    vec3 lamp = vec3(lightXY, lightHeight);
+    float arrisLamp = arrisGlint(onEdge, grad, lamp, uLightRadius[i], eye, uFrontRoughness, lightPower, uIor)
+      * arrisWear * (1.0 - blockedEdge);
+    /*
+     * The camera's bloom round that highlight: a lens spreads a bright line
+     * into a glow, and the glow is what tells you the line is bright rather
+     * than merely pale. It follows the highlight -- there is no glow where the
+     * arris is not lit. (It used to ride the lamp's distance, which lit the
+     * whole width of a pane white whenever the lamp was near.)
+     */
+    float bloom = exp(-ad / 15.0) * 0.35 + exp(-ad / 48.0) * 0.05;
+    vec3 rim = vec3(arrisLamp * (arrisProfile(ad) + bloom));
+
+    /*
+     * ---- Light piped through the pane ----
+     *
+     * A pane is a light guide. Light that gets into it is trapped by total
+     * internal reflection between the two faces and travels until it reaches an
+     * edge, where the angle finally breaks and it escapes -- the principle of an
+     * edge-lit acrylic sign, and why the far edge of a pane glows when you put a
+     * torch anywhere on it. It escapes AT the arris, so it has the arris's
+     * width, and it goes green on the way: the path is the pane's width.
+     *
+     * Only scattered light is trapped. Light crossing clear glass leaves by the
+     * far face at the angle it came in; it takes a rough surface -- the frost,
+     * the grime -- to throw some of it past the critical angle. So how much is
+     * piped follows the frost, and a clear pane pipes almost nothing. (It was
+     * the same for every pane, with a 15 px glow of its own, which lit the
+     * whole width of the edge white whenever the lamp was near.)
+     */
+    float toPane = roundedBox(lightXY - (uRect.xy + halfSize), halfSize, uRadius);
+    float couple = exp(-max(toPane, 0.0) / 130.0) * uFrost;
+    /*
+     * How far it gets. Trapped light crosses the pane corner to corner, one
+     * bounce every 2 t tan(critical angle) -- about 1.8 thicknesses -- and at
+     * each bounce off the frosted face some of it is scattered back out: that
+     * is the same frost that trapped it. So a frosted pane is a poor guide and
+     * the glow dies within a few hundred pixels. And it spreads as it goes, in
+     * the plane of the pane, so it thins as 1 / distance on top of that.
+     * (It ran 780 px with no spreading, so the whole length of an edge lit up
+     * wherever the lamp was.)
+     */
+    float bounce = 1.8 * uThickness;
+    float escapeLength = bounce / max(0.25 * uFrost, 0.02);
+    float piped = couple * exp(-dl / escapeLength) / (1.0 + dl / (4.0 * uThickness));
+    vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
+    rim += pipedTint * arrisProfile(ad) * 1.7 * arrisWear * piped;
+
+    vec3 face = vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
+
+    /*
+     * ---- The lamp, reflected by the face ----
+     *
+     * Glass reflects about 4% straight on -- ((n - 1) / (n + 1))^2 -- and more
+     * toward grazing. It was two settings, both at zero, so the pane reflected
+     * nothing. Now it is the material's reflectance, spread by the surface's
+     * roughness: polished glass gives a small, sharp, bright image of the lamp;
+     * frost spreads the same light into a wide, dim sheen. Neither end is
+     * tuned; both follow from uIor, uFrost and where the lamp is.
+     *
+     * Blocked by whatever is standing on the glass between it and the lamp.
+     */
+    float reflected = lampReflection(frag - lightXY, lightHeight, lightPower * uFaceLamp, uIor, uFrost);
+    vec3 mirror = inside * uLightColour[i] * reflected * (1.0 - blocked);
+
+    /*
+     * Everything the light does scales with the charge, and there is genuinely
+     * nothing at zero: glass does not glow, a light shining on it does. The
+     * refraction is NOT gated — a pane bends what is behind it whether or not
+     * anybody is shining anything at it.
+     */
+    float lit = charge * charge * (3.0 - 2.0 * charge);
+    vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
+
+    lampLight += (tint * (rim + face) + mirror) * lit;
+    lampSpecular += vec3(specular) * inside * lit;
+    lampEdge += bevel * lit * reach;
+  }
+
   vec3 colour = sideLight + arrisRoom;
-  colour += (tint * (rim + face) + mirror) * lit;
+  colour += lampLight;
   /*
    * The specular is the LIGHT, so it is gated on the light. The bevel's edge
    * highlight is GEOMETRY, so it is not.
@@ -634,13 +664,13 @@ void main() {
    * tracking the pointer across every pane whether or not anything was
    * shining. Reported twice as a glow that should not be there before the
    * charge, and both times I looked at CursorLight, which is innocent: every
-   * one of its terms is already multiplied by uCharge. It was this line.
+   * one of its terms is already multiplied by the charge. It was this line.
    *
    * The edge highlight keeps its floor. It is the bevel catching the ambient
    * room rather than the cursor, it does not move when the pointer moves, and
    * without it the pane has no edge at all when idle.
    */
-  colour += vec3(specular) * inside * lit;
+  colour += lampSpecular;
   /*
    * The resting floor is a HINT of an edge, not a third of the pane.
    *
@@ -663,7 +693,7 @@ void main() {
    * page from it does not light up because the shutter is wound.
    */
   float restEdge = bevel * bevel * uRestEdge * uRoomExposure * uHasRoom;
-  colour += vec3(EDGE_HIGHLIGHT) * (restEdge + bevel * lit * reach) * inside;
+  colour += vec3(EDGE_HIGHLIGHT) * (restEdge + lampEdge) * inside;
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.

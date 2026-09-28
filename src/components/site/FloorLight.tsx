@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
-import { lightState, onCharge } from "@/effects/light/lights";
+import { lampPower, lightState, onCharge, pointLights } from "@/effects/light/lights";
+import { lightLocations, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import {
   FLOOR_FRAGMENT_SHADER,
@@ -65,18 +66,14 @@ export function FloorLight() {
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
     const uScale = U("uScale");
-    const uLight = U("uLight");
-    const uCharge = U("uCharge");
+    const lightLoc = lightLocations(gl, program);
     const uGap = U("uGap");
     const uIor = U("uIor");
     const uFrost = U("uFrost");
-    const uHeight = U("uHeight");
     const uEdge = U("uEdge");
     const uLightGain = U("uLightGain");
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
-    const uLightSize = U("uLightSize");
-    const uLampColour = U("uLampColour");
     const uGrimeFloor = U("uGrimeFloor");
     const uViewShift = U("uViewShift");
     /*
@@ -206,17 +203,26 @@ export function FloorLight() {
       quad.bind();
       gl.uniform2f(uViewport, bw, bh);
       gl.uniform1f(uScale, scale);
-      gl.uniform2f(uLight, lightState.x, lightState.y);
-      gl.uniform1f(uCharge, charge);
-      gl.uniform1f(uHeight, lightState.height);
+      // Every point light, at its height above the photographs.
+      uploadLights(
+        gl,
+        lightLoc,
+        pointLights().map((l) => ({
+          x: l.x,
+          y: l.y,
+          height: l.height,
+          colour: l.colour,
+          power: lampPower(l),
+          radius: l.radius,
+          charge: l.charge,
+        })),
+      );
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
       gl.uniform1f(uPrism, t("floorPrism"));
       // Causes only: how sharp and bright each point is follows from these.
-      gl.uniform1f(uLightSize, lightState.radius);
-      gl.uniform3fv(uLampColour, lightState.colour);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform2f(uViewShift, viewState.shiftX, viewState.shiftY);
       requestLayers();

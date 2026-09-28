@@ -188,7 +188,7 @@ describe("the edge is causes, not results", () => {
     expect(src.split(EDGE_SIDE_GLSL).length - 1).toBe(1);
     expect(src).not.toContain("uArris");
     expect(src).not.toContain("uSideReach");
-    expect(src).toContain("arrisGlint(onEdge, grad, lamp, uLightSize, eye");
+    expect(src).toContain("arrisGlint(onEdge, grad, lamp, uLightRadius[i], eye");
   });
 
   it("draws no hairline round the pane", () => {
