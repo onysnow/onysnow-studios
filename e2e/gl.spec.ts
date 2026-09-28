@@ -78,6 +78,7 @@ test.describe("the light passes share one WebGL context", () => {
   });
 
   test("each pass still reaches its own canvas", async ({ page }) => {
+    test.setTimeout(60_000);
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     await charge(page);
@@ -98,8 +99,17 @@ test.describe("the light passes share one WebGL context", () => {
         ),
       )
       .toBe(true);
-    // Released, the charge bleeds away and the lens and floor go dark again.
+    /*
+     * Released, the charge bleeds away and the lens and floor go dark again.
+     *
+     * Unless the hold ran past HOLD_FULL_MS (2.6 s): then the shutter is
+     * ARMED, and by design an armed shutter stays lit until a click spends it
+     * (lib/shutter-charge). On a slow CI runner the polls above take long
+     * enough for that to happen, and the test waited for a light that was
+     * right to stay on. So it does what a person does: if armed, it clicks.
+     */
     await page.mouse.up();
+    if ((await page.locator("[data-armed]").count()) > 0) await page.mouse.click(420, 380);
     await expect.poll(() => inked(page, "canvas.floor-light"), { timeout: 15_000 }).toBe(0);
   });
 

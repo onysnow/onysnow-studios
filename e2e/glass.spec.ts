@@ -130,6 +130,9 @@ test.describe("glass", () => {
     await page.mouse.down();
     await expect(floor).toHaveAttribute("data-dynamic", "", { timeout: 5000 });
     await page.mouse.up();
+    // A hold past 2.6 s arms the shutter, which stays lit until a click spends
+    // it (lib/shutter-charge); a slow runner can get there. Spend it.
+    if ((await page.locator("[data-armed]").count()) > 0) await page.mouse.click(400, 400);
     // Released, the charge bleeds away and the layer parks again.
     await expect(floor).toHaveAttribute("data-dynamic", "idle", { timeout: 15_000 });
   });
