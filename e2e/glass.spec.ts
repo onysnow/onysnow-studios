@@ -252,12 +252,11 @@ test.describe("plastic on the glass", () => {
 });
 
 /*
- * No light but the lamp (2026-09-28): with the room's lights off, the liquid
- * glass library's own fixed light -- its gloss and rim highlight -- is out.
+ * The liquid glass library's own fixed light -- its gloss and rim highlight --
+ * is the room's light, so it is lit exactly as far as the room is: out in a
+ * dark room (cae9b1c), and back now the room is lit again (Ony, 2026-09-28).
  */
-test("the liquid glass's own highlights follow the room's light, which is off", async ({
-  page,
-}) => {
+test("the liquid glass's own highlights follow the room's light, which is on", async ({ page }) => {
   await page.goto("/?glass=raster");
   await page.waitForLoadState("networkidle");
   const read = () =>
@@ -272,6 +271,6 @@ test("the liquid glass's own highlights follow the room's light, which is off", 
     .poll(async () => (await read())["specular"], { timeout: 20_000 })
     .not.toBeUndefined();
   const config = await read();
-  expect(config["specular"]).toBe(0);
-  expect(config["edgeHighlight"]).toBe(0);
+  expect(config["specular"]).toBeGreaterThan(0);
+  expect(config["edgeHighlight"]).toBeGreaterThan(0);
 });

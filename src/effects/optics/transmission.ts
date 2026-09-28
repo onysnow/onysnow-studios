@@ -1,3 +1,4 @@
+import { penumbraOf } from "./shadow";
 /**
  * Light passing THROUGH a pane and landing on what is behind it.
  *
@@ -72,10 +73,7 @@ export function penumbraAcross(
   cosTheta: number,
   cosPhi: number,
 ): number {
-  const base = (lightSize * gap) / Math.max(height - gap, 1);
-  const c = Math.max(cosTheta, 0.05);
-  const p2 = cosPhi * cosPhi;
-  return base * Math.sqrt(p2 / (c * c) + (1 - p2));
+  return penumbraOf((lightSize * gap) / Math.max(height - gap, 1), cosTheta, cosPhi);
 }
 
 /**

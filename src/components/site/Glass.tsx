@@ -41,6 +41,14 @@ const SIDE_STYLE = {
   },
 } as unknown as Record<"top" | "bottom", CSSProperties>;
 
+/*
+ * How far type and the plastic stand off the glass, as a share of a mounted
+ * print's (the "Content depth" setting): the fractions their shadows were
+ * always scaled by in styles.css, now said once, as the causes they are.
+ */
+const TYPE_STANDOFF = 0.42;
+const PLASTIC_STANDOFF = 0.5;
+
 /**
  * SVG filters inside backdrop-filter are Chromium-only. Where they are not
  * supported, a url() in the value would invalidate the whole declaration and
@@ -187,14 +195,18 @@ export function Glass({
       const copy = [...el.querySelectorAll<HTMLElement>("h1, h2, h3, h4, p, blockquote")];
       // Type throws a glyph-shaped shadow (text-shadow), never a box: it does
       // not block the light on the glass as a rectangle.
-      const letGo = copy.map((node) => registerLitSurface(node, { occludes: false }));
+      // A line of type stands off the glass by a fraction of what a mounted
+      // print does (the 0.42 its shadow has always been scaled by).
+      const letGo = copy.map((node) =>
+        registerLitSurface(node, { occludes: false, standoff: TYPE_STANDOFF }),
+      );
       /*
        * Plastic resting on the pane (the orange buttons) is lit too: it catches
        * the lamp on its edge and throws a coloured shadow. Not an occluder --
        * it is translucent, so it tints the light rather than blocking it.
        */
       for (const node of el.querySelectorAll<HTMLElement>(".plastic")) {
-        letGo.push(registerLitSurface(node, { occludes: false }));
+        letGo.push(registerLitSurface(node, { occludes: false, standoff: PLASTIC_STANDOFF }));
       }
 
       release.current = () => {

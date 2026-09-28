@@ -147,7 +147,7 @@ describe("the shader actually uses it", () => {
      * settings (it was scaled by one that sat at zero) and returns with the
      * smudge layer; whatever grime terms exist must all carry the factor.
      */
-    const grime = src.match(/face (?:\+)?= vec3\(inside \*[^;]*\);/g) ?? [];
+    const grime = src.match(/face (?:\+)?= vec3\((?:inside|onFace) \*[^;]*\);/g) ?? [];
     expect(grime.length).toBeGreaterThan(0);
     for (const term of grime) expect(term).toContain("unlit");
     const mirror = src.match(/vec3 mirror = [^;]*;/)?.[0] ?? "";

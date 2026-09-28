@@ -4,6 +4,7 @@ import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
+import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 
 /**
  * Fragment shader for one pane of glass.
@@ -58,6 +59,8 @@ uniform float uRestEdge;      // how much edge shows with nothing shining
 #define MAX_OCC 6
 uniform vec4 uOccRect[MAX_OCC];
 uniform vec4 uOccSoft[MAX_OCC];
+/* uOccDir: direction from the lamp to the shadow (xy) and the light's slant cosine (z). */
+uniform vec4 uOccDir[MAX_OCC];
 uniform float uOccCount;
 
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
@@ -71,6 +74,7 @@ uniform float uSeed;
 uniform float uGrimeRake;   // tunable
 uniform float uGrimeSpecks; // tunable
 uniform float uGrimeFloor;  // tunable
+uniform float uMarksProportional; // 1 while previewing ?try=marks
 uniform float uGap;         // this pane's gap to the photographs behind it, CSS px
 /*
  * The lamp's reflection on the face comes from causes only: what the glass is
@@ -83,6 +87,22 @@ uniform float uFrost;        // this pane's material
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
 // The lights: position, height above this pane, colour, power, size, charge.
 ${LIGHTS_GLSL}
+/*
+ * Where this pane stands in a stack (effects/scene/graph): the share of the
+ * light from above that reaches it through the layers over it, and -- for the
+ * top layer -- how much more the whole stack reflects than it would alone.
+ * Both exactly 1 for a pane on its own.
+ */
+uniform vec3 uLightIn;
+/*
+ * Where the layer above throws its light onto this one, in this pane's own
+ * pixels: centre.xy, half-size.zw, already moved by the cast vector. And its
+ * corner radius, penumbra and whether there is a layer above at all. Outside
+ * it the light arrives straight from the lamp; inside, through the layer.
+ */
+uniform vec4 uAboveRect;
+uniform vec3 uAboveSoft;
+uniform vec3 uReflectScale;
 
 /*
  * The room the face reflects (see effects/optics/environment.ts): an HDR
@@ -141,6 +161,7 @@ ${REFLECTION_GLSL}
 ${EDGE_SIDE_GLSL}
 ${SURFACE_LAYERS_GLSL}
 ${ENVIRONMENT_GLSL}
+${SHADOW_GLSL}
 
 /*
  * How much of the light is blocked at this point on the pane.
@@ -166,17 +187,20 @@ float occlusionAt(vec2 local) {
     if (float(i) >= uOccCount) continue;
     vec4 rect = uOccRect[i];
     vec4 soft = uOccSoft[i];
-
-    // Rounded-rectangle distance: negative inside, in pixels.
-    vec2 q = abs(local - rect.xy) - rect.zw + soft.x;
-    float d = min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - soft.x;
-
-    // The penumbra straddles the edge, so the shadow fades across it rather
-    // than stopping dead at the boundary.
-    float edge = max(soft.y, 0.5);
-    blocked = max(blocked, soft.z * (1.0 - smoothstep(-edge, edge, d)));
+    vec4 dir = uOccDir[i];
+    // The one shadow model's shape (effects/optics/shadow): the penumbra
+    // straddles the edge, so the shadow fades across it rather than stopping
+    // dead at the boundary, and stretches along the direction to the lamp.
+    float cover = shadowRect(local, rect.xy, rect.zw, soft.x, soft.y, dir.xy, dir.z);
+    blocked = max(blocked, soft.z * cover);
   }
   return clamp(blocked, 0.0, 1.0);
+}
+
+/* How much of the light at this point came through the layer above, 0 to 1: its shadow, by the same model. */
+float aboveCover(vec2 local) {
+  if (uAboveSoft.z < 0.5) return 0.0;
+  return shadowRect(local, uAboveRect.xy, uAboveRect.zw, uAboveSoft.x, uAboveSoft.y, vec2(0.0), 1.0);
 }
 
 /*
@@ -315,8 +339,9 @@ void main() {
    * marks rather than dimming them, which is the difference between cleaning
    * glass and looking at it in worse light.
    */
-  float glint = smoothstep(uGrimeFloor, uGrimeFloor + 0.42, surf.r) * 3.4 * handled;
-  float smear = smoothstep(uGrimeFloor * 0.85, uGrimeFloor * 0.85 + 0.5, surf.g) * 1.25 * handled;
+  vec2 cover = marksCover(surf, uGrimeFloor, uMarksProportional);
+  float glint = cover.x * 3.4 * handled;
+  float smear = cover.y * 1.25 * handled;
 
   /*
    * ---- The arris ----
@@ -607,22 +632,24 @@ void main() {
     float toPane = roundedBox(lightXY - (uRect.xy + halfSize), halfSize, uRadius);
     float couple = exp(-max(toPane, 0.0) / 130.0) * uFrost;
     /*
-     * How far it gets. Trapped light crosses the pane corner to corner, one
-     * bounce every 2 t tan(critical angle) -- about 1.8 thicknesses -- and at
-     * each bounce off the frosted face some of it is scattered back out: that
-     * is the same frost that trapped it. So a frosted pane is a poor guide and
-     * the glow dies within a few hundred pixels. And it spreads as it goes, in
-     * the plane of the pane, so it thins as 1 / distance on top of that.
-     * (It ran 780 px with no spreading, so the whole length of an edge lit up
-     * wherever the lamp was.)
+     * How far it gets: along the whole edge, as it always did (Ony,
+     * 2026-09-28: the piped light is part of the look). The frost-escape
+     * and 1/distance spreading tried in cae9b1c cut it to a couple of hundred
+     * pixels and the light stopped reaching the other edges, so it is back
+     * to the run it had. What keeps a far edge dark is the coupling above:
+     * the lamp has to be over or near THIS pane to put light into it.
      */
-    float bounce = 1.8 * uThickness;
-    float escapeLength = bounce / max(0.25 * uFrost, 0.02);
-    float piped = couple * exp(-dl / escapeLength) / (1.0 + dl / (4.0 * uThickness));
+    float piped = couple * exp(-dl / 780.0);
     vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
     rim += pipedTint * arrisProfile(ad) * 1.7 * arrisWear * piped;
 
-    vec3 face = vec3(inside * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
+    /*
+     * The marks are on the flat face only (Ony: no scratches or smudges on
+     * the edges or sides). They fade out over the last tenth of the bevel,
+     * where it meets the face, so there is no line where they stop.
+     */
+    float onFace = inside * smoothstep(0.9, 1.0, band);
+    vec3 face = vec3(onFace * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
 
     /*
      * ---- The lamp, reflected by the face ----
@@ -650,11 +677,12 @@ void main() {
 
     lampLight += (tint * (rim + face) + mirror) * lit;
     lampSpecular += vec3(specular) * inside * lit;
-    lampEdge += bevel * lit * reach;
+    lampEdge += bevel * lit;
   }
 
   vec3 colour = sideLight + arrisRoom;
-  colour += lampLight;
+  vec3 lightIn = mix(vec3(1.0), uLightIn, aboveCover(frag - uRect.xy));
+  colour += lampLight * lightIn;
   /*
    * The specular is the LIGHT, so it is gated on the light. The bevel's edge
    * highlight is GEOMETRY, so it is not.
@@ -670,7 +698,7 @@ void main() {
    * room rather than the cursor, it does not move when the pointer moves, and
    * without it the pane has no edge at all when idle.
    */
-  colour += lampSpecular;
+  colour += lampSpecular * lightIn;
   /*
    * The resting floor is a HINT of an edge, not a third of the pane.
    *
@@ -688,12 +716,12 @@ void main() {
    */
   /*
    * Both follow a source. At rest the only one is the room -- so with the
-   * room's lights off (Room brightness 0) there is no resting edge at all --
-   * and the lamp's share follows the lamp's reach, so an edge across the
-   * page from it does not light up because the shutter is wound.
+   * room's lights off (Room brightness 0) there is no resting edge at all,
+   * and the lamp's share is the lamp's light on the bevel.
    */
   float restEdge = bevel * bevel * uRestEdge * uRoomExposure * uHasRoom;
-  colour += vec3(EDGE_HIGHLIGHT) * (restEdge + lampEdge) * inside;
+  float lightInMean = (lightIn.r + lightIn.g + lightIn.b) / 3.0;
+  colour += vec3(EDGE_HIGHLIGHT) * (restEdge + lampEdge * lightInMean) * inside;
 
   // The tonemap is what blows the arris out: everything above 1.0 compresses
   // toward white, so colour survives only where the light has fallen off.
@@ -721,7 +749,7 @@ void main() {
   vec3 room = decodeRadiance(
     texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
   );
-  colour += inside * reflectance * room * uRoomExposure * uHasRoom;
+  colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
 
   colour = toneMapGlass(colour);
 
