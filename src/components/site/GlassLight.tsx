@@ -3,6 +3,7 @@ import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import {
   beginPass,
+  endPass,
   buildProgram,
   fullScreenTriangle,
   onSharedGlLoss,
@@ -393,7 +394,7 @@ export function GlassLight({
       scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
       const bw = Math.round(viewportWidth() * scale);
       const bh = Math.round(viewportHeight() * scale);
-      if (!beginPass(bw, bh)) return false;
+      if (!beginPass(bw, bh, "glass")) return false;
       quad.bind();
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -603,6 +604,7 @@ export function GlassLight({
         layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
       }
       drawn.clear();
+      endPass();
       return true;
     };
 

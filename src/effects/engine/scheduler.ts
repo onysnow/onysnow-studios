@@ -23,6 +23,8 @@
  * page does not move slower when it is busy: see `ease`.
  */
 
+import { markFrame, perfEnabled, record } from "./perf";
+
 export const ORDER = {
   /** The cursor follower: where the lamp is. */
   input: 0,
@@ -67,6 +69,8 @@ function request() {
 function tick(now: number) {
   frame = 0;
   running = true;
+  const timing = perfEnabled();
+  if (timing) markFrame(now);
   try {
     for (const task of tasks) {
       if (!task.awake) continue;
@@ -77,7 +81,13 @@ function tick(now: number) {
       ran[task.name] = (ran[task.name] ?? 0) + 1;
       let again = false;
       try {
-        again = task.step(now, dt);
+        if (timing) {
+          const t0 = performance.now();
+          again = task.step(now, dt);
+          record(`cpu:${task.name}`, performance.now() - t0);
+        } else {
+          again = task.step(now, dt);
+        }
       } catch (error) {
         // One task failing must not stop the others.
         console.error(`[scheduler] ${task.name}:`, error);

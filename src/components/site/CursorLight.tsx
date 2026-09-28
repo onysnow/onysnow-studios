@@ -5,6 +5,7 @@ import { camera } from "@/effects/camera/camera";
 import { sleepingLoop } from "@/lib/gl-loop";
 import {
   beginPass,
+  endPass,
   blitAll,
   buildProgram,
   clear2d,
@@ -183,7 +184,7 @@ export function CursorLight({
       }
 
       const { scale, w, h } = size();
-      const pass = beginPass(w, h);
+      const pass = beginPass(w, h, "lens");
       if (!pass) return false;
       quad.bind();
       gl.enable(gl.BLEND);
@@ -209,6 +210,7 @@ export function CursorLight({
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // Same step as the draw: the next pass clears the buffer.
       blitAll(pass.canvas, canvas);
+      endPass();
       return true;
     };
 

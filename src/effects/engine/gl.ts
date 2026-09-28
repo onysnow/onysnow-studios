@@ -29,6 +29,8 @@
  * Each one listens here, stops, and rebuilds when it comes back.
  */
 
+import { gpuBegin, gpuEnd, gpuTiming, setGpuMode } from "./perf";
+
 /** Texture units a pass may use; `beginPass` unbinds them all. */
 export const GL_TEXTURE_UNITS = 8;
 
@@ -67,6 +69,7 @@ export function sharedGl(): Shared | null {
     for (const cb of [...restoredListeners]) cb();
   });
   shared = { canvas, gl };
+  setGpuMode(gpuTiming(gl));
   return shared;
 }
 
@@ -84,10 +87,12 @@ export function onSharedGlLoss(lost: () => void, restored: () => void): () => vo
  * Start a pass: size the buffer (only if it changed -- resizing reallocates
  * it), put the context's switches back to their defaults, and clear.
  */
-export function beginPass(width: number, height: number): Shared | null {
+export function beginPass(width: number, height: number, name = "pass"): Shared | null {
   const s = sharedGl();
   if (!s) return null;
   const { canvas, gl } = s;
+  // Timed only when the performance readout is on (engine/perf).
+  gpuBegin(gl, name);
   const w = Math.max(1, Math.round(width));
   const h = Math.max(1, Math.round(height));
   if (canvas.width !== w) canvas.width = w;
@@ -105,6 +110,11 @@ export function beginPass(width: number, height: number): Shared | null {
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
   return s;
+}
+
+/** End a pass started with beginPass: closes its GPU timing when the readout is on. */
+export function endPass() {
+  if (shared) gpuEnd(shared.gl);
 }
 
 /** Compile and link a pass's program; null (and a console error) on failure. */

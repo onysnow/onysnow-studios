@@ -12,6 +12,7 @@ import {
 import { sleepingLoop } from "@/lib/gl-loop";
 import {
   beginPass,
+  endPass,
   blitAll,
   buildProgram,
   clear2d,
@@ -199,7 +200,7 @@ export function FloorLight() {
       scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
       const bw = Math.round((document.documentElement.clientWidth || window.innerWidth) * scale);
       const bh = Math.round(vh * scale);
-      if (!beginPass(bw, bh)) return false;
+      if (!beginPass(bw, bh, "floor")) return false;
       quad.bind();
       gl.uniform2f(uViewport, bw, bh);
       gl.uniform1f(uScale, scale);
@@ -285,6 +286,7 @@ export function FloorLight() {
       }
       // What is left is the floor outside the glass, onto the page.
       blitAll(buffer, canvas);
+      endPass();
       return true;
     };
 

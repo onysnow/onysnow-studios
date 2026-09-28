@@ -1,5 +1,6 @@
 import { reportCharge } from "@/effects/light/lights";
 import { addTask, ease, ORDER } from "@/effects/engine/scheduler";
+import { mountPerfPanel } from "@/effects/engine/perf";
 import { CameraIris } from "./CameraIris";
 import { t } from "@/lib/tuning";
 import { useEffect, useRef } from "react";
@@ -54,6 +55,8 @@ const LINK_RING = 56;
  * the cursor is exactly the kind of movement that setting is asking us to drop.
  */
 export function CustomCursor() {
+  // The performance readout, when asked for with ?perf=1 (effects/engine/perf).
+  useEffect(() => mountPerfPanel(), []);
   const ringRef = useRef<HTMLDivElement>(null);
   const chargeRef = useRef(0);
   const closedRef = useRef(0);
