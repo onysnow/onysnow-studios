@@ -141,3 +141,12 @@ Confirm:
 select key, label, kind from public.site_settings
 where key in ('glass_smudge_url', 'glass_scratch_url');
 ```
+
+---
+
+## Room reflection (HDR) upload slots
+
+**Migration:** `supabase/migrations/20260926130000_room_hdr_slots.sql`
+**Urgency:** none. Until it runs the glass reflects the shipped rooms in
+`public/rooms-hdr/`; it only adds six upload rows. Uploads must be made with
+`art-source/rooms/build_hdr_rooms.py` (log-encoded HDR), not ordinary photos.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { glassGeometry, lightState, onCharge } from "@/lib/edge-glow";
+import { glassGeometry, lightState, onCharge, viewState } from "@/lib/edge-glow";
 import {
   FLOOR_FRAGMENT_SHADER,
   FLOOR_VERTEX_SHADER,
@@ -9,6 +9,8 @@ import {
 import { sleepingLoop } from "@/lib/gl-loop";
 import { t } from "@/lib/tuning";
 import { FLOAT_GLASS } from "@/effects/materials/presets";
+import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
+import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
  * Light through the glass, and the glass's shadow, on the photographs.
@@ -90,6 +92,36 @@ export function FloorLight() {
     const uCaustics = U("uCaustics");
     const uLightSize = U("uLightSize");
     const uIor = U("uIor");
+    const uGrimeFloor = U("uGrimeFloor");
+    const uViewShift = U("uViewShift");
+    /*
+     * The pane's smudge and scratch layers, the same files the light on the
+     * glass reads, so the marks that catch the lamp are the marks that dim
+     * and streak the light under them. Fetched on the first charge.
+     */
+    const uHasSurface = U("uHasSurface");
+    const uSmudgeTile = U("uSmudgeTile");
+    const uScratchTile = U("uScratchTile");
+    gl.uniform1i(U("uSmudge"), 0);
+    gl.uniform1i(U("uScratch"), 1);
+    gl.uniform1f(uHasSurface, 0);
+    gl.uniform1f(uSmudgeTile, 1024);
+    gl.uniform1f(uScratchTile, 2048);
+    const layers = new Map<number, WebGLTexture>();
+    let layersRequested = false;
+    const requestLayers = () => {
+      if (layersRequested) return;
+      layersRequested = true;
+      const done =
+        (unit: number, tile: WebGLUniformLocation | null) => (tex: WebGLTexture, side: number) => {
+          layers.set(unit, tex);
+          gl.useProgram(program);
+          gl.uniform1f(tile, side);
+          if (layers.size === 2) gl.uniform1f(uHasSurface, 1);
+        };
+      loadSurfaceLayer(gl, 0, assetUrl(SITE_ASSETS.glassSmudge), done(0, uSmudgeTile));
+      loadSurfaceLayer(gl, 1, assetUrl(SITE_ASSETS.glassScratch), done(1, uScratchTile));
+    };
     const uView = U("uView");
     const uFrost = U("uFrost");
     const uPrism = U("uPrism");
@@ -206,6 +238,13 @@ export function FloorLight() {
       // Causes only: how sharp and bright each point is follows from these.
       gl.uniform1f(uLightSize, t("shadowSoftness"));
       gl.uniform1f(uIor, FLOAT_GLASS.ior);
+      gl.uniform1f(uGrimeFloor, t("grimeFloor"));
+      gl.uniform2f(uViewShift, viewState.shiftX, viewState.shiftY);
+      requestLayers();
+      for (const [unit, tex] of layers) {
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+      }
       gl.uniform1i(uCount, n);
       gl.uniform4fv(uRect, rects);
       gl.uniform1fv(uSeed, seeds);
@@ -280,6 +319,7 @@ export function FloorLight() {
       loop.stop();
       stopCharge();
       for (const layer of under.values()) layer.remove();
+      for (const tex of layers.values()) gl.deleteTexture(tex);
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
       window.removeEventListener("resize", resize);

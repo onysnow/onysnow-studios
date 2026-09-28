@@ -44,8 +44,19 @@ let pointerY = -9999;
 import { t } from "./tuning";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { castShadow } from "./cast-shadow";
+import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
+import { CAMERA_DISTANCE } from "@/effects/optics/environment";
+import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
 
 export const lightState = { x: -9999, y: -9999, charge: 0 };
+
+/**
+ * Where the viewer's eye is (relative to the viewport's middle) and how far
+ * that moves what is behind the glass. See effects/optics/viewpoint.ts. Read
+ * by the passes that draw on the photographs and in the reflection.
+ */
+export const viewState = { eyeX: 0, eyeY: 0, shiftX: 0, shiftY: 0 };
+let viewIdle = 0;
 
 /**
  * Called by whoever owns the shutter gesture.
@@ -131,6 +142,12 @@ export type GlassRect = {
   /** Intrinsic aspect, for the object-fit: cover mapping. */
   ia: number;
   /**
+   * The photograph BELOW the pane, which its bottom side face looks down at
+   * and reflects: the next scene's, for a band on a seam; otherwise the same
+   * one as `src`. Null when there is none.
+   */
+  below: { src: string; x: number; y: number; w: number; h: number; a: number } | null;
+  /**
    * Which surface this pane wears, 0-3. Assigned once and kept for the life of
    * the element, so a panel's grime does not change as the page scrolls — and
    * so two sections never show identical dirt.
@@ -196,19 +213,25 @@ function smallestVariant(img: HTMLImageElement): string {
   return best || img.currentSrc || img.src;
 }
 
-function backdropOf(el: HTMLElement): HTMLImageElement | null {
+function backdropOf(el: HTMLElement, side: "above" | "below" = "above"): HTMLImageElement | null {
   let scene = el.closest("[data-photo]");
   if (!scene) return null;
   /*
    * A seam band has no photograph of its own: the ones above and below carry
-   * on under it (see PhotoSection). The shader takes one image, so it gets
-   * the one above -- the edge the light most often rakes across -- falling
-   * back to the one below for a band with nothing over it.
+   * on under it (see PhotoSection). The face and the top side take the one
+   * above -- the edge the light most often rakes across -- falling back to the
+   * one below for a band with nothing over it; the bottom side takes the one
+   * below, which is what it faces.
    */
   if (scene.hasAttribute("data-seam")) {
     const up = scene.previousElementSibling;
     const down = scene.nextElementSibling;
-    scene = up?.hasAttribute("data-photo") ? up : down?.hasAttribute("data-photo") ? down : null;
+    const [first, second] = side === "above" ? [up, down] : [down, up];
+    scene = first?.hasAttribute("data-photo")
+      ? first
+      : second?.hasAttribute("data-photo")
+        ? second
+        : null;
     if (!scene) return null;
   }
   const images = scene.querySelectorAll<HTMLImageElement>("img[src]");
@@ -218,6 +241,19 @@ function backdropOf(el: HTMLElement): HTMLImageElement | null {
     if (img && !img.src.startsWith("data:") && img.naturalWidth > 0) return img;
   }
   return null;
+}
+
+function imageBox(img: HTMLImageElement | null): GlassRect["below"] {
+  if (!img) return null;
+  const b = img.getBoundingClientRect();
+  return {
+    src: smallestVariant(img),
+    x: b.left,
+    y: b.top,
+    w: b.width,
+    h: b.height,
+    a: img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+  };
 }
 
 const seeds = new WeakMap<HTMLElement, number>();
@@ -258,6 +294,64 @@ function cornerRadius(el: HTMLElement) {
  * than a point the effect pivots around — a pane should not visibly flip its
  * thickness as it crosses the centre line.
  */
+/*
+ * ---- The side faces ----
+ *
+ * Each pane's two side faces are siblings of it (see .glass-side), laid on
+ * its top and bottom edges here, in the pass that already measures it. Placed
+ * against the pane's offset parent -- which is theirs too -- so they scroll
+ * with it for free; re-placed whenever the pane is measured, so a layout
+ * shift above it cannot leave them behind. Written only when a value
+ * changes.
+ */
+type SideLayers = { top: HTMLElement; bottom: HTMLElement; fixed: boolean; last: string };
+const sideLayers = new WeakMap<HTMLElement, SideLayers>();
+
+export function registerPaneSides(el: HTMLElement, top: HTMLElement, bottom: HTMLElement) {
+  const fixed = getComputedStyle(el).position === "fixed";
+  top.style.position = bottom.style.position = fixed ? "fixed" : "absolute";
+  sideLayers.set(el, { top, bottom, fixed, last: "" });
+  placeSides(el, el.getBoundingClientRect());
+  return () => {
+    sideLayers.delete(el);
+  };
+}
+
+function placeSides(el: HTMLElement, r: DOMRect) {
+  const layers = sideLayers.get(el);
+  if (!layers) return;
+  const sides = paneSideHeights(el, r);
+  const x = layers.fixed ? r.left : el.offsetLeft;
+  const y = layers.fixed ? r.top : el.offsetTop;
+  const w = layers.fixed ? r.width : el.offsetWidth;
+  const h = layers.fixed ? r.height : el.offsetHeight;
+  const radius = cornerRadius(el);
+  const key = `${x},${y},${w},${h},${sides.top},${sides.bottom},${radius}`;
+  if (key === layers.last) return;
+  layers.last = key;
+  const set = (layer: HTMLElement, top: number, height: number, round: string) => {
+    layer.style.transform = `translate(${x}px, ${top}px)`;
+    layer.style.width = `${w}px`;
+    layer.style.height = `${height}px`;
+    layer.style.borderRadius = round;
+  };
+  set(layers.top, y, sides.top, `${radius}px ${radius}px 0 0`);
+  set(layers.bottom, y + h - sides.bottom, sides.bottom, `0 0 ${radius}px ${radius}px`);
+}
+
+/** How tall each of a pane's side faces shows right now, whole CSS pixels. */
+export function paneSideHeights(
+  el: HTMLElement,
+  r: DOMRect = el.getBoundingClientRect(),
+): { top: number; bottom: number } {
+  const tilt = paneTilt(r);
+  const bar = el.classList.contains("glass--bar");
+  return {
+    top: Math.round(sideHeight(sideOpen(tilt, true), bar)),
+    bottom: Math.round(sideHeight(sideOpen(tilt, false), bar)),
+  };
+}
+
 function paneTilt(r: DOMRect) {
   const middle = window.innerHeight / 2;
   const offset = (r.top + r.height / 2 - middle) / middle;
@@ -348,6 +442,7 @@ export function glassGeometry(now = performance.now()): readonly GlassRect[] {
       iw: b?.width ?? 1,
       ih: b?.height ?? 1,
       ia: img && img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+      below: imageBox(backdropOf(el, "below")),
       occ: occluders.get(el) ?? EMPTY_OCCLUDERS,
     });
   }
@@ -377,14 +472,8 @@ function measure(el: HTMLElement, rect?: DOMRect) {
   // for anything that wants to know the cursor is near.
   el.style.setProperty("--glow-on", (nearness * nearness).toFixed(3));
 
-  /*
-   * How far each side face of the pane is turned toward the viewer, 0 to 1.
-   * Never quite zero: the far side is still there, just foreshortened and seen
-   * through the glass, which is why it reads as subtler rather than absent.
-   */
-  const tilt = paneTilt(r);
-  el.style.setProperty("--pane-top", (0.18 + 0.82 * Math.max(0, tilt)).toFixed(3));
-  el.style.setProperty("--pane-bottom", (0.18 + 0.82 * Math.max(0, -tilt)).toFixed(3));
+  // Its side faces, laid on its edges at the heights the tilt gives them.
+  placeSides(el, r);
 
   /*
    * The corner radius, published for the stylesheet.
@@ -451,6 +540,46 @@ function apply() {
     "--reflect-y",
     (pointerY / (document.documentElement.clientHeight || window.innerHeight) - 0.5).toFixed(3),
   );
+  /*
+   * The viewpoint. The eye follows the pointer by the camera's follow
+   * fraction, and the photographs -- a gap behind the glass -- slide on it by
+   * gap / (distance + gap) of that, so what is behind the glass moves under
+   * the bevel and you can watch it bend.
+   */
+  const vw = document.documentElement.clientWidth || window.innerWidth;
+  const vh = document.documentElement.clientHeight || window.innerHeight;
+  const eye = eyeOffset(pointerX, pointerY, vw, vh, t("viewFollow"));
+  const shift = behindGlassShift(eye, t("floorGap"), CAMERA_DISTANCE * vw);
+  viewState.eyeX = eye.x;
+  viewState.eyeY = eye.y;
+  // Set from the first pass, before the pointer moves, so the photographs
+  // never visibly re-scale when the eye first moves.
+  const scale = oversizeFor(vw, vh, t("viewFollow"), t("floorGap"), CAMERA_DISTANCE * vw).toFixed(
+    4,
+  );
+  if (root.getPropertyValue("--view-scale") !== scale) root.setProperty("--view-scale", scale);
+  if (shift.x !== viewState.shiftX || shift.y !== viewState.shiftY) {
+    viewState.shiftX = shift.x;
+    viewState.shiftY = shift.y;
+    root.setProperty("--view-x", `${shift.x.toFixed(2)}px`);
+    root.setProperty("--view-y", `${shift.y.toFixed(2)}px`);
+    /*
+     * The liquid glass redraws a pane only when something behind it is known
+     * to be moving. Mark the shifted photographs as moving while they move,
+     * and idle a moment after, so the glass follows them live and stops
+     * spending frames the moment they settle.
+     */
+    for (const el of document.querySelectorAll<HTMLElement>("[data-view-shift]")) {
+      el.dataset["dynamic"] = "";
+    }
+    window.clearTimeout(viewIdle);
+    viewIdle = window.setTimeout(() => {
+      for (const el of document.querySelectorAll<HTMLElement>("[data-view-shift]")) {
+        el.dataset["dynamic"] = "idle";
+      }
+    }, 300);
+  }
+
   // Refreshes the shared cache as a side effect, so the shader's call this
   // frame is free.
   glassGeometry(now);
@@ -625,6 +754,9 @@ function litSurface(el: HTMLElement, rect?: DOMRect) {
    * these to catch the light on the edge that faces it (see .plastic).
    */
   el.style.setProperty("--lit-on", lit.toFixed(3));
+  // The lamp's bright core, whose mirror image a glossy surface shows: the
+  // emitter's radius less its glow, about two fifths of "Light size".
+  el.style.setProperty("--lamp-core", `${(t("shadowSoftness") * 0.35).toFixed(1)}px`);
   const awayX = centreX - pointerX;
   const awayY = centreY - pointerY;
   el.style.setProperty(

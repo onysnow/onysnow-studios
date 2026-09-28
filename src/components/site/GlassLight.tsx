@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge } from "@/lib/edge-glow";
-import { t } from "@/lib/tuning";
-import { FLOAT_GLASS } from "@/effects/materials/presets";
+import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge, viewState } from "@/lib/edge-glow";
+import { onTuningApplied, t } from "@/lib/tuning";
+import { FLOAT_GLASS, frontRoughness } from "@/effects/materials/presets";
+import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
+import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { LAMP_POWER_PER_GAIN, LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
@@ -123,6 +125,7 @@ export function GlassLight({
     const uEdgeWidth = U("uEdgeWidth");
     const uStraight = U("uStraight");
     const uTilt = U("uTilt");
+    const uBar = U("uBar");
     const uSeed = U("uSeed");
     const uImage = U("uImage");
     const uImageAspect = U("uImageAspect");
@@ -131,7 +134,10 @@ export function GlassLight({
     const uGrimeRake = U("uGrimeRake");
     const uGrimeSpecks = U("uGrimeSpecks");
     const uGrimeFloor = U("uGrimeFloor");
-    const uSideReach = U("uSideReach");
+    const uGap = U("uGap");
+    const uHasBelow = U("uHasBelow");
+    const uImageBelow = U("uImageBelow");
+    const uImageBelowAspect = U("uImageBelowAspect");
     const uRestEdge = U("uRestEdge");
     const uOccRect = U("uOccRect");
     const uOccSoft = U("uOccSoft");
@@ -151,7 +157,8 @@ export function GlassLight({
     const uFrost = U("uFrost");
     const uLightHeight = U("uLightHeight");
     const uLampPower = U("uLampPower");
-    const uArris = U("uArris");
+    const uFaceLamp = U("uFaceLamp");
+    const uLightSize = U("uLightSize");
 
     // The site's amber and teal in linear light — the shader works in linear
     // and only returns to display space at the very end.
@@ -161,10 +168,19 @@ export function GlassLight({
     gl.uniform1i(U("uSmudge"), 0);
     gl.uniform1i(U("uScratch"), 2);
     const uSmudgeTile = U("uSmudgeTile");
+    gl.uniform1i(U("uRoom"), 3);
+    const uHasRoom = U("uHasRoom");
+    const uRoomWidth = U("uRoomWidth");
+    const uCameraDistance = U("uCameraDistance");
+    const uFrontRoughness = U("uFrontRoughness");
+    const uRoomExposure = U("uRoomExposure");
+    const uEye = U("uEye");
+    gl.uniform1f(uHasRoom, 0);
     const uScratchTile = U("uScratchTile");
     gl.uniform1f(uSmudgeTile, 1024);
     gl.uniform1f(uScratchTile, 2048);
     gl.uniform1i(U("uBackdrop"), 1);
+    gl.uniform1i(U("uBackdropBelow"), 4);
     gl.uniform1f(uHasSurface, 0);
 
     gl.enable(gl.BLEND);
@@ -202,45 +218,85 @@ export function GlassLight({
      * onto the nearest power-of-two canvas first -- an admin upload must never
      * be able to turn the layer black.
      */
-    const loadLayer = (unit: number, src: string, tile: WebGLUniformLocation | null) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const side = Math.min(2048, 2 ** Math.round(Math.log2(Math.max(img.width, img.height, 1))));
-        let source: TexImageSource = img;
-        if (img.width !== side || img.height !== side) {
-          const c = document.createElement("canvas");
-          c.width = side;
-          c.height = side;
-          c.getContext("2d")?.drawImage(img, 0, 0, side, side);
-          source = c;
-        }
-        const tex = gl.createTexture();
-        if (!tex) return;
+    const loadLayer = (unit: number, src: string, tile: WebGLUniformLocation | null) =>
+      loadSurfaceLayer(gl, unit, src, (tex, side) => {
         layers.set(unit, tex);
-        gl.activeTexture(gl.TEXTURE0 + unit);
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-        /*
-         * No mipmaps: the map is shown at one texel per CSS pixel, so it is
-         * never minified, and a hex-tile's offset jumps between cells would
-         * pick the wrong mip level along every cell border.
-         */
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.useProgram(program);
         gl.uniform1f(tile, side);
         layersLoaded += 1;
         if (layersLoaded === 2) gl.uniform1f(uHasSurface, 1);
-      };
-      img.src = src;
-    };
+      });
     /*
      * The photographed surface layers, fetched lazily: the shader falls back
      * to no surface detail until both arrive, and they never load at all for
      * somebody who never winds the shutter.
      */
+    /*
+     * The room the face reflects, in real brightness (see
+     * effects/optics/environment.ts). Its mip levels are filtered here in
+     * LINEAR light and uploaded one by one: the browser's own would average
+     * the log-encoded values, and a lamp blurred over a rough face would come
+     * out far dimmer than its light really is.
+     */
+    let room: WebGLTexture | null = null;
+    let roomRequested = false;
+    const requestRoom = () => {
+      if (roomRequested) return;
+      roomRequested = true;
+      const src = document.documentElement.getAttribute("data-room-hdr");
+      if (!src) return;
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const w = 2048;
+        const h = 512;
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, w, h);
+        const rgba = ctx.getImageData(0, 0, w, h).data;
+        const rgb = new Uint8Array(w * h * 3);
+        for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+          rgb[j] = rgba[i]!;
+          rgb[j + 1] = rgba[i + 1]!;
+          rgb[j + 2] = rgba[i + 2]!;
+        }
+        const tex = gl.createTexture();
+        if (!tex) return;
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        roomMipChain(rgb, w, h).forEach((level, i) => {
+          gl.texImage2D(
+            gl.TEXTURE_2D,
+            i,
+            gl.RGB,
+            level.width,
+            level.height,
+            0,
+            gl.RGB,
+            gl.UNSIGNED_BYTE,
+            level.data,
+          );
+        });
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+        // Round the full 360 degrees across; clamped top and bottom.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        room = tex;
+        gl.useProgram(program);
+        gl.uniform1f(uRoomWidth, w);
+        gl.uniform1f(uHasRoom, 1);
+        restingDrawn = false;
+        wake();
+      };
+      img.src = src;
+    };
+
     const requestSurface = () => {
       if (surfaceRequested) return;
       surfaceRequested = true;
@@ -344,6 +400,8 @@ export function GlassLight({
      */
     let restingDrawn = false;
     let restingStamp = -1;
+    let restingEyeX = Number.NaN;
+    let restingEyeY = Number.NaN;
 
     const step = (now: number) => {
       const charge = chargeRef.current;
@@ -351,7 +409,14 @@ export function GlassLight({
 
       if (!lit) {
         // Already settled and nothing has moved: park without redrawing.
-        if (!wasLit && restingDrawn && geometryStamp() === restingStamp) return false;
+        /*
+         * Already settled and nothing has moved -- including the viewpoint,
+         * which moves the photographs under the glass and the room in it.
+         */
+        const eyeStill = viewState.eyeX === restingEyeX && viewState.eyeY === restingEyeY;
+        if (!wasLit && restingDrawn && eyeStill && geometryStamp() === restingStamp) return false;
+        restingEyeX = viewState.eyeX;
+        restingEyeY = viewState.eyeY;
         wasLit = false;
         restingDrawn = true;
         restingStamp = geometryStamp();
@@ -374,16 +439,33 @@ export function GlassLight({
       gl.uniform1f(uGrimeRake, t("grimeRake"));
       gl.uniform1f(uGrimeSpecks, t("grimeSpecks"));
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
-      gl.uniform1f(uSideReach, t("sideReach"));
+      gl.uniform1f(uGap, t("floorGap"));
       gl.uniform1f(uRestEdge, t("restEdge"));
       // The reflection on the face, from causes: the glass, its frost, and
       // the lamp's height above the glass and its brightness.
       gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1f(uFrost, t("glassBlur"));
       gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
-      // Off by request (it reads as a flashlight); see LAMP_REFLECTION_ENABLED.
-      gl.uniform1f(uLampPower, LAMP_REFLECTION_ENABLED ? LAMP_POWER_PER_GAIN * t("coreGain") : 0);
-      gl.uniform1f(uArris, t("arris"));
+      /*
+       * The lamp's power reaches the arris glints whatever the switch says;
+       * the switch turns off only the face's own image of the lamp, which is
+       * off by request (it reads as a flashlight; see LAMP_REFLECTION_ENABLED).
+       */
+      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
+      gl.uniform1f(uFaceLamp, LAMP_REFLECTION_ENABLED ? 1 : 0);
+      gl.uniform1f(uLightSize, t("shadowSoftness"));
+      requestRoom();
+      gl.uniform1f(
+        uCameraDistance,
+        CAMERA_DISTANCE * (document.documentElement.clientWidth || window.innerWidth),
+      );
+      gl.uniform1f(uFrontRoughness, frontRoughness(FLOAT_GLASS, t("glassBlur")));
+      gl.uniform1f(uRoomExposure, t("roomBrightness"));
+      gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
+      if (room) {
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, room);
+      }
       for (const [unit, tex] of layers) {
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -397,12 +479,22 @@ export function GlassLight({
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.uniform1f(uHasBackdrop, texture ? 1 : 0);
+        // The photograph the bottom side face looks down at.
+        const below = pane.below ? requestBackdrop(pane.below.src) : null;
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, below);
+        gl.uniform1f(uHasBelow, below ? 1 : 0);
+        if (pane.below) {
+          gl.uniform4f(uImageBelow, pane.below.x, pane.below.y, pane.below.w, pane.below.h);
+          gl.uniform1f(uImageBelowAspect, pane.below.a);
+        }
 
         gl.uniform4f(uRect, pane.x, pane.y, pane.w, pane.h);
         gl.uniform1f(uRadius, pane.r);
         gl.uniform1f(uEdgeWidth, pane.e);
         gl.uniform1f(uStraight, pane.w >= viewportWidth() - 1 ? 1 : 0);
         gl.uniform1f(uTilt, pane.t);
+        gl.uniform1f(uBar, pane.el.classList.contains("glass--bar") ? 1 : 0);
         gl.uniform1f(uSeed, pane.s);
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
         gl.uniform1f(uImageAspect, pane.ia);
@@ -540,6 +632,12 @@ export function GlassLight({
      * pointer still, and not one photon on the glass until it moved.
      */
     const stopCharge = onCharge(wake);
+    // A changed setting (the room's brightness, the frost) changes the resting
+    // frame too, so it has to be redrawn, not just the lit one.
+    const stopTuning = onTuningApplied(() => {
+      restingDrawn = false;
+      wake();
+    });
     loop.wake();
 
     const onLost = (event: Event) => {
@@ -554,6 +652,7 @@ export function GlassLight({
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
+      stopTuning();
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
       window.removeEventListener("resize", resize);
@@ -562,6 +661,7 @@ export function GlassLight({
       gl.deleteShader(fs);
       gl.deleteBuffer(buffer);
       for (const tex of layers.values()) gl.deleteTexture(tex);
+      if (room) gl.deleteTexture(room);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
     };
   }, [chargeRef, positionRef, generation]);

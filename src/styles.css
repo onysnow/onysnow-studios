@@ -507,13 +507,6 @@
    * ===================================================================== */
 
   .glass {
-    /*
-     * The pane's thickness, in one place. The side face, the refraction strip
-     * and the shader's own side band all read from here, so an edge is one
-     * depth rather than three.
-     */
-    --side-top: calc(3px + 13px * var(--pane-top, 0.18));
-    --side-bottom: calc(3px + 13px * var(--pane-bottom, 0.18));
     position: relative;
     background-color: oklch(0.145 0.011 55 / 30%);
     /*
@@ -557,59 +550,25 @@
      * inset shadows and the edge read as a painted bevel; the light is what
      * should reveal the edge, so this only has to hint that there is one.
      */
-    box-shadow:
-      inset 0 1px 0 oklch(1 0 0 / 0.1),
-      inset 0 -1px 0 oklch(1 0 0 / 0.04),
-      0 18px 40px -30px oklch(0 0 0 / 0.9);
+    /*
+     * No inset hairlines: the rim is the arris, reflected and lit by the
+     * glass light pass (effects/optics/edge-side.ts), not a drawn line.
+     */
+    box-shadow: 0 18px 40px -30px oklch(0 0 0 / 0.9);
   }
 
   .glass--bar {
     background-color: oklch(0.145 0.011 55 / 26%);
     backdrop-filter: blur(28px) saturate(150%) var(--glass-bevel,);
-    box-shadow:
-      inset 0 1px 0 oklch(1 0 0 / 0.08),
-      inset 0 -1px 0 oklch(1 0 0 / 0.03);
+    box-shadow: none;
   }
 
   /*
-   * The near arris.
-   *
-   * The corner where the face of the pane meets its side. Glass totally
-   * internally reflects along an edge, which is why the rim of a cut plate is
-   * the brightest part of it even in flat light — so this is always present,
-   * unlike everything the cursor lights. The shader blows it out; this is only
-   * the hairline it blows out FROM.
+   * The near arris is not drawn. It was a 1 px ring round every pane, and in
+   * the reference photographs nothing on an edge is a line: the eased corner
+   * is a soft band of reflected room and lamp, which the glass light pass
+   * works out (effects/optics/edge-side.ts).
    */
-  .glass::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    pointer-events: none;
-    z-index: 3;
-    /*
-     * Faint. This is the hairline a pane has in flat light, and it is meant to
-     * be something the shader blows out — not a white stroke drawn around the
-     * panel, which is what it reads as the moment it is strong enough to see
-     * on its own.
-     */
-    background: linear-gradient(
-      to bottom,
-      oklch(0.97 0.03 170 / 0.5) 0%,
-      oklch(1 0 0 / 0.04) 3%,
-      oklch(1 0 0 / 0.025) 97%,
-      oklch(0.97 0.03 170 / 0.4) 100%
-    );
-    -webkit-mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    mask-composite: exclude;
-  }
 
   /* =====================================================================
    * Thickness.
@@ -621,177 +580,76 @@
    * other, so the thickness opens on one edge as it closes on the other, and
    * that differential is what reads as depth rather than as a drawn border.
    *
-   * `--pane-top` and `--pane-bottom` are written by lib/edge-glow.ts. Neither
-   * ever reaches zero: the far side is still there, foreshortened and seen
-   * through the glass, which is why it reads as subtler rather than absent.
+   * How tall each shows is sideOpen() and sideHeight() in effects/optics/
+   * edge-side.ts, one model for these layers and the shader. Neither ever
+   * closes: the far side is still there, foreshortened and seen through the
+   * glass, which is why it reads as subtler rather than absent.
    * ===================================================================== */
-  .glass > .glass__side {
+  /*
+   * The side faces (<Glass> renders them as siblings AFTER the pane, and
+   * lib/edge-glow places them on its top and bottom edges).
+   *
+   * The window through a side: what is behind the pane, absorbed over the
+   * long path of glass the light crossed -- saturated teal by the near arris,
+   * where the light was guided along the pane, paler aqua further in.
+   * Multiply, because absorption only ever subtracts; the colours are
+   * sideTransmittance() in effects/optics/edge-side.ts, set on the element by
+   * <Glass>, so this and the shader cannot disagree.
+   *
+   * Siblings, not children: a pane is a stacking context, and nothing inside
+   * one can blend with what is behind it -- a multiply child of a pane painted
+   * its colour flat, over a CSS pane and a liquid one alike. A sibling blends
+   * with the pane's finished image, backdrop and all.
+   *
+   * What a side REFLECTS -- the photograph facing it, mirrored and squeezed,
+   * changing along its length -- the glint where the lamp is, and the echo
+   * just inside, are the glass light pass's.
+   */
+  .glass-side {
     position: absolute;
     left: 0;
-    right: 0;
-    pointer-events: none;
-    z-index: -2;
-    /* Clipped to the pane's own corners; see --pane-radius in lib/edge-glow. */
-    clip-path: inset(0 round var(--pane-radius, 0px));
+    top: 0;
+    width: 0;
+    height: 0;
     /*
-     * What the side of a clear sheet looks like.
-     *
-     * Photographs of cut float glass (stacked sheets, shelf edges) all show
-     * the same thing, and it is not a rainbow: the side is GREEN. The iron in
-     * soda-lime glass is invisible through the thin face and obvious through
-     * the long path of the edge, so the side reads a deep teal, darkest at the
-     * far corner where the path is longest. It is polished, so it also
-     * carries reflections -- pale streaks running parallel to the edge where
-     * the room is caught inside the thickness and bounced along it.
-     *
-     * Layers, near arris to far arris:
-     *   a pale internal-reflection streak, a narrower second one, the teal
-     *   body deepening with depth. Then, past the far arris, the same edge
-     *   seen again THROUGH the face -- the thin green echo line every
-     *   photograph of a clear sheet shows just inside its rim.
+     * Above the pane it belongs to. Liquid glass lifts a pane to z-index 1
+     * (its render is opaque), and a side left at auto sat underneath it,
+     * absorbing nothing anyone could see.
      */
-    --side: var(--side-top);
-    --echo: 5px;
-    height: calc(var(--side) + var(--echo) + 2px);
-    background-image:
-      linear-gradient(
-        var(--side-dir, to bottom),
-        transparent 0,
-        transparent calc(var(--side) + var(--echo)),
-        oklch(0.8 0.08 172 / 0.5) calc(var(--side) + var(--echo)),
-        oklch(0.8 0.08 172 / 0.5) calc(var(--side) + var(--echo) + 1px),
-        transparent calc(var(--side) + var(--echo) + 1px)
-      ),
-      linear-gradient(
-        var(--side-dir, to bottom),
-        oklch(0.9 0.05 168 / 0.1) 0,
-        oklch(0.95 0.06 168 / 0.72) calc(var(--side) * 0.22),
-        oklch(0.6 0.12 174 / 0.55) calc(var(--side) * 0.38),
-        oklch(0.86 0.09 170 / 0.55) calc(var(--side) * 0.58),
-        oklch(0.52 0.11 178 / 0.68) calc(var(--side) * 0.72),
-        oklch(0.45 0.1 182 / 0.8) var(--side),
-        transparent var(--side)
-      );
+    z-index: 2;
+    pointer-events: none;
     background-repeat: no-repeat;
+    mix-blend-mode: multiply;
   }
 
   /*
-   * The far arris: where the side meets the back surface, seen through the
-   * glass. A crisp pale-green line, dimmer than the near one.
+   * The far arris: the eased corner between the side and the back face turns
+   * the light passing it away from you, so it is a thin DARKER line, soft
+   * over the corner's radius (farArrisLoss) and centred on the corner.
    */
-  .glass > .glass__side::after {
+  .glass-side::after {
     content: "";
     position: absolute;
     left: 0;
     right: 0;
-    height: 1px;
-    background: oklch(0.92 0.06 170 / 0.55);
+    height: calc(2 * var(--far-arris-span, 4.5px));
+    background-image: var(--far-arris);
+    mix-blend-mode: multiply;
   }
 
-  .glass > .glass__side--top {
-    top: 0;
-    --side: var(--side-top);
-    --side-dir: to bottom;
-    /*
-     * Always there: the side of a sheet does not appear only when a lamp is
-     * on it. Tilt (which side faces you) sets how much of it you see; the
-     * charge only brightens it a little.
-     */
-    opacity: calc((0.65 + 0.35 * var(--pane-top, 0.18)) * (0.8 + 0.2 * var(--wind, 0)));
+  .glass-side--top::after {
+    bottom: calc(-1 * var(--far-arris-span, 4.5px));
   }
 
-  .glass > .glass__side--top::after {
-    top: var(--side-top);
-  }
-
-  .glass > .glass__side--bottom {
-    bottom: 0;
-    --side: var(--side-bottom);
-    --side-dir: to top;
-    opacity: calc((0.65 + 0.35 * var(--pane-bottom, 0.18)) * (0.8 + 0.2 * var(--wind, 0)));
-  }
-
-  .glass > .glass__side--bottom::after {
-    bottom: var(--side-bottom);
-  }
-
-  .glass--bar {
-    --side-top: calc(2px + 7px * var(--pane-top, 0.18));
-    --side-bottom: calc(2px + 7px * var(--pane-bottom, 0.18));
+  .glass-side--bottom::after {
+    top: calc(-1 * var(--far-arris-span, 4.5px));
   }
 
   /*
-   * The environment reflection — the room the viewer is standing in.
-   *
-   * ONE room, at ONE scale, across the whole page. `background-attachment:
-   * fixed` anchors the image to the viewport rather than to each pane, so a
-   * pane is a WINDOW onto the reflection instead of a container that the
-   * reflection is squashed to fit.
-   *
-   * That distinction was the bug. With a percentage `background-size` every
-   * pane showed the entire room scaled to its own box, so a 64px bar and a
-   * 600px band displayed the same room at wildly different magnifications,
-   * and two panes above one another showed the same furniture twice at two
-   * sizes. Real reflections do not do that: the room is one size and each
-   * piece of glass shows whatever part of it happens to line up.
-   *
-   * Sized in `vw` for the same reason — a single scale every pane shares.
-   * Large, because a pane is a small mirror held close: you see a fragment of
-   * the room magnified, not the whole room shrunk.
-   *
-   * Nearly invisible at rest and revealed by the light. Glass does hold a
-   * reflection in the dark, but faintly; what makes you notice it is
-   * something bright moving across it, which is exactly what the cursor is.
+   * The room reflection is no longer a CSS layer: the glass light pass draws
+   * it from the room's real brightness and the glass's Fresnel, in both glass
+   * modes (see effects/optics/environment.ts).
    */
-  .glass > .glass__reflection {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: -4;
-    mix-blend-mode: screen;
-    background-image: var(--room, url("/rooms/metro.jpg"));
-    background-repeat: no-repeat;
-    /*
-     * Sized against the viewport's HEIGHT, so every pane shares one
-     * magnification whatever shape it is. 420vh is about ten times the
-     * source's own width, so what any pane shows is a fragment -- a couple
-     * of lights and an edge of something -- rather than a legible picture of
-     * a room, which is all you ever actually catch in a dark window.
-     *
-     * The defocus is baked into the images, not applied here. `filter:
-     * blur()` on this layer would blur its own clipped boundary as well and
-     * ring every pane with a soft halo. It is also a DISC convolution rather
-     * than a gaussian, done in linear light before tonemapping, which is why
-     * the lamps come out as hard-rimmed bokeh circles instead of smudges.
-     */
-    background-size: auto var(--tune-reflect-zoom, 210vh);
-    /*
-     * Anchored in viewport space, then pulled back by the pane's own offset.
-     * That is what makes the reflection continuous: two bands stacked above
-     * one another show adjacent parts of one room rather than two copies of
-     * all of it. `background-attachment: fixed` looks like the built-in way to
-     * do this and is not — `.glass` carries a backdrop-filter, and a filtered
-     * element is the containing block for its descendants, so a fixed
-     * background resolves against the pane again and the squashing comes
-     * straight back. --pane-x/--pane-y are measured, so they cannot drift.
-     *
-     * The parallax is added once, identically for every pane: one viewer, one
-     * reflection moving.
-     */
-    background-position: calc(
-        -330vh - var(--pane-x, 0px) + var(--reflect-x, 0) * -1 * var(--tune-reflect-x, 1100px)
-      )
-      calc(-72vh - var(--pane-y, 0px) + var(--reflect-y, 0) * -1 * var(--tune-reflect-y, 750px));
-    /*
-     * 420vh was too far: the rooms are mostly black with a few lights in them,
-     * so at ten times magnification most panes landed on an empty patch and
-     * showed nothing at all. 210vh still reads as a fragment but guarantees
-     * something is in frame. Base opacity up too -- 0.05 was not "subtle", it
-     * was invisible, which is removing the feature rather than restraining it.
-     */
-    opacity: calc(var(--tune-reflect-base, 0.16) + var(--tune-reflect-lit, 0.5) * var(--wind, 0));
-  }
 
   /*
    * No per-pane flip any more. It existed to stop five panes showing the same
@@ -1077,26 +935,6 @@
  * twice. The shader has its own tint and opacity for this -- and with the
  * blur gone, those two finally have something visible to act on.
  */
-/*
- * The CSS ROOM REFLECTION comes off a liquid pane too.
- *
- * Same mistake as the backdrop-filter, found the same way. `.glass__reflection`
- * screen-blends an HDRI of a room onto the pane. Behind a tint and a 26px blur
- * that reads as a faint gleam, which is what it is for. With both of those
- * gone it is the loudest thing on the pane: an unrefracted, undistorted
- * photograph of a room sitting on top of the refracted page, drowning it --
- * reported as "what's with the background image, it's not even being
- * refracted", and it is also why the photograph underneath stopped reading as
- * continuing under the glass.
- *
- * It cannot be refracted, either: liquidglass samples what is BEHIND the pane,
- * and this layer is ON it. Two reflection systems stacked, and the wrong one
- * wins. The shader has its own fresnel and specular, and with the blur gone
- * those finally have something to act on.
- */
-.glass[data-liquid] > .glass__reflection {
-  display: none;
-}
 
 .glass[data-liquid] {
   /*
@@ -1181,38 +1019,45 @@ span:has(> .photo-surface) {
 /*
  * Plastic: the orange buttons.
  *
- * A thin sheet of coloured plastic resting on the glass. Three things follow
- * from what it is, and none of them is a setting:
+ * A thin sheet of glossy, translucent orange plastic resting on the glass.
+ * What the lamp does to it follows from what it is:
  *
- *   GLOSS. Plastic reflects like glass does -- about 4% straight on (acrylic
- *   n = 1.49), rising at grazing -- so the lamp catches the edge that faces
- *   it, brightest when the lamp is lit and near. Its face would also show a
- *   sharp image of the lamp; that is the face reflection, which is switched
- *   off site-wide (LAMP_REFLECTION_ENABLED) and stays off here too.
+ *   LIGHT THROUGH IT. Coloured plastic is a filter, like a stage-lighting gel:
+ *   the pigment absorbs blue and green and passes red and orange. With the
+ *   lamp over it, the light that gets through lands on whatever is behind it
+ *   as ORANGE LIGHT -- the button's shape, projected. Not a shadow. It lands
+ *   thrown away from the lamp by the same cast vector every surface on the
+ *   pane uses (half a print's stand-off), as soft as the lamp's size makes
+ *   it, and brighter the closer and more lit the lamp is. Straight overhead
+ *   the patch is right behind the button and shows as an orange glow round
+ *   its edges; off to one side it slides out from under it. The two faces are
+ *   flat and parallel, so the light is coloured but never bent: no band, no
+ *   seam, no caustic.
  *
- *   LIGHT THROUGH IT. The pigment absorbs blue and green and passes red and
- *   orange, so the plastic glows orange where the lamp is behind and near it.
- *   Its two faces are flat and parallel: a ray comes out at the angle it went
- *   in, shifted sideways by a fraction of the sheet's thickness. So nothing
- *   bends -- no band, no seam, no caustic -- the light is only coloured.
+ *   SPECULAR. The face is glossy: it mirrors the lamp's bright core as a small,
+ *   sharp highlight exactly where the lamp is over it (the camera looks
+ *   straight on, so that is where the reflection geometry puts it), about 4%
+ *   of the core's brightness -- which, the core being many times white, is a
+ *   near-white spot. The rounded edge facing the lamp catches it too, as a
+ *   thin rim that keeps its highlight from wider angles than the flat face.
  *
- *   ITS SHADOW. Not black: the light that gets through is orange, so the
- *   patch it throws on the glass is dimmer AND orange-tinted, offset away
- *   from the lamp and as soft as the lamp's size makes it (the same cast
- *   vector every surface on the pane uses). It stands off the glass less
- *   than a mounted print, hence half the throw.
- *
- * This replaces a generic drop shadow (shadow-lg), which pointed the same way
- * whatever the lamp was doing.
+ * This replaces a generic drop shadow (shadow-lg), and then an orange shadow,
+ * which was the wrong idea: a filter passes coloured light, it does not cast
+ * a coloured darkness.
  */
 .plastic {
   position: relative;
-  isolation: isolate;
-  box-shadow: calc(var(--cast-x, 0px) * 0.5) calc(var(--cast-y, 0px) * 0.5)
-    calc(var(--cast-blur, 0px) * 0.5 + 1px) rgb(150 62 6 / calc(var(--cast-alpha, 0) * 0.9));
+  background-image: radial-gradient(
+    circle calc(var(--lamp-core, 16px) * 1.6) at var(--lit-x, -999px) var(--lit-y, -999px),
+    rgb(255 255 255 / calc(0.85 * var(--lit-on, 0))) 0%,
+    rgb(255 255 255 / calc(0.55 * var(--lit-on, 0))) 28%,
+    rgb(255 245 230 / calc(0.14 * var(--lit-on, 0))) 60%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
 }
 
-/* The lamp's light through the plastic: an orange glow, nothing bent. */
+/* The orange light the lamp throws through it, onto what is behind. */
 .plastic::before {
   content: "";
   position: absolute;
@@ -1220,16 +1065,14 @@ span:has(> .photo-surface) {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(
-    circle 160px at var(--lit-x, 50%) var(--lit-y, 50%),
-    oklch(0.86 0.13 62 / 0.9) 0%,
-    oklch(0.78 0.16 55 / 0.35) 45%,
-    transparent 100%
-  );
-  opacity: calc(var(--lit-on, 0) * var(--lit-near, 0));
+  background: oklch(0.8 0.17 58);
+  transform: translate(calc(var(--cast-x, 0px) * 0.5), calc(var(--cast-y, 0px) * 0.5));
+  filter: blur(calc(var(--cast-blur, 0px) * 0.5 + 3px));
+  mix-blend-mode: plus-lighter;
+  opacity: calc(var(--cast-alpha, 0) * 1.4);
 }
 
-/* The edge facing the lamp catching it: a thin rim, brightest toward the lamp. */
+/* The rounded edge facing the lamp catching it: a thin rim, brightest toward the lamp. */
 .plastic::after {
   content: "";
   position: absolute;
@@ -1239,9 +1082,9 @@ span:has(> .photo-surface) {
   pointer-events: none;
   background: linear-gradient(
     var(--lit-angle, 180deg),
-    rgb(255 255 255 / calc(0.12 + 0.6 * var(--lit-on, 0) * var(--lit-near, 0))) 0%,
-    rgb(255 255 255 / 0.05) 45%,
-    transparent 70%
+    rgb(255 255 255 / calc(0.14 + 0.75 * var(--lit-on, 0) * var(--lit-near, 0))) 0%,
+    rgb(255 255 255 / 0.06) 40%,
+    transparent 65%
   );
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
@@ -2099,23 +1942,12 @@ span:has(> .photo-surface) {
    * This is why a real pane has bright edges even in flat light, and none of
    * the other layers modelled it.
    */
+  /*
+   * No painted Fresnel wash. Reflectance toward the rim is the glass light
+   * pass's, from the material's index and where the eye is.
+   */
   .glass > .glass__fresnel {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: -4;
-    background: linear-gradient(
-      to bottom,
-      oklch(1 0 0 / 0.16) 0%,
-      oklch(1 0 0 / 0.03) 9%,
-      transparent 22%,
-      transparent 78%,
-      oklch(1 0 0 / 0.02) 91%,
-      oklch(1 0 0 / 0.1) 100%
-    );
-    mix-blend-mode: plus-lighter;
-    opacity: 0.85;
+    display: none;
   }
 }
 
@@ -2909,4 +2741,44 @@ html.is-winding * {
   height: 100%;
   z-index: -2;
   pointer-events: none;
+}
+
+/*
+ * OFF, by request: the two remaining "flashlight" layers.
+ *
+ * .photo-surface paints a specular pool of the lamp onto every photograph
+ * (a 52px disc at --lit-x/--lit-y) and .transmitted paints a pool of light
+ * behind each pane. Both are fixed-size radial gradients following the
+ * pointer -- results with settings of their own, not light worked out from
+ * the lamp -- and on the parallaxed hero the paper disc lands beside the
+ * cursor rather than under it, because the photograph is transformed and the
+ * gradient is placed in its untransformed box. Reported as the flashlight
+ * that would not go away.
+ *
+ * The code stays (the rules above). The light the lamp throws onto the
+ * photographs is the floor-light pass (FloorLight), which is physical.
+ */
+.photo-surface,
+.transmitted {
+  display: none;
+}
+
+/*
+ * The photographs behind the glass, moved by the viewpoint.
+ *
+ * They sit a gap behind the pane, so as the eye moves (with the pointer, see
+ * effects/optics/viewpoint.ts) they slide under it by gap / (distance + gap)
+ * of the eye's movement -- through the bevel, where you watch it bend them.
+ * Oversized by exactly as much as the largest slide these settings can make
+ * (--view-scale, from oversizeFor), so it never shows an edge. Things
+ * resting ON the glass are in its plane and do not move.
+ */
+.view-shift {
+  transform: translate(var(--view-x, 0px), var(--view-y, 0px)) scale(var(--view-scale, 1));
+}
+
+@media (prefers-reduced-motion: reduce), (max-width: 767px) {
+  .view-shift {
+    transform: none;
+  }
 }

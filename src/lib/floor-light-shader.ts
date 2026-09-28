@@ -1,6 +1,8 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "@/effects/optics/transmission.glsl";
+import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
+import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
 /**
  * The light that goes THROUGH the glass and lands on the photographs behind.
@@ -89,6 +91,14 @@ uniform float uEdge[${MAX_FLOOR_PANES}];
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
 ${TRANSMISSION_GLSL}
+${SURFACE_LAYERS_GLSL}
+/* How dirty the pane is: the same clarity threshold the marks on the face use. */
+uniform float uGrimeFloor;
+/* How far the viewpoint moves the photograph behind the glass, CSS px. */
+uniform vec2 uViewShift;
+#define SMUDGE_EXTINCTION ${SMUDGE_EXTINCTION.toFixed(3)}
+#define SMUDGE_SCATTER ${SMUDGE_SCATTER.toFixed(3)}
+#define SCRATCH_FOCUS ${SCRATCH_FOCUS.toFixed(3)}
 
 /*
  * The bottom of the pool, worked out rather than drawn.
@@ -245,6 +255,23 @@ vec4 floorAt(vec2 P, float lit) {
               * (1.0 - smoothstep(from + width - soft, from + width + soft, vec3(x)));
     through += band * pool * passes * 0.92 / width;
 
+    /*
+     * The marks on the glass, where this ray crossed it (Q), so their pattern
+     * is thrown across the photograph and slides as the lamp moves -- the
+     * same marks, in the same place, that catch the lamp on the face.
+     *
+     *   under a smudge  the direct light, band and edge included, loses about
+     *                   half its strength, and some of it comes back as a
+     *                   soft glow: dimmer and softer, the greasy-window halo.
+     *   under a scratch a thin line brighter than its surroundings: the
+     *                   groove is a tiny cylinder lens gathering the light.
+     */
+    vec3 marks = surfaceAt(Q - r.xy, uSeed[i]) * uHasSurface;
+    float smear = smoothstep(uGrimeFloor * 0.85, uGrimeFloor * 0.85 + 0.5, marks.g);
+    float groove = smoothstep(uGrimeFloor, uGrimeFloor + 0.42, marks.r);
+    through *= 1.0 - SMUDGE_EXTINCTION * smear;
+    through += vec3(pool * passes * (SMUDGE_SCATTER * smear + SCRATCH_FOCUS * groove));
+
     // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {
       through *= causticAt(Q - r.xy, uSeed[i], penFloor);
@@ -287,7 +314,13 @@ void main() {
     break;
   }
 
-  vec4 f = floorAt(look, lit);
+  /*
+   * The photograph is a gap behind the glass, so from where the viewer's eye
+   * is it appears moved by uViewShift (see effects/optics/viewpoint.ts). The
+   * lamp and the glass are where they are; the point of the photograph seen
+   * here is back along that shift.
+   */
+  vec4 f = floorAt(look - uViewShift, lit);
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = toneMapFilm(f.rgb);
   float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);

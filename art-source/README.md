@@ -46,3 +46,14 @@ Below that there is nothing to recognise; above it the room fogs the panes.
 `penguin_museum` was cut on this test — its daylight windows read as a room in
 daytime — as were `comfy_cafe`, `warm_restaurant_night` and `moon_lab`, which
 kept 0.02–0.17% and went essentially black.
+
+## The HDR rooms the glass reflects (`public/rooms-hdr/`)
+
+Since 2026-09-26 the glass shader reflects the room from these, not from the
+graded JPEGs above (those still feed the photographs' paper sheen). Built by
+`art-source/rooms/build_hdr_rooms.py` from the same Poly Haven originals at 2k
+(CC0) plus `env-station-night.exr`: same crop, resampled in linear light to
+2048 x 512, exposed to a median of 0.18 (photographic middle grey -- a room lit
+like the screen), and log-encoded so the lamps keep their real brightness
+through an 8-bit JPEG. See the script's header and `src/effects/optics/
+environment.ts`.

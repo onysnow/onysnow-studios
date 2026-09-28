@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { roomScript } from "@/lib/rooms";
-import { ROOM_KEYS } from "@/lib/site-assets";
+import { ROOM_KEYS, ROOM_HDR_KEYS } from "@/lib/site-assets";
 import { safeHref } from "@/lib/safe-content";
 import {
   HeadContent,
@@ -97,6 +97,7 @@ function RootShell({ children }: { children: ReactNode }) {
    */
   const { data: settings } = useQuery(settingsQuery);
   const roomSources = ROOM_KEYS.map((key) => safeHref(settings?.[key] ?? ""));
+  const roomHdrSources = ROOM_HDR_KEYS.map((key) => safeHref(settings?.[key] ?? ""));
 
   return (
     /*
@@ -124,7 +125,7 @@ function RootShell({ children }: { children: ReactNode }) {
           synchronous on purpose, which means it writes a style attribute onto
           <html> before React hydrates — see the note above.
         */}
-        <script dangerouslySetInnerHTML={{ __html: roomScript(roomSources) }} />
+        <script dangerouslySetInnerHTML={{ __html: roomScript(roomSources, roomHdrSources) }} />
       </head>
       <body>
         {children}

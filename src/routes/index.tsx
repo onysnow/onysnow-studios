@@ -117,13 +117,20 @@ function HomePage() {
             className="absolute inset-0 max-md:!translate-y-0"
             {...(reduced ? {} : { style: { y: heroY } })}
           >
-            <Img
-              image={hero}
-              eager
-              className="h-[calc(105svh+var(--seam-below,0px))] w-full"
-              imgClassName="scale-105 object-[72%_center] sm:object-center"
-              sizes="100vw"
-            />
+            {/* Behind the glass: slides under it as the viewpoint moves. */}
+            <div
+              data-view-shift=""
+              suppressHydrationWarning
+              className="view-shift absolute inset-0"
+            >
+              <Img
+                image={hero}
+                eager
+                className="h-[calc(105svh+var(--seam-below,0px))] w-full"
+                imgClassName="scale-105 object-[72%_center] sm:object-center"
+                sizes="100vw"
+              />
+            </div>
           </motion.div>
           {/*
             Fades to 60%, not to solid background. The photograph now runs on
