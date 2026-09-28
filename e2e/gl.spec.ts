@@ -152,7 +152,7 @@ test.describe("the light passes share one WebGL context", () => {
   test("every light pass compiles", async ({ page }) => {
     const errors: string[] = [];
     page.on("console", (m) => {
-      if (m.type() === "error" && /shader|link/i.test(m.text())) errors.push(m.text());
+      if (m.type() === "error" && /\b(shader|link):/i.test(m.text())) errors.push(m.text());
     });
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");

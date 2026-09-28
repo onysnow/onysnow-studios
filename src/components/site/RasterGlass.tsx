@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { adoptLayer } from "@/effects/engine/compositor";
 import { addTask, ORDER } from "@/effects/engine/scheduler";
-import { applyGlassConfig } from "@/lib/tuning";
+import { applyGlassConfig } from "@/effects/adapters/liquid-config";
 import { onPane } from "@/lib/glass-panes";
 
 /**

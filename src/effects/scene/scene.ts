@@ -36,6 +36,12 @@ import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
 import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
 import { commitLights, cursorLamp, movePointer, onLightChange } from "@/effects/light/lights";
 import { addTask, ORDER } from "@/effects/engine/scheduler";
+import {
+  type SurfaceLight,
+  writeLightView,
+  writePaneLight,
+  writeSurfaceLight,
+} from "@/effects/adapters/css-vars";
 
 /* ======================================================================
  * What the passes read
@@ -454,14 +460,6 @@ function nearness(r: DOMRect, x: number, y: number, reach: number) {
   return near * near;
 }
 
-type SurfaceLight = {
-  near: number;
-  cast: { x: number; y: number; blur: number };
-  alpha: number;
-  lit: number;
-  angle: number;
-};
-
 /**
  * How the lamp falls on a surface resting on the glass, and the shadow it
  * throws: offset = gap * lateral / height, penumbra = lightRadius * gap /
@@ -537,9 +535,8 @@ function writeView(reading: SceneReading) {
   const vh = reading.viewportHeight;
   const x = cursorLamp.x;
   const y = cursorLamp.y;
-  // Where the viewer is, as a fraction of the viewport from its centre.
-  root.setProperty("--reflect-x", (x / vw - 0.5).toFixed(3));
-  root.setProperty("--reflect-y", (y / vh - 0.5).toFixed(3));
+  // Where the lamp is, for the CSS layers (effects/adapters/css-vars).
+  writeLightView(root, cursorLamp, vw, vh);
   /*
    * The viewpoint. The eye follows the pointer by the camera's follow
    * fraction, and the photographs -- a gap behind the glass -- slide on it by
@@ -610,37 +607,21 @@ function writeSides(p: PaneReading, viewportHeight: number) {
 function writePane(p: PaneReading, viewportHeight: number) {
   const el = p.el;
   const r = p.rect;
-  const x = cursorLamp.x;
-  const y = cursorLamp.y;
-  // How near the cursor is, eased; the lighting itself is the shader's job.
-  el.style.setProperty("--glow-on", nearness(r, x, y, REACH).toFixed(3));
+  // How near the lamp is, eased, and where it stands: the CSS adapter's to write.
+  writePaneLight(el, r, cursorLamp, nearness(r, cursorLamp.x, cursorLamp.y, REACH));
   writeSides(p, viewportHeight);
   // The corner radius, for layers the utility classes cannot tell it to.
   el.style.setProperty("--pane-radius", `${p.radius}px`);
   // Where this pane sits in the viewport, for anything positioned in viewport space.
   el.style.setProperty("--pane-x", `${Math.round(r.left)}px`);
   el.style.setProperty("--pane-y", `${Math.round(r.top)}px`);
-  // Where the light is standing, in the pane's own coordinates.
-  el.style.setProperty("--lit-x", `${Math.round(x - r.left)}px`);
-  el.style.setProperty("--lit-y", `${Math.round(y - r.top)}px`);
 }
 
 function writeSurface(s: SurfaceReading, light: SurfaceLight) {
   const el = s.el;
   const r = s.rect;
   if (r.width === 0 || r.height === 0) return;
-  el.style.setProperty("--lit-x", `${Math.round(cursorLamp.x - r.left)}px`);
-  el.style.setProperty("--lit-y", `${Math.round(cursorLamp.y - r.top)}px`);
-  el.style.setProperty("--lit-near", light.near.toFixed(3));
-  el.style.setProperty("--cast-x", `${light.cast.x.toFixed(1)}px`);
-  el.style.setProperty("--cast-y", `${light.cast.y.toFixed(1)}px`);
-  el.style.setProperty("--cast-blur", `${light.cast.blur.toFixed(1)}px`);
-  el.style.setProperty("--cast-alpha", light.alpha.toFixed(3));
-  el.style.setProperty("--lit-on", light.lit.toFixed(3));
-  // The lamp's bright core, whose mirror image a glossy surface shows: the
-  // emitter's radius less its glow, about two fifths of "Light size".
-  el.style.setProperty("--lamp-core", `${(cursorLamp.radius * 0.35).toFixed(1)}px`);
-  el.style.setProperty("--lit-angle", `${light.angle.toFixed(1)}deg`);
+  writeSurfaceLight(el, r, cursorLamp, light);
   // For the room reflection, offset for the surface's height above the glass.
   el.style.setProperty("--surface-x", `${Math.round(r.left)}px`);
   el.style.setProperty("--surface-y", `${Math.round(r.top)}px`);

@@ -15,9 +15,7 @@
  */
 
 import { getGlassMode, onGlassMode } from "./glass-mode";
-import { DEFAULT_EDGE_WIDTH, readEdgeWidth } from "@/effects/optics/edge-profile";
-// A cycle (lights reads the knobs through t), safe: neither uses the other while loading.
-import { roomLight } from "@/effects/light/lights";
+import { DEFAULT_EDGE_WIDTH } from "@/effects/optics/edge-profile";
 
 export type Knob = {
   label: string;
@@ -995,45 +993,23 @@ export function applyTuning() {
   for (const fn of appliedListeners) fn();
 }
 
-/**
- * Mirrors the shader knobs onto each pane's `data-config`.
- *
- * The rasterised glass keeps its configuration in that attribute and watches
- * it with a MutationObserver, so writing it is enough -- the next frame picks
- * the new values up. No re-init, which matters: an init runs a full
- * html-to-image capture of everything behind the pane, and doing that on every
- * drag of a slider would make the panel unusable.
- *
- * Only ever writes when the value would actually change, because the observer
- * fires on any attribute write and an identical one is pure work.
+/*
+ * The liquid glass's `data-config` is written by its adapter
+ * (effects/adapters/liquid-config), which reads the pane's causes and the
+ * lights as well as these knobs. It registers itself here, so applying the
+ * knobs reaches it without this module depending on the lights.
  */
+let glassConfigWriter: () => void = () => {};
+
+export function setGlassConfigWriter(fn: () => void) {
+  // Registered only: writing now, while the page may still be hydrating,
+  // would put attributes on the panes React did not render.
+  glassConfigWriter = fn;
+}
+
+/** Write every pane's liquid glass config (through the adapter, once it is loaded). */
 export function applyGlassConfig() {
-  if (typeof document === "undefined") return;
-  for (const pane of Array.from(document.querySelectorAll<HTMLElement>(".glass"))) {
-    const isBar = pane.classList.contains("glass--bar");
-    const config: Record<string, number> = {};
-    for (const knob of Object.values(tuning)) {
-      if (!knob.glassKey) continue;
-      if (knob.glassScope === "band" && isBar) continue;
-      if (knob.glassScope === "bar" && !isBar) continue;
-      config[knob.glassKey] = knob.value;
-    }
-    /*
-     * The liquid glass library lights its own gloss and rim from a fixed light
-     * of its own (lightX/lightY), not from the lamp. The only light that
-     * exists besides the lamp is the room's, so that is what those two are
-     * scaled by: with the room dark they go out, and the lamp's own light on
-     * the glass is the GlassLight pass above it.
-     */
-    const roomOn = Math.min(roomLight.gain, 1);
-    for (const key of ["specular", "edgeHighlight"]) {
-      if (key in config) config[key] = config[key]! * roomOn;
-    }
-    // The edge is the pane's own: its attribute wins over the knob.
-    config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);
-    const next = JSON.stringify(config);
-    if (pane.dataset["config"] !== next) pane.dataset["config"] = next;
-  }
+  glassConfigWriter();
 }
 
 /** The current settings, as something you can paste back to be baked in. */
