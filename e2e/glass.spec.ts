@@ -62,12 +62,17 @@ test.describe("glass", () => {
     const before = await sum("canvas.glass__under");
     // No pointer movement from here on: this is the hold trigger on its own.
     await page.mouse.down();
-    await page.waitForTimeout(2800);
-    const under = await sum("canvas.glass__under");
+    /*
+     * The pool of light and shadow lands under the pane. Waited for, not
+     * sampled at a fixed moment: the software renderer the suite runs on
+     * takes seconds to draw a pass's first lit frame, and a fixed 2.8 s
+     * sample caught it charging (lit 0.44, pass live) with nothing drawn yet
+     * about half the time -- on every version, not a fault in the light.
+     */
+    await expect
+      .poll(() => sum("canvas.glass__under"), { timeout: 15_000, intervals: [500] })
+      .toBeGreaterThan(before + 1000);
     await page.mouse.up();
-
-    // The pool of light and shadow lands under the pane...
-    expect(under).toBeGreaterThan(before + 1000);
     // ...and it is drawn beneath the glass's text, not over it.
     const z = await band.evaluate(
       (el) => getComputedStyle(el.querySelector("canvas.glass__under")!).zIndex,
@@ -125,6 +130,9 @@ test.describe("glass", () => {
     await page.mouse.down();
     await expect(floor).toHaveAttribute("data-dynamic", "", { timeout: 5000 });
     await page.mouse.up();
+    // A hold past 2.6 s arms the shutter, which stays lit until a click spends
+    // it (lib/shutter-charge); a slow runner can get there. Spend it.
+    if ((await page.locator("[data-armed]").count()) > 0) await page.mouse.click(400, 400);
     // Released, the charge bleeds away and the layer parks again.
     await expect(floor).toHaveAttribute("data-dynamic", "idle", { timeout: 15_000 });
   });
@@ -178,6 +186,26 @@ test.describe("the pane's edge", () => {
   });
 });
 
+test.describe("every pane is one described piece of glass", () => {
+  // Optics plan step 2: <Pane> declares what each pane is, on the element
+  // every pass measures. Today's panes are all frosted float.
+  test("each pane carries its material, and its side faces follow it", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const panes = await page.$$eval("header.glass, main .glass:not(.glass-toggle)", (els) =>
+      els.map((el) => ({
+        material: el.getAttribute("data-material"),
+        sides: el.nextElementSibling?.classList.contains("glass-side--top") ?? false,
+      })),
+    );
+    expect(panes.length).toBeGreaterThan(2);
+    for (const pane of panes) {
+      expect(pane.material).toBe("frosted-float");
+      expect(pane.sides).toBe(true);
+    }
+  });
+});
+
 test.describe("plastic on the glass", () => {
   test.skip(
     ({ browserName }) => browserName !== "chromium",
@@ -221,4 +249,29 @@ test.describe("plastic on the glass", () => {
     expect(fromLeft.x).toBeGreaterThan(0.5);
     expect((await litFrom(box.x + box.width + 80, box.y + box.height / 2)).x).toBeLessThan(-0.5);
   });
+});
+
+/*
+ * No light but the lamp (2026-09-28): with the room's lights off, the liquid
+ * glass library's own fixed light -- its gloss and rim highlight -- is out.
+ */
+test("the liquid glass's own highlights follow the room's light, which is off", async ({
+  page,
+}) => {
+  await page.goto("/?glass=raster");
+  await page.waitForLoadState("networkidle");
+  const read = () =>
+    page
+      .locator("[data-seam] .glass")
+      .first()
+      .evaluate(
+        (el) => JSON.parse((el as HTMLElement).dataset["config"] ?? "{}") as Record<string, number>,
+      );
+  // Written once the tuning is applied.
+  await expect
+    .poll(async () => (await read())["specular"], { timeout: 20_000 })
+    .not.toBeUndefined();
+  const config = await read();
+  expect(config["specular"]).toBe(0);
+  expect(config["edgeHighlight"]).toBe(0);
 });

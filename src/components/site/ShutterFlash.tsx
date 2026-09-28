@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { SHUTTER_EVENT } from "@/lib/shutter-event";
-import { flashPanels, onCharge } from "@/lib/edge-glow";
+import { flashPanes } from "@/effects/scene/scene";
+import { onCharge } from "@/effects/light/lights";
 import { discardBurn, prepareBurn, takeBurn, type PageBurn } from "@/lib/page-burn";
 
 /**
@@ -84,7 +85,7 @@ export function ShutterFlash() {
       }
 
       // The glass reacts to the same light.
-      flashPanels();
+      flashPanes();
     };
 
     /*

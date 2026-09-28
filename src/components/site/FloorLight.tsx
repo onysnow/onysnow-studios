@@ -1,14 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 
-import { glassGeometry, lightState, onCharge, viewState } from "@/lib/edge-glow";
+import { glassGeometry, viewState } from "@/effects/scene/scene";
+import { lampPower, lightState, onCharge, pointLights } from "@/effects/light/lights";
+import { lightLocations, uploadLights } from "@/effects/light/light-uniforms";
+import { paneCanvas } from "@/effects/engine/compositor";
 import {
   FLOOR_FRAGMENT_SHADER,
   FLOOR_VERTEX_SHADER,
   MAX_FLOOR_PANES,
 } from "@/lib/floor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
+import {
+  beginPass,
+  endPass,
+  blitAll,
+  buildProgram,
+  clear2d,
+  fullScreenTriangle,
+  onSharedGlLoss,
+  sharedGl,
+} from "@/effects/engine/gl";
 import { t } from "@/lib/tuning";
-import { FLOAT_GLASS } from "@/effects/materials/presets";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
@@ -42,56 +54,27 @@ export function FloorLight() {
     const canvas = ref.current;
     if (!canvas) return;
 
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      premultipliedAlpha: true,
-      antialias: false,
-    });
-    if (!gl) return;
-
-    const compile = (type: number, source: string) => {
-      const shader = gl.createShader(type)!;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("floor light shader:", gl.getShaderInfoLog(shader));
-        return null;
-      }
-      return shader;
-    };
-    const vs = compile(gl.VERTEX_SHADER, FLOOR_VERTEX_SHADER);
-    const fs = compile(gl.FRAGMENT_SHADER, FLOOR_FRAGMENT_SHADER);
-    if (!vs || !fs) return;
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("floor light link:", gl.getProgramInfoLog(program));
-      return;
-    }
+    // The shared context (effects/engine/gl); this canvas is a 2D copy of it.
+    const shared = sharedGl();
+    if (!shared) return;
+    const { gl } = shared;
+    const buffer = shared.canvas;
+    const program = buildProgram(gl, FLOOR_VERTEX_SHADER, FLOOR_FRAGMENT_SHADER, "floor light");
+    if (!program) return;
     gl.useProgram(program);
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const aPosition = gl.getAttribLocation(program, "aPosition");
-    gl.enableVertexAttribArray(aPosition);
-    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+    const quad = fullScreenTriangle(gl, program);
 
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
     const uScale = U("uScale");
-    const uLight = U("uLight");
-    const uCharge = U("uCharge");
+    const lightLoc = lightLocations(gl, program);
     const uGap = U("uGap");
-    const uHeight = U("uHeight");
+    const uIor = U("uIor");
+    const uFrost = U("uFrost");
     const uEdge = U("uEdge");
     const uLightGain = U("uLightGain");
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
-    const uLightSize = U("uLightSize");
-    const uIor = U("uIor");
     const uGrimeFloor = U("uGrimeFloor");
     const uViewShift = U("uViewShift");
     /*
@@ -123,30 +106,20 @@ export function FloorLight() {
       loadSurfaceLayer(gl, 1, assetUrl(SITE_ASSETS.glassScratch), done(1, uScratchTile));
     };
     const uView = U("uView");
-    const uFrost = U("uFrost");
     const uPrism = U("uPrism");
     const uCount = U("uCount");
     const uRect = U("uRect");
     const uSeed = U("uSeed");
 
     let scale = 1;
-    const resize = () => {
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
-      const w = Math.round((document.documentElement.clientWidth || window.innerWidth) * scale);
-      const h = Math.round((document.documentElement.clientHeight || window.innerHeight) * scale);
-      if (canvas.width === w && canvas.height === h) return;
-      canvas.width = w;
-      canvas.height = h;
-      gl.viewport(0, 0, w, h);
-      gl.uniform2f(uViewport, w, h);
-      gl.uniform1f(uScale, scale);
-    };
-    resize();
-    window.addEventListener("resize", resize);
 
     const rects = new Float32Array(MAX_FLOOR_PANES * 4);
     const seeds = new Float32Array(MAX_FLOOR_PANES);
     const edges = new Float32Array(MAX_FLOOR_PANES);
+    // Each pane's own causes (effects/materials/pane-causes): gap, index, frost.
+    const gaps = new Float32Array(MAX_FLOOR_PANES);
+    const iors = new Float32Array(MAX_FLOOR_PANES);
+    const frosts = new Float32Array(MAX_FLOOR_PANES);
     let wasLit = false;
 
     /*
@@ -164,10 +137,8 @@ export function FloorLight() {
     const underFor = (el: HTMLElement, w: number, h: number) => {
       let layer = under.get(el);
       if (!layer || !layer.isConnected) {
-        layer = document.createElement("canvas");
-        layer.className = "glass__under";
-        layer.setAttribute("aria-hidden", "true");
-        el.insertBefore(layer, el.firstChild);
+        // Its slot in the pane's stack is the compositor's (effects/engine/compositor).
+        layer = paneCanvas(el, "pane:under");
         under.set(el, layer);
       }
       if (layer.width !== w || layer.height !== h) {
@@ -197,8 +168,7 @@ export function FloorLight() {
       const charge = lightState.charge;
       if (charge <= 0.002) {
         if (wasLit) {
-          gl.clearColor(0, 0, 0, 0);
-          gl.clear(gl.COLOR_BUFFER_BIT);
+          clear2d(canvas);
           clearUnder();
           wasLit = false;
           setLive(false);
@@ -220,24 +190,40 @@ export function FloorLight() {
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
         edges[n] = pane.e;
+        gaps[n] = pane.causes.gap;
+        iors[n] = pane.causes.material.ior;
+        frosts[n] = pane.causes.material.frost;
         drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
         n += 1;
       }
 
-      gl.useProgram(program);
-      gl.uniform2f(uLight, lightState.x, lightState.y);
-      gl.uniform1f(uCharge, charge);
-      gl.uniform1f(uGap, t("floorGap"));
-      gl.uniform1f(uHeight, t("shadowHeight"));
+      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      const bw = Math.round((document.documentElement.clientWidth || window.innerWidth) * scale);
+      const bh = Math.round(vh * scale);
+      if (!beginPass(bw, bh, "floor")) return false;
+      quad.bind();
+      gl.uniform2f(uViewport, bw, bh);
+      gl.uniform1f(uScale, scale);
+      // Every point light, at its height above the photographs.
+      uploadLights(
+        gl,
+        lightLoc,
+        pointLights().map((l) => ({
+          x: l.x,
+          y: l.y,
+          height: l.height,
+          colour: l.colour,
+          power: lampPower(l),
+          radius: l.radius,
+          charge: l.charge,
+        })),
+      );
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
-      gl.uniform1f(uFrost, t("glassBlur"));
       gl.uniform1f(uPrism, t("floorPrism"));
       // Causes only: how sharp and bright each point is follows from these.
-      gl.uniform1f(uLightSize, t("shadowSoftness"));
-      gl.uniform1f(uIor, FLOAT_GLASS.ior);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform2f(uViewShift, viewState.shiftX, viewState.shiftY);
       requestLayers();
@@ -249,8 +235,9 @@ export function FloorLight() {
       gl.uniform4fv(uRect, rects);
       gl.uniform1fv(uSeed, seeds);
       gl.uniform1fv(uEdge, edges);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform1fv(uGap, gaps);
+      gl.uniform1fv(uIor, iors);
+      gl.uniform1fv(uFrost, frosts);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Same task as the draw, so the buffer is still there to copy from.
@@ -267,10 +254,10 @@ export function FloorLight() {
         const sy = pane.y * scale;
         const cx = Math.max(0, Math.floor(sx));
         const cy = Math.max(0, Math.floor(sy));
-        const cw = Math.min(canvas.width, Math.ceil(sx + w)) - cx;
-        const ch = Math.min(canvas.height, Math.ceil(sy + h)) - cy;
+        const cw = Math.min(buffer.width, Math.ceil(sx + w)) - cx;
+        const ch = Math.min(buffer.height, Math.ceil(sy + h)) - cy;
         if (cw <= 0 || ch <= 0) continue;
-        ctx.drawImage(canvas, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
+        ctx.drawImage(buffer, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
       }
 
       /*
@@ -288,32 +275,32 @@ export function FloorLight() {
         gl.enable(gl.SCISSOR_TEST);
         for (const pane of drawnPanes) {
           const x0 = Math.max(0, Math.floor(pane.x * scale));
-          const x1 = Math.min(canvas.width, Math.ceil((pane.x + pane.w) * scale));
-          const y1 = Math.min(canvas.height, Math.ceil((pane.y + pane.h) * scale));
+          const x1 = Math.min(buffer.width, Math.ceil((pane.x + pane.w) * scale));
+          const y1 = Math.min(buffer.height, Math.ceil((pane.y + pane.h) * scale));
           const y0 = Math.max(0, Math.floor(pane.y * scale));
           if (x1 <= x0 || y1 <= y0) continue;
-          gl.scissor(x0, canvas.height - y1, x1 - x0, y1 - y0);
+          gl.scissor(x0, buffer.height - y1, x1 - x0, y1 - y0);
           gl.clear(gl.COLOR_BUFFER_BIT);
         }
         gl.disable(gl.SCISSOR_TEST);
       }
+      // What is left is the floor outside the glass, onto the page.
+      blitAll(buffer, canvas);
+      endPass();
       return true;
     };
 
-    const loop = sleepingLoop(step);
+    const loop = sleepingLoop(step, "floor-light");
     const wake = () => loop.wake();
     window.addEventListener("pointermove", wake, { passive: true });
     window.addEventListener("scroll", wake, { passive: true });
     const stopCharge = onCharge(wake);
     loop.wake();
 
-    const onLost = (event: Event) => {
-      event.preventDefault();
-      loop.stop();
-    };
-    const onRestored = () => setGeneration((g) => g + 1);
-    canvas.addEventListener("webglcontextlost", onLost);
-    canvas.addEventListener("webglcontextrestored", onRestored);
+    const stopLoss = onSharedGlLoss(
+      () => loop.stop(),
+      () => setGeneration((g) => g + 1),
+    );
 
     return () => {
       loop.stop();
@@ -322,9 +309,9 @@ export function FloorLight() {
       for (const tex of layers.values()) gl.deleteTexture(tex);
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
-      window.removeEventListener("resize", resize);
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestored);
+      stopLoss();
+      gl.deleteProgram(program);
+      quad.delete();
     };
   }, [generation]);
 

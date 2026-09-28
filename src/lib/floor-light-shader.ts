@@ -2,6 +2,7 @@ import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "@/effects/optics/transmission.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
+import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
 /**
@@ -16,7 +17,7 @@ import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/opti
  *
  * THE GEOMETRY
  *
- * The pane stands `uGap` pixels off the photograph; the light is `uHeight`
+ * Each pane stands `uGap[i]` pixels off the photograph; the light is `uHeight`
  * above it. For a point P on the photograph, the ray back to the light
  * crosses the glass at Q = P + (L - P) * gap / height. Whatever the glass is
  * doing at Q decides what reaches P:
@@ -38,7 +39,8 @@ import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/opti
  *
  * WHAT IT DRAWS
  *
- * Premultiplied light and shadow in one pass: white where light is added,
+ * Light and shadow in one pass (worked out premultiplied, written straight
+ * for the shared context): white where light is added,
  * black where it is taken away. The canvas sits above the photographs and
  * below the panes, so in CSS mode the pane's own frost and bevel then bend
  * this too, exactly as they bend the photograph under it.
@@ -58,11 +60,7 @@ precision highp float;
 
 uniform vec2 uViewport;
 uniform float uScale;
-uniform vec2 uLight;
-uniform float uCharge;
 
-uniform float uGap;
-uniform float uHeight;
 uniform float uLightGain;
 uniform float uShadowGain;
 uniform float uCaustics;
@@ -72,10 +70,9 @@ uniform float uCaustics;
  * setting -- both are worked out per point from where the lamp is (see
  * effects/optics/transmission.ts).
  */
-uniform float uLightSize;
-uniform float uIor;
+// The lights: position, height above the photographs, colour, size, charge.
+${LIGHTS_GLSL}
 uniform float uView;
-uniform float uFrost;
 uniform float uPrism;
 
 uniform int uCount;
@@ -87,6 +84,14 @@ uniform float uSeed[${MAX_FLOOR_PANES}];
  * 90) so the shadow's rim sat somewhere other than the edge that cast it.
  */
 uniform float uEdge[${MAX_FLOOR_PANES}];
+/*
+ * What each pane is (effects/materials/pane-causes; optics plan step 7): how
+ * far it stands off the photograph, and its glass's index and frost. A pane
+ * declares these; nothing here is a setting.
+ */
+uniform float uGap[${MAX_FLOOR_PANES}];
+uniform float uIor[${MAX_FLOOR_PANES}];
+uniform float uFrost[${MAX_FLOOR_PANES}];
 
 ${EDGE_PROFILE_GLSL}
 ${REFLECTION_GLSL}
@@ -119,7 +124,7 @@ uniform vec2 uViewShift;
  * small: the determinant is floored by the penumbra, and a big soft lamp
  * gives soft cells while a tight one gives wire-thin lines.
  */
-float causticAt(vec2 x, float seed, float pen) {
+float causticAt(vec2 x, float seed, float pen, float gap) {
   x += vec2(seed * 613.0, seed * 389.0);
   float hxx = 0.0;
   float hyy = 0.0;
@@ -136,7 +141,7 @@ float causticAt(vec2 x, float seed, float pen) {
     hyy += curve * d.y * d.y;
     hxy += curve * d.x * d.y;
   }
-  float s = 3.5 * uCaustics * clamp(uGap / 70.0, 0.3, 2.5);
+  float s = 3.5 * uCaustics * clamp(gap / 70.0, 0.3, 2.5);
   float det = (1.0 + s * hxx) * (1.0 + s * hyy) - s * s * hxy * hxy;
   float soft = clamp(pen / 240.0, 0.03, 0.4);
   return clamp(1.0 / max(abs(det), soft), 0.2, 7.0);
@@ -170,7 +175,7 @@ float causticAt(vec2 x, float seed, float pen) {
  *
  * Returns the light added (per colour) in rgb and the light taken away in a.
  */
-vec4 floorAt(vec2 P, float lit) {
+vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
   /*
    * How the lamp's light arrives HERE: from how far off to the side it is and
    * how high. Everything below that changes across the floor -- brightness,
@@ -178,26 +183,29 @@ vec4 floorAt(vec2 P, float lit) {
    * -- follows from these two numbers, so it all grades smoothly away from
    * the lamp rather than being one look everywhere.
    */
-  vec2 toP = P - uLight;
+  vec2 toP = P - lightXY;
   float rLamp = length(toP);
-  float cosT = cosIncidence(rLamp, uHeight);
-  float pool = irradianceFalloff(rLamp, uHeight) * lit;
+  float cosT = cosIncidence(rLamp, height);
+  float pool = irradianceFalloff(rLamp, height) * lit;
   if (pool < 0.002) return vec4(0.0);
   vec2 radial = rLamp > 0.5 ? toP / rLamp : vec2(0.0, 1.0);
-  // Relative to straight on, so the glass passes today's light under the lamp
-  // and less at a slant, where more of it is reflected away.
-  float passes = transmittance(cosT, uIor) / transmittance(1.0, uIor);
-  float frostBlur = frostSpread(uFrost, uIor, uGap, cosT);
   float slant = slantSpread(cosT);
-  // A distance on the floor, as a distance on the glass plane.
-  float toGlass = max(uHeight - uGap, 1.0) / max(uHeight, 1.0);
-
-  // Back along the ray to the glass plane.
-  vec2 Q = P + (uLight - P) * (uGap / max(uHeight, uGap + 1.0));
 
   vec3 light = vec3(pool);
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
+    // This pane's own causes: how high it stands, what glass it is.
+    float gap = uGap[i];
+    float ior = uIor[i];
+    float frost = uFrost[i];
+    // Relative to straight on, so the glass passes today's light under the
+    // lamp and less at a slant, where more of it is reflected away.
+    float passes = transmittance(cosT, ior) / transmittance(1.0, ior);
+    float frostBlur = frostSpread(frost, ior, gap, cosT);
+    // A distance on the floor, as a distance on the glass plane.
+    float toGlass = max(height - gap, 1.0) / max(height, 1.0);
+    // Back along the ray to this pane's plane.
+    vec2 Q = P + (lightXY - P) * (gap / max(height, gap + 1.0));
     vec4 r = uRect[i];
     vec2 hs = r.zw * 0.5;
     vec2 q = Q - (r.xy + hs);
@@ -213,7 +221,7 @@ vec4 floorAt(vec2 P, float lit) {
     vec2 edgeNormal = straight || abs(q.y) - hs.y > abs(q.x) - hs.x
       ? vec2(0.0, 1.0) : vec2(1.0, 0.0);
     float cosPhi = abs(dot(radial, edgeNormal));
-    float penFloor = penumbraAcross(uLightSize, uGap, uHeight, cosT, cosPhi);
+    float penFloor = penumbraAcross(radius, gap, height, cosT, cosPhi);
     float softFloor = sqrt(penFloor * penFloor + frostBlur * frostBlur);
     float pen = max(softFloor * toGlass, 1.0);
     if (d <= -pen) continue;
@@ -228,7 +236,7 @@ vec4 floorAt(vec2 P, float lit) {
      * the beam (see frostBlur above) and sends a little back.
      */
     float onFace = smoothstep(1.0 - soft, 1.0 + soft, x);
-    vec3 through = vec3(pool * passes * (1.0 - 0.18 * uFrost) * onFace);
+    vec3 through = vec3(pool * passes * (1.0 - 0.18 * frost) * onFace);
 
     /*
      * The bevel: a clear, polished strip, angled. Every ray through it is
@@ -274,7 +282,7 @@ vec4 floorAt(vec2 P, float lit) {
 
     // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {
-      through *= causticAt(Q - r.xy, uSeed[i], penFloor);
+      through *= causticAt(Q - r.xy, uSeed[i], penFloor, gap);
     }
 
     light = mix(vec3(pool), through, inGlass);
@@ -288,7 +296,6 @@ vec4 floorAt(vec2 P, float lit) {
 
 void main() {
   vec2 P = vec2(gl_FragCoord.x, uViewport.y - gl_FragCoord.y) / uScale;
-  float lit = uCharge * uCharge * (3.0 - 2.0 * uCharge);
 
   /*
    * Seen THROUGH a pane, the floor is bent by it on the way back to the eye.
@@ -320,11 +327,33 @@ void main() {
    * lamp and the glass are where they are; the point of the photograph seen
    * here is back along that shift.
    */
-  vec4 f = floorAt(look - uViewShift, lit);
+  /*
+   * Every light in the list, each worked out on its own and summed: light
+   * adds. With one light this is that light's floor exactly.
+   */
+  vec4 f = vec4(0.0);
+  for (int i = 0; i < MAX_LIGHTS; i++) {
+    if (i >= uLightCount) break;
+    float c = uLightCharge[i];
+    float lit = c * c * (3.0 - 2.0 * c);
+    f += floorAt(look - uViewShift, lit, uLightPos[i].xy, uLightPos[i].z, uLightRadius[i]);
+  }
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = toneMapFilm(f.rgb);
   float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
-  vec3 warm = vec3(1.0, 0.94, 0.84);
-  gl_FragColor = vec4(warm * add, a);
+  /*
+   * The light's colour, applied after the film curve as it always was. With
+   * one light that is exact; when lights of different colours overlap
+   * (backlight, emitters) the colour moves inside the sum, before the curve.
+   */
+  vec3 warm = uLightColour[0];
+  /*
+   * Worked out premultiplied (the light is at most the coverage, so this is
+   * a valid premultiplied colour), written straight: the shared context
+   * (effects/engine/gl) is not premultiplied, and the browser multiplies it
+   * back in when it copies the buffer out.
+   */
+  vec3 light = warm * add;
+  gl_FragColor = vec4(a > 0.0 ? light / a : vec3(0.0), a);
 }
 `;

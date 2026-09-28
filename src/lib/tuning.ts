@@ -15,7 +15,7 @@
  */
 
 import { getGlassMode, onGlassMode } from "./glass-mode";
-import { DEFAULT_EDGE_WIDTH, readEdgeWidth } from "@/effects/optics/edge-profile";
+import { DEFAULT_EDGE_WIDTH } from "@/effects/optics/edge-profile";
 
 export type Knob = {
   label: string;
@@ -87,11 +87,14 @@ export const tuning: Record<string, Knob> = {
   roomBrightness: {
     label: "Room brightness",
     group: "Environment",
-    value: 1,
+    // The room's own lights are OFF: the lamp is the only source (Ony, 2026-09-28:
+    // "shouldn't be reflecting light when the light from my cursor is off and no
+    // other sources of light exist"). Raise it to light the room.
+    value: 0,
     min: 0,
     max: 8,
     step: 0.1,
-    hint: "How brightly lit the room reflected in the glass is. The glass's own reflectance (from its material) and the room's lamps do the rest; there is no reflection strength setting.",
+    hint: "How brightly the room's own lights light it; 0 is a dark room, with the lamp the only source. The glass's own reflectance (from its material) and the room's lamps do the rest; there is no reflection strength setting.",
   },
   // ---- The camera ----
   //
@@ -744,6 +747,68 @@ export const tuning: Record<string, Knob> = {
 };
 
 /*
+ * ---- Results, not causes (optics plan step 7) ----
+ *
+ * The rule Ony set: he sets CAUSES -- the light, the glass, its shape and
+ * surface, where it sits, the room, the camera -- and physics sets the
+ * EFFECTS. A knob for an effect lets the picture disagree with itself: turn
+ * up "Fresnel" and the face reflects more than its own index of refraction
+ * says it can, while every other term still uses the index.
+ *
+ * These are those knobs. Each is now a model constant, calibrated and
+ * locked: it keeps the value it has here, it has no control in /lab, and a
+ * value saved in the browser from before cannot override it. The values are
+ * the ones the site already looked right with, so nothing on the page moves.
+ * Where the cause that should set it does not exist yet (paper matteness,
+ * lens quality), the result waits for that cause rather than keeping a
+ * slider in the meantime.
+ *
+ * Each entry says what it follows from.
+ */
+export const RESULTS: Readonly<Record<string, string>> = {
+  restEdge:
+    "the edge's brightness at rest: the room it reflects, through Fresnel at the glass's IOR",
+  glassRefraction: "how far the liquid glass bends: its IOR and thickness",
+  glassEdgeBlur: "the softness of the bend at the rim: the edge profile",
+  glassSpecular: "the gloss: Fresnel at the glass's IOR, and its frost",
+  glassDistortion: "surface roughness beyond the frost: the glass's waviness",
+  glassFresnel: "the reflectance: the glass's IOR",
+  glassEdge: "the rim highlight: the lamp and the edge profile",
+  glassSaturation: "the colour through the glass: its tint and absorption",
+  glassSpecTight: "the highlight's size: the lamp's size and the frost",
+  glassLightX: "where the highlight sits: the lamp's position",
+  glassLightY: "where the highlight sits: the lamp's position",
+  glassOpacity: "how much of the scene shows through: the glass is clear",
+  glassShadow: "the shadow's darkness: the light and the gap",
+  glassShadowSpread: "the shadow's softness: the light's size and the gap",
+  glassShadowY: "the shadow's offset: the light's position and the gap",
+  glassBrightness: "the pane's brightness: the room and the light",
+  coreFalloff: "the core's tightness: the lamp's size",
+  ghostGain: "the lens ghosts: the lens's quality",
+  haloGain: "the halo: the lens's quality",
+  rimGlare: "the glare past the rim: the camera's lens and the light",
+  rimGlareSize: "the glare's reach: the camera's lens",
+  displacement: "the refraction of the CSS glass: IOR and thickness",
+  shadowStrength: "the content's shadow: the light and the content's depth",
+  floorView: "the bend of the floor seen through the glass: IOR, thickness and gap",
+  floorLight: "the light through the glass: the lamp's power and the absorption",
+  floorShadow: "the glass's shadow: its edge profile and absorption",
+  floorPrism: "the rainbow at the shadow's edge: the dispersion",
+  transmit: "the CSS pool of light through the glass: the lamp and the absorption",
+  transmitReach: "that pool's spread: the lamp's height and size",
+  transmitCore: "that pool's caustic core: the edge profile and the lamp",
+  paperGloss: "the paper's specular: its matteness (off)",
+  paperCore: "the paper's specular size: its matteness",
+  paperSheen: "the paper's sheen: its matteness",
+  paperReach: "the paper's sheen spread: its matteness and the lamp's height",
+  paperRoom: "the paper's reflection of the room: its matteness",
+  grimeFloor: "how clear the unmarked glass is: the smudge and scratch amounts",
+};
+
+/** Whether a knob is a result: locked, with no control. */
+export const isResult = (key: string): boolean => Object.hasOwn(RESULTS, key);
+
+/*
  * ---- Two sets of values, one per glass mode ----
  *
  * WHY
@@ -805,7 +870,8 @@ export function valueIn(key: string, mode: TuningMode): number {
 /** Set a knob's value in a given mode, loaded or not. */
 export function setValueIn(key: string, mode: TuningMode, value: number) {
   const knob = tuning[key];
-  if (!knob) return;
+  // A result is locked: nothing sets it, including a value saved before.
+  if (!knob || isResult(key)) return;
   if (mode === activeMode || !isPerMode(knob)) {
     knob.value = value;
     applyTuning();
@@ -898,7 +964,7 @@ export function loadSavedTuning() {
   applyTuning();
 }
 
-/** Shorthand for the loops: `t("coreGain")`. */
+/** Shorthand for the loops: `t("grimeRake")`. Light values are read from the lights, not here. */
 export const t = (key: keyof typeof tuning | string): number => tuning[key]?.value ?? 0;
 
 const appliedListeners = new Set<() => void>();
@@ -927,40 +993,30 @@ export function applyTuning() {
   for (const fn of appliedListeners) fn();
 }
 
-/**
- * Mirrors the shader knobs onto each pane's `data-config`.
- *
- * The rasterised glass keeps its configuration in that attribute and watches
- * it with a MutationObserver, so writing it is enough -- the next frame picks
- * the new values up. No re-init, which matters: an init runs a full
- * html-to-image capture of everything behind the pane, and doing that on every
- * drag of a slider would make the panel unusable.
- *
- * Only ever writes when the value would actually change, because the observer
- * fires on any attribute write and an identical one is pure work.
+/*
+ * The liquid glass's `data-config` is written by its adapter
+ * (effects/adapters/liquid-config), which reads the pane's causes and the
+ * lights as well as these knobs. It registers itself here, so applying the
+ * knobs reaches it without this module depending on the lights.
  */
+let glassConfigWriter: () => void = () => {};
+
+export function setGlassConfigWriter(fn: () => void) {
+  // Registered only: writing now, while the page may still be hydrating,
+  // would put attributes on the panes React did not render.
+  glassConfigWriter = fn;
+}
+
+/** Write every pane's liquid glass config (through the adapter, once it is loaded). */
 export function applyGlassConfig() {
-  if (typeof document === "undefined") return;
-  for (const pane of Array.from(document.querySelectorAll<HTMLElement>(".glass"))) {
-    const isBar = pane.classList.contains("glass--bar");
-    const config: Record<string, number> = {};
-    for (const knob of Object.values(tuning)) {
-      if (!knob.glassKey) continue;
-      if (knob.glassScope === "band" && isBar) continue;
-      if (knob.glassScope === "bar" && !isBar) continue;
-      config[knob.glassKey] = knob.value;
-    }
-    // The edge is the pane's own: its attribute wins over the knob.
-    config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);
-    const next = JSON.stringify(config);
-    if (pane.dataset["config"] !== next) pane.dataset["config"] = next;
-  }
+  glassConfigWriter();
 }
 
 /** The current settings, as something you can paste back to be baked in. */
 export function serializeTuning() {
   const byGroup: Record<string, string[]> = {};
   for (const [key, knob] of Object.entries(tuning)) {
+    if (isResult(key)) continue;
     // Both sets for anything kept twice, so pasting this back does not
     // silently bake one mode's numbers into the other.
     const line = isPerMode(knob)

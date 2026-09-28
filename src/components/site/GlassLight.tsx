@@ -1,13 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
+import {
+  beginPass,
+  endPass,
+  buildProgram,
+  fullScreenTriangle,
+  onSharedGlLoss,
+  sharedGl,
+} from "@/effects/engine/gl";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry, geometryStamp, MAX_OCCLUDERS, onCharge, viewState } from "@/lib/edge-glow";
+import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
+import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
+import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
+import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
-import { FLOAT_GLASS, frontRoughness } from "@/effects/materials/presets";
-import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
+import { frontRoughness } from "@/effects/materials/presets";
+import { roomMipChain } from "@/effects/optics/environment";
+import { camera } from "@/effects/camera/camera";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
-import { LAMP_POWER_PER_GAIN, LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
+import { LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -62,7 +74,6 @@ export function GlassLight({
   chargeRef: { current: number };
   positionRef: { current: { x: number; y: number } };
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   /* Bumped when a lost GL context returns; see CursorLight for why this is
      the whole recovery path. */
   const [generation, setGeneration] = useState(0);
@@ -73,59 +84,31 @@ export function GlassLight({
     // device the charge can never leave zero. Nothing to do but not start.
     if (!window.matchMedia?.("(pointer: fine)").matches) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const gl = canvas.getContext("webgl", {
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: false,
-    });
-    if (!gl) return;
-
-    const compile = (type: number, source: string) => {
-      const shader = gl.createShader(type)!;
-      gl.shaderSource(shader, source);
-      gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("glass shader:", gl.getShaderInfoLog(shader));
-        return null;
-      }
-      return shader;
-    };
-
-    const vs = compile(gl.VERTEX_SHADER, LIGHT_VERTEX_SHADER);
-    const fs = compile(gl.FRAGMENT_SHADER, GLASS_LIGHT_FRAGMENT_SHADER);
-    if (!vs || !fs) return;
-
-    const program = gl.createProgram()!;
-    gl.attachShader(program, vs);
-    gl.attachShader(program, fs);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("glass link:", gl.getProgramInfoLog(program));
-      return;
-    }
+    /*
+     * The shared context (effects/engine/gl). Its buffer is offscreen, as
+     * this pass's own canvas already was: each pane's region is copied out
+     * of it into that pane's surface layer.
+     */
+    const shared = sharedGl();
+    if (!shared) return;
+    const { gl } = shared;
+    const canvas = shared.canvas;
+    const program = buildProgram(gl, LIGHT_VERTEX_SHADER, GLASS_LIGHT_FRAGMENT_SHADER, "glass");
+    if (!program) return;
     gl.useProgram(program);
-
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    const aPosition = gl.getAttribLocation(program, "aPosition");
-    gl.enableVertexAttribArray(aPosition);
-    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+    const quad = fullScreenTriangle(gl, program);
 
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
     const uScale = U("uScale");
-    const uLight = U("uLight");
-    const uCharge = U("uCharge");
+    const lightLoc = lightLocations(gl, program);
     const uRect = U("uRect");
     const uRadius = U("uRadius");
     const uEdgeWidth = U("uEdgeWidth");
     const uStraight = U("uStraight");
     const uTilt = U("uTilt");
     const uBar = U("uBar");
+    const uThickness = U("uThickness");
     const uSeed = U("uSeed");
     const uImage = U("uImage");
     const uImageAspect = U("uImageAspect");
@@ -155,10 +138,7 @@ export function GlassLight({
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
     const uIor = U("uIor");
     const uFrost = U("uFrost");
-    const uLightHeight = U("uLightHeight");
-    const uLampPower = U("uLampPower");
     const uFaceLamp = U("uFaceLamp");
-    const uLightSize = U("uLightSize");
 
     // The site's amber and teal in linear light — the shader works in linear
     // and only returns to display space at the very end.
@@ -183,24 +163,7 @@ export function GlassLight({
     gl.uniform1i(U("uBackdropBelow"), 4);
     gl.uniform1f(uHasSurface, 0);
 
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.clearColor(0, 0, 0, 0);
-
     let scale = 1;
-    const resize = () => {
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
-      const w = Math.round(viewportWidth() * scale);
-      const h = Math.round(viewportHeight() * scale);
-      if (canvas.width === w && canvas.height === h) return;
-      canvas.width = w;
-      canvas.height = h;
-      gl.viewport(0, 0, w, h);
-      gl.uniform2f(uViewport, w, h);
-      gl.uniform1f(uScale, scale);
-    };
-    resize();
-    window.addEventListener("resize", resize);
 
     /*
      * The photographed surface map, fetched lazily: the shader falls back to
@@ -357,11 +320,9 @@ export function GlassLight({
 
     const surfaceFor = (el: HTMLElement, cssW: number, cssH: number) => {
       let layer = surfaces.get(el);
-      if (!layer) {
-        layer = document.createElement("canvas");
-        layer.className = "glass__surface";
-        layer.setAttribute("aria-hidden", "true");
-        el.insertBefore(layer, el.firstChild);
+      if (!layer || !layer.isConnected) {
+        // Its slot in the pane's stack is the compositor's (effects/engine/compositor).
+        layer = paneCanvas(el, "pane:surface");
         surfaces.set(el, layer);
       }
       const w = Math.max(1, Math.round(cssW * scale));
@@ -378,7 +339,6 @@ export function GlassLight({
     const allLayers = new Set<HTMLCanvasElement>();
 
     let wasLit = false;
-    canvas.style.opacity = "0";
 
     /* Returns whether there is still something to draw; false parks the loop. */
     /*
@@ -431,36 +391,45 @@ export function GlassLight({
       const panes = glassGeometry(now);
       const { x, y } = positionRef.current;
 
-      gl.disable(gl.SCISSOR_TEST);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      const bw = Math.round(viewportWidth() * scale);
+      const bh = Math.round(viewportHeight() * scale);
+      if (!beginPass(bw, bh, "glass")) return false;
+      quad.bind();
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.uniform2f(uViewport, bw, bh);
+      gl.uniform1f(uScale, scale);
       gl.enable(gl.SCISSOR_TEST);
-      gl.uniform2f(uLight, x, y);
-      gl.uniform1f(uCharge, charge);
-      gl.uniform1f(uGrimeRake, t("grimeRake"));
-      gl.uniform1f(uGrimeSpecks, t("grimeSpecks"));
+      /*
+       * The lights, packed once a frame; each pane then sets their height
+       * above ITS glass. The lamp is drawn where the cursor's light is (the
+       * eased follower) at the shutter's charge, as it always was.
+       */
+      const packed: PackedLight[] = pointLights().map((l) => ({
+        x: l === cursorLamp ? x : l.x,
+        y: l === cursorLamp ? y : l.y,
+        height: l.height,
+        colour: l.colour,
+        power: lampPower(l),
+        radius: l.radius,
+        charge: l === cursorLamp ? charge : l.charge,
+      }));
+      const heights = packed.map((l) => l.height);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
-      gl.uniform1f(uGap, t("floorGap"));
       gl.uniform1f(uRestEdge, t("restEdge"));
-      // The reflection on the face, from causes: the glass, its frost, and
-      // the lamp's height above the glass and its brightness.
-      gl.uniform1f(uIor, FLOAT_GLASS.ior);
-      gl.uniform1f(uFrost, t("glassBlur"));
-      gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - t("floorGap"), 1));
       /*
        * The lamp's power reaches the arris glints whatever the switch says;
        * the switch turns off only the face's own image of the lamp, which is
        * off by request (it reads as a flashlight; see LAMP_REFLECTION_ENABLED).
        */
-      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
       gl.uniform1f(uFaceLamp, LAMP_REFLECTION_ENABLED ? 1 : 0);
-      gl.uniform1f(uLightSize, t("shadowSoftness"));
       requestRoom();
       gl.uniform1f(
         uCameraDistance,
-        CAMERA_DISTANCE * (document.documentElement.clientWidth || window.innerWidth),
+        camera.distance(document.documentElement.clientWidth || window.innerWidth),
       );
-      gl.uniform1f(uFrontRoughness, frontRoughness(FLOAT_GLASS, t("glassBlur")));
-      gl.uniform1f(uRoomExposure, t("roomBrightness"));
+      gl.uniform1f(uRoomExposure, roomLight.gain);
       gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
       if (room) {
         gl.activeTexture(gl.TEXTURE3);
@@ -495,6 +464,23 @@ export function GlassLight({
         gl.uniform1f(uStraight, pane.w >= viewportWidth() - 1 ? 1 : 0);
         gl.uniform1f(uTilt, pane.t);
         gl.uniform1f(uBar, pane.el.classList.contains("glass--bar") ? 1 : 0);
+        /*
+         * What this pane is, as <Pane> declared it (effects/materials/
+         * pane-causes): its material, thickness, gap and surface layers. The
+         * lamp stands a fixed height above the photographs, so its height
+         * above THIS glass is that less this pane's gap.
+         */
+        const { material, thickness, gap, smudge, scratch } = pane.causes;
+        gl.uniform1f(uIor, material.ior);
+        gl.uniform1f(uFrost, material.frost);
+        gl.uniform1f(uFrontRoughness, frontRoughness(material, material.frost));
+        gl.uniform1f(uThickness, thickness);
+        gl.uniform1f(uGap, gap);
+        // Each light's height above THIS glass: its height less the pane's gap.
+        for (let k = 0; k < packed.length; k++) packed[k]!.height = Math.max(heights[k]! - gap, 1);
+        uploadLights(gl, lightLoc, packed);
+        gl.uniform1f(uGrimeRake, t("grimeRake") * smudge);
+        gl.uniform1f(uGrimeSpecks, t("grimeSpecks") * scratch);
         gl.uniform1f(uSeed, pane.s);
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
         gl.uniform1f(uImageAspect, pane.ia);
@@ -595,12 +581,12 @@ export function GlassLight({
              * the standard bloom pass -- which spreads the bright part of the
              * rim out over the photograph beyond as much as into the glass.
              */
-            const spill = t("rimGlare");
+            const spill = camera.lens.glare;
             if (spill > 0) {
               ctx.save();
               ctx.globalCompositeOperation = "lighter";
               ctx.globalAlpha = Math.min(spill, 1);
-              ctx.filter = `blur(${Math.round(t("rimGlareSize") * scale)}px)`;
+              ctx.filter = `blur(${Math.round(camera.lens.glareSize * scale)}px)`;
               ctx.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
               ctx.restore();
             }
@@ -618,10 +604,11 @@ export function GlassLight({
         layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
       }
       drawn.clear();
+      endPass();
       return true;
     };
 
-    const loop = sleepingLoop(step);
+    const loop = sleepingLoop(step, "glass-light");
     const wake = () => loop.wake();
     window.addEventListener("pointermove", wake, { passive: true });
     /*
@@ -640,31 +627,25 @@ export function GlassLight({
     });
     loop.wake();
 
-    const onLost = (event: Event) => {
-      event.preventDefault();
-      loop.stop();
-    };
-    const onRestored = () => setGeneration((g) => g + 1);
-    canvas.addEventListener("webglcontextlost", onLost);
-    canvas.addEventListener("webglcontextrestored", onRestored);
+    const stopLoss = onSharedGlLoss(
+      () => loop.stop(),
+      () => setGeneration((g) => g + 1),
+    );
 
     return () => {
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
       stopTuning();
-      canvas.removeEventListener("webglcontextlost", onLost);
-      canvas.removeEventListener("webglcontextrestored", onRestored);
-      window.removeEventListener("resize", resize);
+      stopLoss();
       gl.deleteProgram(program);
-      gl.deleteShader(vs);
-      gl.deleteShader(fs);
-      gl.deleteBuffer(buffer);
+      quad.delete();
       for (const tex of layers.values()) gl.deleteTexture(tex);
       if (room) gl.deleteTexture(room);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
     };
   }, [chargeRef, positionRef, generation]);
 
-  return <canvas ref={canvasRef} aria-hidden="true" className="glass-light" />;
+  // Nothing of its own to show: it draws into each pane's surface layer.
+  return null;
 }

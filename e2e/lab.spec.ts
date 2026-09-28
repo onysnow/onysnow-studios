@@ -16,7 +16,7 @@ import { expect, test } from "./fixtures";
  */
 async function openLab(page: import("@playwright/test").Page) {
   await page.goto("/lab");
-  await page.locator("#knob-transmit").waitFor({ state: "attached" });
+  await page.locator("#knob-ringSize").waitFor({ state: "attached" });
 }
 
 test.describe("/lab", () => {
@@ -34,42 +34,57 @@ test.describe("/lab", () => {
     await openLab(page);
 
     /*
-     * `transmit` -> `--tune-transmit`, which styles.css actually consumes
-     * (the transmitted-light layer's opacity).
+     * `ringSize` -> `--tune-ring`, which styles.css actually consumes (the
+     * cursor ring's size). A cause: the ring is part of the cursor, not a
+     * result of the light.
      *
      * This used to drive `grimeAmount` -> `--tune-grime`, and it passed for as
      * long as that knob existed -- while nothing in the stylesheet ever read
      * `--tune-grime`. It proved the slider wrote a variable and said nothing
-     * about whether the variable went anywhere. The knob was removed as dead;
-     * this now exercises one with a real consumer, and asserts the consumer
-     * too, so it cannot quietly go back to testing a wire to nowhere.
+     * about whether the variable went anywhere. So it asserts the consumer
+     * too, so it cannot quietly go back to testing a wire to nowhere. (It then
+     * drove `transmit`, until step 7 locked that as a result.)
      */
     const read = () =>
       page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--tune-transmit").trim(),
+        getComputedStyle(document.documentElement).getPropertyValue("--tune-ring").trim(),
       );
 
     const before = await read();
     await page.evaluate(() => {
-      const el = document.getElementById("knob-transmit") as HTMLInputElement;
+      const el = document.getElementById("knob-ringSize") as HTMLInputElement;
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setter.call(el, "0.9");
+      setter.call(el, "44");
       el.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
     await expect.poll(read).not.toBe(before);
-    expect(await read()).toBe("0.9");
+    expect(await read()).toBe("44px");
 
     const consumed = await page.evaluate(() =>
       [...document.styleSheets].some((sheet) => {
         try {
-          return [...sheet.cssRules].some((r) => r.cssText.includes("var(--tune-transmit"));
+          return [...sheet.cssRules].some((r) => r.cssText.includes("var(--tune-ring"));
         } catch {
           return false;
         }
       }),
     );
-    expect(consumed, "--tune-transmit must be read by some rule, or this tests nothing").toBe(true);
+    expect(consumed, "--tune-ring must be read by some rule, or this tests nothing").toBe(true);
+  });
+
+  /*
+   * Step 7: he sets causes, physics sets the effects. A result has no
+   * control (RESULTS in src/lib/tuning.ts).
+   */
+  test("has controls for causes only", async ({ page }) => {
+    await openLab(page);
+    for (const cause of ["edgeWidth", "coreGain", "shadowHeight", "floorGap"]) {
+      await expect(page.locator(`#knob-${cause}`)).toHaveCount(1);
+    }
+    for (const result of ["transmit", "glassFresnel", "floorLight", "restEdge", "rimGlare"]) {
+      await expect(page.locator(`#knob-${result}`)).toHaveCount(0);
+    }
   });
 
   test("previews on the real components, not a swatch", async ({ page }) => {

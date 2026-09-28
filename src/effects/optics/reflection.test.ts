@@ -88,7 +88,7 @@ describe("no glare settings", () => {
   it("the shader draws the reflection from the shared chunk and its causes", () => {
     expect(GLASS_LIGHT_FRAGMENT_SHADER.split(REFLECTION_GLSL).length - 1).toBe(1);
     expect(GLASS_LIGHT_FRAGMENT_SHADER).toMatch(
-      /lampReflection\(frag - uLight, uLightHeight, uLampPower \* uFaceLamp, uIor, uFrost\)/,
+      /lampReflection\(frag - lightXY, lightHeight, lightPower \* uFaceLamp, uIor, uFrost\)/,
     );
     for (const gone of ["uFaceLight", "uSheen", "uSheenReach"]) {
       expect(GLASS_LIGHT_FRAGMENT_SHADER).not.toContain(gone);

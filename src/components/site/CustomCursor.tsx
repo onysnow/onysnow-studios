@@ -1,4 +1,6 @@
-import { reportCharge } from "@/lib/edge-glow";
+import { reportCharge } from "@/effects/light/lights";
+import { addTask, ease, ORDER } from "@/effects/engine/scheduler";
+import { mountPerfPanel } from "@/effects/engine/perf";
 import { CameraIris } from "./CameraIris";
 import { t } from "@/lib/tuning";
 import { useEffect, useRef } from "react";
@@ -53,6 +55,8 @@ const LINK_RING = 56;
  * the cursor is exactly the kind of movement that setting is asking us to drop.
  */
 export function CustomCursor() {
+  // The performance readout, when asked for with ?perf=1 (effects/engine/perf).
+  useEffect(() => mountPerfPanel(), []);
   const ringRef = useRef<HTMLDivElement>(null);
   const chargeRef = useRef(0);
   const closedRef = useRef(0);
@@ -88,10 +92,15 @@ export function CustomCursor() {
      */
     let ringX = targetX;
     let ringY = targetY;
-    let last = performance.now();
-    let frame = 0;
+    /*
+     * A task in the page's one loop (effects/engine/scheduler), first in the
+     * frame: where the lamp is comes before anything that draws with it.
+     * It sleeps once the follower has arrived; a pointer move wakes it.
+     */
+    let follow: ReturnType<typeof addTask> | null = null;
 
     const onMove = (event: PointerEvent) => {
+      follow?.wake();
       targetX = event.clientX;
       targetY = event.clientY;
 
@@ -237,18 +246,22 @@ export function CustomCursor() {
      * in alignment.
      */
 
-    const tick = (now: number) => {
+    const tick = (_now: number, dt: number) => {
       /*
        * Eased by TIME, not by frame. "Ring follow" is the fraction closed per
        * 60 fps frame; a frame that took twice as long closes as much as two
        * would have. Per-frame easing made the lag depend on how busy the page
        * was -- on a heavy frame the follower fell far behind and crawled back.
        */
-      const dt = Math.min(Math.max(now - last, 0), 100) / (1000 / 60);
-      last = now;
-      const k = 1 - Math.pow(1 - t("ringEase"), dt);
+      const k = ease(t("ringEase"), Math.min(dt, 100));
       ringX += (targetX - ringX) * k;
       ringY += (targetY - ringY) * k;
+      // Arrived: land exactly on the pointer, and stop asking for frames.
+      const arrived = Math.abs(targetX - ringX) < 0.05 && Math.abs(targetY - ringY) < 0.05;
+      if (arrived) {
+        ringX = targetX;
+        ringY = targetY;
+      }
 
       const at = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`;
       el.style.transform = at;
@@ -257,9 +270,10 @@ export function CustomCursor() {
       // The shader reads these; it runs its own loop.
       lightPos.current.x = ringX;
       lightPos.current.y = ringY;
-      frame = requestAnimationFrame(tick);
+      return !arrived;
     };
-    frame = requestAnimationFrame(tick);
+    follow = addTask("cursor", ORDER.input, tick);
+    follow.wake();
 
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", onLeave);
@@ -428,7 +442,7 @@ export function CustomCursor() {
     return () => {
       charger.stop();
       window.removeEventListener("click", onClick, true);
-      cancelAnimationFrame(frame);
+      follow?.stop();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", primeShutterAudio);
       window.removeEventListener("keydown", primeShutterAudio);

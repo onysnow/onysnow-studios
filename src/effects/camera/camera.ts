@@ -1,0 +1,57 @@
+/**
+ * The camera: how the picture is recorded, not what light exists
+ * (light-system design, step D).
+ *
+ * Everything that is the lens or the eye rather than the scene lives here:
+ * where the eye is and how far it follows the pointer, the aperture and how
+ * it opens with the shutter's charge, the lens's core, ghosts and halo, the
+ * glare a bright edge spreads into, and the afterimage the flash leaves. The
+ * passes read the camera; none of them reads a camera knob, and a static test
+ * (camera.test.ts) holds them to that.
+ *
+ * The values that come from a knob are getters, so the camera reports exactly
+ * what the knob says when read: the same numbers the passes read directly
+ * before, which is why nothing on the page changed. The afterimage's knobs
+ * reach its CSS through their own custom properties (lib/tuning cssVar), which
+ * is the camera's output channel for the stylesheet.
+ */
+
+import { CAMERA_DISTANCE } from "@/effects/optics/environment";
+import { t } from "@/lib/tuning";
+
+export const camera = {
+  /** How far the eye follows the pointer, 0 to 1 ("Viewpoint follows pointer"). */
+  get follow() {
+    return t("viewFollow");
+  },
+  /** The eye's distance from the screen, CSS px, for a viewport this wide. */
+  distance(viewportWidth: number) {
+    return CAMERA_DISTANCE * viewportWidth;
+  },
+  /** The aperture's radius ("Aperture radius"), and how much it grows with the charge. */
+  get aperture() {
+    return t("aperture");
+  },
+  get apertureGrowth() {
+    return t("spread");
+  },
+  /** The lens: how tight its image of a bright core is, and its ghosts and halo. */
+  lens: {
+    get coreFalloff() {
+      return t("coreFalloff");
+    },
+    get ghosts() {
+      return t("ghostGain");
+    },
+    get halo() {
+      return t("haloGain");
+    },
+    /** The glare a bright edge spreads into, and how far. */
+    get glare() {
+      return t("rimGlare");
+    },
+    get glareSize() {
+      return t("rimGlareSize");
+    },
+  },
+};

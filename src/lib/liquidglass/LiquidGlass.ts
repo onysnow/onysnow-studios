@@ -125,6 +125,10 @@ export class LiquidGlass {
 	private _running = false;
 	private _rafId = 0;
 	private _hasDynamic = false;
+	// LOCAL: an external frame driver (the site's one scheduler). When set,
+	// the library runs a frame only when woken, and says after each whether
+	// it needs another -- see tick(). Unset, it loops every frame as upstream.
+	private _driver: { wake(): void } | null = null;
 	/**
 	 * Genuinely-global dirty flag — set by events that legitimately
 	 * affect every glass at once (resize, WebGL context restored,
@@ -218,6 +222,7 @@ export class LiquidGlass {
 		this.renderer.canvas.addEventListener('webglcontextrestored', () => {
 			this._glassCache.clear();
 			this._globalDirty = true;
+			this._wake(); // LOCAL
 		});
 
 		this._onResize = this._handleResize.bind(this);
@@ -261,6 +266,7 @@ export class LiquidGlass {
 			// every glass needs to re-render.
 			this._sortedChildren = this._getSortedChildren();
 			this._globalDirty = true;
+			this._wake(); // LOCAL
 		});
 		this._observer.observe(this.root, { childList: true });
 
@@ -282,6 +288,7 @@ export class LiquidGlass {
 					this._markGlassAndDependents(owner);
 				}
 			}
+			this._wake(); // LOCAL
 		});
 		for (const el of this.glassSet) {
 			this._glassSubtreeObserver.observe(el, {
@@ -296,7 +303,48 @@ export class LiquidGlass {
 
 		this._running = true;
 		this._globalDirty = true;
-		this._rafId = requestAnimationFrame(() => this._renderLoop());
+		// LOCAL: a driver runs the frames; otherwise loop as upstream.
+		if (this._driver) this._wake();
+		else this._rafId = requestAnimationFrame(() => this._renderLoop());
+	}
+
+	/**
+	 * LOCAL: hand the frames to an external scheduler. Every change the
+	 * library notices wakes it; tick() runs one frame.
+	 */
+	setFrameDriver(driver: { wake(): void } | null): void {
+		this._driver = driver;
+		if (driver) {
+			cancelAnimationFrame(this._rafId);
+			if (this._running) this._wake();
+		}
+	}
+
+	/** LOCAL: ask the driver for a frame, if there is one. */
+	private _wake(): void {
+		this._driver?.wake();
+	}
+
+	/**
+	 * LOCAL: run one frame. Returns whether there is still work: something
+	 * dirty, a capture in flight, a drag, a dynamic contributor that is moving
+	 * (data-dynamic other than "idle", or a video), or a glass that re-rendered
+	 * this frame (its position may still be settling). Otherwise the driver
+	 * can let the page sleep.
+	 */
+	tick(): boolean {
+		if (!this._running) return false;
+		const rendered = this._frame();
+		return (
+			rendered > 0
+			|| this._drag.active
+			|| this._globalDirty
+			|| this._glassDirty.size > 0
+			|| this._glassContentDirty.size > 0
+			|| this._capturingGlassContent
+			|| this._userMarkedChanged.size > 0
+			|| this.root.querySelector('[data-dynamic]:not([data-dynamic="idle"]), video') !== null
+		);
 	}
 
 	destroy(): void {
@@ -472,6 +520,7 @@ export class LiquidGlass {
 				this._glassDirty.add(child);
 			}
 		}
+		this._wake(); // LOCAL
 	}
 
 	/**
@@ -497,6 +546,7 @@ export class LiquidGlass {
 				this._glassDirty.add(glass);
 			}
 		}
+		this._wake(); // LOCAL
 	}
 
 	/**
@@ -516,6 +566,7 @@ export class LiquidGlass {
 	 * (or `undefined`) to mark every glass on this instance dirty.
 	 */
 	markChanged(element?: HTMLElement): void {
+		this._wake(); // LOCAL
 		if (!element) {
 			this._globalDirty = true;
 			return;
@@ -588,6 +639,14 @@ export class LiquidGlass {
 			}
 		} finally {
 			this._capturingGlassContent = false;
+			// LOCAL: the fresh content image has to be drawn, and with a driver
+			// nothing else would ask for the frame that draws it.
+			if (this._driver) {
+				for (const el of this.glassCanvases.keys()) {
+					if (!targets || targets.has(el)) this._glassDirty.add(el);
+				}
+				this._wake();
+			}
 		}
 	}
 
@@ -778,6 +837,7 @@ export class LiquidGlass {
 		// (both content image and shader output).
 		for (const el of this.glassSet) this._glassContentDirty.add(el);
 		this._globalDirty = true;
+		this._wake(); // LOCAL
 	}
 
 	private _updateGlassCanvasSize(el: HTMLElement): void {
@@ -965,6 +1025,12 @@ export class LiquidGlass {
 
 	private _renderLoop(): void {
 		if (!this._running) return;
+		this._frame();
+		this._rafId = requestAnimationFrame(() => this._renderLoop());
+	}
+
+	/** LOCAL: one frame of the loop; returns how many glasses re-rendered. */
+	private _frame(): number {
 
 		// FPS tracking
 		const now = performance.now();
@@ -990,15 +1056,14 @@ export class LiquidGlass {
 		}
 
 		try {
-			this._renderFrame();
+			return this._renderFrame();
 		} catch (err) {
 			console.error('LiquidGlass: render error:', err);
+			return 0;
 		}
-
-		this._rafId = requestAnimationFrame(() => this._renderLoop());
 	}
 
-	private _renderFrame(): void {
+	private _renderFrame(): number {
 		const dpr = window.devicePixelRatio || 1;
 		const rootRect = this.root.getBoundingClientRect();
 		const isDragging = this._drag.active;
@@ -1021,7 +1086,7 @@ export class LiquidGlass {
 		const needsRender = this._glassDirty.size > 0
 			|| this._hasDynamic
 			|| isDragging;
-		if (!needsRender) return;
+		if (!needsRender) return 0;
 
 		// 3. Snapshot + drain the dirty set so anything added during
 		//    this frame's work (e.g. async cache landings) is picked
@@ -1056,6 +1121,7 @@ export class LiquidGlass {
 				renderedThisFrame,
 			);
 		}
+		return renderedThisFrame.length; // LOCAL
 	}
 
 	/**
@@ -1315,7 +1381,11 @@ export class LiquidGlass {
 		// LOCAL: data-dynamic="idle" is a dynamic contributor that is not moving right now.
 		if (child.hasAttribute('data-dynamic')) return child.getAttribute('data-dynamic') !== 'idle';
 		if (child.tagName === 'VIDEO') return true;
-		return child.querySelector('[data-dynamic], video') !== null;
+		// LOCAL: ...and the same for its descendants. This counted an idle
+		// descendant as moving, so a section holding the light-under-glass
+		// canvas or a parallax photo (both marked idle while still) made every
+		// pane over it re-render every frame, forever.
+		return child.querySelector('[data-dynamic]:not([data-dynamic="idle"]), video') !== null;
 	}
 
 	private _drawNonGlassChildToScene(

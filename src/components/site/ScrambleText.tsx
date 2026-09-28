@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { addTask, ORDER } from "@/effects/engine/scheduler";
 
 /**
  * Substitutes drawn from living writing systems, so the settling text reads as
@@ -384,11 +385,10 @@ export function ScrambleText({
     glyphs.current = chars.map((c) => (c.animates ? pick() : c.final));
     settled.current = chars.map((c) => !c.animates);
 
-    let raf = 0;
     const t0 = performance.now();
     const nextAt = chars.map((c) => t0 + c.start);
 
-    const tick = (now: number) => {
+    const tick = (now: number): boolean => {
       let changed = false;
       let remaining = false;
 
@@ -411,11 +411,13 @@ export function ScrambleText({
       }
 
       if (changed) setFrame((f) => f + 1);
-      if (remaining) raf = requestAnimationFrame(tick);
+      return remaining;
     };
 
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // A task in the page's one loop (effects/engine/scheduler); it sleeps when every glyph has settled.
+    const task = addTask("scramble", ORDER.ui, (now) => tick(now));
+    task.wake();
+    return () => task.stop();
   }, [chars, started]);
 
   // Before it starts, and for anyone who asked for reduced motion, this is just

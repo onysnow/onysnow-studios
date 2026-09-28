@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import { registerLitSurface } from "@/lib/edge-glow";
+import { registerLitSurface } from "@/effects/scene/scene";
 
 /**
  * The light that gets THROUGH the pane, landing on what is behind it.

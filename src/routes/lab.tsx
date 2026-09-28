@@ -9,6 +9,8 @@ import { Img } from "@/components/site/Img";
 import {
   applyTuning,
   isPerMode,
+  isResult,
+  RESULTS,
   resetTuning,
   loadSavedTuning,
   restoreTuning,
@@ -120,6 +122,8 @@ function Lab() {
   const groups = useMemo(() => {
     const byGroup = new Map<string, [string, Knob][]>();
     for (const entry of Object.entries(tuning)) {
+      // Results have no control: physics sets them (RESULTS in tuning.ts).
+      if (isResult(entry[0])) continue;
       const list = byGroup.get(entry[1].group) ?? [];
       list.push(entry);
       byGroup.set(entry[1].group, list);
@@ -210,7 +214,8 @@ function Lab() {
           </Button>
           <span className="text-sm text-muted-foreground">
             Kept in this browser until you reset. Groups that do nothing in the current mode are
-            folded away.
+            folded away. These are causes only: the {Object.keys(RESULTS).length} results they
+            produce have no control.
           </span>
         </div>
 

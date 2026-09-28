@@ -10,6 +10,8 @@ import {
   farArrisLoss,
   mirrorReach,
   PANE_THICKNESS,
+  SIDE_ABSORB,
+  FAR_ARRIS_LOSS,
   sideCosine,
   sideGradientCss,
   sideHeight,
@@ -36,6 +38,21 @@ describe("the side face's window", () => {
     const [r, g, b] = sideTransmittance(4);
     expect(g).toBeGreaterThan(b);
     expect(b).toBeGreaterThan(r);
+  });
+
+  it("matches the reference photographs' colour and depth", () => {
+    // Measured: optical depth blue/green 1.2-1.35, red/green 2-4.5, green
+    // 0.5 (paler middle) to 1.3 (most saturated) across a side.
+    const [r, g, b] = SIDE_ABSORB;
+    expect(b / g).toBeGreaterThanOrEqual(1.2);
+    expect(b / g).toBeLessThanOrEqual(1.35);
+    expect(r / g).toBeGreaterThanOrEqual(2);
+    expect(r / g).toBeLessThanOrEqual(4.5);
+    expect(g * sidePath(16)).toBeGreaterThan(0.4);
+    expect(g * sidePath(16)).toBeLessThan(0.6);
+    expect(g * sidePath(0)).toBeGreaterThan(1.1);
+    expect(g * sidePath(0)).toBeLessThan(1.4);
+    expect(FAR_ARRIS_LOSS).toBeCloseTo(0.55);
   });
 
   it("is most saturated at the near arris, where the light was guided furthest", () => {
@@ -171,7 +188,7 @@ describe("the edge is causes, not results", () => {
     expect(src.split(EDGE_SIDE_GLSL).length - 1).toBe(1);
     expect(src).not.toContain("uArris");
     expect(src).not.toContain("uSideReach");
-    expect(src).toContain("arrisGlint(onEdge, grad, lamp, uLightSize, eye");
+    expect(src).toContain("arrisGlint(onEdge, grad, lamp, uLightRadius[i], eye");
   });
 
   it("draws no hairline round the pane", () => {

@@ -92,7 +92,18 @@ describe("the reflection is worked out from causes", () => {
     ]) {
       expect(tuning[gone]).toBeUndefined();
     }
-    expect(tuning["roomBrightness"]?.value).toBe(1);
+    // The room's own lights are off by default: the lamp is the only source.
+    expect(tuning["roomBrightness"]?.value).toBe(0);
+  });
+
+  it("puts nothing on the edge at rest in a dark room, and keeps the lamp's share local", () => {
+    const src = GLASS_LIGHT_FRAGMENT_SHADER;
+    // The resting edge is the room, reflected: no room light, no edge.
+    expect(src).toMatch(/restEdge = bevel \* bevel \* uRestEdge \* uRoomExposure/);
+    // The lamp's share of the edge highlight falls off with the lamp's reach.
+    expect(src).toContain("bevel * lit * reach");
+    // Piped light is scattered back out by the frost as it goes, and spreads.
+    expect(src).toMatch(/exp\(-dl \/ escapeLength\)/);
   });
 
   it("is drawn in the glass shader, from Fresnel, ungated by the lamp", () => {

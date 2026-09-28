@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { Glass } from "./Glass";
+import { Pane } from "@/effects/react/Pane";
 
 /**
  * A frosted content band. Kept as a named wrapper because "section" is what
- * these are at the call sites; all behaviour lives in Glass.
+ * these are at the call sites. A <Pane> of today's glass; see effects/react/Pane.
  */
 export function GlassSection({
   children,
@@ -15,8 +15,8 @@ export function GlassSection({
   overlap?: boolean;
 }) {
   return (
-    <Glass className={className ?? ""} overlap={overlap}>
+    <Pane className={className ?? ""} overlap={overlap}>
       {children}
-    </Glass>
+    </Pane>
   );
 }

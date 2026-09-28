@@ -6,12 +6,18 @@ import {
   type ElementType,
   type ReactNode,
 } from "react";
-import { paneEdgeWidth, registerEdgeGlow, registerPaneSides } from "@/lib/edge-glow";
+import {
+  paneCauses,
+  paneEdgeWidth,
+  registerLitSurface,
+  registerPaneSides,
+  registerScenePane,
+} from "@/effects/scene/scene";
 import { requestBevelFilter } from "@/lib/bevel-filters";
-import { registerLitSurface } from "@/lib/edge-glow";
 import { registerPane } from "@/lib/glass-panes";
 import { onTuningApplied } from "@/lib/tuning";
 import { EDGE_WIDTH_ATTR } from "@/effects/optics/edge-profile";
+import { layerProps, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { FAR_ARRIS_SPAN, farArrisGradientCss, sideGradientCss } from "@/effects/optics/edge-side";
 import { cn } from "@/lib/utils";
 
@@ -22,11 +28,13 @@ import { cn } from "@/lib/utils";
  */
 const SIDE_STYLE = {
   top: {
+    zIndex: SIDE_LAYER_Z,
     backgroundImage: sideGradientCss("to bottom"),
     "--far-arris": farArrisGradientCss("to bottom"),
     "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
   },
   bottom: {
+    zIndex: SIDE_LAYER_Z,
     backgroundImage: sideGradientCss("to top"),
     "--far-arris": farArrisGradientCss("to top"),
     "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
@@ -71,13 +79,21 @@ export function Glass({
   /** Pulls the band up over whatever it follows, so its top edge has a photograph behind it. */
   overlap = false,
   edgeWidth,
+  causes,
+  style,
 }: {
   children: ReactNode;
-  className?: string;
-  as?: ElementType;
-  variant?: "panel" | "bar";
-  overlap?: boolean;
-  edgeWidth?: number;
+  className?: string | undefined;
+  as?: ElementType | undefined;
+  variant?: "panel" | "bar" | undefined;
+  overlap?: boolean | undefined;
+  edgeWidth?: number | undefined;
+  /**
+   * The pane's own causes as element attributes (data-material,
+   * data-thickness, ...). Set by <Pane>; see effects/materials/pane-causes.
+   */
+  causes?: Record<string, string | number> | undefined;
+  style?: CSSProperties | undefined;
 }) {
   /*
    * A callback ref, NOT useRef plus an empty-dependency effect.
@@ -117,7 +133,7 @@ export function Glass({
         return;
       }
 
-      const unregister = registerEdgeGlow(el);
+      const unregister = registerScenePane(el);
 
       /*
        * The bevel map depends on the pane's size and corner radius.
@@ -141,6 +157,7 @@ export function Glass({
           radius,
           edgeWidth: edgeWidth ?? paneEdgeWidth(el),
           straight,
+          thickness: paneCauses(el).thickness,
         });
         /*
          * Onto the pane itself, as a variable the stylesheet folds into the
@@ -204,7 +221,7 @@ export function Glass({
 
   /*
    * Its side faces, placed on its edges by the same pass that measures it
-   * (lib/edge-glow). In an effect because they are siblings, attached after
+   * (effects/scene/scene). In an effect because they are siblings, attached after
    * the pane's own ref runs.
    */
   useEffect(() => {
@@ -235,6 +252,8 @@ export function Glass({
        */
       suppressHydrationWarning
       {...(edgeWidth !== undefined ? { [EDGE_WIDTH_ATTR]: edgeWidth } : {})}
+      {...causes}
+      style={style}
       className={cn(
         "glass",
         variant === "bar" && "glass--bar",
@@ -243,15 +262,13 @@ export function Glass({
       )}
     >
       {/* Bright points behind the glass, thrown out of focus into discs. */}
-      <span aria-hidden="true" className="glass__bokeh" />
+      <span {...layerProps("pane:bokeh")} />
       {/*
         The bezel, bending and dispersing what is behind it. One layer over the
         whole pane: the displacement map carries the profile, pushing at the
         edges and neutral through the middle, which is what a bevel IS.
       */}
-      <span aria-hidden="true" className="glass__refract" />
-      {/* Reflectivity rising toward the rim, the way glass does at grazing angles. */}
-      <span aria-hidden="true" className="glass__fresnel" />
+      <span {...layerProps("pane:refraction")} />
       {/*
         The room it reflects is drawn by the glass light pass (GlassLight),
         from the room's real brightness and the glass's Fresnel -- in both
@@ -259,7 +276,7 @@ export function Glass({
         environment.ts for why that could not be both physical and visible.
       */}
       {/* The specular band the shutter flash sweeps across the panel. */}
-      <span aria-hidden="true" className="glass__glare" />
+      <span {...layerProps("pane:glare")} />
       {children}
     </Tag>
   );
