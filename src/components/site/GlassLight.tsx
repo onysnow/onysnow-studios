@@ -15,7 +15,8 @@ import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
 import { frontRoughness } from "@/effects/materials/presets";
-import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
+import { roomMipChain } from "@/effects/optics/environment";
+import { camera } from "@/effects/camera/camera";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
@@ -425,7 +426,7 @@ export function GlassLight({
       requestRoom();
       gl.uniform1f(
         uCameraDistance,
-        CAMERA_DISTANCE * (document.documentElement.clientWidth || window.innerWidth),
+        camera.distance(document.documentElement.clientWidth || window.innerWidth),
       );
       gl.uniform1f(uRoomExposure, roomLight.gain);
       gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
@@ -579,12 +580,12 @@ export function GlassLight({
              * the standard bloom pass -- which spreads the bright part of the
              * rim out over the photograph beyond as much as into the glass.
              */
-            const spill = t("rimGlare");
+            const spill = camera.lens.glare;
             if (spill > 0) {
               ctx.save();
               ctx.globalCompositeOperation = "lighter";
               ctx.globalAlpha = Math.min(spill, 1);
-              ctx.filter = `blur(${Math.round(t("rimGlareSize") * scale)}px)`;
+              ctx.filter = `blur(${Math.round(camera.lens.glareSize * scale)}px)`;
               ctx.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
               ctx.restore();
             }

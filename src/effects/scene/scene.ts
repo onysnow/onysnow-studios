@@ -31,7 +31,7 @@ import { t } from "@/lib/tuning";
 import { castShadow } from "@/lib/cast-shadow";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
-import { CAMERA_DISTANCE } from "@/effects/optics/environment";
+import { camera } from "@/effects/camera/camera";
 import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
 import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
 import { commitLights, cursorLamp, movePointer, onLightChange } from "@/effects/light/lights";
@@ -543,15 +543,13 @@ function writeView(reading: SceneReading) {
    * gap / (distance + gap) of that, so what is behind the glass moves under
    * the bevel and you can watch it bend.
    */
-  const eye = eyeOffset(x, y, vw, vh, t("viewFollow"));
-  const shift = behindGlassShift(eye, t("floorGap"), CAMERA_DISTANCE * vw);
+  const eye = eyeOffset(x, y, vw, vh, camera.follow);
+  const shift = behindGlassShift(eye, t("floorGap"), camera.distance(vw));
   viewState.eyeX = eye.x;
   viewState.eyeY = eye.y;
   // Set from the first frame, so the photographs never visibly re-scale when
   // the eye first moves.
-  const scale = oversizeFor(vw, vh, t("viewFollow"), t("floorGap"), CAMERA_DISTANCE * vw).toFixed(
-    4,
-  );
+  const scale = oversizeFor(vw, vh, camera.follow, t("floorGap"), camera.distance(vw)).toFixed(4);
   if (root.getPropertyValue("--view-scale") !== scale) root.setProperty("--view-scale", scale);
   if (shift.x === viewState.shiftX && shift.y === viewState.shiftY) return;
   viewState.shiftX = shift.x;

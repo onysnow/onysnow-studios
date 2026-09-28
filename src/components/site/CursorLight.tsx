@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { cursorLamp, onCharge } from "@/effects/light/lights";
+import { camera } from "@/effects/camera/camera";
 import { sleepingLoop } from "@/lib/gl-loop";
 import {
   beginPass,
@@ -200,11 +201,11 @@ export function CursorLight({
       gl.uniform1f(uClosed, closed);
       gl.uniform1f(uTime, (now - start) / 1000);
       gl.uniform1f(uGain, cursorLamp.gain);
-      gl.uniform1f(uFalloff, t("coreFalloff"));
-      gl.uniform1f(uAperture, t("aperture"));
-      gl.uniform1f(uSpread, t("spread"));
-      gl.uniform1f(uGhostGain, t("ghostGain"));
-      gl.uniform1f(uHaloGain, t("haloGain"));
+      gl.uniform1f(uFalloff, camera.lens.coreFalloff);
+      gl.uniform1f(uAperture, camera.aperture);
+      gl.uniform1f(uSpread, camera.apertureGrowth);
+      gl.uniform1f(uGhostGain, camera.lens.ghosts);
+      gl.uniform1f(uHaloGain, camera.lens.halo);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // Same step as the draw: the next pass clears the buffer.
       blitAll(pass.canvas, canvas);
