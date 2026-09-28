@@ -76,6 +76,7 @@ export function FloorLight() {
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
     const uLightSize = U("uLightSize");
+    const uLampColour = U("uLampColour");
     const uGrimeFloor = U("uGrimeFloor");
     const uViewShift = U("uViewShift");
     /*
@@ -207,14 +208,15 @@ export function FloorLight() {
       gl.uniform1f(uScale, scale);
       gl.uniform2f(uLight, lightState.x, lightState.y);
       gl.uniform1f(uCharge, charge);
-      gl.uniform1f(uHeight, t("shadowHeight"));
+      gl.uniform1f(uHeight, lightState.height);
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
       gl.uniform1f(uPrism, t("floorPrism"));
       // Causes only: how sharp and bright each point is follows from these.
-      gl.uniform1f(uLightSize, t("shadowSoftness"));
+      gl.uniform1f(uLightSize, lightState.radius);
+      gl.uniform3fv(uLampColour, lightState.colour);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform2f(uViewShift, viewState.shiftX, viewState.shiftY);
       requestLayers();

@@ -16,6 +16,8 @@
 
 import { getGlassMode, onGlassMode } from "./glass-mode";
 import { DEFAULT_EDGE_WIDTH, readEdgeWidth } from "@/effects/optics/edge-profile";
+// A cycle (lights reads the knobs through t), safe: neither uses the other while loading.
+import { roomLight } from "@/effects/light/lights";
 
 export type Knob = {
   label: string;
@@ -964,7 +966,7 @@ export function loadSavedTuning() {
   applyTuning();
 }
 
-/** Shorthand for the loops: `t("coreGain")`. */
+/** Shorthand for the loops: `t("grimeRake")`. Light values are read from the lights, not here. */
 export const t = (key: keyof typeof tuning | string): number => tuning[key]?.value ?? 0;
 
 const appliedListeners = new Set<() => void>();
@@ -1023,9 +1025,9 @@ export function applyGlassConfig() {
      * scaled by: with the room dark they go out, and the lamp's own light on
      * the glass is the GlassLight pass above it.
      */
-    const roomLight = Math.min(tuning["roomBrightness"]!.value, 1);
+    const roomOn = Math.min(roomLight.gain, 1);
     for (const key of ["specular", "edgeHighlight"]) {
-      if (key in config) config[key] = config[key]! * roomLight;
+      if (key in config) config[key] = config[key]! * roomOn;
     }
     // The edge is the pane's own: its attribute wins over the knob.
     config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);

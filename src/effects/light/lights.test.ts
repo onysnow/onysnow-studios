@@ -46,3 +46,50 @@ describe("the lights", () => {
     expect(seen).toEqual([0.2, 0.4]);
   });
 });
+
+/*
+ * Light-system design, step A: everything about a light lives in the lights,
+ * and nothing else reads a knob for a light value or writes a light's colour.
+ * That is what lets a light be off and mean it: the resting edge glowed
+ * because two lights (the room, the liquid library's own) lived outside any
+ * list.
+ */
+describe("the lights are the only source of light values", () => {
+  it("carry position, height, size, colour and strength", async () => {
+    const { roomLight, lampPower, LAMP_COLOUR } = await import("./lights");
+    const { t } = await import("@/lib/tuning");
+    expect(cursorLamp.height).toBe(t("shadowHeight"));
+    expect(cursorLamp.radius).toBe(t("shadowSoftness"));
+    expect(cursorLamp.gain).toBe(t("coreGain"));
+    expect(cursorLamp.colour).toEqual(LAMP_COLOUR);
+    expect(roomLight.gain).toBe(t("roomBrightness"));
+    expect(lights).toContain(roomLight);
+    expect(lampPower()).toBeGreaterThan(0);
+  });
+
+  it("are the only thing that reads the light knobs or names the lamp's colour", async () => {
+    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { join, relative } = await import("node:path");
+    const root = join(__dirname, "../..");
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name)) files.push(p);
+      }
+    };
+    walk(root);
+    const knob =
+      /\bt\(\s*"(coreGain|shadowHeight|shadowSoftness|roomBrightness)"\s*\)|tuning\[\s*"(coreGain|shadowHeight|shadowSoftness|roomBrightness)"\s*\]/;
+    const colour = /1\.0,\s*0\.94,\s*0\.84/;
+    const offenders = files
+      .map((p) => relative(root, p))
+      .filter((p) => p !== "effects/light/lights.ts")
+      .filter((p) => {
+        const src = readFileSync(join(root, p), "utf8");
+        return knob.test(src) || colour.test(src);
+      });
+    expect(offenders).toEqual([]);
+  });
+});

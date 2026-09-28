@@ -84,7 +84,8 @@ uniform float uFrost;        // this pane's material
 uniform float uLightHeight; // CSS pixels above the glass
 uniform float uLampPower;
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
-uniform float uLightSize;   // the lamp's radius, CSS pixels
+uniform float uLightSize;
+uniform vec3 uLampColour;   // the lamp's colour (effects/light/lights)   // the lamp's radius, CSS pixels
 
 /*
  * The room the face reflects (see effects/optics/environment.ts): an HDR
@@ -586,7 +587,7 @@ void main() {
    * Blocked by whatever is standing on the glass between it and the lamp.
    */
   float reflected = lampReflection(frag - uLight, uLightHeight, uLampPower * uFaceLamp, uIor, uFrost);
-  vec3 mirror = inside * vec3(1.0, 0.94, 0.84) * reflected * (1.0 - blocked);
+  vec3 mirror = inside * uLampColour * reflected * (1.0 - blocked);
 
   /*
    * Everything the light does scales with the charge, and there is genuinely

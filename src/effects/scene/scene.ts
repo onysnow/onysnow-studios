@@ -477,8 +477,8 @@ function lightOnSurface(r: DOMRect): SurfaceLight {
   const centreY = r.top + r.height / 2;
   const cast = castShadow({
     gap: t("shadowGap"),
-    height: t("shadowHeight"),
-    lightRadius: t("shadowSoftness"),
+    height: cursorLamp.height,
+    lightRadius: cursorLamp.radius,
     lateralX: centreX - x,
     lateralY: centreY - y,
   });
@@ -639,7 +639,7 @@ function writeSurface(s: SurfaceReading, light: SurfaceLight) {
   el.style.setProperty("--lit-on", light.lit.toFixed(3));
   // The lamp's bright core, whose mirror image a glossy surface shows: the
   // emitter's radius less its glow, about two fifths of "Light size".
-  el.style.setProperty("--lamp-core", `${(t("shadowSoftness") * 0.35).toFixed(1)}px`);
+  el.style.setProperty("--lamp-core", `${(cursorLamp.radius * 0.35).toFixed(1)}px`);
   el.style.setProperty("--lit-angle", `${light.angle.toFixed(1)}deg`);
   // For the room reflection, offset for the surface's height above the glass.
   el.style.setProperty("--surface-x", `${Math.round(r.left)}px`);

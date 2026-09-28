@@ -16,21 +16,90 @@
  * No React here; the engine stays portable to the component library.
  */
 
+import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
+import { t } from "@/lib/tuning";
+
+export type LightKind =
+  /** A lamp at a point: the cursor's. */
+  | "point"
+  /** The room's own lights, seen as the room image reflected in the glass. */
+  | "environment";
+
+/*
+ * Everything about a light lives here and nowhere else (light-system design,
+ * step A): where it is, how big, what colour, how strong, how hard it is
+ * burning. The passes read these; none of them reads a knob for a light
+ * value, and a static test (lights.test.ts) holds them to that.
+ *
+ * The values that come from a knob are GETTERS, so a light always reports
+ * exactly what the knob says at the moment it is read -- the same numbers the
+ * passes read directly before, which is why nothing on the page changed.
+ */
 export type Light = {
   /** A stable name, so a pass can pick a light out of the list. */
-  id: string;
+  readonly id: string;
+  readonly kind: LightKind;
   /** Viewport position, CSS pixels. Off-page is -9999. */
   x: number;
   y: number;
+  /** How far above the photographs, CSS pixels ("Light height"). */
+  readonly height: number;
+  /** Its radius, CSS pixels ("Light size"): penumbrae, glint length. */
+  readonly radius: number;
+  /** Its colour, linear RGB. */
+  readonly colour: readonly [number, number, number];
+  /** How strong it is ("Core gain" for the lamp, "Room brightness" for the room). */
+  readonly gain: number;
   /** How hard it is burning, 0 to 1. */
   charge: number;
 };
 
+/** The lamp's colour: a warm white, a little under daylight. */
+export const LAMP_COLOUR = [1.0, 0.94, 0.84] as const;
+
 /** The lamp the cursor carries. First in the list, always there. */
-export const cursorLamp: Light = { id: "cursor", x: -9999, y: -9999, charge: 0 };
+export const cursorLamp: Light = {
+  id: "cursor",
+  kind: "point",
+  x: -9999,
+  y: -9999,
+  get height() {
+    return t("shadowHeight");
+  },
+  get radius() {
+    return t("shadowSoftness");
+  },
+  colour: LAMP_COLOUR,
+  get gain() {
+    return t("coreGain");
+  },
+  charge: 0,
+};
+
+/**
+ * The room's own lights. Its gain is "Room brightness", 0 by default: a dark
+ * room, the lamp the only source. It is always "burning"; its gain says how
+ * much.
+ */
+export const roomLight: Light = {
+  id: "room",
+  kind: "environment",
+  x: 0,
+  y: 0,
+  height: 0,
+  radius: 0,
+  colour: [1, 1, 1],
+  get gain() {
+    return t("roomBrightness");
+  },
+  charge: 1,
+};
 
 /** Every light in the scene. */
-export const lights: readonly Light[] = [cursorLamp];
+export const lights: readonly Light[] = [cursorLamp, roomLight];
+
+/** The lamp's radiant power, for the passes that work in real units. */
+export const lampPower = (light: Light = cursorLamp) => LAMP_POWER_PER_GAIN * light.gain;
 
 /** Where the pointer is going; committed to the lamp at the next frame. */
 export const pointer = { x: -9999, y: -9999 };

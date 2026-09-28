@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
-import { onCharge } from "@/effects/light/lights";
+import { cursorLamp, onCharge } from "@/effects/light/lights";
 import { sleepingLoop } from "@/lib/gl-loop";
 import {
   beginPass,
@@ -199,7 +199,7 @@ export function CursorLight({
       gl.uniform1f(uCharge, charge);
       gl.uniform1f(uClosed, closed);
       gl.uniform1f(uTime, (now - start) / 1000);
-      gl.uniform1f(uGain, t("coreGain"));
+      gl.uniform1f(uGain, cursorLamp.gain);
       gl.uniform1f(uFalloff, t("coreFalloff"));
       gl.uniform1f(uAperture, t("aperture"));
       gl.uniform1f(uSpread, t("spread"));

@@ -10,13 +10,13 @@ import {
 } from "@/effects/engine/gl";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
-import { onCharge } from "@/effects/light/lights";
+import { cursorLamp, lampPower, onCharge, roomLight } from "@/effects/light/lights";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
 import { frontRoughness } from "@/effects/materials/presets";
 import { CAMERA_DISTANCE, roomMipChain } from "@/effects/optics/environment";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
-import { LAMP_POWER_PER_GAIN, LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
+import { LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -140,6 +140,7 @@ export function GlassLight({
     const uLampPower = U("uLampPower");
     const uFaceLamp = U("uFaceLamp");
     const uLightSize = U("uLightSize");
+    const uLampColour = U("uLampColour");
 
     // The site's amber and teal in linear light — the shader works in linear
     // and only returns to display space at the very end.
@@ -411,15 +412,16 @@ export function GlassLight({
        * the switch turns off only the face's own image of the lamp, which is
        * off by request (it reads as a flashlight; see LAMP_REFLECTION_ENABLED).
        */
-      gl.uniform1f(uLampPower, LAMP_POWER_PER_GAIN * t("coreGain"));
+      gl.uniform1f(uLampPower, lampPower(cursorLamp));
+      gl.uniform3fv(uLampColour, cursorLamp.colour);
       gl.uniform1f(uFaceLamp, LAMP_REFLECTION_ENABLED ? 1 : 0);
-      gl.uniform1f(uLightSize, t("shadowSoftness"));
+      gl.uniform1f(uLightSize, cursorLamp.radius);
       requestRoom();
       gl.uniform1f(
         uCameraDistance,
         CAMERA_DISTANCE * (document.documentElement.clientWidth || window.innerWidth),
       );
-      gl.uniform1f(uRoomExposure, t("roomBrightness"));
+      gl.uniform1f(uRoomExposure, roomLight.gain);
       gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
       if (room) {
         gl.activeTexture(gl.TEXTURE3);
@@ -466,7 +468,7 @@ export function GlassLight({
         gl.uniform1f(uFrontRoughness, frontRoughness(material, material.frost));
         gl.uniform1f(uThickness, thickness);
         gl.uniform1f(uGap, gap);
-        gl.uniform1f(uLightHeight, Math.max(t("shadowHeight") - gap, 1));
+        gl.uniform1f(uLightHeight, Math.max(cursorLamp.height - gap, 1));
         gl.uniform1f(uGrimeRake, t("grimeRake") * smudge);
         gl.uniform1f(uGrimeSpecks, t("grimeSpecks") * scratch);
         gl.uniform1f(uSeed, pane.s);

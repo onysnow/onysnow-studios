@@ -73,6 +73,7 @@ uniform float uCaustics;
  * effects/optics/transmission.ts).
  */
 uniform float uLightSize;
+uniform vec3 uLampColour;   // the lamp's colour (effects/light/lights)
 uniform float uView;
 uniform float uPrism;
 
@@ -333,7 +334,7 @@ void main() {
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = toneMapFilm(f.rgb);
   float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
-  vec3 warm = vec3(1.0, 0.94, 0.84);
+  vec3 warm = uLampColour;
   /*
    * Worked out premultiplied (the light is at most the coverage, so this is
    * a valid premultiplied colour), written straight: the shared context
