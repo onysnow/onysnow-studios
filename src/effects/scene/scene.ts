@@ -294,7 +294,7 @@ function facesAt(
   return paneFaces(
     r,
     eyeAt(viewportWidth, viewportHeight),
-    viewportHeight / 2,
+    camera.distance(viewportWidth),
     el.classList.contains("glass--bar"),
     thickness,
     r.width >= viewportWidth - 1,

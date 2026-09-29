@@ -9,7 +9,7 @@ import {
 } from "./presets";
 import { readPaneCauses } from "./pane-causes";
 import { reflectanceNormal } from "@/effects/optics/reflection";
-import { PANE_THICKNESS, SIDE_ABSORB, sideHeight } from "@/effects/optics/edge-side";
+import { PANE_THICKNESS, SIDE_ABSORB, sideWidth } from "@/effects/optics/edge-side";
 import { Pane } from "@/effects/react/Pane";
 
 /**
@@ -75,8 +75,12 @@ describe("a pane's causes, read from its element", () => {
   });
 
   it("a thicker slab shows a proportionally taller side", () => {
-    expect(sideHeight(0.5, false, PANE_THICKNESS)).toBe(sideHeight(0.5));
-    expect(sideHeight(0.5, false, 2 * PANE_THICKNESS)).toBeCloseTo(2 * sideHeight(0.5));
+    // A thicker slab shows a wider side from the same place (a little under
+    // twice: the back arris is further away too).
+    const one = sideWidth(300, PANE_THICKNESS, false, 1728);
+    const two = sideWidth(300, 2 * PANE_THICKNESS, false, 1728);
+    expect(two).toBeGreaterThan(1.95 * one);
+    expect(two).toBeLessThan(2 * one);
   });
 });
 

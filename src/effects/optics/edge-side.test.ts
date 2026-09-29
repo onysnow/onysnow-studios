@@ -14,8 +14,7 @@ import {
   FAR_ARRIS_LOSS,
   sideCosine,
   sideGradientCss,
-  sideHeight,
-  sideOpen,
+  sideWidth,
   paneFaces,
   sidePath,
   sideTransmittance,
@@ -99,15 +98,21 @@ describe("the side's height", () => {
     expect(css).not.toContain("--side-top");
     expect(css).not.toContain("--pane-top");
     // Bars are thinner glass than bands.
-    expect(sideHeight(1, true)).toBeLessThan(sideHeight(1));
+    expect(sideWidth(300, PANE_THICKNESS, true, 1728)).toBeLessThan(
+      sideWidth(300, PANE_THICKNESS, false, 1728),
+    );
   });
 
-  it("shows only from its own side of the edge, wider the further past the eye", () => {
-    expect(sideOpen(-10, 450)).toBe(0);
-    expect(sideOpen(0, 450)).toBe(0);
-    expect(sideOpen(225, 450)).toBeCloseTo(0.5, 12);
-    expect(sideOpen(900, 450)).toBe(1);
-    expect(sideHeight(0)).toBe(0);
+  it("shows only from its own side of the edge, a few pixels wide: seen from the front", () => {
+    const D = 1728; // 1.2 x a 1440 px view
+    expect(sideWidth(-10, PANE_THICKNESS, false, D)).toBe(0);
+    expect(sideWidth(0, PANE_THICKNESS, false, D)).toBe(0);
+    // Perspective: offset x T / (D + T).
+    expect(sideWidth(450, 18, false, D)).toBeCloseTo((450 * 18) / (D + 18), 12);
+    // Half a view past the eye, an 18 px slab shows under 5 px of side.
+    expect(sideWidth(450, 18, false, D)).toBeLessThan(5);
+    // Twice as far past the eye, twice as wide; twice as thick, about twice.
+    expect(sideWidth(400, 18, false, D)).toBeCloseTo(2 * sideWidth(200, 18, false, D), 12);
   });
 
   it("never shows the top and bottom (or left and right) of a flat pane at once", () => {
@@ -118,7 +123,7 @@ describe("the side's height", () => {
         const f = paneFaces(
           { left: 300, top: 250, right: 700, bottom: 500 },
           { x: eyeX, y: eyeY },
-          450,
+          1728,
           bar,
           PANE_THICKNESS,
           false,

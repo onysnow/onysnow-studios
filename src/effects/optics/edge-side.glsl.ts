@@ -1,13 +1,12 @@
 import {
   ARRIS_RADIUS,
-  BAR_SIDE_MAX_PX,
+  BAR_THINNER,
   ECHO_GAIN,
   FAR_ARRIS_LOSS,
   PANE_THICKNESS,
   RELAY_GAIN,
   SIDE_ABSORB,
   SIDE_GUIDED_DEPTH,
-  SIDE_MAX_PX,
   SIDE_PATH_GUIDED,
   SIDE_PATH_MIN,
 } from "./edge-side";
@@ -24,8 +23,7 @@ export const EDGE_SIDE_GLSL = /* glsl */ `
 #define PANE_THICKNESS ${f(PANE_THICKNESS)}
 #define ARRIS_RADIUS ${f(ARRIS_RADIUS)}
 #define SIDE_ABSORB vec3(${SIDE_ABSORB.map(f).join(", ")})
-#define SIDE_MAX_PX ${f(SIDE_MAX_PX)}
-#define BAR_SIDE_MAX_PX ${f(BAR_SIDE_MAX_PX)}
+#define BAR_THINNER ${f(BAR_THINNER)}
 #define SIDE_PATH_MIN ${f(SIDE_PATH_MIN)}
 #define SIDE_PATH_GUIDED ${f(SIDE_PATH_GUIDED)}
 #define SIDE_GUIDED_DEPTH ${f(SIDE_GUIDED_DEPTH)}
@@ -33,15 +31,16 @@ export const EDGE_SIDE_GLSL = /* glsl */ `
 #define ECHO_GAIN ${f(ECHO_GAIN)}
 #define RELAY_GAIN ${f(RELAY_GAIN)}
 
-/* How much of a side face is in view, 0..1: how far its edge is past the eye, over the reach. */
-float sideOpen(float offset, float reach) {
-  return clamp(offset / max(reach, 1.0), 0.0, 1.0);
+/* How wide a side face shows, CSS px, its edge offset px past the eye (edge-side.ts sideWidth). */
+float sideWidth(float offset, float thickness, float bar, float distance) {
+  float t = max(thickness, 0.0) * (bar > 0.5 ? BAR_THINNER : 1.0);
+  return max(offset, 0.0) * t / (max(distance, 1.0) + t);
 }
 
-/* The side face's width on screen, CSS pixels; bar is 1.0 for the thin fixed bars. Scales with thickness. */
-float sideHeight(float open, float bar, float thickness) {
-  float base = (bar > 0.5 ? BAR_SIDE_MAX_PX : SIDE_MAX_PX) * clamp(open, 0.0, 1.0);
-  return base * max(thickness, 0.0) / PANE_THICKNESS;
+/* The inverse: how far past the eye an edge is whose face shows width px. */
+float sideOffset(float width, float thickness, float bar, float distance) {
+  float t = max(max(thickness, 0.0) * (bar > 0.5 ? BAR_THINNER : 1.0), 0.01);
+  return width * (max(distance, 1.0) + t) / t;
 }
 
 /* Path length through the side at depth px in from the front arris. */

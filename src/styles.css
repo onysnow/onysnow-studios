@@ -581,10 +581,10 @@
    * other, so the thickness opens on one edge as it closes on the other, and
    * that differential is what reads as depth rather than as a drawn border.
    *
-   * How tall each shows is sideOpen() and sideHeight() in effects/optics/
-   * edge-side.ts, one model for these layers and the shader. Neither ever
-   * closes: the far side is still there, foreshortened and seen through the
-   * glass, which is why it reads as subtler rather than absent.
+   * How wide each shows is sideWidth() / paneFaces() in effects/optics/
+   * edge-side.ts, one model for these layers and the shader: a face shows
+   * only from its own side of the edge, never two opposite ones, and only a
+   * few pixels, seen nearly edge-on from the front.
    * ===================================================================== */
   /*
    * The side faces (<Glass> renders them as siblings AFTER the pane, and

@@ -709,9 +709,11 @@ void main() {
     float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
     float farTopLine = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
     float farBotLine = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
-    float fullFace = max(sideHeight(1.0, uBar, uThickness), 1.0);
-    float topOpenness = uFaces.x / fullFace;
-    float botOpenness = uFaces.y / fullFace;
+    // How far round the face is turned toward you: its edge's offset past
+    // the eye, over half the view.
+    float halfView = max(0.5 * uViewport.y / uScale, 1.0);
+    float topOpenness = clamp(sideOffset(uFaces.x, uThickness, uBar, uCameraDistance) / halfView, 0.0, 1.0);
+    float botOpenness = clamp(sideOffset(uFaces.y, uThickness, uBar, uCameraDistance) / halfView, 0.0, 1.0);
     float sideGlare = (glareTop * topOpenness + glareBot * botOpenness) * withinX;
     rim += vec3(sideGlare) * 11.0 * grazing * edgeFacing * EDGE_GLOW;
     rim += vec3((farTopLine * topOpenness + farBotLine * botOpenness) * withinX) * 5.0 * direct * EDGE_GLOW;
