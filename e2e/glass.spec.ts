@@ -215,6 +215,8 @@ test.describe("plastic on the glass", () => {
   test("the orange button passes orange light behind it, thrown away from the lamp", async ({
     page,
   }) => {
+    // Two lit holds with the full light passes running: slow in software GL.
+    test.setTimeout(60_000);
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     const button = page.locator("main .glass .plastic").first();
