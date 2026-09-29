@@ -59,3 +59,61 @@ describe("results are locked", () => {
     expect(text).toMatch(/\bcoreGain:/);
   });
 });
+
+describe("saved tuning keeps only what was moved", () => {
+  it("does not save values nobody touched", async () => {
+    const { tuningSnapshot, resetTuning, TUNING_DEFAULTS } = await import("./tuning");
+    resetTuning(TUNING_DEFAULTS);
+    const snap = tuningSnapshot();
+    expect(Object.keys(snap.css)).toEqual([]);
+    expect(Object.keys(snap.raster)).toEqual([]);
+  });
+
+  it("ignores an old default in a store written when every knob was saved", async () => {
+    const { restoreTuning, resetTuning, TUNING_DEFAULTS, t } = await import("./tuning");
+    resetTuning(TUNING_DEFAULTS);
+    restoreTuning({ css: { roomBrightness: 0 }, raster: { roomBrightness: 0 } });
+    expect(t("roomBrightness")).toBe(1);
+    restoreTuning({ css: { roomBrightness: 2.5 }, raster: { roomBrightness: 2.5 } });
+    expect(t("roomBrightness")).toBe(2.5);
+    resetTuning(TUNING_DEFAULTS);
+  });
+});
+
+describe("the lab's saved tuning", () => {
+  it("sets aside a store written the old way (every knob) and keeps the source's values", async () => {
+    const mod = await import("./tuning");
+    mod.resetTuning(mod.TUNING_DEFAULTS);
+    const store = new Map<string, string>();
+    const ls = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    const g = globalThis as unknown as { window?: unknown };
+    const hadWindow = "window" in g;
+    const before = g.window;
+    g.window = { localStorage: ls };
+    try {
+      store.set(
+        mod.TUNING_STORE,
+        JSON.stringify({ css: { roomBrightness: 0 }, raster: { roomBrightness: 0 } }),
+      );
+      mod.loadSavedTuning();
+      expect(mod.t("roomBrightness")).toBe(1);
+      expect(store.has(mod.TUNING_STORE)).toBe(false);
+      expect(store.has(`${mod.TUNING_STORE}:before-2026-09-28`)).toBe(true);
+
+      store.set(
+        mod.TUNING_STORE,
+        JSON.stringify({ v: 2, css: { roomBrightness: 2 }, raster: { roomBrightness: 2 } }),
+      );
+      mod.loadSavedTuning();
+      expect(mod.t("roomBrightness")).toBe(2);
+    } finally {
+      if (hadWindow) g.window = before;
+      else delete g.window;
+      mod.resetTuning(mod.TUNING_DEFAULTS);
+    }
+  });
+});

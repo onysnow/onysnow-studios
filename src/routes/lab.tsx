@@ -14,11 +14,11 @@ import {
   resetTuning,
   loadSavedTuning,
   restoreTuning,
+  savedTuning,
   serializeTuning,
   setValueIn,
   tuning,
   tuningMode,
-  tuningSnapshot,
   valueIn,
   TUNING_DEFAULTS,
   type Knob,
@@ -140,7 +140,7 @@ function Lab() {
     applyTuning();
     redraw((n) => n + 1);
     try {
-      localStorage.setItem(STORE, JSON.stringify(tuningSnapshot()));
+      localStorage.setItem(STORE, savedTuning());
     } catch {
       // Tuning still works without somewhere to remember it.
     }

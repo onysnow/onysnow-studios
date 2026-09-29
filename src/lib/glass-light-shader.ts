@@ -141,6 +141,15 @@ uniform vec3  uCool;
 #define REFRACTION 0.69
 #define CHROM_ABERRATION 0.05
 #define EDGE_HIGHLIGHT 0.05
+/*
+ * The lamp's scattered light on the edge and its bloom (restored from
+ * before step 8; see the lamp loop). EDGE_GLOW 0.0 turns it off whole.
+ * The three numbers are the values the "Edge glow" and "Side reach"
+ * settings had when they were retired.
+ */
+#define EDGE_GLOW 1.0
+#define EDGE_GLOW_ARRIS 9.75
+#define EDGE_GLOW_SIDE_REACH 0.7
 #define FRESNEL 1.0
 #define MAX_BEND 34.0   // peak displacement at the rim, CSS pixels
 
@@ -642,6 +651,38 @@ void main() {
     float piped = couple * exp(-dl / 780.0);
     vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
     rim += pipedTint * arrisProfile(ad) * 1.7 * arrisWear * piped;
+
+    /*
+     * ---- The edge glowing where the lamp is, and its bloom ----
+     *
+     * Back from before optics step 8 (fde9b4e), at Ony's request (2026-09-29:
+     * "no bloom. no edge lights"). Step 8 kept only the arris's MIRROR image
+     * of the lamp, which shows only where the geometry puts it, so at most
+     * lamp positions the edge stayed dark. A real edge also SCATTERS the
+     * lamp's light: the ground corner and the frost send it out in every
+     * direction, brightest where the lamp is nearest and fading with it, and
+     * the camera spreads that bright line into a bloom. These are those
+     * terms, as they were: a tight line on the arris, its glow (flare) and
+     * haze, the side faces' glare and the far arris line, all falling off
+     * with the lamp's reach and gated by its charge like everything else.
+     */
+    float filament = exp(-ad / 2.8);
+    float flare = exp(-ad / 15.0);
+    float haze = exp(-ad / 48.0);
+    float edgeFacing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
+    rim += vec3(filament * EDGE_GLOW_ARRIS * arrisWear + flare * 4.6 + haze * 0.34)
+      * reach * edgeFacing * EDGE_GLOW;
+    rim += pipedTint * flare * 0.8 * piped * edgeFacing * EDGE_GLOW;
+    float grazing = direct * 0.3 + spill * EDGE_GLOW_SIDE_REACH;
+    float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
+    float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
+    float farTopLine = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
+    float farBotLine = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
+    float topOpenness = sideOpen(uTilt, 1.0);
+    float botOpenness = sideOpen(uTilt, 0.0);
+    float sideGlare = (glareTop * topOpenness + glareBot * botOpenness) * withinX;
+    rim += vec3(sideGlare) * 11.0 * grazing * edgeFacing * EDGE_GLOW;
+    rim += vec3((farTopLine * topOpenness + farBotLine * botOpenness) * withinX) * 5.0 * direct * EDGE_GLOW;
 
     /*
      * The marks are on the flat face only (Ony: no scratches or smudges on
