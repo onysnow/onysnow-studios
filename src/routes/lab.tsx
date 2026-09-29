@@ -7,6 +7,7 @@ import { coverPhotosQuery, settingsQuery } from "@/lib/content";
 import { saveSiteTuning } from "@/lib/admin";
 import { useAdminStatus } from "@/hooks/use-admin";
 import { PhotoSection } from "@/components/site/PhotoSection";
+import { ParallaxScene } from "@/components/site/ParallaxScene";
 import { Img } from "@/components/site/Img";
 import {
   applyTuning,
@@ -208,13 +209,22 @@ function Lab() {
        * Stacks (light step E): the same two panes three ways. Lab only -- no
        * live page uses a stack yet.
        */}
-      <PhotoSection image={photos.data?.[2] ?? photo}>
+      {/*
+       * On the photograph itself, not on a section pane: a pane inside a pane
+       * cannot see past its container (the outer pane's blur is a backdrop
+       * root), so nested, these frosted a tinted box and drew as hard
+       * squares with the container's shadow round them (Ony, 2026-09-29).
+       * Each stack rests on the picture, as a stack on the site would.
+       */}
+      <ParallaxScene image={photos.data?.[2] ?? photo} scrim="none" height="">
         <div className="mx-auto max-w-5xl px-6 py-16" data-lab-stacks>
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Stacks</p>
-          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            Two panes, one resting on the other. With air between them each keeps its own surfaces
-            and the light bounces between them; bonded, they are one thick pane.
-          </p>
+          <Pane className="max-w-2xl !p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Stacks</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Two panes, one resting on the other. With air between them each keeps its own surfaces
+              and the light bounces between them; bonded, they are one thick pane.
+            </p>
+          </Pane>
           <div className="mt-8 grid gap-10 sm:grid-cols-3">
             {(
               [
@@ -234,7 +244,7 @@ function Lab() {
             ))}
           </div>
         </div>
-      </PhotoSection>
+      </ParallaxScene>
 
       <div className="mx-auto max-w-5xl px-6 py-14">
         <p className="mb-3 text-xs text-muted-foreground" data-lab-save={saveState}>
