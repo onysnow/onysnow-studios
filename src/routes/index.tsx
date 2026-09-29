@@ -127,7 +127,7 @@ function HomePage() {
                 image={hero}
                 eager
                 className="h-[calc(105svh+var(--seam-below,0px))] w-full"
-                imgClassName="scale-105 object-[72%_center] sm:object-center"
+                imgClassName="scale-105 object-[22%_center] sm:object-center"
                 sizes="100vw"
               />
             </div>
