@@ -135,6 +135,7 @@ export function GlassLight({
     const uImageBelowAspect = U("uImageBelowAspect");
     const uRestEdge = U("uRestEdge");
     const uGlowOnly = U("uGlowOnly");
+    const uEdgeBloom = U("uEdgeBloom");
     const uAboveRect = U("uAboveRect");
     const uAboveSoft = U("uAboveSoft");
     const uOccRect = U("uOccRect");
@@ -436,6 +437,7 @@ export function GlassLight({
       const heights = packed.map((l) => l.height);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uRestEdge, t("restEdge"));
+      gl.uniform1f(uEdgeBloom, camera.lens.edgeBloom);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       /*
        * The lamp's power reaches the arris glints whatever the switch says;

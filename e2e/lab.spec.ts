@@ -79,10 +79,20 @@ test.describe("/lab", () => {
    */
   test("has controls for causes only", async ({ page }) => {
     await openLab(page);
-    for (const cause of ["edgeWidth", "coreGain", "shadowHeight", "floorGap"]) {
+    // The lens flare controls are back by request (Ony, 2026-09-29).
+    for (const cause of [
+      "edgeWidth",
+      "coreGain",
+      "shadowHeight",
+      "floorGap",
+      "rimGlare",
+      "ghostGain",
+      "haloGain",
+      "edgeBloom",
+    ]) {
       await expect(page.locator(`#knob-${cause}`)).toHaveCount(1);
     }
-    for (const result of ["transmit", "glassFresnel", "floorLight", "restEdge", "rimGlare"]) {
+    for (const result of ["transmit", "glassFresnel", "floorLight", "restEdge"]) {
       await expect(page.locator(`#knob-${result}`)).toHaveCount(0);
     }
   });

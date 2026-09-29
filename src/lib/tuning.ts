@@ -403,7 +403,7 @@ export const tuning: Record<string, Knob> = {
   },
   coreFalloff: {
     label: "Core tightness",
-    group: "Light",
+    group: "Lens flare",
     value: 1500,
     min: 300,
     max: 4000,
@@ -430,7 +430,7 @@ export const tuning: Record<string, Knob> = {
   },
   ghostGain: {
     label: "Ghost strength",
-    group: "Light",
+    group: "Lens flare",
     value: 2.78,
     min: 0,
     max: 6,
@@ -439,7 +439,7 @@ export const tuning: Record<string, Knob> = {
   },
   haloGain: {
     label: "Halo strength",
-    group: "Light",
+    group: "Lens flare",
     value: 1.5,
     min: 0,
     max: 4,
@@ -467,7 +467,7 @@ export const tuning: Record<string, Knob> = {
   },
   rimGlare: {
     label: "Edge glare",
-    group: "Glass",
+    group: "Lens flare",
     value: 0.8,
     min: 0,
     max: 1,
@@ -476,12 +476,22 @@ export const tuning: Record<string, Knob> = {
   },
   rimGlareSize: {
     label: "Edge glare size",
-    group: "Glass",
+    group: "Lens flare",
     value: 16,
     min: 2,
     max: 60,
     step: 1,
     hint: "How far the glare spreads, in pixels.",
+  },
+  edgeBloom: {
+    label: "Edge bloom",
+    group: "Lens flare",
+    // Ony, 2026-09-29: "the bloom is a little strong" (was 1).
+    value: 0.65,
+    min: 0,
+    max: 2,
+    step: 0.05,
+    hint: "How much the camera spreads a lit edge into a glow round it. The bright line itself stays; this is only the soft light around it.",
   },
   // ---- CSS-side ----
   displacement: {
@@ -783,11 +793,6 @@ export const RESULTS: Readonly<Record<string, string>> = {
   glassShadowSpread: "the shadow's softness: the light's size and the gap",
   glassShadowY: "the shadow's offset: the light's position and the gap",
   glassBrightness: "the pane's brightness: the room and the light",
-  coreFalloff: "the core's tightness: the lamp's size",
-  ghostGain: "the lens ghosts: the lens's quality",
-  haloGain: "the halo: the lens's quality",
-  rimGlare: "the glare past the rim: the camera's lens and the light",
-  rimGlareSize: "the glare's reach: the camera's lens",
   displacement: "the refraction of the CSS glass: IOR and thickness",
   shadowStrength: "the content's shadow: the light and the content's depth",
   floorView: "the bend of the floor seen through the glass: IOR, thickness and gap",

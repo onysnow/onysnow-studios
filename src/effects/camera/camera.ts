@@ -53,5 +53,9 @@ export const camera = {
     get glareSize() {
       return t("rimGlareSize");
     },
+    /** How much a lit edge is spread into a glow round it ("Edge bloom"). */
+    get edgeBloom() {
+      return t("edgeBloom");
+    },
   },
 };

@@ -45,6 +45,7 @@ precision highp float;
 uniform vec2  uViewport;      // device pixels
 uniform float uScale;         // device pixels per CSS pixel
 uniform float uRestEdge;
+uniform float uEdgeBloom;     // the camera spreading a lit edge into a glow ("Edge bloom")
 uniform float uGlowOnly;      // 1: draw only the lit edge and its bloom (the .glass-glow layer)      // how much edge shows with nothing shining
 
 /*
@@ -630,7 +631,7 @@ void main() {
      * arris is not lit. (It used to ride the lamp's distance, which lit the
      * whole width of a pane white whenever the lamp was near.)
      */
-    float bloom = exp(-ad / 15.0) * 0.35 + exp(-ad / 48.0) * 0.05;
+    float bloom = (exp(-ad / 15.0) * 0.35 + exp(-ad / 48.0) * 0.05) * uEdgeBloom;
     vec3 rim = vec3(arrisLamp * (arrisProfile(ad) + bloom));
 
     /*
@@ -682,9 +683,9 @@ void main() {
     float flare = exp(-ad / 15.0);
     float haze = exp(-ad / 48.0);
     float edgeFacing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
-    rim += vec3(filament * EDGE_GLOW_ARRIS * arrisWear + flare * 4.6 + haze * 0.34)
+    rim += vec3(filament * EDGE_GLOW_ARRIS * arrisWear + (flare * 4.6 + haze * 0.34) * uEdgeBloom)
       * reach * edgeFacing * EDGE_GLOW;
-    rim += pipedTint * flare * 0.8 * piped * edgeFacing * EDGE_GLOW;
+    rim += pipedTint * flare * 0.8 * uEdgeBloom * piped * edgeFacing * EDGE_GLOW;
     float grazing = direct * 0.3 + spill * EDGE_GLOW_SIDE_REACH;
     float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
     float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
