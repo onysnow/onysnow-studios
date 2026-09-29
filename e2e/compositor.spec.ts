@@ -32,6 +32,8 @@ async function paneLayers(page: import("@playwright/test").Page) {
       tag: c.tagName,
     })) as Layer[],
     sideZ: Number.parseInt(getComputedStyle(el.nextElementSibling!).zIndex, 10),
+    // A pane with a z-index of its own lifts its sides with it (0 when it has none).
+    paneZ: Number.parseInt(getComputedStyle(el).zIndex, 10) || 0,
   }));
 }
 
@@ -59,12 +61,12 @@ test.describe("the compositor", () => {
   test("CSS glass: every pane layer in its slot and order", async ({ page }) => {
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
-    const { children, sideZ } = await paneLayers(page);
+    const { children, sideZ, paneZ } = await paneLayers(page);
     const names = checkOrder(children);
     for (const n of ["pane:bokeh", "pane:refraction", "pane:glare", "pane:under", "pane:surface"]) {
       expect(names).toContain(n);
     }
-    expect(sideZ).toBe(SIDE_LAYER_Z);
+    expect(sideZ).toBe(paneZ + SIDE_LAYER_Z);
   });
 
   test("liquid glass: the library's canvas is taken into its slot, under the light", async ({

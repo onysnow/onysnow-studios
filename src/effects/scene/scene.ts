@@ -29,7 +29,7 @@
  */
 import { t } from "@/lib/tuning";
 import { castShadow } from "@/lib/cast-shadow";
-import { LIGHT_BLEED } from "@/effects/engine/compositor";
+import { GLOW_LAYER_Z, LIGHT_BLEED, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
@@ -365,7 +365,26 @@ function readImage(img: HTMLImageElement | null): ImageReading | null {
 
 function readPane(el: HTMLElement, withOffsets = true): PaneReading {
   const layers = withOffsets ? sideLayers.get(el) : undefined;
-  if (layers && layers.fixed === null) layers.fixed = getComputedStyle(el).position === "fixed";
+  if (layers && layers.fixed === null) {
+    const cs = getComputedStyle(el);
+    layers.fixed = cs.position === "fixed";
+    /*
+     * A pane with a z-index of its own (the fixed header, z-40) lifts its
+     * sides and its lit edge with it: they are siblings, and at their plain
+     * slots (2, 3) they sat UNDER the header, so its lit edge and bloom were
+     * seen through its own glass -- a backlight, not a lit edge (Ony,
+     * 2026-09-29: "the bloom is still not showing up on top of the header
+     * and instead is backlighting").
+     */
+    const z = Number.parseInt(cs.zIndex, 10);
+    if (Number.isFinite(z) && z > 0) {
+      layers.top.style.zIndex = String(z + SIDE_LAYER_Z);
+      layers.bottom.style.zIndex = String(z + SIDE_LAYER_Z);
+      if (layers.left) layers.left.style.zIndex = String(z + SIDE_LAYER_Z);
+      if (layers.right) layers.right.style.zIndex = String(z + SIDE_LAYER_Z);
+      if (layers.glow) layers.glow.style.zIndex = String(z + GLOW_LAYER_Z);
+    }
+  }
   return {
     el,
     rect: el.getBoundingClientRect(),
