@@ -367,7 +367,13 @@ void main() {
   }
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = toneMapFilm(f.rgb);
-  float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
+  /*
+   * The shadow goes through the same film curve as the light: deep shade rolls
+   * off toward black instead of clipping to it, so the shadow can be strong
+   * enough to read far from the lamp without going solid right beside it.
+   */
+  float shade = 1.0 - exp(-f.a * 1.15);
+  float a = clamp(max(add.r, max(add.g, add.b)) + shade, 0.0, 1.0);
   /*
    * The light's colour, applied after the film curve as it always was. With
    * one light that is exact; when lights of different colours overlap
