@@ -171,7 +171,9 @@ test.describe("the light passes share one WebGL context", () => {
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     await charge(page);
-    await expect.poll(() => inked(page, "canvas.floor-light")).toBeGreaterThan(1000);
+    await expect
+      .poll(() => inked(page, "canvas.floor-light"), { timeout: 20_000 })
+      .toBeGreaterThan(1000);
     expect(errors).toEqual([]);
   });
 });

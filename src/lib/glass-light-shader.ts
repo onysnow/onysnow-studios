@@ -70,7 +70,7 @@ uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
 uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one edge every effect shares
 uniform float uStraight;      // 1: a full-width band -- top and bottom edges only
-uniform float uTilt;          // -1 looking up at it, 1 looking down at it
+uniform vec4  uFaces;         // how wide each side face shows, CSS px: top, bottom, left, right (effects/optics/edge-side paneFaces)
 uniform float uBar;           // 1: a thin fixed bar (.glass--bar), thinner glass
 uniform float uThickness;     // this pane's thickness, CSS px (its data-thickness)
 uniform float uSeed;
@@ -439,15 +439,19 @@ void main() {
    * REFLECTS, and the echo.
    */
   // Whole pixels, as the CSS side layers are placed (effects/scene/scene).
-  float topT = floor(sideHeight(sideOpen(uTilt, 1.0), uBar, uThickness) + 0.5);
-  float botT = floor(sideHeight(sideOpen(uTilt, 0.0), uBar, uThickness) + 0.5);
+  // A closed face (0 px) draws nothing; the widths are kept off zero only so
+  // nothing below divides by it.
+  float topShows = step(0.5, uFaces.x);
+  float botShows = step(0.5, uFaces.y);
+  float topT = max(uFaces.x, 0.5);
+  float botT = max(uFaces.y, 0.5);
   float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z) * inside;
   float dTop = frag.y - uRect.y;
   float dBot = (uRect.y + uRect.w) - frag.y;
   float onTop = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dTop)
-    * (1.0 - smoothstep(topT - ARRIS_RADIUS, topT + ARRIS_RADIUS, dTop)) * withinX;
+    * (1.0 - smoothstep(topT - ARRIS_RADIUS, topT + ARRIS_RADIUS, dTop)) * withinX * topShows;
   float onBot = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dBot)
-    * (1.0 - smoothstep(botT - ARRIS_RADIUS, botT + ARRIS_RADIUS, dBot)) * withinX;
+    * (1.0 - smoothstep(botT - ARRIS_RADIUS, botT + ARRIS_RADIUS, dBot)) * withinX * botShows;
 
   /*
    * The side as a mirror. You see it at a grazing angle, so it reflects
@@ -495,7 +499,8 @@ void main() {
   vec3 behindBelow = texture2D(uBackdropBelow, coverUv(frag, uImageBelow, uImageBelowAspect)).rgb * uHasBelow;
   vec3 echoTint = exp(-SIDE_ABSORB * 2.0 * SIDE_PATH_MIN) * ECHO_GAIN;
   sideLight += echoTint * withinX * (
-    straight * uHasBackdrop * echoProfile(dTop, topT) + behindBelow * echoProfile(dBot, botT)
+    straight * uHasBackdrop * echoProfile(dTop, topT) * topShows
+      + behindBelow * echoProfile(dBot, botT) * botShows
   );
 
 
@@ -704,8 +709,9 @@ void main() {
     float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
     float farTopLine = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
     float farBotLine = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
-    float topOpenness = sideOpen(uTilt, 1.0);
-    float botOpenness = sideOpen(uTilt, 0.0);
+    float fullFace = max(sideHeight(1.0, uBar, uThickness), 1.0);
+    float topOpenness = uFaces.x / fullFace;
+    float botOpenness = uFaces.y / fullFace;
     float sideGlare = (glareTop * topOpenness + glareBot * botOpenness) * withinX;
     rim += vec3(sideGlare) * 11.0 * grazing * edgeFacing * EDGE_GLOW;
     rim += vec3((farTopLine * topOpenness + farBotLine * botOpenness) * withinX) * 5.0 * direct * EDGE_GLOW;

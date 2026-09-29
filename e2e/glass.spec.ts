@@ -151,13 +151,18 @@ test.describe("the pane's edge", () => {
    * layer inside one paints its colour flat instead of absorbing. So they are
    * siblings, laid on the pane's edges by the pass that measures it.
    */
-  test("its side faces sit on its top and bottom edges, outside it, absorbing", async ({
+  test("its side faces sit on its edges, outside it, absorbing; only the one facing the eye shows", async ({
     page,
   }) => {
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     const band = page.locator("[data-seam] .glass").first();
     await band.scrollIntoViewIfNeeded();
+    // Put the band's top edge below the eye (the middle of the view), so its
+    // top face is the one in view.
+    const top = await band.evaluate((el) => el.getBoundingClientRect().top);
+    const vh = await page.evaluate(() => window.innerHeight);
+    await page.mouse.wheel(0, top - vh * 0.7);
     const facts = async () =>
       band.evaluate((el) => {
         const r = el.getBoundingClientRect();
@@ -177,6 +182,8 @@ test.describe("the pane's edge", () => {
       });
     await expect.poll(async () => (await facts()).heights[0]).toBeGreaterThan(0);
     const f = await facts();
+    // Below the eye: its top face shows, its bottom face cannot.
+    expect(f.heights[1]).toBe(0);
     expect(f.classes[0]).toContain("glass-side--top");
     expect(f.classes[1]).toContain("glass-side--bottom");
     expect(f.topAt).toBe(0);
@@ -192,7 +199,7 @@ test.describe("the pane's edge", () => {
    * shows a face on each; the one facing the middle of the view is the wider.
    * A band as wide as the view has no left or right edge in sight: none.
    */
-  test("a pane whose left and right edges are in view has side faces there too", async ({
+  test("a pane shows the side faces that face the eye, never two opposite ones", async ({
     page,
   }) => {
     test.setTimeout(60_000);
@@ -217,13 +224,14 @@ test.describe("the pane's edge", () => {
           centre: r.left + r.width / 2 - document.documentElement.clientWidth / 2,
         };
       });
-    await expect.poll(async () => (await faces()).left[1]).toBeGreaterThan(0);
+    await expect.poll(async () => (await faces()).right[1]).toBeGreaterThan(0);
     const f = await faces();
     expect(Math.abs(f.left[0]!)).toBeLessThan(1);
     expect(Math.abs(f.right[0]!)).toBeLessThan(1);
-    expect(f.right[1]).toBeGreaterThan(0);
-    // Left of the middle: its right face, which faces the eye, shows more.
-    if (f.centre < 0) expect(f.right[1]).toBeGreaterThan(f.left[1]);
+    // Left of the eye (the pointer is off the page, so the eye is centred):
+    // its right face, which faces the eye, shows; its left face cannot.
+    expect(f.centre).toBeLessThan(0);
+    expect(f.left[1]).toBe(0);
     // A pane as wide as the view: no left or right face.
     const bandLeft = await page.evaluate(() => {
       const w = document.documentElement.clientWidth;

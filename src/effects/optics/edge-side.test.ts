@@ -16,6 +16,7 @@ import {
   sideGradientCss,
   sideHeight,
   sideOpen,
+  paneFaces,
   sidePath,
   sideTransmittance,
 } from "./edge-side";
@@ -101,10 +102,65 @@ describe("the side's height", () => {
     expect(sideHeight(1, true)).toBeLessThan(sideHeight(1));
   });
 
-  it("opens on the side facing the eye and never closes on the other", () => {
-    expect(sideOpen(1, true)).toBe(1);
-    expect(sideOpen(1, false)).toBeGreaterThan(0);
-    expect(sideOpen(-1, false)).toBe(1);
+  it("shows only from its own side of the edge, wider the further past the eye", () => {
+    expect(sideOpen(-10, 450)).toBe(0);
+    expect(sideOpen(0, 450)).toBe(0);
+    expect(sideOpen(225, 450)).toBeCloseTo(0.5, 12);
+    expect(sideOpen(900, 450)).toBe(1);
+    expect(sideHeight(0)).toBe(0);
+  });
+
+  it("never shows the top and bottom (or left and right) of a flat pane at once", () => {
+    // Ony, 2026-09-29: "you should never be able to see the top and bottom at the same time".
+    const bar = false;
+    for (const eyeY of [-200, 0, 150, 300, 450, 700, 1200]) {
+      for (const eyeX of [0, 400, 720, 1100]) {
+        const f = paneFaces(
+          { left: 300, top: 250, right: 700, bottom: 500 },
+          { x: eyeX, y: eyeY },
+          450,
+          bar,
+          PANE_THICKNESS,
+          false,
+        );
+        expect(f.top > 0 && f.bottom > 0).toBe(false);
+        expect(f.left > 0 && f.right > 0).toBe(false);
+      }
+    }
+  });
+
+  it("a pane that straddles the eye shows no side; a small one near it, hardly any", () => {
+    const eye = { x: 720, y: 450 };
+    const straddling = paneFaces(
+      { left: 600, top: 400, right: 840, bottom: 500 },
+      eye,
+      450,
+      false,
+      PANE_THICKNESS,
+      false,
+    );
+    expect(straddling).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
+    const near = paneFaces(
+      { left: 760, top: 480, right: 860, bottom: 560 },
+      eye,
+      450,
+      false,
+      PANE_THICKNESS,
+      false,
+    );
+    expect(near.top).toBeLessThanOrEqual(1);
+    expect(near.left).toBeLessThanOrEqual(2);
+    // A full-width band has no left or right edge in view.
+    const band = paneFaces(
+      { left: 0, top: 600, right: 1440, bottom: 900 },
+      eye,
+      450,
+      false,
+      PANE_THICKNESS,
+      true,
+    );
+    expect(band.left + band.right).toBe(0);
+    expect(band.top).toBeGreaterThan(0);
   });
 
   it("the thinner it shows, the more grazing the look and the more it mirrors", () => {

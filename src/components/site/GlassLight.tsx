@@ -119,7 +119,7 @@ export function GlassLight({
     const uRadius = U("uRadius");
     const uEdgeWidth = U("uEdgeWidth");
     const uStraight = U("uStraight");
-    const uTilt = U("uTilt");
+    const uFaces = U("uFaces");
     const uBar = U("uBar");
     const uThickness = U("uThickness");
     const uSeed = U("uSeed");
@@ -615,7 +615,7 @@ export function GlassLight({
         gl.uniform1f(uRadius, pane.r);
         gl.uniform1f(uEdgeWidth, pane.e);
         gl.uniform1f(uStraight, pane.w >= viewportWidth() - 1 ? 1 : 0);
-        gl.uniform1f(uTilt, pane.t);
+        gl.uniform4f(uFaces, pane.faces.top, pane.faces.bottom, pane.faces.left, pane.faces.right);
         gl.uniform1f(uBar, pane.el.classList.contains("glass--bar") ? 1 : 0);
         /*
          * What this pane is, as <Pane> declared it (effects/materials/

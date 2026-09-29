@@ -35,7 +35,7 @@ import { previewing } from "@/effects/engine/preview";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
 import { camera } from "@/effects/camera/camera";
-import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
+import { paneFaces, type PaneFaces } from "@/effects/optics/edge-side";
 import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
 import {
   placeStack,
@@ -128,11 +128,8 @@ export type GlassRect = {
    * factor in here is then exactly 1.
    */
   stack: StackPlacement;
-  /**
-   * Viewing angle onto the pane, -1 to 1: positive when it is below eye level
-   * and you see its top side, negative above. Scrolling carries it across.
-   */
-  t: number;
+  /** How wide each of its side faces shows, CSS px (edge-side paneFaces). */
+  faces: PaneFaces;
 };
 
 /* ======================================================================
@@ -272,71 +269,51 @@ export function paneCauses(el: HTMLElement): PaneCauses {
 }
 
 /**
- * How far the panel is from eye level, as a fraction of half the viewport:
- * clamped, and eased so the middle of the screen is a broad flat region
- * rather than a point the thickness flips across.
+ * Where the eye is, in viewport CSS px: the middle of the view, moved toward
+ * the pointer by the camera's follow (effects/optics/viewpoint) -- the same
+ * eye the photographs' parallax and the reflections use.
  */
-function paneTilt(r: DOMRect, viewportHeight: number) {
-  const middle = viewportHeight / 2;
-  const offset = (r.top + r.height / 2 - middle) / middle;
-  const clamped = Math.max(-1, Math.min(1, offset));
-  return clamped * Math.abs(clamped);
-}
-
-function sideHeightsAt(
-  el: HTMLElement,
-  r: DOMRect,
-  thickness: number,
-  viewportHeight: number,
-): { top: number; bottom: number } {
-  const tilt = paneTilt(r, viewportHeight);
-  const bar = el.classList.contains("glass--bar");
-  return {
-    top: Math.round(sideHeight(sideOpen(tilt, true), bar, thickness)),
-    bottom: Math.round(sideHeight(sideOpen(tilt, false), bar, thickness)),
-  };
+function eyeAt(viewportWidth: number, viewportHeight: number) {
+  const e = eyeOffset(cursorLamp.x, cursorLamp.y, viewportWidth, viewportHeight, camera.follow);
+  return { x: viewportWidth / 2 + e.x, y: viewportHeight / 2 + e.y };
 }
 
 /**
- * The same across the view: -1 far left of the eye, 1 far right. Measured
- * against the half-width, so on a landscape screen a pane has to stand much
- * further to the side than above or below to open a side as far -- the left
- * and right faces show less than the top and bottom ones.
+ * Which of a pane's side faces show, and how wide, whole CSS px
+ * (effects/optics/edge-side paneFaces): only from their own side of the
+ * edge, so never the top and bottom at once, and wider the further the edge
+ * is past the eye.
  */
-function paneTiltX(r: DOMRect, viewportWidth: number) {
-  const middle = viewportWidth / 2;
-  const offset = (r.left + r.width / 2 - middle) / middle;
-  const clamped = Math.max(-1, Math.min(1, offset));
-  return clamped * Math.abs(clamped);
-}
-
-/**
- * How wide the left and right side faces show, whole CSS px: the same side
- * model as the top and bottom, turned on its side. A pane right of the eye
- * shows its left face (the one facing the middle), and the other way round.
- * A band as wide as the viewport has no left or right edge in view: none.
- */
-function sideWidthsAt(
+function facesAt(
   el: HTMLElement,
   r: DOMRect,
   thickness: number,
   viewportWidth: number,
-): { left: number; right: number } {
-  if (r.width >= viewportWidth - 1) return { left: 0, right: 0 };
-  const tilt = paneTiltX(r, viewportWidth);
-  const bar = el.classList.contains("glass--bar");
-  return {
-    left: Math.round(sideHeight(sideOpen(tilt, true), bar, thickness)),
-    right: Math.round(sideHeight(sideOpen(tilt, false), bar, thickness)),
-  };
+  viewportHeight: number,
+): PaneFaces {
+  return paneFaces(
+    r,
+    eyeAt(viewportWidth, viewportHeight),
+    viewportHeight / 2,
+    el.classList.contains("glass--bar"),
+    thickness,
+    r.width >= viewportWidth - 1,
+  );
 }
 
-/** How tall each of a pane's side faces shows right now, whole CSS pixels. */
+/** How wide each of a pane's side faces shows right now, whole CSS pixels. */
 export function paneSideHeights(
   el: HTMLElement,
   r: DOMRect = el.getBoundingClientRect(),
-): { top: number; bottom: number } {
-  return sideHeightsAt(el, r, paneCauses(el).thickness, window.innerHeight);
+): PaneFaces {
+  const root = document.documentElement;
+  return facesAt(
+    el,
+    r,
+    paneCauses(el).thickness,
+    root.clientWidth || window.innerWidth,
+    root.clientHeight || window.innerHeight,
+  );
 }
 
 /* ======================================================================
@@ -538,7 +515,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       h: r.height,
       r: p.radius,
       e: paneEdgeWidth(p.el),
-      t: paneTilt(r, reading.innerHeight),
+      faces: facesAt(p.el, r, p.causes.thickness, reading.viewportWidth, reading.viewportHeight),
       s: surfaceSeed(p.el),
       src: above?.src ?? "",
       ix: above?.x ?? 0,
@@ -754,8 +731,9 @@ function writeSides(p: PaneReading, viewportHeight: number, viewportWidth: numbe
   const r = p.rect;
   const box = layers.fixed ? { x: r.left, y: r.top, w: r.width, h: r.height } : p.offset;
   if (!box) return;
-  const sides = sideHeightsAt(p.el, r, p.causes.thickness, viewportHeight);
-  const across = sideWidthsAt(p.el, r, p.causes.thickness, viewportWidth);
+  const faces = facesAt(p.el, r, p.causes.thickness, viewportWidth, viewportHeight);
+  const sides = { top: faces.top, bottom: faces.bottom };
+  const across = { left: faces.left, right: faces.right };
   const { x, y, w, h } = box;
   const key = `${x},${y},${w},${h},${sides.top},${sides.bottom},${across.left},${across.right},${p.radius}`;
   if (key === layers.last) return;
@@ -862,7 +840,7 @@ function run(now = performance.now()) {
   snapshotVersion = version;
   // 4. write
   writeView(reading);
-  for (const p of reading.panes) writePane(p, reading.innerHeight, reading.viewportWidth);
+  for (const p of reading.panes) writePane(p, reading.viewportHeight, reading.viewportWidth);
   reading.surfaces.forEach((s, i) => {
     const light = lightOn[i];
     if (light) writeSurface(s, light);
