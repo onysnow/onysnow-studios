@@ -40,6 +40,7 @@
  * library now, so the bend this map draws and the light the shaders draw are
  * computed from the same edge. Re-exported so existing imports keep working.
  */
+import { waveSlope } from "@/effects/optics/waviness";
 import {
   refractionOffset,
   roundedRectSDF,
@@ -77,6 +78,14 @@ export type BevelOptions = {
    * screen -- and bending them draws corners where there should be none.
    */
   straight?: boolean;
+  /**
+   * Rolled or hammered glass (effects/optics/waviness): its ripples tip the
+   * line of sight across the whole face, so what is behind is seen shifted
+   * by the surface's slope, as well as bent at the bevel. `shift` is how far
+   * one unit of slope moves it, in CSS px (waveScale); `cssPerMap` how many
+   * CSS px one map pixel stands for; `seed` which surface the pane wears.
+   */
+  wave?: { shift: number; seed: number; cssPerMap: number } | undefined;
 };
 
 /**
@@ -92,7 +101,7 @@ export function bevelField(
   radius: number,
   options: BevelOptions,
 ): BevelField {
-  const { bezelWidth, thickness, ior, profile = "circle" } = options;
+  const { bezelWidth, thickness, ior, profile = "circle", wave } = options;
   const data = new Uint8ClampedArray(width * height * 4);
   const halfH = height / 2;
   // Straight: measure distance to the top and bottom only, as if the pane
@@ -111,8 +120,23 @@ export function bevelField(
 
       const inside = -roundedRectSDF(px, py, halfW, halfH, radius);
       if (inside <= 0) continue;
+      const i = y * width + x;
+      if (wave && wave.shift > 0) {
+        // Pane-local CSS px from its top-left: the point the floor's caustic reads.
+        const [sx, sy] = waveSlope(
+          (x + 0.5) * wave.cssPerMap,
+          (y + 0.5) * wave.cssPerMap,
+          wave.seed,
+        );
+        ox[i] = (sx * wave.shift) / wave.cssPerMap;
+        oy[i] = (sy * wave.shift) / wave.cssPerMap;
+      }
       // Past the bevel the face is flat, so the ray goes straight through.
-      if (inside >= bezelWidth) continue;
+      if (inside >= bezelWidth) {
+        const mag = Math.hypot(ox[i]!, oy[i]!);
+        if (mag > maxOffset) maxOffset = mag;
+        continue;
+      }
 
       /*
        * The direction is the SDF's own gradient, which points straight in from
@@ -135,10 +159,9 @@ export function bevelField(
 
       const offset = refractionOffset(inside / bezelWidth, bezelWidth, thickness, ior, profile);
 
-      const i = y * width + x;
-      ox[i] = gx * offset;
-      oy[i] = gy * offset;
-      const mag = Math.abs(offset);
+      ox[i] = ox[i]! + gx * offset;
+      oy[i] = oy[i]! + gy * offset;
+      const mag = Math.hypot(ox[i]!, oy[i]!);
       if (mag > maxOffset) maxOffset = mag;
     }
   }

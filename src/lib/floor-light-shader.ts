@@ -3,6 +3,7 @@ import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "@/effects/optics/transmission.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
+import { WAVINESS_GLSL } from "@/effects/optics/waviness.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
@@ -104,6 +105,7 @@ uniform vec2 uMarks[${MAX_FLOOR_PANES}];
 uniform float uMarksProportional; // 1 while previewing ?try=marks
 
 ${EDGE_PROFILE_GLSL}
+${WAVINESS_GLSL}
 ${REFLECTION_GLSL}
 ${SHADOW_GLSL}
 ${TRANSMISSION_GLSL}
@@ -136,23 +138,14 @@ uniform vec2 uViewShift;
  * gives soft cells while a tight one gives wire-thin lines.
  */
 float causticAt(vec2 x, float seed, float pen, float gap) {
-  x += vec2(seed * 613.0, seed * 389.0);
-  float hxx = 0.0;
-  float hyy = 0.0;
-  float hxy = 0.0;
-  for (int k = 0; k < 6; k++) {
-    float fk = float(k);
-    float ang = seed * 1.7 + fk * 2.39996;       // golden angle: never lined up
-    vec2 d = vec2(cos(ang), sin(ang));
-    float len = 190.0 / (1.0 + fk * 0.33);        // 190 px down to ~72 px
-    float w = 6.2831853 / len;
-    // Amplitude chosen so every ripple bends equally: a * w^2 = 1/6.
-    float curve = -sin(dot(d, x) * w + fk * 1.618 + seed * 4.0) / 6.0;
-    hxx += curve * d.x * d.x;
-    hyy += curve * d.y * d.y;
-    hxy += curve * d.x * d.y;
-  }
-  float s = 3.5 * uCaustics * clamp(gap / 70.0, 0.3, 2.5);
+  // The pane's surface, the same one the glass bends its view by (waviness.ts).
+  vec2 slope;
+  vec3 hessian;
+  waveSurface(x, seed, slope, hessian);
+  float hxx = hessian.x;
+  float hyy = hessian.y;
+  float hxy = hessian.z;
+  float s = waveScale(uCaustics, gap);
   float det = (1.0 + s * hxx) * (1.0 + s * hyy) - s * s * hxy * hxy;
   float soft = clamp(pen / 240.0, 0.03, 0.4);
   return clamp(1.0 / max(abs(det), soft), 0.2, 7.0);

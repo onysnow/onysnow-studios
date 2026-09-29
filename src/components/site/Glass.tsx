@@ -12,10 +12,12 @@ import {
   registerLitSurface,
   registerPaneSides,
   registerScenePane,
+  surfaceSeed,
 } from "@/effects/scene/scene";
 import { requestBevelFilter } from "@/lib/bevel-filters";
 import { registerPane } from "@/lib/glass-panes";
-import { onTuningApplied } from "@/lib/tuning";
+import { onTuningApplied, t } from "@/lib/tuning";
+import { waveScale } from "@/effects/optics/waviness";
 import { EDGE_WIDTH_ATTR } from "@/effects/optics/edge-profile";
 import { GLOW_LAYER_Z, layerProps, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { FAR_ARRIS_SPAN, farArrisGradientCss, sideGradientCss } from "@/effects/optics/edge-side";
@@ -184,6 +186,10 @@ export function Glass({
           edgeWidth: edgeWidth ?? paneEdgeWidth(el),
           straight,
           thickness: paneCauses(el).thickness,
+          // Rolled glass bends the view by its ripples too ("Glass waviness";
+          // the same surface throws the caustic, effects/optics/waviness).
+          waveShift: waveScale(t("floorCaustics"), paneCauses(el).gap),
+          waveSeed: surfaceSeed(el),
         });
         /*
          * Onto the pane itself, as a variable the stylesheet folds into the

@@ -199,7 +199,8 @@ function cornerRadius(el: HTMLElement) {
 const seeds = new WeakMap<HTMLElement, number>();
 let nextSeed = 0;
 
-function surfaceSeed(el: HTMLElement) {
+/** Which surface (0-3) a pane wears: its grime and its ripples, kept for the element's life. */
+export function surfaceSeed(el: HTMLElement) {
   let seed = seeds.get(el);
   if (seed === undefined) {
     seed = nextSeed % 4;
