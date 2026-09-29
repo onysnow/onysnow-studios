@@ -10,9 +10,16 @@ import {
   sharedGl,
 } from "@/effects/engine/gl";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
-import { glassGeometry, geometryStamp, MAX_OCCLUDERS, viewState } from "@/effects/scene/scene";
+import {
+  glassGeometry,
+  geometryStamp,
+  MAX_OCCLUDERS,
+  paneGlowLayer,
+  viewState,
+} from "@/effects/scene/scene";
 import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
 import { castShadow } from "@/lib/cast-shadow";
+import { LIGHT_BLEED } from "@/effects/engine/compositor";
 import { castShadow as castByModel } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
 import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
@@ -68,7 +75,7 @@ const viewportWidth = () => document.documentElement.clientWidth || window.inner
 const viewportHeight = () => document.documentElement.clientHeight || window.innerHeight;
 
 /** How far outside a pane the bloom still has something to contribute. */
-const BLEED = 90;
+const BLEED = LIGHT_BLEED;
 
 export function GlassLight({
   chargeRef,
@@ -127,6 +134,7 @@ export function GlassLight({
     const uImageBelow = U("uImageBelow");
     const uImageBelowAspect = U("uImageBelowAspect");
     const uRestEdge = U("uRestEdge");
+    const uGlowOnly = U("uGlowOnly");
     const uAboveRect = U("uAboveRect");
     const uAboveSoft = U("uAboveSoft");
     const uOccRect = U("uOccRect");
@@ -589,6 +597,7 @@ export function GlassLight({
         const sy = Math.floor((viewportHeight() - (pane.y + pane.h) - BLEED) * scale);
         const sh = Math.ceil((pane.h + BLEED * 2) * scale);
         gl.scissor(sx, sy, sw, sh);
+        gl.uniform1f(uGlowOnly, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
 
         /*
@@ -662,6 +671,41 @@ export function GlassLight({
           }
           drawn.add(layer);
           allLayers.add(layer);
+
+          /*
+           * The lit edge and its bloom, again, alone, for the layer above the
+           * side faces (.glass-glow; see the end of the glass shader). Same
+           * region of the buffer, cleared first -- the scissor limits the
+           * clear to it -- then copied out the same way, with the same glare.
+           */
+          const glowLayer = paneGlowLayer(pane.el);
+          if (glowLayer && lit) {
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.uniform1f(uGlowOnly, 1);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+            if (glowLayer.width !== layer.width) glowLayer.width = layer.width;
+            if (glowLayer.height !== layer.height) glowLayer.height = layer.height;
+            const g = glowLayer.getContext("2d");
+            if (g) {
+              g.clearRect(0, 0, glowLayer.width, glowLayer.height);
+              if (cw > 0 && ch > 0) {
+                g.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
+                const spill = camera.lens.glare;
+                if (spill > 0) {
+                  g.save();
+                  g.globalCompositeOperation = "lighter";
+                  g.globalAlpha = Math.min(spill, 1);
+                  g.filter = `blur(${Math.round(camera.lens.glareSize * scale)}px)`;
+                  g.drawImage(canvas, cx, cy, cw, ch, cx - srcX, cy - srcY, cw, ch);
+                  g.restore();
+                }
+              }
+              drawn.add(glowLayer);
+              allLayers.add(glowLayer);
+            }
+            // Leave the region as the next pane's draw expects to find it.
+            gl.clear(gl.COLOR_BUFFER_BIT);
+          }
         }
       }
       gl.disable(gl.SCISSOR_TEST);

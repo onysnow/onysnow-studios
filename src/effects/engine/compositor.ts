@@ -43,6 +43,16 @@ export const PANE_CONTENT = "pane:content";
 /** The side faces, siblings above the pane (see .glass-side). */
 export const SIDE_LAYER_Z = 2;
 
+/**
+ * The lit edge and its bloom, a sibling above the side faces (see
+ * .glass-glow): the light a lit arris throws is in front of the side, not
+ * absorbed by it.
+ */
+export const GLOW_LAYER_Z = SIDE_LAYER_Z + 1;
+
+/** How far outside a pane its light layers reach: the bloom escapes the glass. */
+export const LIGHT_BLEED = 90;
+
 /** The attribute that names a layer's slot. */
 export const LAYER_ATTR = "data-layer";
 

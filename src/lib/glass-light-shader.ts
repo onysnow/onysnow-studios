@@ -44,7 +44,8 @@ precision highp float;
 
 uniform vec2  uViewport;      // device pixels
 uniform float uScale;         // device pixels per CSS pixel
-uniform float uRestEdge;      // how much edge shows with nothing shining
+uniform float uRestEdge;
+uniform float uGlowOnly;      // 1: draw only the lit edge and its bloom (the .glass-glow layer)      // how much edge shows with nothing shining
 
 /*
  * ---- What is standing on this pane ----
@@ -242,6 +243,16 @@ void main() {
   vec2 edgeHalf = uStraight > 0.5 ? vec2(1e5, halfSize.y) : halfSize;
   float d = roundedBox(p, edgeHalf, uRadius);
   float inside = smoothstep(0.5, -0.5, d);
+  /*
+   * The lit edge's own layer (uGlowOnly) is nothing but the edge and its
+   * bloom, which is gone by 160 px from the rim (haze, exp(-d / 48)): the
+   * rest of the pane is skipped rather than computed and thrown away, so
+   * the second draw costs a band round the edge, not a second pane.
+   */
+  if (uGlowOnly > 0.5 && abs(d) > 160.0) {
+    gl_FragColor = vec4(0.0);
+    return;
+  }
 
   /*
    * ---- Normal from the height field ----
@@ -566,7 +577,8 @@ void main() {
    * adds (superposition). With one light the sums are that light's terms
    * exactly, so the page did not change when the loop arrived.
    */
-  vec3 lampLight = vec3(0.0);     // (tint * (rim + face) + mirror) * lit, per light
+  vec3 lampLight = vec3(0.0);     // (tint * face + mirror) * lit, per light
+  vec3 lampGlow = vec3(0.0);      // tint * rim * lit: the lit edge and its bloom, per light
   vec3 lampSpecular = vec3(0.0);  // the Blinn-Phong highlight, per light
   float lampEdge = 0.0;           // the bevel's share of each light
   for (int i = 0; i < MAX_LIGHTS; i++) {
@@ -716,7 +728,8 @@ void main() {
     float lit = charge * charge * (3.0 - 2.0 * charge);
     vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
 
-    lampLight += (tint * (rim + face) + mirror) * lit;
+    lampLight += (tint * face + mirror) * lit;
+    lampGlow += tint * rim * lit;
     lampSpecular += vec3(specular) * inside * lit;
     lampEdge += bevel * lit;
   }
@@ -840,6 +853,23 @@ void main() {
    * face, the reflected source, the specular. What is left unbounded is the
    * rim, which is the part that should escape.
    */
+  /*
+   * THE LIT EDGE IS DRAWN ON ITS OWN LAYER, IN FRONT OF THE SIDE FACES.
+   *
+   * The side faces are CSS siblings above the pane that MULTIPLY what is
+   * under them (their absorption), and this pass's layer is under them --
+   * so the edge's own light and its bloom came out darkened across the
+   * side, reading as a glow BEHIND the edge (Ony, 2026-09-29). The light a
+   * lit arris throws is in front of everything: it comes off the front
+   * corner, and the bloom is the camera's. So the pass runs twice per pane:
+   * everything else here (uGlowOnly 0), and the edge's light alone
+   * (uGlowOnly 1) for a layer above the sides (.glass-glow).
+   */
+  if (uGlowOnly > 0.5) {
+    vec3 glow = toneMapGlass(lampGlow * lightIn);
+    gl_FragColor = vec4(glow, clamp(max(max(glow.r, glow.g), glow.b), 0.0, 1.0));
+    return;
+  }
   float alpha = clamp(max(max(abs(colour.r), abs(colour.g)), abs(colour.b)), 0.0, 1.0);
   gl_FragColor = vec4(colour, alpha);
 }

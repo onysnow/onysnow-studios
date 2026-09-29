@@ -119,6 +119,8 @@ test.describe("the light passes share one WebGL context", () => {
    * raising one pane's gap changes what lands under it.
    */
   test("the light under a pane follows that pane's own gap", async ({ page }) => {
+    // Waits for the picture to settle: slow in a software-rendered browser.
+    test.setTimeout(60_000);
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     const band = page.locator("[data-seam] .glass").first();

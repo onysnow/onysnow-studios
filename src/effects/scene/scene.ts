@@ -29,6 +29,7 @@
  */
 import { t } from "@/lib/tuning";
 import { castShadow } from "@/lib/cast-shadow";
+import { LIGHT_BLEED } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
@@ -151,6 +152,8 @@ const standoffs = new WeakMap<HTMLElement, number>();
 type SideLayers = {
   top: HTMLElement;
   bottom: HTMLElement;
+  /** The lit edge's layer, above the sides (optional; see .glass-glow). */
+  glow: HTMLElement | null;
   /** Whether the pane is position: fixed; asked once, in a frame's read phase. */
   fixed: boolean | null;
   last: string;
@@ -719,6 +722,20 @@ function writeSides(p: PaneReading, viewportHeight: number) {
   };
   set(layers.top, y, sides.top, `${p.radius}px ${p.radius}px 0 0`);
   set(layers.bottom, y + h - sides.bottom, sides.bottom, `0 0 ${p.radius}px ${p.radius}px`);
+  // The lit edge's layer covers the pane and its bleed, exactly as the surface layer does.
+  if (layers.glow) {
+    const g = layers.glow;
+    g.style.position = position;
+    g.style.transform = `translate(${x - LIGHT_BLEED}px, ${y - LIGHT_BLEED}px)`;
+    g.style.width = `${w + LIGHT_BLEED * 2}px`;
+    g.style.height = `${h + LIGHT_BLEED * 2}px`;
+  }
+}
+
+/** The lit edge's layer of a pane, if it has one (drawn by the glass light pass). */
+export function paneGlowLayer(el: HTMLElement): HTMLCanvasElement | null {
+  const g = sideLayers.get(el)?.glow;
+  return g instanceof HTMLCanvasElement ? g : null;
 }
 
 function writePane(p: PaneReading, viewportHeight: number) {
@@ -881,8 +898,13 @@ export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions =
 }
 
 /** Give a pane its two side faces (siblings of it; see .glass-side). */
-export function registerPaneSides(el: HTMLElement, top: HTMLElement, bottom: HTMLElement) {
-  sideLayers.set(el, { top, bottom, fixed: null, last: "" });
+export function registerPaneSides(
+  el: HTMLElement,
+  top: HTMLElement,
+  bottom: HTMLElement,
+  glow: HTMLElement | null = null,
+) {
+  sideLayers.set(el, { top, bottom, glow, fixed: null, last: "" });
   // Laid on the pane by the next frame, with everything else.
   reschedule();
   return () => {

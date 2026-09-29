@@ -623,6 +623,22 @@
   }
 
   /*
+   * The lit edge and its bloom (GlassLight draws it; the scene places it over
+   * the pane and its bleed, like the side faces). Above the sides, adding
+   * light the way the surface layer does: the light a lit arris throws comes
+   * off the front corner, so the side's absorption must not darken it.
+   */
+  .glass-glow {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    mix-blend-mode: plus-lighter;
+  }
+
+  /*
    * The far arris: the eased corner between the side and the back face turns
    * the light passing it away from you, so it is a thin DARKER line, soft
    * over the corner's radius (farArrisLoss) and centred on the corner.
@@ -2425,14 +2441,16 @@ html[data-try~="shadows"] .plastic::before {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .glass > .glass__surface {
+  .glass > .glass__surface,
+  .glass-glow {
     display: none;
   }
 }
 
 /* Phones skip the whole effect layer; a canvas per pane is more, not less. */
 @media (pointer: coarse), (hover: none) {
-  .glass > .glass__surface {
+  .glass > .glass__surface,
+  .glass-glow {
     display: none;
   }
 }
