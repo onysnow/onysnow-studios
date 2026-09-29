@@ -272,11 +272,16 @@ test.describe("plastic on the glass", () => {
     "The effect layer is suppressed outside Chromium.",
   );
 
-  test("the orange button passes orange light behind it, thrown away from the lamp", async ({
+  /*
+   * Ony, 2026-09-29: the light appears only with the cursor right on top of
+   * the button, with a shadow round it cast from the button's edges, and a
+   * mild orange glow -- not bright.
+   */
+  test("the orange button lights only with the lamp over it: a mild orange glow ringed by its edge's shadow", async ({
     page,
   }) => {
     // Two lit holds with the full light passes running: slow in software GL.
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     const button = page.locator("main .glass .plastic").first();
@@ -284,32 +289,41 @@ test.describe("plastic on the glass", () => {
     await page.waitForTimeout(800);
     const box = (await button.boundingBox())!;
 
-    // No generic drop shadow: what lands behind it is light, not darkness.
-    expect(await button.evaluate((el) => getComputedStyle(el).boxShadow)).toBe("none");
     const light = () =>
       button.evaluate((el) => {
-        const cs = getComputedStyle(el, "::before");
-        const m = new DOMMatrixReadOnly(cs.transform === "none" ? undefined : cs.transform);
-        return { x: m.m41, opacity: Number(cs.opacity), blend: cs.mixBlendMode };
+        const before = getComputedStyle(el, "::before");
+        // The edge's shadow: the alpha of the first box-shadow's colour.
+        const shadow = getComputedStyle(el).boxShadow;
+        const alpha = Number(/rgba?\([^)]*?,\s*([\d.]+)\)/.exec(shadow)?.[1] ?? "0");
+        return { opacity: Number(before.opacity), blend: before.mixBlendMode, edge: alpha };
       });
-    // Unlit: nothing passes through a lamp that is off.
-    expect((await light()).opacity).toBe(0);
+    // Unlit: nothing passes through a lamp that is off, and no edge shadow.
+    const off = await light();
+    expect(off.opacity).toBe(0);
+    expect(off.edge).toBe(0);
 
-    const litFrom = async (x: number, y: number) => {
+    // Lit, pressing and releasing away from the button so nothing is clicked.
+    const litAt = async (x: number, y: number) => {
       await page.mouse.move(x, y, { steps: 4 });
       await page.mouse.down();
       await page.waitForTimeout(2200);
       const l = await light();
+      await page.mouse.move(x, y - 300, { steps: 2 });
       await page.mouse.up();
       await page.waitForTimeout(600);
       return l;
     };
 
-    const fromLeft = await litFrom(box.x - 80, box.y + box.height / 2);
-    expect(fromLeft.blend).toBe("plus-lighter");
-    expect(fromLeft.opacity).toBeGreaterThan(0);
-    expect(fromLeft.x).toBeGreaterThan(0.5);
-    expect((await litFrom(box.x + box.width + 80, box.y + box.height / 2)).x).toBeLessThan(-0.5);
+    // Beside it: the lamp is not over it, so it shows nothing.
+    const beside = await litAt(box.x - 80, box.y + box.height / 2);
+    expect(beside.opacity).toBe(0);
+    expect(beside.edge).toBe(0);
+    // Right on top of it: a mild orange glow, and the edge's shadow round it.
+    const over = await litAt(box.x + box.width / 2, box.y + box.height / 2);
+    expect(over.blend).toBe("plus-lighter");
+    expect(over.opacity).toBeGreaterThan(0);
+    expect(over.opacity).toBeLessThanOrEqual(0.28);
+    expect(over.edge).toBeGreaterThan(0);
   });
 });
 
