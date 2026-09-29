@@ -124,6 +124,7 @@ export function GlassLight({
     const uSeed = U("uSeed");
     const uImage = U("uImage");
     const uImageFit = U("uImageFit");
+    const uBurn = U("uBurn");
     const uHasBackdrop = U("uHasBackdrop");
     const uHasBokeh = U("uHasBokeh");
     const uHasBokehBelow = U("uHasBokehBelow");
@@ -554,6 +555,7 @@ export function GlassLight({
       gl.uniform1f(uEdgeBloom, camera.lens.edgeBloom);
       gl.uniform1f(uBokehGain, camera.bokeh);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
+      gl.uniform1f(uBurn, previewing("burn") ? 1 : 0);
       /*
        * The lamp's power reaches the arris glints whatever the switch says;
        * the switch turns off only the face's own image of the lamp, which is

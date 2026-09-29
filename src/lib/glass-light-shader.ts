@@ -124,6 +124,7 @@ uniform vec2  uEye;             // the viewer's eye, from the viewport middle, C
 uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
+uniform float uBurn;          // 1 while previewing ?try=burn (edge-profile toneMapGlassBurn)
 uniform vec3 uImageFit;       // intrinsic width / height, then its object-position (0..1)
 // The light the photograph clipped, and the disc the frost spreads it over
 // (effects/optics/bokeh).
@@ -853,7 +854,7 @@ void main() {
     colour += inside * uBokehGain * discs;
   }
 
-  colour = toneMapGlass(colour);
+  colour = uBurn > 0.5 ? toneMapGlassBurn(colour) : toneMapGlass(colour);
 
   /*
    * The CSS side layers multiply everything under them by the side's
@@ -914,7 +915,7 @@ void main() {
    * (uGlowOnly 1) for a layer above the sides (.glass-glow).
    */
   if (uGlowOnly > 0.5) {
-    vec3 glow = toneMapGlass(lampGlow * lightIn);
+    vec3 glow = uBurn > 0.5 ? toneMapGlassBurn(lampGlow * lightIn) : toneMapGlass(lampGlow * lightIn);
     gl_FragColor = vec4(glow, clamp(max(max(glow.r, glow.g), glow.b), 0.0, 1.0));
     return;
   }

@@ -10,6 +10,7 @@ import {
   surfaceHeight,
   toneMapFilm,
   toneMapGlass,
+  toneMapGlassBurn,
 } from "./edge-profile";
 import { EDGE_PROFILE_GLSL } from "./edge-profile.glsl";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
@@ -107,6 +108,7 @@ describe("the GLSL chunk", () => {
       surfaceHeight,
       fresnelRise,
       toneMapGlass,
+      toneMapGlassBurn,
       toneMapFilm,
     };
     expect(glsl.sort()).toEqual(Object.keys(ts).sort());
@@ -163,6 +165,27 @@ describe("the edge functions", () => {
     expect(toneMapGlass(-2)).toBeCloseTo(-toneMapGlass(2), 12);
     expect(toneMapGlass(1e6)).toBeLessThan(1);
     expect(toneMapGlass(3)).toBeGreaterThan(toneMapGlass(2));
+  });
+
+  it("toneMapGlassBurn matches toneMapGlass until the light is past what the picture holds", () => {
+    const dim: [number, number, number] = [0.05, 0.6, 0.7];
+    expect(toneMapGlassBurn(dim)).toEqual(dim.map(toneMapGlass));
+  });
+
+  it("toneMapGlassBurn burns a bright coloured light toward white, keeping a trace of its colour", () => {
+    // The studio room's cyan tube, reflected: the case that came out as solid cyan.
+    const tube: [number, number, number] = [0.05, 6, 6];
+    const plain = tube.map(toneMapGlass);
+    const burnt = toneMapGlassBurn(tube);
+    expect(burnt[0]).toBeGreaterThan(plain[0]! + 0.3);
+    expect(burnt[0]).toBeLessThan(burnt[1]);
+    expect(burnt[1]).toBeCloseTo(plain[1]!, 12);
+    for (const c of burnt) expect(c).toBeLessThan(1);
+  });
+
+  it("toneMapGlassBurn leaves darkening alone", () => {
+    const shade: [number, number, number] = [-0.4, 5, 5];
+    expect(toneMapGlassBurn(shade)[0]).toBeCloseTo(toneMapGlass(-0.4), 12);
   });
 
   it("toneMapFilm rolls off toward 1 without clipping", () => {

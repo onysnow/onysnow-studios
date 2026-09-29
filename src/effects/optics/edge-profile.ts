@@ -155,6 +155,35 @@ export function toneMapGlass(c: number): number {
   return Math.sign(r) * Math.pow(Math.abs(r), 1 / 2.2);
 }
 
+/** How far past what the picture holds a light must be before its core is all white. */
+export const BURN_FROM = 1;
+export const BURN_TO = 4;
+/** The most a core burns: a trace of its colour always survives. */
+export const BURN_MAX = 0.85;
+
+/**
+ * The glass tonemap with a film's shoulder (preview "burn").
+ *
+ * toneMapGlass squeezes each channel on its own, so a coloured light keeps
+ * its full saturation however bright it gets: a cyan tube reflected in the
+ * glass came out as a solid pure-cyan patch. Film and sensors don't do that.
+ * Once the brightest channel is past what the picture can hold, the others
+ * are carried up after it and the core burns toward white, with the colour
+ * left at its edges where the light is dimmer. Only light burns: a channel the
+ * pane is darkening (negative) is left alone.
+ */
+export function toneMapGlassBurn(rgb: readonly [number, number, number]): [number, number, number] {
+  const peak = Math.max(rgb[0], rgb[1], rgb[2], 0);
+  const r = rgb.map((c) => c / (1 + Math.abs(c)));
+  const top = Math.max(r[0]!, r[1]!, r[2]!);
+  const t = Math.min(1, Math.max(0, (peak - BURN_FROM) / (BURN_TO - BURN_FROM)));
+  const burn = t * t * (3 - 2 * t) * BURN_MAX;
+  return r.map((v, i) => {
+    const out = rgb[i]! >= 0 ? v + (top - v) * burn : v;
+    return Math.sign(out) * Math.pow(Math.abs(out), 1 / 2.2);
+  }) as [number, number, number];
+}
+
 /** The film response the light under the glass uses: bright light rolls off instead of clipping. */
 export function toneMapFilm(c: number): number {
   return 1 - Math.exp(-c * 1.15);
