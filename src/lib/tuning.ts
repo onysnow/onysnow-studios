@@ -978,18 +978,33 @@ export function loadSavedTuning() {
     const raw = window.localStorage.getItem(TUNING_STORE);
     if (!raw) return;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (parsed["css"] || parsed["raster"]) {
+    if (parsed["v"] === SAVED_TUNING_VERSION) {
       restoreTuning(parsed as Parameters<typeof restoreTuning>[0]);
     } else {
-      // Written before the sets were split: one set of numbers, tuned against
-      // whichever mode was up at the time. Seed both rather than guess.
-      const flat = parsed as Record<string, number>;
-      restoreTuning({ css: flat, raster: flat });
+      /*
+       * Written before 2026-09-28, when the lab saved EVERY knob, touched or
+       * not. Such a store pins each knob to whatever the source said on the
+       * day it was written, so every default improved since (the edges'
+       * calibration, the room's light) never reached that browser: the site
+       * looked different there than everywhere else and nothing said why.
+       * It is set aside, not applied -- kept under a backup key, so nothing
+       * tuned is lost -- and the source's values stand.
+       */
+      window.localStorage.setItem(`${TUNING_STORE}:before-2026-09-28`, raw);
+      window.localStorage.removeItem(TUNING_STORE);
     }
   } catch {
     // A blocked or corrupt store is not a reason to fail to render the site.
   }
   applyTuning();
+}
+
+/** The shape the lab saves now: only the knobs that were moved. */
+export const SAVED_TUNING_VERSION = 2;
+
+/** What the lab writes to TUNING_STORE. */
+export function savedTuning(): string {
+  return JSON.stringify({ v: SAVED_TUNING_VERSION, ...tuningSnapshot() });
 }
 
 /** Shorthand for the loops: `t("grimeRake")`. Light values are read from the lights, not here. */
