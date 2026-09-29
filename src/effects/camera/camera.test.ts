@@ -19,6 +19,7 @@ const CAMERA_KNOBS = [
   "haloGain",
   "rimGlare",
   "rimGlareSize",
+  "edgeBloom",
 ];
 
 describe("the camera", () => {

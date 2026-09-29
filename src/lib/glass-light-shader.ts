@@ -5,6 +5,7 @@ import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
+import { BOKEH_GLSL } from "@/effects/optics/bokeh.glsl";
 
 /**
  * Fragment shader for one pane of glass.
@@ -44,7 +45,9 @@ precision highp float;
 
 uniform vec2  uViewport;      // device pixels
 uniform float uScale;         // device pixels per CSS pixel
-uniform float uRestEdge;      // how much edge shows with nothing shining
+uniform float uRestEdge;
+uniform float uEdgeBloom;     // the camera spreading a lit edge into a glow ("Edge bloom")
+uniform float uGlowOnly;      // 1: draw only the lit edge and its bloom (the .glass-glow layer)      // how much edge shows with nothing shining
 
 /*
  * ---- What is standing on this pane ----
@@ -67,7 +70,7 @@ uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
 uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one edge every effect shares
 uniform float uStraight;      // 1: a full-width band -- top and bottom edges only
-uniform float uTilt;          // -1 looking up at it, 1 looking down at it
+uniform vec4  uFaces;         // how wide each side face shows, CSS px: top, bottom, left, right (effects/optics/edge-side paneFaces)
 uniform float uBar;           // 1: a thin fixed bar (.glass--bar), thinner glass
 uniform float uThickness;     // this pane's thickness, CSS px (its data-thickness)
 uniform float uSeed;
@@ -122,6 +125,16 @@ uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
 uniform float uImageAspect;   // intrinsic width / height
+// The light the photograph clipped, and the disc the frost spreads it over
+// (effects/optics/bokeh).
+uniform sampler2D uBokeh;       // the photograph above's hidden light
+uniform float uHasBokeh;
+uniform vec4  uImageBox;       // the box it shows in (its section)
+uniform sampler2D uBokehBelow;  // and the photograph below's, for a band on a seam
+uniform float uHasBokehBelow;
+uniform vec4  uImageBelowBox;
+uniform float uBokehRadius;   // CSS px
+uniform float uBokehGain;     // the "Bokeh" knob
 /*
  * The photograph BELOW the pane, for a band on a seam between two: its bottom
  * side face looks down at it. The same image as uBackdrop otherwise.
@@ -228,6 +241,8 @@ vec2 coverUv(vec2 pt, vec4 image, float aspect) {
   return (rel - 0.5) / scale + 0.5;
 }
 
+${BOKEH_GLSL}
+
 void main() {
   // gl_FragCoord counts up from the bottom; the page counts down from the top.
   vec2 frag = vec2(gl_FragCoord.x, uViewport.y - gl_FragCoord.y) / uScale;
@@ -242,6 +257,16 @@ void main() {
   vec2 edgeHalf = uStraight > 0.5 ? vec2(1e5, halfSize.y) : halfSize;
   float d = roundedBox(p, edgeHalf, uRadius);
   float inside = smoothstep(0.5, -0.5, d);
+  /*
+   * The lit edge's own layer (uGlowOnly) is nothing but the edge and its
+   * bloom, which is gone by 160 px from the rim (haze, exp(-d / 48)): the
+   * rest of the pane is skipped rather than computed and thrown away, so
+   * the second draw costs a band round the edge, not a second pane.
+   */
+  if (uGlowOnly > 0.5 && abs(d) > 160.0) {
+    gl_FragColor = vec4(0.0);
+    return;
+  }
 
   /*
    * ---- Normal from the height field ----
@@ -414,15 +439,19 @@ void main() {
    * REFLECTS, and the echo.
    */
   // Whole pixels, as the CSS side layers are placed (effects/scene/scene).
-  float topT = floor(sideHeight(sideOpen(uTilt, 1.0), uBar, uThickness) + 0.5);
-  float botT = floor(sideHeight(sideOpen(uTilt, 0.0), uBar, uThickness) + 0.5);
+  // A closed face (0 px) draws nothing; the widths are kept off zero only so
+  // nothing below divides by it.
+  float topShows = step(0.5, uFaces.x);
+  float botShows = step(0.5, uFaces.y);
+  float topT = max(uFaces.x, 0.5);
+  float botT = max(uFaces.y, 0.5);
   float withinX = step(uRect.x, frag.x) * step(frag.x, uRect.x + uRect.z) * inside;
   float dTop = frag.y - uRect.y;
   float dBot = (uRect.y + uRect.w) - frag.y;
   float onTop = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dTop)
-    * (1.0 - smoothstep(topT - ARRIS_RADIUS, topT + ARRIS_RADIUS, dTop)) * withinX;
+    * (1.0 - smoothstep(topT - ARRIS_RADIUS, topT + ARRIS_RADIUS, dTop)) * withinX * topShows;
   float onBot = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dBot)
-    * (1.0 - smoothstep(botT - ARRIS_RADIUS, botT + ARRIS_RADIUS, dBot)) * withinX;
+    * (1.0 - smoothstep(botT - ARRIS_RADIUS, botT + ARRIS_RADIUS, dBot)) * withinX * botShows;
 
   /*
    * The side as a mirror. You see it at a grazing angle, so it reflects
@@ -470,7 +499,8 @@ void main() {
   vec3 behindBelow = texture2D(uBackdropBelow, coverUv(frag, uImageBelow, uImageBelowAspect)).rgb * uHasBelow;
   vec3 echoTint = exp(-SIDE_ABSORB * 2.0 * SIDE_PATH_MIN) * ECHO_GAIN;
   sideLight += echoTint * withinX * (
-    straight * uHasBackdrop * echoProfile(dTop, topT) + behindBelow * echoProfile(dBot, botT)
+    straight * uHasBackdrop * echoProfile(dTop, topT) * topShows
+      + behindBelow * echoProfile(dBot, botT) * botShows
   );
 
 
@@ -566,7 +596,8 @@ void main() {
    * adds (superposition). With one light the sums are that light's terms
    * exactly, so the page did not change when the loop arrived.
    */
-  vec3 lampLight = vec3(0.0);     // (tint * (rim + face) + mirror) * lit, per light
+  vec3 lampLight = vec3(0.0);     // (tint * face + mirror) * lit, per light
+  vec3 lampGlow = vec3(0.0);      // tint * rim * lit: the lit edge and its bloom, per light
   vec3 lampSpecular = vec3(0.0);  // the Blinn-Phong highlight, per light
   float lampEdge = 0.0;           // the bevel's share of each light
   for (int i = 0; i < MAX_LIGHTS; i++) {
@@ -618,7 +649,7 @@ void main() {
      * arris is not lit. (It used to ride the lamp's distance, which lit the
      * whole width of a pane white whenever the lamp was near.)
      */
-    float bloom = exp(-ad / 15.0) * 0.35 + exp(-ad / 48.0) * 0.05;
+    float bloom = (exp(-ad / 15.0) * 0.35 + exp(-ad / 48.0) * 0.05) * uEdgeBloom;
     vec3 rim = vec3(arrisLamp * (arrisProfile(ad) + bloom));
 
     /*
@@ -670,16 +701,19 @@ void main() {
     float flare = exp(-ad / 15.0);
     float haze = exp(-ad / 48.0);
     float edgeFacing = 0.72 + 0.28 * smoothstep(0.35, 0.85, abs(grad.y));
-    rim += vec3(filament * EDGE_GLOW_ARRIS * arrisWear + flare * 4.6 + haze * 0.34)
+    rim += vec3(filament * EDGE_GLOW_ARRIS * arrisWear + (flare * 4.6 + haze * 0.34) * uEdgeBloom)
       * reach * edgeFacing * EDGE_GLOW;
-    rim += pipedTint * flare * 0.8 * piped * edgeFacing * EDGE_GLOW;
+    rim += pipedTint * flare * 0.8 * uEdgeBloom * piped * edgeFacing * EDGE_GLOW;
     float grazing = direct * 0.3 + spill * EDGE_GLOW_SIDE_REACH;
     float glareTop = exp(-pow((dTop - topT * 0.5) / (topT * 0.42), 2.0)) * step(0.0, dTop);
     float glareBot = exp(-pow((dBot - botT * 0.5) / (botT * 0.42), 2.0)) * step(0.0, dBot);
     float farTopLine = exp(-pow((dTop - topT) / 1.7, 2.0)) * step(0.0, dTop);
     float farBotLine = exp(-pow((dBot - botT) / 1.7, 2.0)) * step(0.0, dBot);
-    float topOpenness = sideOpen(uTilt, 1.0);
-    float botOpenness = sideOpen(uTilt, 0.0);
+    // How far round the face is turned toward you: its edge's offset past
+    // the eye, over half the view.
+    float halfView = max(0.5 * uViewport.y / uScale, 1.0);
+    float topOpenness = clamp(sideOffset(uFaces.x, uThickness, uBar, uCameraDistance) / halfView, 0.0, 1.0);
+    float botOpenness = clamp(sideOffset(uFaces.y, uThickness, uBar, uCameraDistance) / halfView, 0.0, 1.0);
     float sideGlare = (glareTop * topOpenness + glareBot * botOpenness) * withinX;
     rim += vec3(sideGlare) * 11.0 * grazing * edgeFacing * EDGE_GLOW;
     rim += vec3((farTopLine * topOpenness + farBotLine * botOpenness) * withinX) * 5.0 * direct * EDGE_GLOW;
@@ -716,7 +750,8 @@ void main() {
     float lit = charge * charge * (3.0 - 2.0 * charge);
     vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
 
-    lampLight += (tint * (rim + face) + mirror) * lit;
+    lampLight += (tint * face + mirror) * lit;
+    lampGlow += tint * rim * lit;
     lampSpecular += vec3(specular) * inside * lit;
     lampEdge += bevel * lit;
   }
@@ -792,6 +827,25 @@ void main() {
   );
   colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
 
+  /*
+   * ---- Bokeh ----
+   *
+   * The light behind the pane that the photograph's file clipped, spread by
+   * the frost over the aperture's hexagon (effects/optics/bokeh). It is the
+   * photograph's own light, so it does not wait for the lamp, and it is only
+   * seen through the face.
+   */
+  if (uHasBokeh + uHasBokehBelow > 0.5 && uBokehGain > 0.0 && uGlowOnly < 0.5) {
+    vec3 discs = vec3(0.0);
+    if (uHasBokeh > 0.5) {
+      discs += bokehAt(uBokeh, frag, uImage, uImageAspect, uImageBox, uBokehRadius, uScale);
+    }
+    if (uHasBokehBelow > 0.5) {
+      discs += bokehAt(uBokehBelow, frag, uImageBelow, uImageBelowAspect, uImageBelowBox, uBokehRadius, uScale);
+    }
+    colour += inside * uBokehGain * discs;
+  }
+
   colour = toneMapGlass(colour);
 
   /*
@@ -840,6 +894,23 @@ void main() {
    * face, the reflected source, the specular. What is left unbounded is the
    * rim, which is the part that should escape.
    */
+  /*
+   * THE LIT EDGE IS DRAWN ON ITS OWN LAYER, IN FRONT OF THE SIDE FACES.
+   *
+   * The side faces are CSS siblings above the pane that MULTIPLY what is
+   * under them (their absorption), and this pass's layer is under them --
+   * so the edge's own light and its bloom came out darkened across the
+   * side, reading as a glow BEHIND the edge (Ony, 2026-09-29). The light a
+   * lit arris throws is in front of everything: it comes off the front
+   * corner, and the bloom is the camera's. So the pass runs twice per pane:
+   * everything else here (uGlowOnly 0), and the edge's light alone
+   * (uGlowOnly 1) for a layer above the sides (.glass-glow).
+   */
+  if (uGlowOnly > 0.5) {
+    vec3 glow = toneMapGlass(lampGlow * lightIn);
+    gl_FragColor = vec4(glow, clamp(max(max(glow.r, glow.g), glow.b), 0.0, 1.0));
+    return;
+  }
   float alpha = clamp(max(max(abs(colour.r), abs(colour.g)), abs(colour.b)), 0.0, 1.0);
   gl_FragColor = vec4(colour, alpha);
 }

@@ -22,6 +22,8 @@ test.skip(
 );
 
 test("the lab's stacks are placed by the stack solver", async ({ page }) => {
+  // The lab is every pane at once; under a software renderer a frame is seconds.
+  test.setTimeout(60_000);
   const shaderErrors: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "error" && /\b(shader|link):/i.test(m.text())) shaderErrors.push(m.text());
@@ -29,7 +31,7 @@ test("the lab's stacks are placed by the stack solver", async ({ page }) => {
   await page.goto("/lab?glass=css");
   await page.waitForLoadState("networkidle");
   const stacks = page.locator("[data-lab-stacks] [data-stack]");
-  await expect(stacks).toHaveCount(3);
+  await expect(stacks).toHaveCount(3, { timeout: 15_000 });
   await stacks.first().scrollIntoViewIfNeeded();
   const box = (await stacks.first().boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });

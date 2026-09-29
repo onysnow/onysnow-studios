@@ -29,12 +29,13 @@
  */
 import { t } from "@/lib/tuning";
 import { castShadow } from "@/lib/cast-shadow";
+import { LIGHT_BLEED } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { behindGlassShift, eyeOffset, oversizeFor } from "@/effects/optics/viewpoint";
 import { camera } from "@/effects/camera/camera";
-import { sideHeight, sideOpen } from "@/effects/optics/edge-side";
+import { paneFaces, type PaneFaces } from "@/effects/optics/edge-side";
 import { readPaneCauses, type PaneCauses } from "@/effects/materials/pane-causes";
 import {
   placeStack,
@@ -108,8 +109,10 @@ export type GlassRect = {
   ih: number;
   /** Intrinsic aspect, for the object-fit: cover mapping. */
   ia: number;
+  /** The box the photograph shows in: its section, which clips it. */
+  ibox: Box;
   /** The photograph BELOW the pane, which its bottom side face reflects. */
-  below: { src: string; x: number; y: number; w: number; h: number; a: number } | null;
+  below: { src: string; x: number; y: number; w: number; h: number; a: number; box: Box } | null;
   /** What this pane is, as <Pane> declared it (effects/materials/pane-causes). */
   causes: PaneCauses;
   /**
@@ -125,11 +128,8 @@ export type GlassRect = {
    * factor in here is then exactly 1.
    */
   stack: StackPlacement;
-  /**
-   * Viewing angle onto the pane, -1 to 1: positive when it is below eye level
-   * and you see its top side, negative above. Scrolling carries it across.
-   */
-  t: number;
+  /** How wide each of its side faces shows, CSS px (edge-side paneFaces). */
+  faces: PaneFaces;
 };
 
 /* ======================================================================
@@ -147,10 +147,15 @@ const nonOccluding = new WeakSet<HTMLElement>();
 /** How far each surface stands off the glass, as a share of "Content depth" (1 if unset). */
 const standoffs = new WeakMap<HTMLElement, number>();
 
-/** Each pane's two side faces, siblings of it (see .glass-side). */
+/** Each pane's side faces, siblings of it (see .glass-side). */
 type SideLayers = {
   top: HTMLElement;
   bottom: HTMLElement;
+  /** Its left and right sides, where the pane has visible left and right edges. */
+  left: HTMLElement | null;
+  right: HTMLElement | null;
+  /** The lit edge's layer, above the sides (optional; see .glass-glow). */
+  glow: HTMLElement | null;
   /** Whether the pane is position: fixed; asked once, in a frame's read phase. */
   fixed: boolean | null;
   last: string;
@@ -264,44 +269,62 @@ export function paneCauses(el: HTMLElement): PaneCauses {
 }
 
 /**
- * How far the panel is from eye level, as a fraction of half the viewport:
- * clamped, and eased so the middle of the screen is a broad flat region
- * rather than a point the thickness flips across.
+ * Where the eye is, in viewport CSS px: the middle of the view, moved toward
+ * the pointer by the camera's follow (effects/optics/viewpoint) -- the same
+ * eye the photographs' parallax and the reflections use.
  */
-function paneTilt(r: DOMRect, viewportHeight: number) {
-  const middle = viewportHeight / 2;
-  const offset = (r.top + r.height / 2 - middle) / middle;
-  const clamped = Math.max(-1, Math.min(1, offset));
-  return clamped * Math.abs(clamped);
+function eyeAt(viewportWidth: number, viewportHeight: number) {
+  const e = eyeOffset(cursorLamp.x, cursorLamp.y, viewportWidth, viewportHeight, camera.follow);
+  return { x: viewportWidth / 2 + e.x, y: viewportHeight / 2 + e.y };
 }
 
-function sideHeightsAt(
+/**
+ * Which of a pane's side faces show, and how wide, whole CSS px
+ * (effects/optics/edge-side paneFaces): only from their own side of the
+ * edge, so never the top and bottom at once, and wider the further the edge
+ * is past the eye.
+ */
+function facesAt(
   el: HTMLElement,
   r: DOMRect,
   thickness: number,
+  viewportWidth: number,
   viewportHeight: number,
-): { top: number; bottom: number } {
-  const tilt = paneTilt(r, viewportHeight);
-  const bar = el.classList.contains("glass--bar");
-  return {
-    top: Math.round(sideHeight(sideOpen(tilt, true), bar, thickness)),
-    bottom: Math.round(sideHeight(sideOpen(tilt, false), bar, thickness)),
-  };
+): PaneFaces {
+  return paneFaces(
+    r,
+    eyeAt(viewportWidth, viewportHeight),
+    camera.distance(viewportWidth),
+    el.classList.contains("glass--bar"),
+    thickness,
+    r.width >= viewportWidth - 1,
+  );
 }
 
-/** How tall each of a pane's side faces shows right now, whole CSS pixels. */
+/** How wide each of a pane's side faces shows right now, whole CSS pixels. */
 export function paneSideHeights(
   el: HTMLElement,
   r: DOMRect = el.getBoundingClientRect(),
-): { top: number; bottom: number } {
-  return sideHeightsAt(el, r, paneCauses(el).thickness, window.innerHeight);
+): PaneFaces {
+  const root = document.documentElement;
+  return facesAt(
+    el,
+    r,
+    paneCauses(el).thickness,
+    root.clientWidth || window.innerWidth,
+    root.clientHeight || window.innerHeight,
+  );
 }
 
 /* ======================================================================
  * 2. Read
  * ====================================================================== */
 
-type ImageReading = { img: HTMLImageElement; rect: DOMRect };
+/** A photograph, where it is drawn, and the box it shows in (its section, which clips it). */
+/** A rectangle on the page, CSS px. */
+type Box = { x: number; y: number; w: number; h: number };
+
+type ImageReading = { img: HTMLImageElement; rect: DOMRect; box: DOMRect };
 
 type PaneReading = {
   el: HTMLElement;
@@ -335,7 +358,9 @@ type SceneReading = {
 };
 
 function readImage(img: HTMLImageElement | null): ImageReading | null {
-  return img ? { img, rect: img.getBoundingClientRect() } : null;
+  if (!img) return null;
+  const rect = img.getBoundingClientRect();
+  return { img, rect, box: img.closest("[data-photo]")?.getBoundingClientRect() ?? rect };
 }
 
 function readPane(el: HTMLElement, withOffsets = true): PaneReading {
@@ -417,7 +442,7 @@ function invalidate() {
 
 function imageFields(reading: ImageReading | null) {
   if (!reading) return null;
-  const { img, rect } = reading;
+  const { img, rect, box } = reading;
   return {
     src: smallestVariant(img),
     x: rect.left,
@@ -425,6 +450,7 @@ function imageFields(reading: ImageReading | null) {
     w: rect.width,
     h: rect.height,
     a: img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+    box: { x: box.left, y: box.top, w: box.width, h: box.height },
   };
 }
 
@@ -489,7 +515,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       h: r.height,
       r: p.radius,
       e: paneEdgeWidth(p.el),
-      t: paneTilt(r, reading.innerHeight),
+      faces: facesAt(p.el, r, p.causes.thickness, reading.viewportWidth, reading.viewportHeight),
       s: surfaceSeed(p.el),
       src: above?.src ?? "",
       ix: above?.x ?? 0,
@@ -497,6 +523,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       iw: above?.w ?? 1,
       ih: above?.h ?? 1,
       ia: above?.a ?? 1,
+      ibox: above?.box ?? { x: 0, y: 0, w: 0, h: 0 },
       below: imageFields(p.below),
       causes: stacked.get(p.el)?.causes ?? p.causes,
       stack: stacked.get(p.el)?.stack ?? { ...SINGLE, zBottom: p.causes.gap },
@@ -697,16 +724,18 @@ function writeView(reading: SceneReading) {
  * parent -- which is theirs too -- so they scroll with it for free, or the
  * viewport for a fixed pane. Written only when something changed.
  */
-function writeSides(p: PaneReading, viewportHeight: number) {
+function writeSides(p: PaneReading, viewportHeight: number, viewportWidth: number) {
   const layers = sideLayers.get(p.el);
   if (!layers) return;
   if (layers.fixed === null) return;
   const r = p.rect;
   const box = layers.fixed ? { x: r.left, y: r.top, w: r.width, h: r.height } : p.offset;
   if (!box) return;
-  const sides = sideHeightsAt(p.el, r, p.causes.thickness, viewportHeight);
+  const faces = facesAt(p.el, r, p.causes.thickness, viewportWidth, viewportHeight);
+  const sides = { top: faces.top, bottom: faces.bottom };
+  const across = { left: faces.left, right: faces.right };
   const { x, y, w, h } = box;
-  const key = `${x},${y},${w},${h},${sides.top},${sides.bottom},${p.radius}`;
+  const key = `${x},${y},${w},${h},${sides.top},${sides.bottom},${across.left},${across.right},${p.radius}`;
   if (key === layers.last) return;
   layers.last = key;
   const position = layers.fixed ? "fixed" : "absolute";
@@ -719,14 +748,44 @@ function writeSides(p: PaneReading, viewportHeight: number) {
   };
   set(layers.top, y, sides.top, `${p.radius}px ${p.radius}px 0 0`);
   set(layers.bottom, y + h - sides.bottom, sides.bottom, `0 0 ${p.radius}px ${p.radius}px`);
+  /*
+   * The left and right faces run between the top and bottom ones, so the
+   * corners are absorbed once, not twice. The corners themselves -- where a
+   * rounded pane's side turns from one face to the next -- are the top and
+   * bottom faces' rounding.
+   */
+  const between = Math.max(0, h - sides.top - sides.bottom);
+  const setSide = (layer: HTMLElement | null, left: number, width: number) => {
+    if (!layer) return;
+    layer.style.position = position;
+    layer.style.transform = `translate(${left}px, ${y + sides.top}px)`;
+    layer.style.width = `${width}px`;
+    layer.style.height = `${width > 0 ? between : 0}px`;
+  };
+  setSide(layers.left, x, across.left);
+  setSide(layers.right, x + w - across.right, across.right);
+  // The lit edge's layer covers the pane and its bleed, exactly as the surface layer does.
+  if (layers.glow) {
+    const g = layers.glow;
+    g.style.position = position;
+    g.style.transform = `translate(${x - LIGHT_BLEED}px, ${y - LIGHT_BLEED}px)`;
+    g.style.width = `${w + LIGHT_BLEED * 2}px`;
+    g.style.height = `${h + LIGHT_BLEED * 2}px`;
+  }
 }
 
-function writePane(p: PaneReading, viewportHeight: number) {
+/** The lit edge's layer of a pane, if it has one (drawn by the glass light pass). */
+export function paneGlowLayer(el: HTMLElement): HTMLCanvasElement | null {
+  const g = sideLayers.get(el)?.glow;
+  return g instanceof HTMLCanvasElement ? g : null;
+}
+
+function writePane(p: PaneReading, viewportHeight: number, viewportWidth: number) {
   const el = p.el;
   const r = p.rect;
   // How near the lamp is, eased, and where it stands: the CSS adapter's to write.
   writePaneLight(el, r, cursorLamp, nearness(r, cursorLamp.x, cursorLamp.y, REACH));
-  writeSides(p, viewportHeight);
+  writeSides(p, viewportHeight, viewportWidth);
   // The corner radius, for layers the utility classes cannot tell it to.
   el.style.setProperty("--pane-radius", `${p.radius}px`);
   // Where this pane sits in the viewport, for anything positioned in viewport space.
@@ -781,7 +840,7 @@ function run(now = performance.now()) {
   snapshotVersion = version;
   // 4. write
   writeView(reading);
-  for (const p of reading.panes) writePane(p, reading.innerHeight);
+  for (const p of reading.panes) writePane(p, reading.viewportHeight, reading.viewportWidth);
   reading.surfaces.forEach((s, i) => {
     const light = lightOn[i];
     if (light) writeSurface(s, light);
@@ -880,9 +939,16 @@ export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions =
   };
 }
 
-/** Give a pane its two side faces (siblings of it; see .glass-side). */
-export function registerPaneSides(el: HTMLElement, top: HTMLElement, bottom: HTMLElement) {
-  sideLayers.set(el, { top, bottom, fixed: null, last: "" });
+/** Give a pane its side faces (siblings of it; see .glass-side). */
+export function registerPaneSides(
+  el: HTMLElement,
+  top: HTMLElement,
+  bottom: HTMLElement,
+  glow: HTMLElement | null = null,
+  left: HTMLElement | null = null,
+  right: HTMLElement | null = null,
+) {
+  sideLayers.set(el, { top, bottom, left, right, glow, fixed: null, last: "" });
   // Laid on the pane by the next frame, with everything else.
   reschedule();
   return () => {

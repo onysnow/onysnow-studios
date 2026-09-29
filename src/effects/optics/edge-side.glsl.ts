@@ -1,18 +1,14 @@
 import {
   ARRIS_RADIUS,
-  BAR_SIDE_MIN_PX,
-  BAR_SIDE_RANGE_PX,
+  BAR_THINNER,
   ECHO_GAIN,
   FAR_ARRIS_LOSS,
   PANE_THICKNESS,
   RELAY_GAIN,
   SIDE_ABSORB,
   SIDE_GUIDED_DEPTH,
-  SIDE_MIN_PX,
   SIDE_PATH_GUIDED,
   SIDE_PATH_MIN,
-  SIDE_RANGE_PX,
-  SIDE_REST_OPEN,
 } from "./edge-side";
 
 const f = (n: number) => n.toFixed(6);
@@ -27,11 +23,7 @@ export const EDGE_SIDE_GLSL = /* glsl */ `
 #define PANE_THICKNESS ${f(PANE_THICKNESS)}
 #define ARRIS_RADIUS ${f(ARRIS_RADIUS)}
 #define SIDE_ABSORB vec3(${SIDE_ABSORB.map(f).join(", ")})
-#define SIDE_REST_OPEN ${f(SIDE_REST_OPEN)}
-#define SIDE_MIN_PX ${f(SIDE_MIN_PX)}
-#define SIDE_RANGE_PX ${f(SIDE_RANGE_PX)}
-#define BAR_SIDE_MIN_PX ${f(BAR_SIDE_MIN_PX)}
-#define BAR_SIDE_RANGE_PX ${f(BAR_SIDE_RANGE_PX)}
+#define BAR_THINNER ${f(BAR_THINNER)}
 #define SIDE_PATH_MIN ${f(SIDE_PATH_MIN)}
 #define SIDE_PATH_GUIDED ${f(SIDE_PATH_GUIDED)}
 #define SIDE_GUIDED_DEPTH ${f(SIDE_GUIDED_DEPTH)}
@@ -39,18 +31,16 @@ export const EDGE_SIDE_GLSL = /* glsl */ `
 #define ECHO_GAIN ${f(ECHO_GAIN)}
 #define RELAY_GAIN ${f(RELAY_GAIN)}
 
-/* How much of a side face is in view; top is 1.0 for the top side. */
-float sideOpen(float tilt, float top) {
-  float t = top > 0.5 ? tilt : -tilt;
-  return SIDE_REST_OPEN + (1.0 - SIDE_REST_OPEN) * max(0.0, t);
+/* How wide a side face shows, CSS px, its edge offset px past the eye (edge-side.ts sideWidth). */
+float sideWidth(float offset, float thickness, float bar, float distance) {
+  float t = max(thickness, 0.0) * (bar > 0.5 ? BAR_THINNER : 1.0);
+  return max(offset, 0.0) * t / (max(distance, 1.0) + t);
 }
 
-/* The side face's height on screen, CSS pixels; bar is 1.0 for the thin fixed bars. Scales with thickness. */
-float sideHeight(float open, float bar, float thickness) {
-  float base = bar > 0.5
-    ? BAR_SIDE_MIN_PX + BAR_SIDE_RANGE_PX * open
-    : SIDE_MIN_PX + SIDE_RANGE_PX * open;
-  return base * max(thickness, 0.0) / PANE_THICKNESS;
+/* The inverse: how far past the eye an edge is whose face shows width px. */
+float sideOffset(float width, float thickness, float bar, float distance) {
+  float t = max(max(thickness, 0.0) * (bar > 0.5 ? BAR_THINNER : 1.0), 0.01);
+  return width * (max(distance, 1.0) + t) / t;
 }
 
 /* Path length through the side at depth px in from the front arris. */

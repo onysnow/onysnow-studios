@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { settingsQuery } from "@/lib/content";
 import { safeCustomCss, safeHref } from "@/lib/safe-content";
 import { SITE_ASSETS } from "@/lib/site-assets";
-import { loadSavedTuning } from "@/lib/tuning";
+import { applySiteTuning, SITE_TUNING_KEY } from "@/lib/tuning";
 
 /** Display faces the portal can switch between. */
 const FONTS = new Set(["jost", "inter-tight", "barlow-condensed"]);
@@ -60,19 +60,20 @@ export function CustomCss() {
   const glassScratch = safeHref(data?.[SITE_ASSETS.glassScratch.key] ?? "");
 
   /*
-   * Whatever the lab last saved, applied to the real site.
-   *
-   * Here rather than in its own component because this is already the place
-   * that reads studio settings and writes them onto the document, and it is
-   * already mounted on every route. Once, on mount: the lab applies its own
-   * changes live while you are in it, and re-applying on every render would
-   * fight that.
+   * The site's published tuning -- what Ony set in /lab -- applied for
+   * every visitor, as soon as the settings arrive and whenever they change.
+   * (It used to be each browser's own localStorage, so what he tuned was
+   * seen by nobody else, and a stale copy could pin one browser to old
+   * values.) The lab applies its own changes live while you are in it.
    */
+  const siteTuning = data?.[SITE_TUNING_KEY];
   useEffect(() => {
+    if (data === undefined) return;
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/lab")) return;
     // The panes carry `suppressHydrationWarning` precisely so this does not
     // have to be timed against hydration -- see Glass.tsx.
-    loadSavedTuning();
-  }, []);
+    applySiteTuning(siteTuning);
+  }, [data, siteTuning]);
 
   useEffect(() => {
     const root = document.documentElement;

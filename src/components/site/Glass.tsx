@@ -17,7 +17,7 @@ import { requestBevelFilter } from "@/lib/bevel-filters";
 import { registerPane } from "@/lib/glass-panes";
 import { onTuningApplied } from "@/lib/tuning";
 import { EDGE_WIDTH_ATTR } from "@/effects/optics/edge-profile";
-import { layerProps, SIDE_LAYER_Z } from "@/effects/engine/compositor";
+import { GLOW_LAYER_Z, layerProps, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { FAR_ARRIS_SPAN, farArrisGradientCss, sideGradientCss } from "@/effects/optics/edge-side";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +39,19 @@ const SIDE_STYLE = {
     "--far-arris": farArrisGradientCss("to top"),
     "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
   },
-} as unknown as Record<"top" | "bottom", CSSProperties>;
+  left: {
+    zIndex: SIDE_LAYER_Z,
+    backgroundImage: sideGradientCss("to right"),
+    "--far-arris": farArrisGradientCss("to right"),
+    "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
+  },
+  right: {
+    zIndex: SIDE_LAYER_Z,
+    backgroundImage: sideGradientCss("to left"),
+    "--far-arris": farArrisGradientCss("to left"),
+    "--far-arris-span": `${FAR_ARRIS_SPAN}px`,
+  },
+} as unknown as Record<"top" | "bottom" | "left" | "right", CSSProperties>;
 
 /*
  * How far type and the plastic stand off the glass, as a share of a mounted
@@ -48,6 +60,9 @@ const SIDE_STYLE = {
  */
 const TYPE_STANDOFF = 0.42;
 const PLASTIC_STANDOFF = 0.5;
+
+/* The lit edge's layer: above the side faces, adding light (see .glass-glow). */
+const GLOW_STYLE = { zIndex: GLOW_LAYER_Z } as CSSProperties;
 
 /**
  * SVG filters inside backdrop-filter are Chromium-only. Where they are not
@@ -131,6 +146,9 @@ export function Glass({
   /* The side faces: siblings of the pane, rendered before it attaches. */
   const sideTop = useRef<HTMLSpanElement | null>(null);
   const sideBottom = useRef<HTMLSpanElement | null>(null);
+  const sideLeft = useRef<HTMLSpanElement | null>(null);
+  const sideRight = useRef<HTMLSpanElement | null>(null);
+  const glowLayer = useRef<HTMLCanvasElement | null>(null);
 
   const attach = useCallback(
     (el: HTMLElement | null) => {
@@ -239,7 +257,14 @@ export function Glass({
   useEffect(() => {
     const el = node.current;
     if (!el || !sideTop.current || !sideBottom.current) return;
-    return registerPaneSides(el, sideTop.current, sideBottom.current);
+    return registerPaneSides(
+      el,
+      sideTop.current,
+      sideBottom.current,
+      glowLayer.current,
+      sideLeft.current,
+      sideRight.current,
+    );
   }, []);
 
   const pane = (
@@ -294,7 +319,7 @@ export function Glass({
   );
 
   /*
-   * The two side faces -- the pane's thickness, between its arrises. Which one
+   * The side faces -- the pane's thickness, between its arrises. Which ones
    * you can see depends on where the pane sits against your eye, so they open
    * and close against each other as you scroll. Siblings AFTER the pane, not
    * children: see .glass-side in styles.css for why only a sibling can absorb
@@ -315,6 +340,25 @@ export function Glass({
         className="glass-side glass-side--bottom"
         style={SIDE_STYLE.bottom}
       />
+      {/* And the left and right faces, where the pane's left and right edges are in view. */}
+      <span
+        ref={sideLeft}
+        aria-hidden="true"
+        className="glass-side glass-side--left"
+        style={SIDE_STYLE.left}
+      />
+      <span
+        ref={sideRight}
+        aria-hidden="true"
+        className="glass-side glass-side--right"
+        style={SIDE_STYLE.right}
+      />
+      {/*
+        The lit edge and its bloom, above the side faces: the light a lit
+        arris throws comes off the front corner and is not absorbed by the
+        side behind it. Drawn by the glass light pass (GlassLight).
+      */}
+      <canvas ref={glowLayer} aria-hidden="true" className="glass-glow" style={GLOW_STYLE} />
     </>
   );
 }

@@ -614,19 +614,26 @@ export class HtmlCapture {
 				// the node itself AND its ancestors, because html-to-image
 				// calls the filter for every node in the subtree and dropping
 				// only the root of a glass element would keep its children.
-				...(hideNodes && hideNodes.length
-					? {
-						filter: (node: Node) => {
-							if (node.nodeType !== 1) return true;
-							let cur: Node | null = node;
-							while (cur) {
-								if (hideNodes.includes(cur as HTMLElement)) return false;
-								cur = cur.parentNode;
-							}
-							return true;
-						},
+				// LOCAL: and drop every img/video/canvas, and the parallax layers
+				// ([data-view-shift]) whole. The scene draws media live from their
+				// elements (_captureMediaDescendants) BEFORE this snapshot, at
+				// their current position; left in the snapshot, a photograph was
+				// drawn a second time on top, as it was when the snapshot was
+				// taken -- so a photo sliding under the glass (the viewpoint's
+				// parallax) stood still in liquid glass.
+				filter: (node: Node) => {
+					if (node.nodeType !== 1) return true;
+					const tag = (node as Element).tagName;
+					if (tag === 'IMG' || tag === 'VIDEO' || tag === 'CANVAS') return false;
+					if ((node as Element).hasAttribute('data-view-shift')) return false;
+					if (!hideNodes || hideNodes.length === 0) return true;
+					let cur: Node | null = node;
+					while (cur) {
+						if (hideNodes.includes(cur as HTMLElement)) return false;
+						cur = cur.parentNode;
 					}
-					: {}),
+					return true;
+				},
 			});
 
 			this.cache.set(element, { canvas: rendered, w, h });

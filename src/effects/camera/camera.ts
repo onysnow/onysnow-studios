@@ -35,6 +35,10 @@ export const camera = {
   get apertureGrowth() {
     return t("spread");
   },
+  /** How much light a photograph's blown highlights held: the bokeh's brightness. */
+  get bokeh() {
+    return t("bokeh");
+  },
   /** The lens: how tight its image of a bright core is, and its ghosts and halo. */
   lens: {
     get coreFalloff() {
@@ -52,6 +56,10 @@ export const camera = {
     },
     get glareSize() {
       return t("rimGlareSize");
+    },
+    /** How much a lit edge is spread into a glow round it ("Edge bloom"). */
+    get edgeBloom() {
+      return t("edgeBloom");
     },
   },
 };

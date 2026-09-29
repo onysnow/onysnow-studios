@@ -128,7 +128,8 @@ test.describe("glass", () => {
     await expect(floor).toHaveAttribute("data-dynamic", "idle");
     await page.mouse.move(400, 400, { steps: 3 });
     await page.mouse.down();
-    await expect(floor).toHaveAttribute("data-dynamic", "", { timeout: 5000 });
+    // Generous: under a software renderer one frame of the whole page is seconds.
+    await expect(floor).toHaveAttribute("data-dynamic", "", { timeout: 10_000 });
     await page.mouse.up();
     // A hold past 2.6 s arms the shutter, which stays lit until a click spends
     // it (lib/shutter-charge); a slow runner can get there. Spend it.
@@ -150,13 +151,18 @@ test.describe("the pane's edge", () => {
    * layer inside one paints its colour flat instead of absorbing. So they are
    * siblings, laid on the pane's edges by the pass that measures it.
    */
-  test("its side faces sit on its top and bottom edges, outside it, absorbing", async ({
+  test("its side faces sit on its edges, outside it, absorbing; only the one facing the eye shows", async ({
     page,
   }) => {
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     const band = page.locator("[data-seam] .glass").first();
     await band.scrollIntoViewIfNeeded();
+    // Put the band's top edge below the eye (the middle of the view), so its
+    // top face is the one in view.
+    const top = await band.evaluate((el) => el.getBoundingClientRect().top);
+    const vh = await page.evaluate(() => window.innerHeight);
+    await page.mouse.wheel(0, top - vh * 0.7);
     const facts = async () =>
       band.evaluate((el) => {
         const r = el.getBoundingClientRect();
@@ -176,6 +182,8 @@ test.describe("the pane's edge", () => {
       });
     await expect.poll(async () => (await facts()).heights[0]).toBeGreaterThan(0);
     const f = await facts();
+    // Below the eye: its top face shows, its bottom face cannot.
+    expect(f.heights[1]).toBe(0);
     expect(f.classes[0]).toContain("glass-side--top");
     expect(f.classes[1]).toContain("glass-side--bottom");
     expect(f.topAt).toBe(0);
@@ -183,6 +191,58 @@ test.describe("the pane's edge", () => {
     expect(f.widths).toEqual([0, 0]);
     expect(f.blend).toBe("multiply");
     expect(f.inside).toBe(false);
+  });
+
+  /*
+   * Ony, 2026-09-29: "If you can see the edge of the pane on the left and
+   * right then it should have a side as well." A pane narrower than the view
+   * shows a face on each; the one facing the middle of the view is the wider.
+   * A band as wide as the view has no left or right edge in sight: none.
+   */
+  test("a pane shows the side faces that face the eye, never two opposite ones", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await page.goto("/lab?glass=css");
+    await page.waitForLoadState("networkidle");
+    const stack = page.locator("[data-lab-stacks] [data-stack]").first();
+    await stack.scrollIntoViewIfNeeded();
+    const pane = stack.locator(".glass").first();
+    const faces = async () =>
+      pane.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const box = (sel: string) => {
+          let n = el.nextElementSibling;
+          while (n && !n.classList.contains(sel)) n = n.nextElementSibling;
+          return n ? n.getBoundingClientRect() : null;
+        };
+        const left = box("glass-side--left")!;
+        const right = box("glass-side--right")!;
+        return {
+          left: [Math.round(left.left - r.left), Math.round(left.width)],
+          right: [Math.round(r.right - right.right), Math.round(right.width)],
+          centre: r.left + r.width / 2 - document.documentElement.clientWidth / 2,
+        };
+      });
+    await expect.poll(async () => (await faces()).right[1]).toBeGreaterThan(0);
+    const f = await faces();
+    expect(Math.abs(f.left[0]!)).toBeLessThan(1);
+    expect(Math.abs(f.right[0]!)).toBeLessThan(1);
+    // Left of the eye (the pointer is off the page, so the eye is centred):
+    // its right face, which faces the eye, shows; its left face cannot.
+    expect(f.centre).toBeLessThan(0);
+    expect(f.left[1]).toBe(0);
+    // A pane as wide as the view: no left or right face.
+    const bandLeft = await page.evaluate(() => {
+      const w = document.documentElement.clientWidth;
+      const band = [...document.querySelectorAll<HTMLElement>(".glass")].find(
+        (el) => el.getBoundingClientRect().width >= w - 1,
+      );
+      let n = band?.nextElementSibling ?? null;
+      while (n && !n.classList.contains("glass-side--left")) n = n.nextElementSibling;
+      return n ? n.getBoundingClientRect().width : -1;
+    });
+    expect(bandLeft).toBe(0);
   });
 });
 
@@ -215,6 +275,8 @@ test.describe("plastic on the glass", () => {
   test("the orange button passes orange light behind it, thrown away from the lamp", async ({
     page,
   }) => {
+    // Two lit holds with the full light passes running: slow in software GL.
+    test.setTimeout(60_000);
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     const button = page.locator("main .glass .plastic").first();

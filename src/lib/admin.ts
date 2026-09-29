@@ -103,6 +103,21 @@ export async function updateRow(table: EditableTable, id: string, patch: Record<
   if (error) throw error;
 }
 
+/**
+ * Publish the lab's tuning for every visitor (the site_settings row
+ * SITE_TUNING_KEY). Admins only -- the table's policy refuses anyone else.
+ * An upsert, so the row does not need creating by hand first.
+ */
+export async function saveSiteTuning(key: string, value: string) {
+  const { error } = await (supabase as any)
+    .from("site_settings")
+    .upsert(
+      { key, value, label: "Effect tuning (set in /lab)", kind: "longtext", sort_order: 999 },
+      { onConflict: "key" },
+    );
+  if (error) throw error;
+}
+
 export async function insertRow(table: EditableTable, row: Record<string, unknown>) {
   const { error } = await (supabase as any).from(table).insert(row);
   if (error) throw error;

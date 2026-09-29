@@ -135,6 +135,7 @@
   letter-spacing: 0.2em;
   color: var(--color-primary);
 }
+/* The glass shader dims the lights' bokeh by this same shadow: effects/optics/bokeh PHOTO_VIGNETTE. Change both together. */
 @utility image-vignette {
   box-shadow: inset 0 0 9rem 1rem oklch(0.08 0.01 55 / 70%);
 }
@@ -580,10 +581,10 @@
    * other, so the thickness opens on one edge as it closes on the other, and
    * that differential is what reads as depth rather than as a drawn border.
    *
-   * How tall each shows is sideOpen() and sideHeight() in effects/optics/
-   * edge-side.ts, one model for these layers and the shader. Neither ever
-   * closes: the far side is still there, foreshortened and seen through the
-   * glass, which is why it reads as subtler rather than absent.
+   * How wide each shows is sideWidth() / paneFaces() in effects/optics/
+   * edge-side.ts, one model for these layers and the shader: a face shows
+   * only from its own side of the edge, never two opposite ones, and only a
+   * few pixels, seen nearly edge-on from the front.
    * ===================================================================== */
   /*
    * The side faces (<Glass> renders them as siblings AFTER the pane, and
@@ -623,6 +624,22 @@
   }
 
   /*
+   * The lit edge and its bloom (GlassLight draws it; the scene places it over
+   * the pane and its bleed, like the side faces). Above the sides, adding
+   * light the way the surface layer does: the light a lit arris throws comes
+   * off the front corner, so the side's absorption must not darken it.
+   */
+  .glass-glow {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    mix-blend-mode: plus-lighter;
+  }
+
+  /*
    * The far arris: the eased corner between the side and the back face turns
    * the light passing it away from you, so it is a thin DARKER line, soft
    * over the corner's radius (farArrisLoss) and centred on the corner.
@@ -643,6 +660,25 @@
 
   .glass-side--bottom::after {
     top: calc(-1 * var(--far-arris-span, 4.5px));
+  }
+
+  /* The left and right faces: the same far-arris line, standing upright. */
+  .glass-side--left::after,
+  .glass-side--right::after {
+    top: 0;
+    bottom: 0;
+    left: auto;
+    right: auto;
+    width: calc(2 * var(--far-arris-span, 4.5px));
+    height: auto;
+  }
+
+  .glass-side--left::after {
+    right: calc(-1 * var(--far-arris-span, 4.5px));
+  }
+
+  .glass-side--right::after {
+    left: calc(-1 * var(--far-arris-span, 4.5px));
   }
 
   /*
@@ -1099,8 +1135,7 @@ html[data-try~="shadows"] .glass blockquote {
 
 html[data-try~="shadows"] .plastic::before {
   /* The same model: its own standoff, its own growth, no fractions. */
-  transform: translate(var(--cast-x, 0px), var(--cast-y, 0px))
-    scale(var(--cast-scale, 1));
+  transform: translate(var(--cast-x, 0px), var(--cast-y, 0px)) scale(var(--cast-scale, 1));
   filter: blur(var(--cast-blur, 0px));
 }
 
@@ -2425,14 +2460,16 @@ html[data-try~="shadows"] .plastic::before {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .glass > .glass__surface {
+  .glass > .glass__surface,
+  .glass-glow {
     display: none;
   }
 }
 
 /* Phones skip the whole effect layer; a canvas per pane is more, not less. */
 @media (pointer: coarse), (hover: none) {
-  .glass > .glass__surface {
+  .glass > .glass__surface,
+  .glass-glow {
     display: none;
   }
 }

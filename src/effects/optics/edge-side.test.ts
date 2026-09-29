@@ -14,8 +14,8 @@ import {
   FAR_ARRIS_LOSS,
   sideCosine,
   sideGradientCss,
-  sideHeight,
-  sideOpen,
+  sideWidth,
+  paneFaces,
   sidePath,
   sideTransmittance,
 } from "./edge-side";
@@ -98,13 +98,74 @@ describe("the side's height", () => {
     expect(css).not.toContain("--side-top");
     expect(css).not.toContain("--pane-top");
     // Bars are thinner glass than bands.
-    expect(sideHeight(1, true)).toBeLessThan(sideHeight(1));
+    expect(sideWidth(300, PANE_THICKNESS, true, 1728)).toBeLessThan(
+      sideWidth(300, PANE_THICKNESS, false, 1728),
+    );
   });
 
-  it("opens on the side facing the eye and never closes on the other", () => {
-    expect(sideOpen(1, true)).toBe(1);
-    expect(sideOpen(1, false)).toBeGreaterThan(0);
-    expect(sideOpen(-1, false)).toBe(1);
+  it("shows only from its own side of the edge, a few pixels wide: seen from the front", () => {
+    const D = 1728; // 1.2 x a 1440 px view
+    expect(sideWidth(-10, PANE_THICKNESS, false, D)).toBe(0);
+    expect(sideWidth(0, PANE_THICKNESS, false, D)).toBe(0);
+    // Perspective: offset x T / (D + T).
+    expect(sideWidth(450, 18, false, D)).toBeCloseTo((450 * 18) / (D + 18), 12);
+    // Half a view past the eye, an 18 px slab shows under 5 px of side.
+    expect(sideWidth(450, 18, false, D)).toBeLessThan(5);
+    // Twice as far past the eye, twice as wide; twice as thick, about twice.
+    expect(sideWidth(400, 18, false, D)).toBeCloseTo(2 * sideWidth(200, 18, false, D), 12);
+  });
+
+  it("never shows the top and bottom (or left and right) of a flat pane at once", () => {
+    // Ony, 2026-09-29: "you should never be able to see the top and bottom at the same time".
+    const bar = false;
+    for (const eyeY of [-200, 0, 150, 300, 450, 700, 1200]) {
+      for (const eyeX of [0, 400, 720, 1100]) {
+        const f = paneFaces(
+          { left: 300, top: 250, right: 700, bottom: 500 },
+          { x: eyeX, y: eyeY },
+          1728,
+          bar,
+          PANE_THICKNESS,
+          false,
+        );
+        expect(f.top > 0 && f.bottom > 0).toBe(false);
+        expect(f.left > 0 && f.right > 0).toBe(false);
+      }
+    }
+  });
+
+  it("a pane that straddles the eye shows no side; a small one near it, hardly any", () => {
+    const eye = { x: 720, y: 450 };
+    const straddling = paneFaces(
+      { left: 600, top: 400, right: 840, bottom: 500 },
+      eye,
+      450,
+      false,
+      PANE_THICKNESS,
+      false,
+    );
+    expect(straddling).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
+    const near = paneFaces(
+      { left: 760, top: 480, right: 860, bottom: 560 },
+      eye,
+      450,
+      false,
+      PANE_THICKNESS,
+      false,
+    );
+    expect(near.top).toBeLessThanOrEqual(1);
+    expect(near.left).toBeLessThanOrEqual(2);
+    // A full-width band has no left or right edge in view.
+    const band = paneFaces(
+      { left: 0, top: 600, right: 1440, bottom: 900 },
+      eye,
+      450,
+      false,
+      PANE_THICKNESS,
+      true,
+    );
+    expect(band.left + band.right).toBe(0);
+    expect(band.top).toBeGreaterThan(0);
   });
 
   it("the thinner it shows, the more grazing the look and the more it mirrors", () => {

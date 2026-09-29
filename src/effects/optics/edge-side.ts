@@ -65,30 +65,64 @@ export const ARRIS_RADIUS = 1.5;
 export const SIDE_ABSORB: readonly [number, number, number] = FROSTED_FLOAT.absorb;
 
 /**
- * How much of each side face is in view. Which of the two you can see depends
- * on where the pane sits against your eye; neither ever closes completely.
- * (`tilt` is -1 looking up at the pane, 1 looking down at it.)
+ * How wide a side face shows on screen, CSS px: perspective, nothing else.
+ *
+ * A side face runs straight back from the front of the pane, so you see it
+ * only from ITS side of the edge: the top face only when the top edge is
+ * below your eye, the bottom face only when the bottom edge is above it.
+ * Never two opposite faces -- for a flat slab that is impossible (Ony,
+ * 2026-09-29) -- at most two neighbours (the bottom and the left, seen from
+ * down and to the left). A pane that straddles your eye shows none.
+ *
+ * You look at the page from the front, from `distance` away, so a face
+ * `thickness` deep is seen nearly edge-on: its front arris is `offset` past
+ * your eye and its back arris is foreshortened toward it by
+ * distance / (distance + thickness), leaving
+ *
+ *   width = offset * thickness / (distance + thickness)
+ *
+ * a few pixels at most -- "the side, but top down" (Ony). Small panes near
+ * the middle of the view show almost no side at all.
+ *
+ * `offset` is how far the edge is past the eye on the face's side (negative
+ * or zero: the face is turned away). The thin fixed bars (.glass--bar, the
+ * header) are thinner glass.
  */
-export const SIDE_REST_OPEN = 0.18;
-export function sideOpen(tilt: number, top: boolean): number {
-  return SIDE_REST_OPEN + (1 - SIDE_REST_OPEN) * Math.max(0, top ? tilt : -tilt);
+export const BAR_THINNER = 9 / 16;
+export function sideWidth(
+  offset: number,
+  thickness: number,
+  bar: boolean,
+  distance: number,
+): number {
+  if (offset <= 0) return 0;
+  const t = Math.max(thickness, 0) * (bar ? BAR_THINNER : 1);
+  return (offset * t) / (Math.max(distance, 1) + t);
 }
 
+/** The four faces of a pane, CSS px, for an eye at (eyeX, eyeY) in the viewport. */
+export type PaneFaces = { top: number; bottom: number; left: number; right: number };
+
 /**
- * The side face's height on screen, CSS pixels: the CSS side layers are
- * placed at it (effects/scene/scene) and the shader draws to it. The thin fixed
- * bars (.glass--bar, the header) are thinner glass.
+ * Which faces of a pane show, and how wide, whole CSS px, for an eye at
+ * `eye` (viewport px) `distance` from the page. A band as wide as the view
+ * has no left or right edge in sight.
  */
-export const SIDE_MIN_PX = 3;
-export const SIDE_RANGE_PX = 13;
-export const BAR_SIDE_MIN_PX = 2;
-export const BAR_SIDE_RANGE_PX = 7;
-export function sideHeight(open: number, bar = false, thickness = PANE_THICKNESS): number {
-  const base = bar
-    ? BAR_SIDE_MIN_PX + BAR_SIDE_RANGE_PX * open
-    : SIDE_MIN_PX + SIDE_RANGE_PX * open;
-  // A thicker slab shows a proportionally taller side from the same angle.
-  return (base * Math.max(thickness, 0)) / PANE_THICKNESS;
+export function paneFaces(
+  rect: { left: number; top: number; right: number; bottom: number },
+  eye: { x: number; y: number },
+  distance: number,
+  bar: boolean,
+  thickness: number,
+  fullWidth: boolean,
+): PaneFaces {
+  const w = (offset: number) => Math.round(sideWidth(offset, thickness, bar, distance));
+  return {
+    top: w(rect.top - eye.y),
+    bottom: w(eye.y - rect.bottom),
+    left: fullWidth ? 0 : w(rect.left - eye.x),
+    right: fullWidth ? 0 : w(eye.x - rect.right),
+  };
 }
 
 /*

@@ -1,10 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { RotateCcw, ClipboardCopy, Copy, Layers } from "lucide-react";
-import { coverPhotosQuery } from "@/lib/content";
+import { coverPhotosQuery, settingsQuery } from "@/lib/content";
+import { saveSiteTuning } from "@/lib/admin";
+import { useAdminStatus } from "@/hooks/use-admin";
 import { PhotoSection } from "@/components/site/PhotoSection";
+import { ParallaxScene } from "@/components/site/ParallaxScene";
 import { Img } from "@/components/site/Img";
 import {
   applyTuning,
@@ -12,9 +15,9 @@ import {
   isResult,
   RESULTS,
   resetTuning,
-  loadSavedTuning,
-  restoreTuning,
+  applySiteTuning,
   savedTuning,
+  SITE_TUNING_KEY,
   serializeTuning,
   setValueIn,
   tuning,
@@ -73,8 +76,6 @@ function KnobRow({
   );
 }
 
-const STORE = "onysnow:tuning";
-
 export const Route = createFileRoute("/lab")({
   // Client only: every control here drives a live effect, and there is nothing
   // to server-render but a form.
@@ -114,12 +115,44 @@ function Lab() {
   // own next frame.
   const [, redraw] = useState(0);
 
+  /*
+   * What the lab edits is the SITE's tuning: what every visitor sees
+   * (SITE_TUNING_KEY in site_settings). It starts from what is published;
+   * each change is applied live and, when you are signed in as the admin,
+   * saved for everyone a moment after you stop moving the slider. Signed
+   * out, changes stay in this browser only, and the lab says so.
+   */
+  const settings = useQuery(settingsQuery);
+  const admin = useAdminStatus();
+  const queryClient = useQueryClient();
+  const canPublish = Boolean(admin.data?.isAdmin);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const loaded = useRef(false);
   useEffect(() => {
-    // The same loader the rest of the site uses, so the lab cannot drift from
-    // what everyone else gets.
-    loadSavedTuning();
+    if (loaded.current || settings.data === undefined) return;
+    loaded.current = true;
+    applySiteTuning(settings.data[SITE_TUNING_KEY]);
     redraw((n) => n + 1);
-  }, []);
+  }, [settings.data]);
+
+  const saveTimer = useRef<number | null>(null);
+  const publish = useCallback(() => {
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = null;
+      if (!canPublish) return;
+      setSaveState("saving");
+      saveSiteTuning(SITE_TUNING_KEY, savedTuning())
+        .then(() => {
+          setSaveState("saved");
+          void queryClient.invalidateQueries({ queryKey: ["site_settings"] });
+        })
+        .catch(() => {
+          setSaveState("error");
+          toast.error("Could not save for everyone -- are you signed in as the admin?");
+        });
+    }, 700);
+  }, [canPublish, queryClient]);
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, [string, Knob][]>();
@@ -133,18 +166,17 @@ function Lab() {
     return [...byGroup.entries()];
   }, []);
 
-  const set = useCallback((key: string, value: number, mode?: TuningMode) => {
-    const knob = tuning[key];
-    if (!knob) return;
-    setValueIn(key, mode ?? tuningMode(), value);
-    applyTuning();
-    redraw((n) => n + 1);
-    try {
-      localStorage.setItem(STORE, savedTuning());
-    } catch {
-      // Tuning still works without somewhere to remember it.
-    }
-  }, []);
+  const set = useCallback(
+    (key: string, value: number, mode?: TuningMode) => {
+      const knob = tuning[key];
+      if (!knob) return;
+      setValueIn(key, mode ?? tuningMode(), value);
+      applyTuning();
+      redraw((n) => n + 1);
+      publish();
+    },
+    [publish],
+  );
 
   const mode = useGlassMode();
   const photo = photos.data?.[0];
@@ -177,13 +209,22 @@ function Lab() {
        * Stacks (light step E): the same two panes three ways. Lab only -- no
        * live page uses a stack yet.
        */}
-      <PhotoSection image={photos.data?.[2] ?? photo}>
+      {/*
+       * On the photograph itself, not on a section pane: a pane inside a pane
+       * cannot see past its container (the outer pane's blur is a backdrop
+       * root), so nested, these frosted a tinted box and drew as hard
+       * squares with the container's shadow round them (Ony, 2026-09-29).
+       * Each stack rests on the picture, as a stack on the site would.
+       */}
+      <ParallaxScene image={photos.data?.[2] ?? photo} scrim="none" height="">
         <div className="mx-auto max-w-5xl px-6 py-16" data-lab-stacks>
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Stacks</p>
-          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            Two panes, one resting on the other. With air between them each keeps its own surfaces
-            and the light bounces between them; bonded, they are one thick pane.
-          </p>
+          <Pane className="max-w-2xl !p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Stacks</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Two panes, one resting on the other. With air between them each keeps its own surfaces
+              and the light bounces between them; bonded, they are one thick pane.
+            </p>
+          </Pane>
           <div className="mt-8 grid gap-10 sm:grid-cols-3">
             {(
               [
@@ -203,21 +244,28 @@ function Lab() {
             ))}
           </div>
         </div>
-      </PhotoSection>
+      </ParallaxScene>
 
       <div className="mx-auto max-w-5xl px-6 py-14">
+        <p className="mb-3 text-xs text-muted-foreground" data-lab-save={saveState}>
+          {canPublish
+            ? saveState === "saving"
+              ? "Saving for everyone…"
+              : saveState === "saved"
+                ? "Saved — this is how every visitor sees the site."
+                : saveState === "error"
+                  ? "Not saved. Check you are signed in as the admin."
+                  : "Changes here are saved for every visitor."
+            : "Sign in as the admin to save these for every visitor. Until then, changes are only in this browser and are lost on reload."}
+        </p>
         <div className="mb-8 flex flex-wrap items-center gap-3">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               resetTuning(TUNING_DEFAULTS);
-              try {
-                localStorage.removeItem(STORE);
-              } catch {
-                /* nothing to clear */
-              }
               redraw((n) => n + 1);
+              publish();
               toast.success("Back to the values in the source");
             }}
           >

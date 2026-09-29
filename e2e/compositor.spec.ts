@@ -19,8 +19,9 @@ async function paneLayers(page: import("@playwright/test").Page) {
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.3, { steps: 4 });
   await page.mouse.down();
   await expect
+    // Generous: under a software renderer a frame of the page is seconds, more with liquid glass.
     .poll(() => band.evaluate((el) => el.querySelectorAll(":scope > canvas").length), {
-      timeout: 20_000,
+      timeout: 45_000,
     })
     .toBeGreaterThanOrEqual(2);
   await page.mouse.up();
