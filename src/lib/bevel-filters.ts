@@ -42,6 +42,13 @@ export type PaneGeometry = {
   straight?: boolean;
   /** The pane's thickness, CSS px (its data-thickness); GLASS_THICKNESS if unsaid. */
   thickness?: number;
+  /**
+   * Rolled or hammered glass: how far its ripples shift the view, CSS px per
+   * unit of slope (effects/optics/waviness waveScale), and which surface the
+   * pane wears. 0 or unsaid: flat float glass, bent at the bevel only.
+   */
+  waveShift?: number;
+  waveSeed?: number;
 };
 
 export type BevelEntry = {
@@ -66,7 +73,9 @@ function bucket(n: number): number {
 
 function keyFor(g: PaneGeometry): string {
   const t = Math.round(g.thickness ?? GLASS_THICKNESS);
-  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}e${Math.round(g.edgeWidth)}${g.straight ? "s" : ""}${t === GLASS_THICKNESS ? "" : `t${t}`}`;
+  const wave =
+    g.waveShift && g.waveShift > 0 ? `w${Math.round(g.waveShift * 4)}n${g.waveSeed ?? 0}` : "";
+  return `${bucket(g.width)}x${bucket(g.height)}r${Math.round(g.radius)}e${Math.round(g.edgeWidth)}${g.straight ? "s" : ""}${t === GLASS_THICKNESS ? "" : `t${t}`}${wave}`;
 }
 
 function encode(
@@ -76,6 +85,8 @@ function encode(
   edgeWidth: number,
   straight = false,
   thickness = GLASS_THICKNESS,
+  waveShift = 0,
+  waveSeed = 0,
 ): { href: string; scale: number } | null {
   if (typeof document === "undefined") return null;
 
@@ -90,6 +101,7 @@ function encode(
     thickness: thickness * scale,
     ior: GLASS_IOR,
     straight,
+    wave: waveShift > 0 ? { shift: waveShift, seed: waveSeed, cssPerMap: 1 / scale } : undefined,
   });
 
   const canvas = document.createElement("canvas");
@@ -128,6 +140,8 @@ export function requestBevelFilter(g: PaneGeometry): string | null {
     Math.round(g.edgeWidth),
     g.straight ?? false,
     Math.round(g.thickness ?? GLASS_THICKNESS),
+    Math.round((g.waveShift ?? 0) * 4) / 4,
+    g.waveSeed ?? 0,
   );
   if (!encoded) return null;
 

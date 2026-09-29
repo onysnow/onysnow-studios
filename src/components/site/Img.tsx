@@ -21,7 +21,16 @@ type ImgProps = {
   imgClassName?: string;
   eager?: boolean;
   alt?: string;
+  /**
+   * The point to keep in frame, 0..1 each way from the top-left: a focal
+   * point chosen in the Studio (lib/page-photos). Set as the picture's
+   * object-position, inline, which is also where the glass reads it from
+   * (effects/scene focusOf). Unset: the stylesheet's framing (centred).
+   */
+  focus?: { x: number; y: number } | null | undefined;
 };
+
+const pct = (v: number) => `${(Math.min(1, Math.max(0, v)) * 100).toFixed(1)}%`;
 
 /**
  * The single image abstraction for the site: a blurred placeholder that fades to
@@ -35,6 +44,7 @@ export function Img({
   imgClassName,
   eager = false,
   alt,
+  focus,
 }: ImgProps) {
   const [loaded, setLoaded] = useState(false);
 
@@ -130,6 +140,7 @@ export function Img({
           loading={eager ? "eager" : "lazy"}
           fetchPriority={eager ? "high" : "auto"}
           decoding="async"
+          {...(focus ? { style: { objectPosition: `${pct(focus.x)} ${pct(focus.y)}` } } : {})}
           onLoad={() => setLoaded(true)}
           onError={() => setLoaded(true)}
           className={cn(

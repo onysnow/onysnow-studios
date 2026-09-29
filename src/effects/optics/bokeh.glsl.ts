@@ -44,27 +44,28 @@ float photoShows(vec2 pt, vec4 image, vec4 box, float cell) {
 
 // Unconditional: a texture read under a branch that differs between
 // neighbouring pixels gets no reliable level of detail.
-vec3 bokehTap(sampler2D map, vec2 pt, vec4 image, float aspect, vec4 box, float cell, float bias) {
-  vec2 uv = clamp(coverUv(pt, image, aspect), 0.0, 1.0);
+vec3 bokehTap(sampler2D map, vec2 pt, vec4 image, vec3 fit, vec4 box, float cell, float bias) {
+  vec2 uv = clamp(coverUv(pt, image, fit), 0.0, 1.0);
   return texture2D(map, uv, bias).rgb * photoShows(pt, image, box, cell);
 }
 
 /*
- * The hidden light of one photograph (drawn at image, aspect; showing in
+ * The hidden light of one photograph (drawn at image, framed by fit -- its
+ * aspect and object-position, see coverUv; showing in
  * box) averaged over the hexagon of radius px round the page point at.
  */
-vec3 bokehAt(sampler2D map, vec2 at, vec4 image, float aspect, vec4 box, float radius, float devicePx) {
+vec3 bokehAt(sampler2D map, vec2 at, vec4 image, vec3 fit, vec4 box, float radius, float devicePx) {
   // The whole hexagon off the photograph's box: none of its light reaches here.
   vec2 far = max(box.xy - at, at - box.xy - box.zw);
   if (max(far.x, far.y) > radius) return vec3(0.0);
   // No light anywhere near (the map's alpha, bokeh.ts markLightNear): skip the gather.
-  if (texture2D(map, coverUv(at, image, aspect)).a <= 0.0) return vec3(0.0);
+  if (texture2D(map, coverUv(at, image, fit)).a <= 0.0) return vec3(0.0);
   float cell = radius / ${f(BOKEH_RINGS)};
   float bias = log2(max(cell * devicePx, 1.0));
   vec3 sum = vec3(0.0);
 ${BOKEH_TAPS.map(
   ([x, y]) =>
-    `  sum += bokehTap(map, at + vec2(${f(x)}, ${f(y)}) * radius, image, aspect, box, cell, bias);`,
+    `  sum += bokehTap(map, at + vec2(${f(x)}, ${f(y)}) * radius, image, fit, box, cell, bias);`,
 ).join("\n")}
   return sum / ${f(BOKEH_TAPS.length)};
 }

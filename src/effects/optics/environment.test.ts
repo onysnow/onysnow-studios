@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CAMERA_DISTANCE,
+  ROOM_KNEE,
+  ROOM_LMAX,
   decodeRadiance,
   encodeRadiance,
-  ROOM_LMAX,
+  kneeRadiance,
   roomLod,
   roomMipChain,
   roomUv,
@@ -125,5 +127,18 @@ describe("the reflection is worked out from causes", () => {
 
   it("the chunk has no backtick to end its literal early", () => {
     expect(ENVIRONMENT_GLSL).not.toContain("`");
+  });
+});
+
+describe("the room's brightest lights, compressed (preview dimroom)", () => {
+  it("leaves ordinary room light nearly alone and rolls its lamps off below the knee", () => {
+    expect(kneeRadiance(0.2, ROOM_KNEE)).toBeCloseTo(0.2 / (1 + 0.2 / ROOM_KNEE), 12);
+    expect(kneeRadiance(0.2, ROOM_KNEE)).toBeGreaterThan(0.18);
+    expect(kneeRadiance(64, ROOM_KNEE)).toBeLessThan(ROOM_KNEE);
+    expect(kneeRadiance(64, ROOM_KNEE)).toBeGreaterThan(kneeRadiance(8, ROOM_KNEE));
+  });
+
+  it("is off at knee 0", () => {
+    expect(kneeRadiance(64, 0)).toBe(64);
   });
 });

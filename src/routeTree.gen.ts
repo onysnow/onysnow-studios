@@ -30,6 +30,7 @@ import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminAdvancedRouteImport } from './routes/_authenticated/admin.advanced'
 import { Route as AuthenticatedAdminCategoriesRouteImport } from './routes/_authenticated/admin.categories'
 import { Route as AuthenticatedAdminInquiriesRouteImport } from './routes/_authenticated/admin.inquiries'
+import { Route as AuthenticatedAdminPagePhotosRouteImport } from './routes/_authenticated/admin.page-photos'
 import { Route as AuthenticatedAdminPagesRouteImport } from './routes/_authenticated/admin.pages'
 import { Route as AuthenticatedAdminPhotosRouteImport } from './routes/_authenticated/admin.photos'
 import { Route as AuthenticatedAdminPostsRouteImport } from './routes/_authenticated/admin.posts'
@@ -145,6 +146,12 @@ const AuthenticatedAdminInquiriesRoute =
     path: '/inquiries',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminPagePhotosRoute =
+  AuthenticatedAdminPagePhotosRouteImport.update({
+    id: '/page-photos',
+    path: '/page-photos',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminPagesRoute = AuthenticatedAdminPagesRouteImport.update({
   id: '/pages',
   path: '/pages',
@@ -206,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/admin/advanced': typeof AuthenticatedAdminAdvancedRoute
   '/admin/categories': typeof AuthenticatedAdminCategoriesRoute
   '/admin/inquiries': typeof AuthenticatedAdminInquiriesRoute
+  '/admin/page-photos': typeof AuthenticatedAdminPagePhotosRoute
   '/admin/pages': typeof AuthenticatedAdminPagesRoute
   '/admin/photos': typeof AuthenticatedAdminPhotosRoute
   '/admin/posts': typeof AuthenticatedAdminPostsRoute
@@ -233,6 +241,7 @@ export interface FileRoutesByTo {
   '/admin/advanced': typeof AuthenticatedAdminAdvancedRoute
   '/admin/categories': typeof AuthenticatedAdminCategoriesRoute
   '/admin/inquiries': typeof AuthenticatedAdminInquiriesRoute
+  '/admin/page-photos': typeof AuthenticatedAdminPagePhotosRoute
   '/admin/pages': typeof AuthenticatedAdminPagesRoute
   '/admin/photos': typeof AuthenticatedAdminPhotosRoute
   '/admin/posts': typeof AuthenticatedAdminPostsRoute
@@ -264,6 +273,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/advanced': typeof AuthenticatedAdminAdvancedRoute
   '/_authenticated/admin/categories': typeof AuthenticatedAdminCategoriesRoute
   '/_authenticated/admin/inquiries': typeof AuthenticatedAdminInquiriesRoute
+  '/_authenticated/admin/page-photos': typeof AuthenticatedAdminPagePhotosRoute
   '/_authenticated/admin/pages': typeof AuthenticatedAdminPagesRoute
   '/_authenticated/admin/photos': typeof AuthenticatedAdminPhotosRoute
   '/_authenticated/admin/posts': typeof AuthenticatedAdminPostsRoute
@@ -295,6 +305,7 @@ export interface FileRouteTypes {
     | '/admin/advanced'
     | '/admin/categories'
     | '/admin/inquiries'
+    | '/admin/page-photos'
     | '/admin/pages'
     | '/admin/photos'
     | '/admin/posts'
@@ -322,6 +333,7 @@ export interface FileRouteTypes {
     | '/admin/advanced'
     | '/admin/categories'
     | '/admin/inquiries'
+    | '/admin/page-photos'
     | '/admin/pages'
     | '/admin/photos'
     | '/admin/posts'
@@ -352,6 +364,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/advanced'
     | '/_authenticated/admin/categories'
     | '/_authenticated/admin/inquiries'
+    | '/_authenticated/admin/page-photos'
     | '/_authenticated/admin/pages'
     | '/_authenticated/admin/photos'
     | '/_authenticated/admin/posts'
@@ -528,6 +541,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminInquiriesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/page-photos': {
+      id: '/_authenticated/admin/page-photos'
+      path: '/page-photos'
+      fullPath: '/admin/page-photos'
+      preLoaderRoute: typeof AuthenticatedAdminPagePhotosRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/pages': {
       id: '/_authenticated/admin/pages'
       path: '/pages'
@@ -584,6 +604,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdvancedRoute: typeof AuthenticatedAdminAdvancedRoute
   AuthenticatedAdminCategoriesRoute: typeof AuthenticatedAdminCategoriesRoute
   AuthenticatedAdminInquiriesRoute: typeof AuthenticatedAdminInquiriesRoute
+  AuthenticatedAdminPagePhotosRoute: typeof AuthenticatedAdminPagePhotosRoute
   AuthenticatedAdminPagesRoute: typeof AuthenticatedAdminPagesRoute
   AuthenticatedAdminPhotosRoute: typeof AuthenticatedAdminPhotosRoute
   AuthenticatedAdminPostsRoute: typeof AuthenticatedAdminPostsRoute
@@ -598,6 +619,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdvancedRoute: AuthenticatedAdminAdvancedRoute,
   AuthenticatedAdminCategoriesRoute: AuthenticatedAdminCategoriesRoute,
   AuthenticatedAdminInquiriesRoute: AuthenticatedAdminInquiriesRoute,
+  AuthenticatedAdminPagePhotosRoute: AuthenticatedAdminPagePhotosRoute,
   AuthenticatedAdminPagesRoute: AuthenticatedAdminPagesRoute,
   AuthenticatedAdminPhotosRoute: AuthenticatedAdminPhotosRoute,
   AuthenticatedAdminPostsRoute: AuthenticatedAdminPostsRoute,

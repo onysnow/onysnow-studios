@@ -573,7 +573,11 @@ export const tuning: Record<string, Knob> = {
   floorLight: {
     label: "Light through glass",
     group: "Shadows",
-    value: 0.35,
+    // Clear float glass passes about 90% of the light (the reflection off its
+    // faces is worked out separately, in the shader). This was 0.35, which
+    // made clear glass lose two thirds of the light, and the light through it
+    // faded out a short way from the lamp.
+    value: 0.9,
     min: 0,
     max: 1,
     step: 0.01,
@@ -582,7 +586,10 @@ export const tuning: Record<string, Knob> = {
   floorShadow: {
     label: "Glass shadow",
     group: "Shadows",
-    value: 0.6,
+    // Under the bevel the light is turned away, not dimmed: the shade there is
+    // everything the lamp would have put down. The film curve in the floor
+    // shader rolls it off toward black, so it never goes solid.
+    value: 1,
     min: 0,
     max: 1,
     step: 0.01,

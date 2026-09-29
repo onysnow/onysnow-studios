@@ -3,6 +3,7 @@ import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "@/effects/optics/transmission.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
+import { WAVINESS_GLSL } from "@/effects/optics/waviness.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
@@ -104,6 +105,7 @@ uniform vec2 uMarks[${MAX_FLOOR_PANES}];
 uniform float uMarksProportional; // 1 while previewing ?try=marks
 
 ${EDGE_PROFILE_GLSL}
+${WAVINESS_GLSL}
 ${REFLECTION_GLSL}
 ${SHADOW_GLSL}
 ${TRANSMISSION_GLSL}
@@ -136,23 +138,14 @@ uniform vec2 uViewShift;
  * gives soft cells while a tight one gives wire-thin lines.
  */
 float causticAt(vec2 x, float seed, float pen, float gap) {
-  x += vec2(seed * 613.0, seed * 389.0);
-  float hxx = 0.0;
-  float hyy = 0.0;
-  float hxy = 0.0;
-  for (int k = 0; k < 6; k++) {
-    float fk = float(k);
-    float ang = seed * 1.7 + fk * 2.39996;       // golden angle: never lined up
-    vec2 d = vec2(cos(ang), sin(ang));
-    float len = 190.0 / (1.0 + fk * 0.33);        // 190 px down to ~72 px
-    float w = 6.2831853 / len;
-    // Amplitude chosen so every ripple bends equally: a * w^2 = 1/6.
-    float curve = -sin(dot(d, x) * w + fk * 1.618 + seed * 4.0) / 6.0;
-    hxx += curve * d.x * d.x;
-    hyy += curve * d.y * d.y;
-    hxy += curve * d.x * d.y;
-  }
-  float s = 3.5 * uCaustics * clamp(gap / 70.0, 0.3, 2.5);
+  // The pane's surface, the same one the glass bends its view by (waviness.ts).
+  vec2 slope;
+  vec3 hessian;
+  waveSurface(x, seed, slope, hessian);
+  float hxx = hessian.x;
+  float hyy = hessian.y;
+  float hxy = hessian.z;
+  float s = waveScale(uCaustics, gap);
   float det = (1.0 + s * hxx) * (1.0 + s * hyy) - s * s * hxy * hxy;
   float soft = clamp(pen / 240.0, 0.03, 0.4);
   return clamp(1.0 / max(abs(det), soft), 0.2, 7.0);
@@ -312,8 +305,20 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
       through *= causticAt(Q - r.xy, uSeed[i], penFloor, gap);
     }
 
-    light = mix(vec3(pool), through * uThrough[i], inGlass);
-    break;
+    /*
+     * Every pane the ray crosses filters it, in turn -- not only the first.
+     *
+     * This took the first pane the ray met and stopped. Where two panes
+     * overlap (the fixed header over a pane, or over a band scrolling under
+     * it) the ray passes through both, and the point where it stopped
+     * crossing the upper one switched the floor to the lower pane's answer
+     * in a single pixel: a hard line, curved toward the lamp because each
+     * pane's crossing point moves with it (Ony's list, item 3). What a pane
+     * lets through is a fraction of what reaches it; the fractions multiply,
+     * and at each pane's edge its fraction eases back to 1 over the lamp's
+     * penumbra (inGlass), so nothing starts or stops on a line.
+     */
+    light *= mix(vec3(1.0), through * uThrough[i] / max(pool, 1e-4), inGlass);
   }
 
   vec3 add = light * uLightGain;
@@ -367,7 +372,13 @@ void main() {
   }
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = toneMapFilm(f.rgb);
-  float a = clamp(max(add.r, max(add.g, add.b)) + f.a, 0.0, 1.0);
+  /*
+   * The shadow goes through the same film curve as the light: deep shade rolls
+   * off toward black instead of clipping to it, so the shadow can be strong
+   * enough to read far from the lamp without going solid right beside it.
+   */
+  float shade = 1.0 - exp(-f.a * 1.15);
+  float a = clamp(max(add.r, max(add.g, add.b)) + shade, 0.0, 1.0);
   /*
    * The light's colour, applied after the film curve as it always was. With
    * one light that is exact; when lights of different colours overlap

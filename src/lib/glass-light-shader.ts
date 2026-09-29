@@ -124,7 +124,9 @@ uniform vec2  uEye;             // the viewer's eye, from the viewport middle, C
 uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
-uniform float uImageAspect;   // intrinsic width / height
+uniform float uRoomKnee;      // 0, or ?try=dimroom's knee (environment ROOM_KNEE)
+uniform float uBurn;          // 1 while previewing ?try=burn (edge-profile toneMapGlassBurn)
+uniform vec3 uImageFit;       // intrinsic width / height, then its object-position (0..1)
 // The light the photograph clipped, and the disc the frost spreads it over
 // (effects/optics/bokeh).
 uniform sampler2D uBokeh;       // the photograph above's hidden light
@@ -142,7 +144,7 @@ uniform float uBokehGain;     // the "Bokeh" knob
 uniform sampler2D uBackdropBelow;
 uniform float uHasBelow;
 uniform vec4  uImageBelow;
-uniform float uImageBelowAspect;
+uniform vec3 uImageBelowFit;
 
 
 uniform vec3  uWarm;
@@ -231,14 +233,20 @@ float aboveCover(vec2 local) {
  * glass reads too (see effects/optics/surface-layers.glsl.ts).
  */
 
-/* Where a page point falls in an object-fit: cover image (x, y, w, h). */
-vec2 coverUv(vec2 pt, vec4 image, float aspect) {
+/*
+ * Where a page point falls in an object-fit: cover image (x, y, w, h). fit
+ * is the photograph's intrinsic aspect, then its object-position as 0..1:
+ * the point of the photograph pinned to the same point of the box, which is
+ * how a chosen focal point frames it (lib/page-photos). 0.5, 0.5 is centred.
+ */
+vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
   vec2 rel = (pt - image.xy) / max(image.zw, vec2(1.0));
+  float aspect = fit.x;
   float boxAspect = image.z / max(image.w, 1.0);
   vec2 scale = boxAspect > aspect
     ? vec2(1.0, boxAspect / aspect)
     : vec2(aspect / boxAspect, 1.0);
-  return (rel - 0.5) / scale + 0.5;
+  return (rel - fit.yz) / scale + fit.yz;
 }
 
 ${BOKEH_GLSL}
@@ -307,15 +315,16 @@ void main() {
   /*
    * ---- The backdrop, sampled ----
    *
-   * Mapped through object-fit: cover, so the photograph is sampled where it is
-   * actually drawn rather than where its element happens to be.
+   * Mapped through object-fit: cover and its object-position (coverUv, with
+   * the scale kept for the bend below), so the photograph is sampled where it
+   * is actually drawn rather than where its element happens to be.
    */
   vec2 rel = (frag - uImage.xy) / max(uImage.zw, vec2(1.0));
   float boxAspect = uImage.z / max(uImage.w, 1.0);
-  vec2 coverScale = boxAspect > uImageAspect
-    ? vec2(1.0, boxAspect / uImageAspect)
-    : vec2(uImageAspect / boxAspect, 1.0);
-  vec2 uvBase = (rel - 0.5) / coverScale + 0.5;
+  vec2 coverScale = boxAspect > uImageFit.x
+    ? vec2(1.0, boxAspect / uImageFit.x)
+    : vec2(uImageFit.x / boxAspect, 1.0);
+  vec2 uvBase = (rel - uImageFit.yz) / coverScale + uImageFit.yz;
   vec2 uvBend = bend / max(uImage.zw, vec2(1.0)) / coverScale;
 
   /*
@@ -420,8 +429,9 @@ void main() {
      * the room reflects the room. Toward the side, the reflected ray runs on
      * into the page, onto the photograph -- the side's mirror, below.
      */
-    arrisRoom += step(0.0, r.z) * fresnelSchlick(dot(-ray, n), uIor)
-      * decodeRadiance(texture2D(uRoom, roomUvDir(r), arcBias).rgb);
+    vec3 seen = decodeRadiance(texture2D(uRoom, roomUvDir(r), arcBias).rgb);
+    if (uRoomKnee > 0.0) seen = seen / (1.0 + seen / uRoomKnee);
+    arrisRoom += step(0.0, r.z) * fresnelSchlick(dot(-ray, n), uIor) * seen;
   }
   arrisRoom *= 0.25 * arrisProfile(ad) * uRoomExposure * uHasRoom;
 
@@ -472,8 +482,8 @@ void main() {
   float zBot = uThickness * (1.0 - clamp(dBot / botT, 0.0, 1.0));
   vec2 seenTop = vec2(frag.x + xLean * (uGap + zTop), topY - mirrorReach(dTop, topT, uGap, uThickness));
   vec2 seenBot = vec2(frag.x + xLean * (uGap + zBot), botY + mirrorReach(dBot, botT, uGap, uThickness));
-  vec3 mirrorTop = texture2D(uBackdrop, coverUv(seenTop, uImage, uImageAspect)).rgb * uHasBackdrop;
-  vec3 mirrorBot = texture2D(uBackdropBelow, coverUv(seenBot, uImageBelow, uImageBelowAspect)).rgb * uHasBelow;
+  vec3 mirrorTop = texture2D(uBackdrop, coverUv(seenTop, uImage, uImageFit)).rgb * uHasBackdrop;
+  vec3 mirrorBot = texture2D(uBackdropBelow, coverUv(seenBot, uImageBelow, uImageBelowFit)).rgb * uHasBelow;
   vec3 sideLight = mirrorTop * fTop * onTop + mirrorBot * fBot * onBot;
 
   /*
@@ -487,8 +497,8 @@ void main() {
   vec2 relayTop = vec2(frag.x - xLean * (uGap + zTop), topY + mirrorReach(dTop, topT, uGap, uThickness));
   vec2 relayBot = vec2(frag.x - xLean * (uGap + zBot), botY - mirrorReach(dBot, botT, uGap, uThickness));
   vec3 relayed = RELAY_GAIN * (
-    texture2D(uBackdrop, coverUv(relayTop, uImage, uImageAspect)).rgb * uHasBackdrop * onTop * (1.0 - fTop)
-    + texture2D(uBackdropBelow, coverUv(relayBot, uImageBelow, uImageBelowAspect)).rgb * uHasBelow * onBot * (1.0 - fBot)
+    texture2D(uBackdrop, coverUv(relayTop, uImage, uImageFit)).rgb * uHasBackdrop * onTop * (1.0 - fTop)
+    + texture2D(uBackdropBelow, coverUv(relayBot, uImageBelow, uImageBelowFit)).rgb * uHasBelow * onBot * (1.0 - fBot)
   );
 
   /*
@@ -496,7 +506,7 @@ void main() {
    * total internal reflection -- a paler copy of the edge displaced inward by
    * the side's height, its light having crossed the side twice.
    */
-  vec3 behindBelow = texture2D(uBackdropBelow, coverUv(frag, uImageBelow, uImageBelowAspect)).rgb * uHasBelow;
+  vec3 behindBelow = texture2D(uBackdropBelow, coverUv(frag, uImageBelow, uImageBelowFit)).rgb * uHasBelow;
   vec3 echoTint = exp(-SIDE_ABSORB * 2.0 * SIDE_PATH_MIN) * ECHO_GAIN;
   sideLight += echoTint * withinX * (
     straight * uHasBackdrop * echoProfile(dTop, topT) * topShows
@@ -825,6 +835,7 @@ void main() {
   vec3 room = decodeRadiance(
     texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
   );
+  if (uRoomKnee > 0.0) room = room / (1.0 + room / uRoomKnee);
   colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
 
   /*
@@ -838,15 +849,15 @@ void main() {
   if (uHasBokeh + uHasBokehBelow > 0.5 && uBokehGain > 0.0 && uGlowOnly < 0.5) {
     vec3 discs = vec3(0.0);
     if (uHasBokeh > 0.5) {
-      discs += bokehAt(uBokeh, frag, uImage, uImageAspect, uImageBox, uBokehRadius, uScale);
+      discs += bokehAt(uBokeh, frag, uImage, uImageFit, uImageBox, uBokehRadius, uScale);
     }
     if (uHasBokehBelow > 0.5) {
-      discs += bokehAt(uBokehBelow, frag, uImageBelow, uImageBelowAspect, uImageBelowBox, uBokehRadius, uScale);
+      discs += bokehAt(uBokehBelow, frag, uImageBelow, uImageBelowFit, uImageBelowBox, uBokehRadius, uScale);
     }
     colour += inside * uBokehGain * discs;
   }
 
-  colour = toneMapGlass(colour);
+  colour = uBurn > 0.5 ? toneMapGlassBurn(colour) : toneMapGlass(colour);
 
   /*
    * The CSS side layers multiply everything under them by the side's
@@ -907,7 +918,7 @@ void main() {
    * (uGlowOnly 1) for a layer above the sides (.glass-glow).
    */
   if (uGlowOnly > 0.5) {
-    vec3 glow = toneMapGlass(lampGlow * lightIn);
+    vec3 glow = uBurn > 0.5 ? toneMapGlassBurn(lampGlow * lightIn) : toneMapGlass(lampGlow * lightIn);
     gl_FragColor = vec4(glow, clamp(max(max(glow.r, glow.g), glow.b), 0.0, 1.0));
     return;
   }

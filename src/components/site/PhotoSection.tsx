@@ -26,7 +26,8 @@ export function PhotoSection({
   className,
   seam = false,
 }: {
-  image: ImgSource | null | undefined;
+  /** The photograph behind it. A seam band has none: it shows its neighbours'. */
+  image?: ImgSource | null | undefined;
   children: ReactNode;
   depth?: "subtle" | "standard" | "deep";
   className?: string;

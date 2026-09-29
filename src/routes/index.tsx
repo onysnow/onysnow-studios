@@ -28,19 +28,21 @@ import {
   testimonialsQuery,
 } from "@/lib/content";
 import { photoUrl } from "@/lib/photo-url";
+import { pagePhotosQuery, resolveSlot } from "@/lib/page-photos";
 
 export const Route = createFileRoute("/")({
   // Loading on the server means crawlers and social cards get real content
   // instead of skeletons, and the hero image is known before first paint.
   loader: async ({ context: { queryClient } }) => {
-    const [photos] = await Promise.all([
+    const [photos, chosen] = await Promise.all([
       queryClient.ensureQueryData(coverPhotosQuery),
+      queryClient.ensureQueryData(pagePhotosQuery),
       queryClient.ensureQueryData(categoriesQuery),
       queryClient.ensureQueryData(pageCopyQuery("home")),
       queryClient.ensureQueryData(testimonialsQuery),
       queryClient.ensureQueryData(settingsQuery),
     ]);
-    const hero = photos.find((p) => p.featured) ?? photos[0];
+    const hero = resolveSlot("home.hero", chosen, photos).photo;
     return { ogImage: photoUrl(hero?.storage_path) };
   },
   head: ({ loaderData }) => ({
@@ -64,6 +66,23 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
+/**
+ * How wide the hero photograph is actually drawn, for its `srcset`.
+ *
+ * "100vw" was a lie for a cover image: when the hero is proportionally taller
+ * than the photograph, the photograph is drawn wider than the screen, so the
+ * browser picked a file smaller than the space and stretched it -- the 1280px
+ * rendition drawn about 1,500px wide was the soft hero Ony saw. The drawn width
+ * is the larger of the screen's width and the picture's height times the
+ * photograph's shape, plus the viewpoint's few per cent of oversize.
+ */
+function heroSizes(photo: { width?: number | null; height?: number | null } | undefined): string {
+  const aspect = photo?.width && photo.height ? photo.width / photo.height : 1.5;
+  // 92vh of hero plus the half of the glass band the picture runs on under
+  // (--seam-below, about a quarter of a screen).
+  return `max(105vw, ${(118 * aspect * 1.05).toFixed(1)}vh)`;
+}
+
 function HomePage() {
   const reduced = useReducedMotion();
   const { scrollYProgress } = useScroll();
@@ -76,26 +95,24 @@ function HomePage() {
   const { data: settings } = useQuery(settingsQuery);
 
   const cats = categories ?? [];
-  const hero = photos?.find((p) => p.featured) ?? photos?.[0];
-  const philosophyImage = photos?.[2] ?? photos?.[1] ?? hero;
   /*
-   * The interstitial bands. Spread across the set so no two show the same
-   * photograph, falling back down the list when fewer have been uploaded than
-   * there are bands to fill.
+   * Every photograph on this page is chosen in the Studio (Page photos) and
+   * framed on its own focal point there; a spot nobody has chosen shows what
+   * it always did (lib/page-photos fallback).
+   *
+   * The five glass bands (<PhotoSection seam>) have no photograph of their
+   * own: they are clear glass over the join between two photographs, and
+   * show those. They used to be handed photos[1..5] all the same, which did
+   * nothing except make dragging those positions in the library look like it
+   * should.
    */
-  const bandOne = photos?.[3] ?? photos?.[1] ?? hero;
-  const bandTwo = photos?.[4] ?? photos?.[2] ?? hero;
-  const bandThree = photos?.[5] ?? photos?.[0] ?? hero;
-  const bandFour = photos?.[1] ?? photos?.[4] ?? hero;
-  const bandFive = photos?.[2] ?? photos?.[0] ?? hero;
-  /*
-   * The interstitials: full-bleed frames sitting between the glass bands.
-   * Chosen from further down the set so a band and the photograph next to it
-   * are never the same frame.
-   */
-  const interOne = photos?.[6] ?? photos?.[2] ?? hero;
-  const interTwo = photos?.[7] ?? photos?.[3] ?? hero;
-  const interThree = photos?.[8] ?? photos?.[5] ?? hero;
+  const { data: chosen } = useQuery(pagePhotosQuery);
+  const spot = (key: string) => resolveSlot(key, chosen, photos);
+  const hero = spot("home.hero");
+  const frameOne = spot("home.frame-1");
+  const frameTwo = spot("home.frame-2");
+  const frameThree = spot("home.frame-3");
+  const philosophy = spot("home.philosophy");
   const quotes = testimonials ?? [];
 
   return (
@@ -106,7 +123,7 @@ function HomePage() {
          * The clip wraps the PICTURE, not the section -- same reasoning as
          * ParallaxScene, and this is the hero's own copy of that structure.
          *
-         * The parallax image is 105svh and slides, so a clip has to exist. On
+         * The parallax image slides, so a clip has to exist. On
          * the section it also cropped the glass resting on it: the pane's
          * light layer sits at `inset: -90px` so a lit edge can throw light
          * past the boundary, and cropping that turns the softest part of the
@@ -123,12 +140,22 @@ function HomePage() {
               suppressHydrationWarning
               className="view-shift absolute inset-0"
             >
+              {/*
+               * Exactly the section's size, no bigger. It was 105svh tall and
+               * scaled a further 5%, room the scroll parallax never uses (it
+               * only moves the picture DOWN, and only once the top has
+               * scrolled away) -- and every bit of it cropped a wide
+               * photograph harder: at a 1192x749 window a 16:9 frame lost a
+               * fifth of its width. The viewpoint's own oversize (.view-shift)
+               * is all the bleed the picture needs.
+               */}
               <Img
-                image={hero}
+                image={hero.photo}
                 eager
-                className="h-[calc(105svh+var(--seam-below,0px))] w-full"
-                imgClassName="scale-105 object-[72%_center] sm:object-center"
-                sizes="100vw"
+                className="h-full w-full"
+                imgClassName="object-[25%_center] sm:object-center"
+                focus={hero.focus}
+                sizes={heroSizes(hero.photo)}
               />
             </div>
           </motion.div>
@@ -168,7 +195,7 @@ function HomePage() {
       </section>
 
       {/* Intro */}
-      <PhotoSection seam image={bandOne} depth="subtle">
+      <PhotoSection seam depth="subtle">
         <Section size="base">
           <Container>
             <Reveal className="grid gap-10 lg:grid-cols-[.4fr_1fr]">
@@ -200,14 +227,15 @@ function HomePage() {
         something to be seen against as it arrives.
       */}
       <ParallaxScene
-        image={interOne}
+        image={frameOne.photo}
+        focus={frameOne.focus}
         depth="deep"
         scrim="none"
         height="min-h-[48svh] lg:min-h-[62svh]"
       />
 
       {/* Disciplines — compact, with a thumbnail so the layout reads at a glance */}
-      <PhotoSection seam image={bandTwo} depth="standard">
+      <PhotoSection seam depth="standard">
         <Section size="sm">
           <Container>
             <Reveal>
@@ -257,14 +285,15 @@ function HomePage() {
         something to be seen against as it arrives.
       */}
       <ParallaxScene
-        image={interTwo}
+        image={frameTwo.photo}
+        focus={frameTwo.focus}
         depth="standard"
         scrim="none"
         height="min-h-[48svh] lg:min-h-[62svh]"
       />
 
       {/* Selected work — a horizontal wheel, no container around it */}
-      <PhotoSection seam image={bandThree} depth="standard">
+      <PhotoSection seam depth="standard">
         <Section size="sm">
           <Container>
             <Carousel opts={{ align: "start", loop: true }} className="w-full">
@@ -334,7 +363,8 @@ function HomePage() {
         something to be seen against as it arrives.
       */}
       <ParallaxScene
-        image={interThree}
+        image={frameThree.photo}
+        focus={frameThree.focus}
         depth="deep"
         scrim="none"
         height="min-h-[48svh] lg:min-h-[62svh]"
@@ -357,7 +387,7 @@ function HomePage() {
         is all the separation three short quotes need.
       */}
       {quotes.length > 0 ? (
-        <PhotoSection seam image={bandFive} depth="standard">
+        <PhotoSection seam depth="standard">
           <Section size="base">
             <Container>
               <Reveal>
@@ -384,7 +414,13 @@ function HomePage() {
       {/* Closing CTA */}
 
       {/* Philosophy — full-bleed parallax band */}
-      <ParallaxScene image={philosophyImage} depth="standard" scrim="full" height="min-h-[72svh]">
+      <ParallaxScene
+        image={philosophy.photo}
+        focus={philosophy.focus}
+        depth="standard"
+        scrim="full"
+        height="min-h-[72svh]"
+      >
         <Section size="lg">
           <Container>
             <Reveal className="grid gap-12 lg:grid-cols-2">
@@ -411,7 +447,7 @@ function HomePage() {
         </Section>
       </ParallaxScene>
 
-      <PhotoSection seam image={bandFour} depth="deep">
+      <PhotoSection seam depth="deep">
         <Section size="lg" className="text-center">
           <Container width="content">
             <Reveal>

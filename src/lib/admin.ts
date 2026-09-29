@@ -204,6 +204,7 @@ export const CONTENT_KEYS = [
   ["testimonials"],
   ["page_content"],
   ["site_settings"],
+  ["page_photos"],
   ["posts"],
   /*
    * The per-post query is keyed ["post", slug], singular, and ["posts"] does

@@ -3,17 +3,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Camera,
   Code2,
+  ExternalLink,
   FileText,
   Folder,
+  Frame,
   Images,
+  Inbox,
   LayoutDashboard,
+  Loader2,
   LogOut,
   MessageSquareQuote,
-  Inbox,
-  Loader2,
   Settings,
   Sparkles,
-  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminStatus } from "@/hooks/use-admin";
@@ -41,6 +42,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
 const NAV: { to: string; label: string; icon: typeof Images; exact?: boolean }[] = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/admin/photos", label: "Photos", icon: Images },
+  { to: "/admin/page-photos", label: "Page photos", icon: Frame },
   { to: "/admin/categories", label: "Categories", icon: Folder },
   { to: "/admin/services", label: "Services", icon: Sparkles },
   { to: "/admin/testimonials", label: "Testimonials", icon: MessageSquareQuote },

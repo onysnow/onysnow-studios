@@ -28,8 +28,7 @@
  * No React here; components register elements and the engine does the rest.
  */
 import { t } from "@/lib/tuning";
-import { castShadow } from "@/lib/cast-shadow";
-import { LIGHT_BLEED } from "@/effects/engine/compositor";
+import { GLOW_LAYER_Z, LIGHT_BLEED, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
@@ -109,10 +108,21 @@ export type GlassRect = {
   ih: number;
   /** Intrinsic aspect, for the object-fit: cover mapping. */
   ia: number;
+  /** Its object-position, 0..1 each way: the focal point it is framed on. */
+  ifocus: Focus;
   /** The box the photograph shows in: its section, which clips it. */
   ibox: Box;
   /** The photograph BELOW the pane, which its bottom side face reflects. */
-  below: { src: string; x: number; y: number; w: number; h: number; a: number; box: Box } | null;
+  below: {
+    src: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    a: number;
+    focus: Focus;
+    box: Box;
+  } | null;
   /** What this pane is, as <Pane> declared it (effects/materials/pane-causes). */
   causes: PaneCauses;
   /**
@@ -189,7 +199,8 @@ function cornerRadius(el: HTMLElement) {
 const seeds = new WeakMap<HTMLElement, number>();
 let nextSeed = 0;
 
-function surfaceSeed(el: HTMLElement) {
+/** Which surface (0-3) a pane wears: its grime and its ripples, kept for the element's life. */
+export function surfaceSeed(el: HTMLElement) {
   let seed = seeds.get(el);
   if (seed === undefined) {
     seed = nextSeed % 4;
@@ -365,7 +376,26 @@ function readImage(img: HTMLImageElement | null): ImageReading | null {
 
 function readPane(el: HTMLElement, withOffsets = true): PaneReading {
   const layers = withOffsets ? sideLayers.get(el) : undefined;
-  if (layers && layers.fixed === null) layers.fixed = getComputedStyle(el).position === "fixed";
+  if (layers && layers.fixed === null) {
+    const cs = getComputedStyle(el);
+    layers.fixed = cs.position === "fixed";
+    /*
+     * A pane with a z-index of its own (the fixed header, z-40) lifts its
+     * sides and its lit edge with it: they are siblings, and at their plain
+     * slots (2, 3) they sat UNDER the header, so its lit edge and bloom were
+     * seen through its own glass -- a backlight, not a lit edge (Ony,
+     * 2026-09-29: "the bloom is still not showing up on top of the header
+     * and instead is backlighting").
+     */
+    const z = Number.parseInt(cs.zIndex, 10);
+    if (Number.isFinite(z) && z > 0) {
+      layers.top.style.zIndex = String(z + SIDE_LAYER_Z);
+      layers.bottom.style.zIndex = String(z + SIDE_LAYER_Z);
+      if (layers.left) layers.left.style.zIndex = String(z + SIDE_LAYER_Z);
+      if (layers.right) layers.right.style.zIndex = String(z + SIDE_LAYER_Z);
+      if (layers.glow) layers.glow.style.zIndex = String(z + GLOW_LAYER_Z);
+    }
+  }
   return {
     el,
     rect: el.getBoundingClientRect(),
@@ -440,6 +470,27 @@ function invalidate() {
   version += 1;
 }
 
+/** A photograph's framing point, 0..1 each way from its top-left. */
+export type Focus = { x: number; y: number };
+const CENTRED: Focus = { x: 0.5, y: 0.5 };
+
+/**
+ * Where a photograph is framed: its inline object-position, which is where a
+ * chosen focal point is put (components/site/Img `focus`). Read off the
+ * element's own style, not the computed one, so it costs nothing per frame;
+ * a picture framed only by a stylesheet class reads as centred, and those are
+ * phone-only, where the glass is not drawn.
+ */
+export function focusOf(img: HTMLImageElement): Focus {
+  const parts = img.style.objectPosition.trim().split(/\s+/);
+  const at = (v: string | undefined) => {
+    if (!v?.endsWith("%")) return 0.5;
+    const n = Number.parseFloat(v) / 100;
+    return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
+  };
+  return parts[0] ? { x: at(parts[0]), y: at(parts[1] ?? parts[0]) } : CENTRED;
+}
+
 function imageFields(reading: ImageReading | null) {
   if (!reading) return null;
   const { img, rect, box } = reading;
@@ -450,6 +501,7 @@ function imageFields(reading: ImageReading | null) {
     w: rect.width,
     h: rect.height,
     a: img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+    focus: focusOf(img),
     box: { x: box.left, y: box.top, w: box.width, h: box.height },
   };
 }
@@ -523,6 +575,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       iw: above?.w ?? 1,
       ih: above?.h ?? 1,
       ia: above?.a ?? 1,
+      ifocus: above?.focus ?? CENTRED,
       ibox: above?.box ?? { x: 0, y: 0, w: 0, h: 0 },
       below: imageFields(p.below),
       causes: stacked.get(p.el)?.causes ?? p.causes,
@@ -579,8 +632,8 @@ function nearness(r: DOMRect, x: number, y: number, reach: number) {
 
 /**
  * How the lamp falls on a surface resting on the glass, and the shadow it
- * throws: offset = gap * lateral / height, penumbra = lightRadius * gap /
- * distance (see lib/cast-shadow). Only while the lamp is lit -- the same
+ * throws, by the one shadow model (effects/optics/shadow): moved and grown
+ * by H / (H - g), softened by R g / (H - g) across the light and more along it. Only while the lamp is lit -- the same
  * smoothstep of the charge the glass shader uses, so the shadow never leads
  * or lags the light that casts it.
  */
@@ -591,36 +644,22 @@ function lightOnSurface(r: DOMRect, standoff = 1): SurfaceLight {
   const centreX = r.left + r.width / 2;
   const centreY = r.top + r.height / 2;
   /*
-   * Where its shadow lands and how soft. Previewing (?try=shadows): the one
-   * shadow model every shadow reads -- the shadow grows with the lamp's
-   * nearness and softens along the direction to the lamp. Otherwise the
-   * approved look: moved and evenly blurred.
+   * Where its shadow lands, how much bigger than the thing it is, and how
+   * soft: the one shadow model every shadow reads (effects/optics/shadow) --
+   * grown by how near the lamp is, softened along the direction to it,
+   * from this surface's own standoff. Approved by Ony 2026-09-29 ("all
+   * shadows should behave the same and come from the same function").
    */
-  const cast = previewing("shadows")
-    ? (() => {
-        const m = castByModel({
-          lampX: x,
-          lampY: y,
-          height: cursorLamp.height,
-          radius: cursorLamp.radius,
-          gap: t("shadowGap") * standoff,
-          x: centreX,
-          y: centreY,
-        });
-        return {
-          x: m.x - centreX,
-          y: m.y - centreY,
-          blur: isotropicBlur(m),
-          model: m,
-        };
-      })()
-    : castShadow({
-        gap: t("shadowGap"),
-        height: cursorLamp.height,
-        lightRadius: cursorLamp.radius,
-        lateralX: centreX - x,
-        lateralY: centreY - y,
-      });
+  const m = castByModel({
+    lampX: x,
+    lampY: y,
+    height: cursorLamp.height,
+    radius: cursorLamp.radius,
+    gap: t("shadowGap") * standoff,
+    x: centreX,
+    y: centreY,
+  });
+  const cast = { x: m.x - centreX, y: m.y - centreY, blur: isotropicBlur(m), model: m };
   const c = cursorLamp.charge;
   const lit = c * c * (3 - 2 * c);
   const alpha = near * lit * t("shadowStrength");

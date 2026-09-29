@@ -131,8 +131,42 @@ function changed() {
   for (const fn of changeWatchers) fn();
 }
 
+/*
+ * Who says where the lamp is.
+ *
+ * The lamp you see is drawn by the cursor (components/site/CustomCursor),
+ * which eases toward the pointer. The scene used to light everything from the
+ * raw pointer instead, so while the pointer moved the light on the glass, the
+ * light under it and every lit surface ran ahead of the lamp drawn on screen
+ * -- 236 px ahead, 60 ms after an 800 px move. While a drawn lamp is on the
+ * page it is the lamp: raw pointer moves are ignored and it reports its own
+ * position every frame it moves. Without one (no custom cursor), the pointer
+ * is the lamp, as before.
+ */
+let drawn = 0;
+
+/** A drawn lamp is on the page (returns the release). */
+export function claimLamp(): () => void {
+  drawn += 1;
+  return () => {
+    drawn = Math.max(0, drawn - 1);
+  };
+}
+
 /** The pointer moved (or left the page, at -9999). */
 export function movePointer(x: number, y: number) {
+  // Leaving the page always takes the lamp away; moving is the drawn lamp's.
+  if (drawn > 0 && x > -9999) return;
+  setLamp(x, y);
+}
+
+/** Where the lamp is: the drawn lamp's position, each frame it moves. */
+export function moveLamp(x: number, y: number) {
+  setLamp(x, y);
+}
+
+function setLamp(x: number, y: number) {
+  if (pointer.x === x && pointer.y === y) return;
   pointer.x = x;
   pointer.y = y;
   changed();

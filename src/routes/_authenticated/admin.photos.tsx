@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { toast } from "sonner";
-import { Loader2, Star, Trash2, UploadCloud } from "lucide-react";
+import { Loader2, Trash2, UploadCloud } from "lucide-react";
 import { AdminHeading } from "@/components/admin/AdminHeading";
 import { SortableItem, SortableList } from "@/components/admin/SortableList";
 import { Img } from "@/components/site/Img";
@@ -18,6 +18,7 @@ import {
 import { deletePhoto, uploadPhoto } from "@/lib/image-upload";
 import { useContentRefresh } from "@/hooks/use-admin";
 import type { Photo } from "@/lib/content";
+import { adminPagePhotosQuery, usage } from "@/lib/page-photos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,11 +52,15 @@ const UNASSIGNED = "__none__";
 function PhotosPage() {
   const photos = useQuery(adminPhotosQuery);
   const categories = useQuery(adminCategoriesQuery);
+  const pagePhotos = useQuery(adminPagePhotosQuery);
+  const usedOn = useMemo(() => usage(pagePhotos.data?.rows), [pagePhotos.data]);
   const refresh = useContentRefresh();
 
   const [filter, setFilter] = useState<string>("all");
   const [uploading, setUploading] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
+  // The spots a delete would empty, named in its confirmation.
+  const selectedInUse = selected.flatMap((id) => usedOn.get(id) ?? []);
   const [order, setOrder] = useState<string[] | null>(null);
   const [uploadCategory, setUploadCategory] = useState<string>(UNASSIGNED);
 
@@ -278,6 +283,9 @@ function PhotosPage() {
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   This removes the files as well and cannot be undone.
+                  {selectedInUse.length
+                    ? ` ${selectedInUse.join(", ")} will go back to automatic.`
+                    : ""}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -364,17 +372,12 @@ function PhotosPage() {
                       />{" "}
                       Published
                     </label>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Feature on the home page"
-                      onClick={() => patch(photo.id, { featured: !photo.featured })}
-                    >
-                      <Star
-                        className={cn("size-4", photo.featured && "fill-primary text-primary")}
-                      />
-                    </Button>
                   </div>
+                  {usedOn.get(photo.id)?.length ? (
+                    <p className="text-xs text-muted-foreground">
+                      Used on: {usedOn.get(photo.id)!.join(", ")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </SortableItem>

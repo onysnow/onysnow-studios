@@ -1030,7 +1030,7 @@
 
 /* The photograph's own frame, thrown across the pane under it. */
 span:has(> .photo-surface) {
-  box-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px)
+  box-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px) var(--cast-spread, 0px)
     rgba(0, 0, 0, var(--cast-alpha, 0));
 }
 
@@ -1048,31 +1048,6 @@ span:has(> .photo-surface) {
 .glass h4,
 .glass p,
 .glass blockquote {
-  text-shadow: calc(var(--cast-x, 0px) * 0.42) calc(var(--cast-y, 0px) * 0.42)
-    calc(var(--cast-blur, 0px) * 0.6 + 1px) rgba(0, 0, 0, calc(var(--cast-alpha, 0) * 0.55));
-}
-
-/*
- * Previewing the one shadow model (?try=shadows; effects/engine/preview).
- *
- * The scene works out each surface's shadow from its own standoff -- a print,
- * a line of type, a sheet of plastic -- so the numbers arrive ready to use and
- * nothing here scales them. The shadow is also bigger than the thing by
- * however much nearer the lamp is (--cast-spread). A CSS blur is one number,
- * so it carries the mean of the penumbra across and along the light; the
- * shader's shadow shapes carry both.
- */
-html[data-try~="shadows"] span:has(> .photo-surface) {
-  box-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px) var(--cast-spread, 0px)
-    rgba(0, 0, 0, var(--cast-alpha, 0));
-}
-
-html[data-try~="shadows"] .glass h1,
-html[data-try~="shadows"] .glass h2,
-html[data-try~="shadows"] .glass h3,
-html[data-try~="shadows"] .glass h4,
-html[data-try~="shadows"] .glass p,
-html[data-try~="shadows"] .glass blockquote {
   text-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px)
     rgba(0, 0, 0, calc(var(--cast-alpha, 0) * 0.55));
 }
@@ -1126,16 +1101,11 @@ html[data-try~="shadows"] .glass blockquote {
   border-radius: inherit;
   pointer-events: none;
   background: oklch(0.8 0.17 58);
-  transform: translate(calc(var(--cast-x, 0px) * 0.5), calc(var(--cast-y, 0px) * 0.5));
-  filter: blur(calc(var(--cast-blur, 0px) * 0.5 + 5px));
+  /* The one shadow model: its own standoff, its own growth, no fractions. */
+  transform: translate(var(--cast-x, 0px), var(--cast-y, 0px)) scale(var(--cast-scale, 1));
+  filter: blur(calc(var(--cast-blur, 0px) + 4px));
   mix-blend-mode: plus-lighter;
   opacity: calc(var(--plastic-on) * 0.28);
-}
-
-html[data-try~="shadows"] .plastic::before {
-  /* The same model: its own standoff, its own growth, no fractions. */
-  transform: translate(var(--cast-x, 0px), var(--cast-y, 0px)) scale(var(--cast-scale, 1));
-  filter: blur(var(--cast-blur, 0px));
 }
 
 /* The rounded edge facing the lamp catching it: a thin rim, brightest toward the lamp. */

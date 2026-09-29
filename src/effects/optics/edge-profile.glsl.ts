@@ -1,4 +1,4 @@
-import { DEFAULT_EDGE_WIDTH } from "./edge-profile";
+import { BURN_FROM, BURN_MAX, BURN_TO, DEFAULT_EDGE_WIDTH } from "./edge-profile";
 
 /**
  * The GLSL twins of edge-profile.ts, as one chunk every shader splices in.
@@ -45,6 +45,21 @@ float fresnelRise(float facing) {
 vec3 toneMapGlass(vec3 c) {
   c = c / (1.0 + abs(c));
   return sign(c) * pow(abs(c), vec3(1.0 / 2.2));
+}
+
+/*
+ * The same with a film's shoulder (preview "burn"; edge-profile.ts
+ * toneMapGlassBurn): past what the picture holds, the other channels are
+ * carried up after the brightest, so a bright coloured light burns toward
+ * white at its core instead of staying fully saturated. Darkening is untouched.
+ */
+vec3 toneMapGlassBurn(vec3 c) {
+  float peak = max(max(max(c.r, c.g), c.b), 0.0);
+  vec3 r = c / (1.0 + abs(c));
+  float top = max(max(r.r, r.g), r.b);
+  float burn = smoothstep(${BURN_FROM.toFixed(1)}, ${BURN_TO.toFixed(1)}, peak) * ${BURN_MAX.toFixed(3)};
+  r = mix(r, r + (vec3(top) - r) * burn, step(0.0, c));
+  return sign(r) * pow(abs(r), vec3(1.0 / 2.2));
 }
 
 /* Film response: bright light rolls off instead of clipping flat. */

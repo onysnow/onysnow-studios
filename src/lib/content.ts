@@ -63,7 +63,7 @@ async function rows<T extends TableName, R>(
 }
 
 /** Only the columns a rendered photograph actually needs. */
-const PHOTO_COLS =
+export const PHOTO_COLS =
   "id,storage_path,width,height,blur_data_url,sources,alt,title,category_id,sort_order,featured,published";
 
 /** How many photographs a gallery page pulls at a time. */
