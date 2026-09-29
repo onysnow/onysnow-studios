@@ -312,8 +312,20 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
       through *= causticAt(Q - r.xy, uSeed[i], penFloor, gap);
     }
 
-    light = mix(vec3(pool), through * uThrough[i], inGlass);
-    break;
+    /*
+     * Every pane the ray crosses filters it, in turn -- not only the first.
+     *
+     * This took the first pane the ray met and stopped. Where two panes
+     * overlap (the fixed header over a pane, or over a band scrolling under
+     * it) the ray passes through both, and the point where it stopped
+     * crossing the upper one switched the floor to the lower pane's answer
+     * in a single pixel: a hard line, curved toward the lamp because each
+     * pane's crossing point moves with it (Ony's list, item 3). What a pane
+     * lets through is a fraction of what reaches it; the fractions multiply,
+     * and at each pane's edge its fraction eases back to 1 over the lamp's
+     * penumbra (inGlass), so nothing starts or stops on a line.
+     */
+    light *= mix(vec3(1.0), through * uThrough[i] / max(pool, 1e-4), inGlass);
   }
 
   vec3 add = light * uLightGain;
