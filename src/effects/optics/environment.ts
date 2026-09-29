@@ -38,6 +38,21 @@ export function encodeRadiance(l: number): number {
   return Math.log2(1 + Math.min(Math.max(l, 0), ROOM_LMAX)) / Math.log2(1 + ROOM_LMAX);
 }
 
+/**
+ * Preview "dimroom": where the room's brightest lights are compressed, in
+ * multiples of its middle grey. A lit aquarium tank or a studio softbox is
+ * encoded up to ROOM_LMAX, and even the 4% the front of the glass reflects
+ * of that clips to a solid white slab. radiance / (1 + radiance / knee)
+ * leaves the room's ordinary light alone and rolls its lamps and windows
+ * off toward the knee.
+ */
+export const ROOM_KNEE = 2;
+
+/** The same compression on one value; knee 0 leaves it untouched. */
+export function kneeRadiance(v: number, knee: number): number {
+  return knee > 0 ? v / (1 + v / knee) : v;
+}
+
 /** Decode it again. */
 export function decodeRadiance(v: number): number {
   return Math.pow(2, v * Math.log2(1 + ROOM_LMAX)) - 1;

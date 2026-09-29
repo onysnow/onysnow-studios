@@ -124,6 +124,7 @@ uniform vec2  uEye;             // the viewer's eye, from the viewport middle, C
 uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
+uniform float uRoomKnee;      // 0, or ?try=dimroom's knee (environment ROOM_KNEE)
 uniform float uBurn;          // 1 while previewing ?try=burn (edge-profile toneMapGlassBurn)
 uniform vec3 uImageFit;       // intrinsic width / height, then its object-position (0..1)
 // The light the photograph clipped, and the disc the frost spreads it over
@@ -428,8 +429,9 @@ void main() {
      * the room reflects the room. Toward the side, the reflected ray runs on
      * into the page, onto the photograph -- the side's mirror, below.
      */
-    arrisRoom += step(0.0, r.z) * fresnelSchlick(dot(-ray, n), uIor)
-      * decodeRadiance(texture2D(uRoom, roomUvDir(r), arcBias).rgb);
+    vec3 seen = decodeRadiance(texture2D(uRoom, roomUvDir(r), arcBias).rgb);
+    if (uRoomKnee > 0.0) seen = seen / (1.0 + seen / uRoomKnee);
+    arrisRoom += step(0.0, r.z) * fresnelSchlick(dot(-ray, n), uIor) * seen;
   }
   arrisRoom *= 0.25 * arrisProfile(ad) * uRoomExposure * uHasRoom;
 
@@ -833,6 +835,7 @@ void main() {
   vec3 room = decodeRadiance(
     texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
   );
+  if (uRoomKnee > 0.0) room = room / (1.0 + room / uRoomKnee);
   colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
 
   /*

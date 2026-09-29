@@ -18,6 +18,9 @@ export const PREVIEWS = {
   /** Scratches and smudges block and scatter in proportion to each pixel's opacity. */
   marks: "Scratches and smudges act in proportion to how much of each pixel they cover",
   burn: "Bright coloured light burns toward white at its core, as on film, instead of staying fully saturated",
+  satin: "The front of the glass etched like the back, so reflected room lights are soft glows",
+  dimroom:
+    "The room's brightest lights (windows, softboxes) compressed so their reflection doesn't clip to white",
 } as const;
 
 export type PreviewName = keyof typeof PREVIEWS;

@@ -25,10 +25,10 @@ import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
 import { frontRoughness } from "@/effects/materials/presets";
-import { roomMipChain } from "@/effects/optics/environment";
+import { ROOM_KNEE, roomMipChain } from "@/effects/optics/environment";
 import { camera } from "@/effects/camera/camera";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
-import { LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
+import { LAMP_REFLECTION_ENABLED, frostRoughness } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 import { discRadiusForBlur, hiddenLightMap, markLightNear } from "@/effects/optics/bokeh";
 
@@ -125,6 +125,7 @@ export function GlassLight({
     const uImage = U("uImage");
     const uImageFit = U("uImageFit");
     const uBurn = U("uBurn");
+    const uRoomKnee = U("uRoomKnee");
     const uHasBackdrop = U("uHasBackdrop");
     const uHasBokeh = U("uHasBokeh");
     const uHasBokehBelow = U("uHasBokehBelow");
@@ -556,6 +557,7 @@ export function GlassLight({
       gl.uniform1f(uBokehGain, camera.bokeh);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.uniform1f(uBurn, previewing("burn") ? 1 : 0);
+      gl.uniform1f(uRoomKnee, previewing("dimroom") ? ROOM_KNEE : 0);
       /*
        * The lamp's power reaches the arris glints whatever the switch says;
        * the switch turns off only the face's own image of the lamp, which is
@@ -627,7 +629,14 @@ export function GlassLight({
         const { material, thickness, gap, smudge, scratch } = pane.causes;
         gl.uniform1f(uIor, material.ior);
         gl.uniform1f(uFrost, material.frost);
-        gl.uniform1f(uFrontRoughness, frontRoughness(material, material.frost));
+        // ?try=satin: the front face etched like the back, so the room it
+        // reflects spreads into a soft glow instead of a mirror image.
+        gl.uniform1f(
+          uFrontRoughness,
+          previewing("satin")
+            ? frostRoughness(material.frost)
+            : frontRoughness(material, material.frost),
+        );
         gl.uniform1f(uThickness, thickness);
         gl.uniform1f(uGap, gap);
         // Each light's height above THIS glass: its height less the pane's gap.
