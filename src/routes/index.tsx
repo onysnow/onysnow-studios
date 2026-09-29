@@ -64,6 +64,23 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
+/**
+ * How wide the hero photograph is actually drawn, for its `srcset`.
+ *
+ * "100vw" was a lie for a cover image: when the hero is proportionally taller
+ * than the photograph, the photograph is drawn wider than the screen, so the
+ * browser picked a file smaller than the space and stretched it -- the 1280px
+ * rendition drawn about 1,500px wide was the soft hero Ony saw. The drawn width
+ * is the larger of the screen's width and the picture's height times the
+ * photograph's shape, plus the viewpoint's few per cent of oversize.
+ */
+function heroSizes(photo: { width?: number | null; height?: number | null } | undefined): string {
+  const aspect = photo?.width && photo.height ? photo.width / photo.height : 1.5;
+  // 92vh of hero plus the half of the glass band the picture runs on under
+  // (--seam-below, about a quarter of a screen).
+  return `max(105vw, ${(118 * aspect * 1.05).toFixed(1)}vh)`;
+}
+
 function HomePage() {
   const reduced = useReducedMotion();
   const { scrollYProgress } = useScroll();
@@ -106,7 +123,7 @@ function HomePage() {
          * The clip wraps the PICTURE, not the section -- same reasoning as
          * ParallaxScene, and this is the hero's own copy of that structure.
          *
-         * The parallax image is 105svh and slides, so a clip has to exist. On
+         * The parallax image slides, so a clip has to exist. On
          * the section it also cropped the glass resting on it: the pane's
          * light layer sits at `inset: -90px` so a lit edge can throw light
          * past the boundary, and cropping that turns the softest part of the
@@ -123,12 +140,21 @@ function HomePage() {
               suppressHydrationWarning
               className="view-shift absolute inset-0"
             >
+              {/*
+               * Exactly the section's size, no bigger. It was 105svh tall and
+               * scaled a further 5%, room the scroll parallax never uses (it
+               * only moves the picture DOWN, and only once the top has
+               * scrolled away) -- and every bit of it cropped a wide
+               * photograph harder: at a 1192x749 window a 16:9 frame lost a
+               * fifth of its width. The viewpoint's own oversize (.view-shift)
+               * is all the bleed the picture needs.
+               */}
               <Img
                 image={hero}
                 eager
-                className="h-[calc(105svh+var(--seam-below,0px))] w-full"
-                imgClassName="scale-105 object-[22%_center] sm:object-center"
-                sizes="100vw"
+                className="h-full w-full"
+                imgClassName="object-[25%_center] sm:object-center"
+                sizes={heroSizes(hero)}
               />
             </div>
           </motion.div>
