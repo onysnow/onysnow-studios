@@ -8,14 +8,12 @@ afterEach(() => resetPreviews());
 describe("changes not yet approved are off unless asked for", () => {
   it("is off by default", () => {
     resetPreviews([]);
-    expect(previewing("shadows")).toBe(false);
     expect(previewing("marks")).toBe(false);
   });
 
   it("turns on only what is named", () => {
     resetPreviews(["marks"]);
     expect(previewing("marks")).toBe(true);
-    expect(previewing("shadows")).toBe(false);
   });
 
   it("the glass and the floor read the marks through one function", () => {

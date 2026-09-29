@@ -28,7 +28,6 @@
  * No React here; components register elements and the engine does the rest.
  */
 import { t } from "@/lib/tuning";
-import { castShadow } from "@/lib/cast-shadow";
 import { GLOW_LAYER_Z, LIGHT_BLEED, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
@@ -598,8 +597,8 @@ function nearness(r: DOMRect, x: number, y: number, reach: number) {
 
 /**
  * How the lamp falls on a surface resting on the glass, and the shadow it
- * throws: offset = gap * lateral / height, penumbra = lightRadius * gap /
- * distance (see lib/cast-shadow). Only while the lamp is lit -- the same
+ * throws, by the one shadow model (effects/optics/shadow): moved and grown
+ * by H / (H - g), softened by R g / (H - g) across the light and more along it. Only while the lamp is lit -- the same
  * smoothstep of the charge the glass shader uses, so the shadow never leads
  * or lags the light that casts it.
  */
@@ -610,36 +609,22 @@ function lightOnSurface(r: DOMRect, standoff = 1): SurfaceLight {
   const centreX = r.left + r.width / 2;
   const centreY = r.top + r.height / 2;
   /*
-   * Where its shadow lands and how soft. Previewing (?try=shadows): the one
-   * shadow model every shadow reads -- the shadow grows with the lamp's
-   * nearness and softens along the direction to the lamp. Otherwise the
-   * approved look: moved and evenly blurred.
+   * Where its shadow lands, how much bigger than the thing it is, and how
+   * soft: the one shadow model every shadow reads (effects/optics/shadow) --
+   * grown by how near the lamp is, softened along the direction to it,
+   * from this surface's own standoff. Approved by Ony 2026-09-29 ("all
+   * shadows should behave the same and come from the same function").
    */
-  const cast = previewing("shadows")
-    ? (() => {
-        const m = castByModel({
-          lampX: x,
-          lampY: y,
-          height: cursorLamp.height,
-          radius: cursorLamp.radius,
-          gap: t("shadowGap") * standoff,
-          x: centreX,
-          y: centreY,
-        });
-        return {
-          x: m.x - centreX,
-          y: m.y - centreY,
-          blur: isotropicBlur(m),
-          model: m,
-        };
-      })()
-    : castShadow({
-        gap: t("shadowGap"),
-        height: cursorLamp.height,
-        lightRadius: cursorLamp.radius,
-        lateralX: centreX - x,
-        lateralY: centreY - y,
-      });
+  const m = castByModel({
+    lampX: x,
+    lampY: y,
+    height: cursorLamp.height,
+    radius: cursorLamp.radius,
+    gap: t("shadowGap") * standoff,
+    x: centreX,
+    y: centreY,
+  });
+  const cast = { x: m.x - centreX, y: m.y - centreY, blur: isotropicBlur(m), model: m };
   const c = cursorLamp.charge;
   const lit = c * c * (3 - 2 * c);
   const alpha = near * lit * t("shadowStrength");

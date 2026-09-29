@@ -18,7 +18,6 @@ import {
   viewState,
 } from "@/effects/scene/scene";
 import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
-import { castShadow } from "@/lib/cast-shadow";
 import { LIGHT_BLEED } from "@/effects/engine/compositor";
 import { castShadow as castByModel } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
@@ -638,7 +637,7 @@ export function GlassLight({
         /*
          * And where that light lands: the layer above, thrown across the gap
          * between them by the lamp the way anything resting on glass throws
-         * its shadow (lib/cast-shadow). Outside it the lamp reaches this pane
+         * its shadow (effects/optics/shadow). Outside it the lamp reaches this pane
          * directly. The first light places it; with more lights each would
          * throw its own (a later step, when there are more).
          */
@@ -650,28 +649,18 @@ export function GlassLight({
           const lampHeight = Math.max(heights[0]! - gap - thickness, 1);
           const cx = over.x + over.w / 2;
           const cy = over.y + over.h / 2;
-          // Previewing the one shadow model (?try=shadows): placed, grown and softened by it.
-          const m = previewing("shadows")
-            ? castByModel({
-                lampX: lamp.x,
-                lampY: lamp.y,
-                height: lampHeight,
-                radius: lamp.radius,
-                gap: sep,
-                x: cx,
-                y: cy,
-              })
-            : null;
-          const cast = m
-            ? { x: m.x - cx, y: m.y - cy, blur: m.across }
-            : castShadow({
-                gap: sep,
-                height: lampHeight,
-                lightRadius: lamp.radius,
-                lateralX: cx - lamp.x,
-                lateralY: cy - lamp.y,
-              });
-          const grow = m?.scale ?? 1;
+          // The one shadow model: placed, grown and softened by it.
+          const m = castByModel({
+            lampX: lamp.x,
+            lampY: lamp.y,
+            height: lampHeight,
+            radius: lamp.radius,
+            gap: sep,
+            x: cx,
+            y: cy,
+          });
+          const cast = { x: m.x - cx, y: m.y - cy, blur: m.across };
+          const grow = m.scale;
           gl.uniform4f(
             uAboveRect,
             cx - pane.x + cast.x,
