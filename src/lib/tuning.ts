@@ -900,22 +900,50 @@ export function switchTuningMode(mode: TuningMode) {
   applyTuning();
 }
 
-/** Both sets, for persisting. */
+/**
+ * Both sets, for persisting -- only the knobs that differ from the source.
+ *
+ * It used to write every knob. So a value nobody had touched was saved
+ * too, and when a default changed in the source the browser kept the old
+ * one: Room brightness went back to 1 in the source and stayed 0 for anyone
+ * who had moved any other slider while it was 0. Now only what was moved is
+ * remembered, and everything else follows the source.
+ */
 export function tuningSnapshot(): Record<TuningMode, Record<string, number>> {
   const css: Record<string, number> = {};
   const raster: Record<string, number> = {};
   for (const key of Object.keys(tuning)) {
-    css[key] = valueIn(key, "css");
-    raster[key] = valueIn(key, "raster");
+    if (isResult(key)) continue;
+    const base = TUNING_DEFAULTS[key];
+    const c = valueIn(key, "css");
+    const r = valueIn(key, "raster");
+    if (c !== base) css[key] = c;
+    if (r !== base) raster[key] = r;
   }
   return { css, raster };
+}
+
+/**
+ * Defaults a knob has had before, for stores written when the whole set was
+ * saved: a saved value equal to one of these was never moved -- it was the
+ * source's value at the time -- so the source's value now wins.
+ */
+const PAST_DEFAULTS: Readonly<Record<string, readonly number[]>> = {
+  // 0 from cae9b1c (the dark room) until 6382a63 put the room's light back.
+  roomBrightness: [0],
+};
+
+/** Whether a saved value is only an old default, not something anyone chose. */
+export function isStaleDefault(key: string, value: number): boolean {
+  return PAST_DEFAULTS[key]?.includes(value) ?? false;
 }
 
 /** Restore both sets. */
 export function restoreTuning(saved: Partial<Record<TuningMode, Record<string, number>>>) {
   for (const mode of ["css", "raster"] as const) {
     for (const [key, value] of Object.entries(saved[mode] ?? {})) {
-      if (typeof value === "number") setValueIn(key, mode, value);
+      if (typeof value !== "number" || isStaleDefault(key, value)) continue;
+      setValueIn(key, mode, value);
     }
   }
   applyTuning();

@@ -59,3 +59,23 @@ describe("results are locked", () => {
     expect(text).toMatch(/\bcoreGain:/);
   });
 });
+
+describe("saved tuning keeps only what was moved", () => {
+  it("does not save values nobody touched", async () => {
+    const { tuningSnapshot, resetTuning, TUNING_DEFAULTS } = await import("./tuning");
+    resetTuning(TUNING_DEFAULTS);
+    const snap = tuningSnapshot();
+    expect(Object.keys(snap.css)).toEqual([]);
+    expect(Object.keys(snap.raster)).toEqual([]);
+  });
+
+  it("ignores an old default in a store written when every knob was saved", async () => {
+    const { restoreTuning, resetTuning, TUNING_DEFAULTS, t } = await import("./tuning");
+    resetTuning(TUNING_DEFAULTS);
+    restoreTuning({ css: { roomBrightness: 0 }, raster: { roomBrightness: 0 } });
+    expect(t("roomBrightness")).toBe(1);
+    restoreTuning({ css: { roomBrightness: 2.5 }, raster: { roomBrightness: 2.5 } });
+    expect(t("roomBrightness")).toBe(2.5);
+    resetTuning(TUNING_DEFAULTS);
+  });
+});
