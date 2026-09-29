@@ -662,6 +662,25 @@
     top: calc(-1 * var(--far-arris-span, 4.5px));
   }
 
+  /* The left and right faces: the same far-arris line, standing upright. */
+  .glass-side--left::after,
+  .glass-side--right::after {
+    top: 0;
+    bottom: 0;
+    left: auto;
+    right: auto;
+    width: calc(2 * var(--far-arris-span, 4.5px));
+    height: auto;
+  }
+
+  .glass-side--left::after {
+    right: calc(-1 * var(--far-arris-span, 4.5px));
+  }
+
+  .glass-side--right::after {
+    left: calc(-1 * var(--far-arris-span, 4.5px));
+  }
+
   /*
    * The room reflection is no longer a CSS layer: the glass light pass draws
    * it from the room's real brightness and the glass's Fresnel, in both glass

@@ -150,10 +150,13 @@ const nonOccluding = new WeakSet<HTMLElement>();
 /** How far each surface stands off the glass, as a share of "Content depth" (1 if unset). */
 const standoffs = new WeakMap<HTMLElement, number>();
 
-/** Each pane's two side faces, siblings of it (see .glass-side). */
+/** Each pane's side faces, siblings of it (see .glass-side). */
 type SideLayers = {
   top: HTMLElement;
   bottom: HTMLElement;
+  /** Its left and right sides, where the pane has visible left and right edges. */
+  left: HTMLElement | null;
+  right: HTMLElement | null;
   /** The lit edge's layer, above the sides (optional; see .glass-glow). */
   glow: HTMLElement | null;
   /** Whether the pane is position: fixed; asked once, in a frame's read phase. */
@@ -291,6 +294,40 @@ function sideHeightsAt(
   return {
     top: Math.round(sideHeight(sideOpen(tilt, true), bar, thickness)),
     bottom: Math.round(sideHeight(sideOpen(tilt, false), bar, thickness)),
+  };
+}
+
+/**
+ * The same across the view: -1 far left of the eye, 1 far right. Measured
+ * against the half-width, so on a landscape screen a pane has to stand much
+ * further to the side than above or below to open a side as far -- the left
+ * and right faces show less than the top and bottom ones.
+ */
+function paneTiltX(r: DOMRect, viewportWidth: number) {
+  const middle = viewportWidth / 2;
+  const offset = (r.left + r.width / 2 - middle) / middle;
+  const clamped = Math.max(-1, Math.min(1, offset));
+  return clamped * Math.abs(clamped);
+}
+
+/**
+ * How wide the left and right side faces show, whole CSS px: the same side
+ * model as the top and bottom, turned on its side. A pane right of the eye
+ * shows its left face (the one facing the middle), and the other way round.
+ * A band as wide as the viewport has no left or right edge in view: none.
+ */
+function sideWidthsAt(
+  el: HTMLElement,
+  r: DOMRect,
+  thickness: number,
+  viewportWidth: number,
+): { left: number; right: number } {
+  if (r.width >= viewportWidth - 1) return { left: 0, right: 0 };
+  const tilt = paneTiltX(r, viewportWidth);
+  const bar = el.classList.contains("glass--bar");
+  return {
+    left: Math.round(sideHeight(sideOpen(tilt, true), bar, thickness)),
+    right: Math.round(sideHeight(sideOpen(tilt, false), bar, thickness)),
   };
 }
 
@@ -710,7 +747,7 @@ function writeView(reading: SceneReading) {
  * parent -- which is theirs too -- so they scroll with it for free, or the
  * viewport for a fixed pane. Written only when something changed.
  */
-function writeSides(p: PaneReading, viewportHeight: number) {
+function writeSides(p: PaneReading, viewportHeight: number, viewportWidth: number) {
   const layers = sideLayers.get(p.el);
   if (!layers) return;
   if (layers.fixed === null) return;
@@ -718,8 +755,9 @@ function writeSides(p: PaneReading, viewportHeight: number) {
   const box = layers.fixed ? { x: r.left, y: r.top, w: r.width, h: r.height } : p.offset;
   if (!box) return;
   const sides = sideHeightsAt(p.el, r, p.causes.thickness, viewportHeight);
+  const across = sideWidthsAt(p.el, r, p.causes.thickness, viewportWidth);
   const { x, y, w, h } = box;
-  const key = `${x},${y},${w},${h},${sides.top},${sides.bottom},${p.radius}`;
+  const key = `${x},${y},${w},${h},${sides.top},${sides.bottom},${across.left},${across.right},${p.radius}`;
   if (key === layers.last) return;
   layers.last = key;
   const position = layers.fixed ? "fixed" : "absolute";
@@ -732,6 +770,22 @@ function writeSides(p: PaneReading, viewportHeight: number) {
   };
   set(layers.top, y, sides.top, `${p.radius}px ${p.radius}px 0 0`);
   set(layers.bottom, y + h - sides.bottom, sides.bottom, `0 0 ${p.radius}px ${p.radius}px`);
+  /*
+   * The left and right faces run between the top and bottom ones, so the
+   * corners are absorbed once, not twice. The corners themselves -- where a
+   * rounded pane's side turns from one face to the next -- are the top and
+   * bottom faces' rounding.
+   */
+  const between = Math.max(0, h - sides.top - sides.bottom);
+  const setSide = (layer: HTMLElement | null, left: number, width: number) => {
+    if (!layer) return;
+    layer.style.position = position;
+    layer.style.transform = `translate(${left}px, ${y + sides.top}px)`;
+    layer.style.width = `${width}px`;
+    layer.style.height = `${width > 0 ? between : 0}px`;
+  };
+  setSide(layers.left, x, across.left);
+  setSide(layers.right, x + w - across.right, across.right);
   // The lit edge's layer covers the pane and its bleed, exactly as the surface layer does.
   if (layers.glow) {
     const g = layers.glow;
@@ -748,12 +802,12 @@ export function paneGlowLayer(el: HTMLElement): HTMLCanvasElement | null {
   return g instanceof HTMLCanvasElement ? g : null;
 }
 
-function writePane(p: PaneReading, viewportHeight: number) {
+function writePane(p: PaneReading, viewportHeight: number, viewportWidth: number) {
   const el = p.el;
   const r = p.rect;
   // How near the lamp is, eased, and where it stands: the CSS adapter's to write.
   writePaneLight(el, r, cursorLamp, nearness(r, cursorLamp.x, cursorLamp.y, REACH));
-  writeSides(p, viewportHeight);
+  writeSides(p, viewportHeight, viewportWidth);
   // The corner radius, for layers the utility classes cannot tell it to.
   el.style.setProperty("--pane-radius", `${p.radius}px`);
   // Where this pane sits in the viewport, for anything positioned in viewport space.
@@ -808,7 +862,7 @@ function run(now = performance.now()) {
   snapshotVersion = version;
   // 4. write
   writeView(reading);
-  for (const p of reading.panes) writePane(p, reading.innerHeight);
+  for (const p of reading.panes) writePane(p, reading.innerHeight, reading.viewportWidth);
   reading.surfaces.forEach((s, i) => {
     const light = lightOn[i];
     if (light) writeSurface(s, light);
@@ -907,14 +961,16 @@ export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions =
   };
 }
 
-/** Give a pane its two side faces (siblings of it; see .glass-side). */
+/** Give a pane its side faces (siblings of it; see .glass-side). */
 export function registerPaneSides(
   el: HTMLElement,
   top: HTMLElement,
   bottom: HTMLElement,
   glow: HTMLElement | null = null,
+  left: HTMLElement | null = null,
+  right: HTMLElement | null = null,
 ) {
-  sideLayers.set(el, { top, bottom, glow, fixed: null, last: "" });
+  sideLayers.set(el, { top, bottom, left, right, glow, fixed: null, last: "" });
   // Laid on the pane by the next frame, with everything else.
   reschedule();
   return () => {

@@ -185,6 +185,57 @@ test.describe("the pane's edge", () => {
     expect(f.blend).toBe("multiply");
     expect(f.inside).toBe(false);
   });
+
+  /*
+   * Ony, 2026-09-29: "If you can see the edge of the pane on the left and
+   * right then it should have a side as well." A pane narrower than the view
+   * shows a face on each; the one facing the middle of the view is the wider.
+   * A band as wide as the view has no left or right edge in sight: none.
+   */
+  test("a pane whose left and right edges are in view has side faces there too", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await page.goto("/lab?glass=css");
+    await page.waitForLoadState("networkidle");
+    const stack = page.locator("[data-lab-stacks] [data-stack]").first();
+    await stack.scrollIntoViewIfNeeded();
+    const pane = stack.locator(".glass").first();
+    const faces = async () =>
+      pane.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const box = (sel: string) => {
+          let n = el.nextElementSibling;
+          while (n && !n.classList.contains(sel)) n = n.nextElementSibling;
+          return n ? n.getBoundingClientRect() : null;
+        };
+        const left = box("glass-side--left")!;
+        const right = box("glass-side--right")!;
+        return {
+          left: [Math.round(left.left - r.left), Math.round(left.width)],
+          right: [Math.round(r.right - right.right), Math.round(right.width)],
+          centre: r.left + r.width / 2 - document.documentElement.clientWidth / 2,
+        };
+      });
+    await expect.poll(async () => (await faces()).left[1]).toBeGreaterThan(0);
+    const f = await faces();
+    expect(Math.abs(f.left[0]!)).toBeLessThan(1);
+    expect(Math.abs(f.right[0]!)).toBeLessThan(1);
+    expect(f.right[1]).toBeGreaterThan(0);
+    // Left of the middle: its right face, which faces the eye, shows more.
+    if (f.centre < 0) expect(f.right[1]).toBeGreaterThan(f.left[1]);
+    // A pane as wide as the view: no left or right face.
+    const bandLeft = await page.evaluate(() => {
+      const w = document.documentElement.clientWidth;
+      const band = [...document.querySelectorAll<HTMLElement>(".glass")].find(
+        (el) => el.getBoundingClientRect().width >= w - 1,
+      );
+      let n = band?.nextElementSibling ?? null;
+      while (n && !n.classList.contains("glass-side--left")) n = n.nextElementSibling;
+      return n ? n.getBoundingClientRect().width : -1;
+    });
+    expect(bandLeft).toBe(0);
+  });
 });
 
 test.describe("every pane is one described piece of glass", () => {
