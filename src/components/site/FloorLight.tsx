@@ -2,7 +2,7 @@ import { previewing } from "@/effects/engine/preview";
 import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
-import { lampPower, lightState, onCharge, pointLights } from "@/effects/light/lights";
+import { lampPower, onCharge, onFlash, pointLights, strongestCharge } from "@/effects/light/lights";
 import { lightLocations, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import {
@@ -172,7 +172,8 @@ export function FloorLight() {
     setLive(false);
 
     const step = (now: number) => {
-      const charge = lightState.charge;
+      // Any light burning: the lamp while charged, the flash for its pulse.
+      const charge = strongestCharge();
       if (charge <= 0.002) {
         if (wasLit) {
           clear2d(canvas);
@@ -310,6 +311,7 @@ export function FloorLight() {
     window.addEventListener("pointermove", wake, { passive: true });
     window.addEventListener("scroll", wake, { passive: true });
     const stopCharge = onCharge(wake);
+    const stopFlash = onFlash(wake);
     loop.wake();
 
     const stopLoss = onSharedGlLoss(
@@ -320,6 +322,7 @@ export function FloorLight() {
     return () => {
       loop.stop();
       stopCharge();
+      stopFlash();
       for (const layer of under.values()) layer.remove();
       for (const tex of layers.values()) gl.deleteTexture(tex);
       window.removeEventListener("pointermove", wake);

@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { SHUTTER_EVENT } from "@/lib/shutter-event";
-import { flashPanes } from "@/effects/scene/scene";
-import { onCharge } from "@/effects/light/lights";
+import { flashPanes, viewState } from "@/effects/scene/scene";
+import { fireFlash, onCharge } from "@/effects/light/lights";
+import { previewing } from "@/effects/engine/preview";
 import { discardBurn, prepareBurn, takeBurn, type PageBurn } from "@/lib/page-burn";
 
 /**
@@ -43,6 +44,14 @@ export function ShutterFlash() {
       const fx = at ? (at.x / viewportWidth()) * 100 : 50;
       const fy = at ? (at.y / viewportHeight()) * 100 : 50;
 
+      // Previewing ?try=flash: the flash is a light the whole scene answers.
+      if (previewing("flash")) {
+        fireFlash(
+          viewportWidth() / 2 + viewState.eyeX,
+          viewportHeight() / 2 + viewState.eyeY,
+          viewportWidth(),
+        );
+      }
       if (flash) {
         flash.style.setProperty("--flash-x", `${fx}%`);
         flash.style.setProperty("--flash-y", `${fy}%`);

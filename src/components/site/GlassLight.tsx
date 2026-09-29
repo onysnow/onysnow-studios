@@ -17,7 +17,15 @@ import {
   paneGlowLayer,
   viewState,
 } from "@/effects/scene/scene";
-import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
+import {
+  cursorLamp,
+  flashLight,
+  lampPower,
+  onCharge,
+  onFlash,
+  pointLights,
+  roomLight,
+} from "@/effects/light/lights";
 import { LIGHT_BLEED } from "@/effects/engine/compositor";
 import { castShadow as castByModel } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
@@ -500,7 +508,8 @@ export function GlassLight({
 
     const step = (now: number) => {
       const charge = chargeRef.current;
-      const lit = charge > 0.002;
+      // The flash lights the glass for its pulse whatever the lamp's charge.
+      const lit = Math.max(charge, flashLight.charge) > 0.002;
 
       if (!lit) {
         // Already settled and nothing has moved: park without redrawing.
@@ -864,6 +873,7 @@ export function GlassLight({
      * pointer still, and not one photon on the glass until it moved.
      */
     const stopCharge = onCharge(wake);
+    const stopFlash = onFlash(wake);
     // A changed setting (the room's brightness, the frost) changes the resting
     // frame too, so it has to be redrawn, not just the lit one.
     const stopTuning = onTuningApplied(() => {
@@ -882,6 +892,7 @@ export function GlassLight({
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
+      stopFlash();
       stopTuning();
       stopLoss();
       gl.deleteProgram(program);

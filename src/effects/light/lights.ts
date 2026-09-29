@@ -18,6 +18,7 @@
 
 import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
 import { t } from "@/lib/tuning";
+import { camera } from "@/effects/camera/camera";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -98,9 +99,98 @@ export const roomLight: Light = {
 /** Every light in the scene. */
 export const lights: readonly Light[] = [cursorLamp, roomLight];
 
-/** The lights that stand at a point (the lamp; later the backlight and the rest). */
+/*
+ * The shutter's flash, as a light (light-system design, item 16).
+ *
+ * A speedlight on the camera, and the camera is the viewer: it stands at the
+ * eye, the camera's distance above the screen, so it lights the whole page
+ * almost evenly (its falloff over a screen is gentle from that high) and
+ * sits face-on to every pane. A little cooler than the lamp, as a xenon tube
+ * is. It burns for one pulse -- full at once, then down with a time
+ * constant of FLASH_DECAY -- and while it burns it is in the light list like
+ * any other light, so the glass, the light through it and the rims all answer
+ * it by the same physics as the lamp. Out of the list the rest of the time.
+ */
+export const FLASH_COLOUR = [0.94, 0.97, 1.0] as const;
+/** Seconds for the flash to fall to 1/e. A speedlight's pulse, eased for the eye. */
+export const FLASH_DECAY = 0.12;
+/** How much stronger than the lamp the flash is. */
+export const FLASH_GAIN = 2.5;
+/** The flash head's radius, CSS px: small beside the lamp's diffuser. */
+export const FLASH_RADIUS = 18;
+
+let flashViewportWidth = 1280;
+export const flashLight: Light = {
+  id: "flash",
+  kind: "point",
+  x: -9999,
+  y: -9999,
+  get height() {
+    return camera.distance(flashViewportWidth);
+  },
+  radius: FLASH_RADIUS,
+  colour: FLASH_COLOUR,
+  get gain() {
+    return t("coreGain") * FLASH_GAIN;
+  },
+  charge: 0,
+};
+
+const flashWatchers = new Set<() => void>();
+/** Wake a pass for every frame of the flash's pulse. */
+export function onFlash(fn: () => void) {
+  flashWatchers.add(fn);
+  return () => flashWatchers.delete(fn);
+}
+
+let flashFrame = 0;
+/**
+ * Fire the flash from the camera: centred on the viewer's eye (the middle of
+ * the viewport, moved by where the eye has followed the pointer).
+ */
+export function fireFlash(x: number, y: number, viewportWidth: number) {
+  if (typeof window === "undefined") return;
+  flashViewportWidth = viewportWidth;
+  flashLight.x = x;
+  flashLight.y = y;
+  const start = performance.now();
+  cancelAnimationFrame(flashFrame);
+  const step = (now: number) => {
+    const charge = Math.exp(-(now - start) / 1000 / FLASH_DECAY);
+    flashLight.charge = charge > 0.01 ? charge : 0;
+    changed();
+    for (const fn of flashWatchers) fn();
+    if (flashLight.charge > 0) flashFrame = requestAnimationFrame(step);
+  };
+  step(start);
+}
+
+/*
+ * Development only: hold the flash at a strength, so a screenshot on a slow
+ * renderer can see what a pulse too short to catch does. 0 puts it out.
+ */
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as { __holdFlash?: unknown }).__holdFlash = (charge: number) => {
+    cancelAnimationFrame(flashFrame);
+    flashViewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    flashLight.x = flashViewportWidth / 2;
+    flashLight.y = (document.documentElement.clientHeight || window.innerHeight) / 2;
+    flashLight.charge = Math.max(0, Math.min(1, charge));
+    changed();
+    for (const fn of flashWatchers) fn();
+  };
+}
+
+/** The lights that stand at a point: the lamp, and the flash while it burns. */
 export function pointLights(): Light[] {
-  return lights.filter((l) => l.kind === "point");
+  const out = lights.filter((l) => l.kind === "point");
+  if (flashLight.charge > 0) out.push(flashLight);
+  return out;
+}
+
+/** How hard the most strongly burning point light is burning: whether to draw at all. */
+export function strongestCharge(): number {
+  return Math.max(cursorLamp.charge, flashLight.charge);
 }
 
 /** The lamp's radiant power, for the passes that work in real units. */

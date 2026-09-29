@@ -21,6 +21,8 @@ export const PREVIEWS = {
   satin: "The front of the glass etched like the back, so reflected room lights are soft glows",
   dimroom:
     "The room's brightest lights (windows, softboxes) compressed so their reflection doesn't clip to white",
+  flash:
+    "The shutter flash is a light in the scene: the glass, the light through it and the rims answer it",
 } as const;
 
 export type PreviewName = keyof typeof PREVIEWS;
