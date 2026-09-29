@@ -35,8 +35,9 @@ const contexts = (page: import("@playwright/test").Page) =>
 async function charge(page: import("@playwright/test").Page) {
   await page.mouse.move(420, 380, { steps: 4 });
   await page.mouse.down();
+  // Generous: under a software renderer one frame of the whole page is seconds.
   await expect(page.locator("canvas.floor-light")).toHaveAttribute("data-dynamic", "", {
-    timeout: 5000,
+    timeout: 10_000,
   });
   await page.waitForTimeout(600);
 }
@@ -59,12 +60,13 @@ test.describe("the light passes share one WebGL context", () => {
   );
 
   test("liquid glass: two contexts, the shared one and the liquid renderer's", async ({ page }) => {
+    test.setTimeout(60_000);
     await countContexts(page);
     await page.goto("/?glass=raster");
     await page.waitForLoadState("networkidle");
     await charge(page);
     // The liquid renderer starts once its scene has been captured.
-    await expect.poll(() => contexts(page), { timeout: 20_000 }).toBe(2);
+    await expect.poll(() => contexts(page), { timeout: 40_000 }).toBe(2);
     await page.waitForTimeout(500);
     expect(await contexts(page)).toBe(2);
   });

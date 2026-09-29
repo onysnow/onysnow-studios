@@ -31,6 +31,7 @@ import { camera } from "@/effects/camera/camera";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { LAMP_REFLECTION_ENABLED } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
+import { discRadiusForBlur, hiddenLightMap, markLightNear } from "@/effects/optics/bokeh";
 
 /**
  * The glass itself: what it does to the photograph behind it, and what it does
@@ -125,6 +126,12 @@ export function GlassLight({
     const uImage = U("uImage");
     const uImageAspect = U("uImageAspect");
     const uHasBackdrop = U("uHasBackdrop");
+    const uHasBokeh = U("uHasBokeh");
+    const uHasBokehBelow = U("uHasBokehBelow");
+    const uImageBox = U("uImageBox");
+    const uImageBelowBox = U("uImageBelowBox");
+    const uBokehRadius = U("uBokehRadius");
+    const uBokehGain = U("uBokehGain");
     const uHasSurface = U("uHasSurface");
     const uGrimeRake = U("uGrimeRake");
     const uGrimeSpecks = U("uGrimeSpecks");
@@ -180,6 +187,8 @@ export function GlassLight({
     gl.uniform1f(uScratchTile, 2048);
     gl.uniform1i(U("uBackdrop"), 1);
     gl.uniform1i(U("uBackdropBelow"), 4);
+    gl.uniform1i(U("uBokeh"), 5);
+    gl.uniform1i(U("uBokehBelow"), 6);
     gl.uniform1f(uHasSurface, 0);
 
     let scale = 1;
@@ -295,6 +304,111 @@ export function GlassLight({
      * refract, rather than taking the whole canvas down with it.
      */
     const backdrops = new Map<string, WebGLTexture | null>();
+    /*
+     * And the light each photograph clipped (effects/optics/bokeh), which the
+     * frost spreads into the discs. Square and a power of two so it can be
+     * mipmapped: the shader reads it at the level of its taps' spacing. The
+     * stretch does not matter, it is read by the same uv as the photograph.
+     */
+    let disposed = false;
+    const HIDDEN_SIZE = 512;
+    // How far a disc can reach, in map texels: an eighth of the photograph,
+    // which covers the widest disc on a photograph drawn up to ~2400 px wide.
+    const HIDDEN_REACH = HIDDEN_SIZE / 8;
+    const NEIGHBOURHOODS = 24;
+    const hidden = new Map<string, WebGLTexture | null>();
+    const hiddenLightTexture = (img: HTMLImageElement): WebGLTexture | null => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = c.height = HIDDEN_SIZE;
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        if (!ctx) return null;
+        ctx.drawImage(img, 0, 0, HIDDEN_SIZE, HIDDEN_SIZE);
+        const data = ctx.getImageData(0, 0, HIDDEN_SIZE, HIDDEN_SIZE).data;
+        // Each pixel's neighbourhood: the photograph shrunk to a few dozen
+        // cells and smoothly stretched back.
+        const small = document.createElement("canvas");
+        small.width = small.height = NEIGHBOURHOODS;
+        small.getContext("2d")?.drawImage(img, 0, 0, NEIGHBOURHOODS, NEIGHBOURHOODS);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(small, 0, 0, HIDDEN_SIZE, HIDDEN_SIZE);
+        const around = ctx.getImageData(0, 0, HIDDEN_SIZE, HIDDEN_SIZE).data;
+        const map = markLightNear(hiddenLightMap(data, around), HIDDEN_SIZE, HIDDEN_REACH);
+        const tex = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          HIDDEN_SIZE,
+          HIDDEN_SIZE,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          new Uint8Array(map.buffer),
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        return tex;
+      } catch {
+        // A photograph the page may not read (no CORS): no discs, nothing else lost.
+        return null;
+      }
+    };
+    /*
+     * How wide the discs are: as wide as the blur the pane shows (a disc of
+     * radius 2 sigma spreads like a Gaussian of sigma). Read once per pane;
+     * liquid glass takes the pane's backdrop-filter off, so it falls back to
+     * the stylesheet's value.
+     */
+    /*
+     * The hidden light is a few tens of milliseconds of pixel work per
+     * photograph: done one photograph per idle moment, not on top of the
+     * load, and the pass woken ONCE when the queue is empty -- a redraw of
+     * every pane per photograph was a second of work each on a slow machine.
+     */
+    const hiddenQueue: [string, HTMLImageElement][] = [];
+    let hiddenScheduled = false;
+    const whenIdle = (fn: () => void) =>
+      typeof window.requestIdleCallback === "function"
+        ? window.requestIdleCallback(fn, { timeout: 3000 })
+        : setTimeout(fn, 200);
+    const buildNextHidden = () => {
+      hiddenScheduled = false;
+      if (disposed) return;
+      const next = hiddenQueue.shift();
+      if (next) hidden.set(next[0], hiddenLightTexture(next[1]));
+      if (hiddenQueue.length > 0) {
+        hiddenScheduled = true;
+        whenIdle(buildNextHidden);
+      } else {
+        restingDrawn = false;
+        wake();
+      }
+    };
+    const queueHidden = (src: string, img: HTMLImageElement) => {
+      hiddenQueue.push([src, img]);
+      if (!hiddenScheduled) {
+        hiddenScheduled = true;
+        whenIdle(buildNextHidden);
+      }
+    };
+    const PANE_BLUR_FALLBACK = 30;
+    const blurOf = new WeakMap<HTMLElement, number>();
+    const paneBlur = (el: HTMLElement) => {
+      let b = blurOf.get(el);
+      if (b === undefined) {
+        const m = /blur\(([\d.]+)px\)/.exec(getComputedStyle(el).backdropFilter || "");
+        b = m ? Number(m[1]) : PANE_BLUR_FALLBACK;
+        blurOf.set(el, b);
+      }
+      return b;
+    };
     const requestBackdrop = (src: string) => {
       if (backdrops.has(src)) return backdrops.get(src) ?? null;
       backdrops.set(src, null);
@@ -310,6 +424,7 @@ export function GlassLight({
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         backdrops.set(src, tex);
+        queueHidden(src, img);
       };
       img.src = src;
       return null;
@@ -438,6 +553,7 @@ export function GlassLight({
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uRestEdge, t("restEdge"));
       gl.uniform1f(uEdgeBloom, camera.lens.edgeBloom);
+      gl.uniform1f(uBokehGain, camera.bokeh);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       /*
        * The lamp's power reaches the arris glints whatever the switch says;
@@ -471,6 +587,20 @@ export function GlassLight({
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.uniform1f(uHasBackdrop, texture ? 1 : 0);
+        const clipped = pane.src ? (hidden.get(pane.src) ?? null) : null;
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, clipped);
+        gl.uniform1f(uHasBokeh, clipped ? 1 : 0);
+        gl.uniform4f(uImageBox, pane.ibox.x, pane.ibox.y, pane.ibox.w, pane.ibox.h);
+        const clippedBelow = pane.below ? (hidden.get(pane.below.src) ?? null) : null;
+        gl.activeTexture(gl.TEXTURE6);
+        gl.bindTexture(gl.TEXTURE_2D, clippedBelow);
+        gl.uniform1f(uHasBokehBelow, clippedBelow ? 1 : 0);
+        if (pane.below) {
+          const b = pane.below.box;
+          gl.uniform4f(uImageBelowBox, b.x, b.y, b.w, b.h);
+        }
+        gl.uniform1f(uBokehRadius, discRadiusForBlur(paneBlur(pane.el)));
         // The photograph the bottom side face looks down at.
         const below = pane.below ? requestBackdrop(pane.below.src) : null;
         gl.activeTexture(gl.TEXTURE4);
@@ -748,6 +878,7 @@ export function GlassLight({
     );
 
     return () => {
+      disposed = true;
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
@@ -758,6 +889,7 @@ export function GlassLight({
       for (const tex of layers.values()) gl.deleteTexture(tex);
       if (room) gl.deleteTexture(room);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
+      for (const tex of hidden.values()) if (tex) gl.deleteTexture(tex);
     };
   }, [chargeRef, positionRef, generation]);
 

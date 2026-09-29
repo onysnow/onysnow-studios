@@ -135,6 +135,7 @@
   letter-spacing: 0.2em;
   color: var(--color-primary);
 }
+/* The glass shader dims the lights' bokeh by this same shadow: effects/optics/bokeh PHOTO_VIGNETTE. Change both together. */
 @utility image-vignette {
   box-shadow: inset 0 0 9rem 1rem oklch(0.08 0.01 55 / 70%);
 }
@@ -1115,8 +1116,7 @@ html[data-try~="shadows"] .glass blockquote {
 
 html[data-try~="shadows"] .plastic::before {
   /* The same model: its own standoff, its own growth, no fractions. */
-  transform: translate(var(--cast-x, 0px), var(--cast-y, 0px))
-    scale(var(--cast-scale, 1));
+  transform: translate(var(--cast-x, 0px), var(--cast-y, 0px)) scale(var(--cast-scale, 1));
   filter: blur(var(--cast-blur, 0px));
 }
 

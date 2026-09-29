@@ -112,6 +112,17 @@ export const tuning: Record<string, Knob> = {
     step: 0.05,
     hint: "0 is a fixed eye straight in front of the screen; 1 puts the eye right over the pointer. The photographs behind the glass slide under it by the parallax of the glass's height -- which is how you see the edge bend them.",
   },
+  // How much light the photograph's blown highlights are taken to have held
+  // (effects/optics/bokeh). Their size follows the frost; this is brightness.
+  bokeh: {
+    label: "Bokeh",
+    group: "Camera",
+    value: 40,
+    min: 0,
+    max: 200,
+    step: 5,
+    hint: "How bright the discs are that the lights in a photograph make behind frosted glass: how many times more light a blown-out bulb held than the file could store. 0 turns the discs off. Their size is the frost's.",
+  },
   // ---- The rasterised glass ----
   //
   // These are the shader's own uniforms, not CSS. They only do anything in
@@ -1065,6 +1076,17 @@ export function applyTuning() {
   }
   applyGlassConfig();
   for (const fn of appliedListeners) fn();
+}
+
+// Development only: set a knob from a test rig or the console, as the lab would.
+if (import.meta.env?.DEV && typeof window !== "undefined") {
+  (window as unknown as { __setKnob?: unknown }).__setKnob = (key: string, value: number) => {
+    const knob = tuning[key];
+    if (!knob) return false;
+    knob.value = value;
+    applyTuning();
+    return true;
+  };
 }
 
 /*

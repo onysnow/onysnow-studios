@@ -128,7 +128,8 @@ test.describe("glass", () => {
     await expect(floor).toHaveAttribute("data-dynamic", "idle");
     await page.mouse.move(400, 400, { steps: 3 });
     await page.mouse.down();
-    await expect(floor).toHaveAttribute("data-dynamic", "", { timeout: 5000 });
+    // Generous: under a software renderer one frame of the whole page is seconds.
+    await expect(floor).toHaveAttribute("data-dynamic", "", { timeout: 10_000 });
     await page.mouse.up();
     // A hold past 2.6 s arms the shutter, which stays lit until a click spends
     // it (lib/shutter-charge); a slow runner can get there. Spend it.

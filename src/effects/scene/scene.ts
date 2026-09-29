@@ -109,8 +109,10 @@ export type GlassRect = {
   ih: number;
   /** Intrinsic aspect, for the object-fit: cover mapping. */
   ia: number;
+  /** The box the photograph shows in: its section, which clips it. */
+  ibox: Box;
   /** The photograph BELOW the pane, which its bottom side face reflects. */
-  below: { src: string; x: number; y: number; w: number; h: number; a: number } | null;
+  below: { src: string; x: number; y: number; w: number; h: number; a: number; box: Box } | null;
   /** What this pane is, as <Pane> declared it (effects/materials/pane-causes). */
   causes: PaneCauses;
   /**
@@ -304,7 +306,11 @@ export function paneSideHeights(
  * 2. Read
  * ====================================================================== */
 
-type ImageReading = { img: HTMLImageElement; rect: DOMRect };
+/** A photograph, where it is drawn, and the box it shows in (its section, which clips it). */
+/** A rectangle on the page, CSS px. */
+type Box = { x: number; y: number; w: number; h: number };
+
+type ImageReading = { img: HTMLImageElement; rect: DOMRect; box: DOMRect };
 
 type PaneReading = {
   el: HTMLElement;
@@ -338,7 +344,9 @@ type SceneReading = {
 };
 
 function readImage(img: HTMLImageElement | null): ImageReading | null {
-  return img ? { img, rect: img.getBoundingClientRect() } : null;
+  if (!img) return null;
+  const rect = img.getBoundingClientRect();
+  return { img, rect, box: img.closest("[data-photo]")?.getBoundingClientRect() ?? rect };
 }
 
 function readPane(el: HTMLElement, withOffsets = true): PaneReading {
@@ -420,7 +428,7 @@ function invalidate() {
 
 function imageFields(reading: ImageReading | null) {
   if (!reading) return null;
-  const { img, rect } = reading;
+  const { img, rect, box } = reading;
   return {
     src: smallestVariant(img),
     x: rect.left,
@@ -428,6 +436,7 @@ function imageFields(reading: ImageReading | null) {
     w: rect.width,
     h: rect.height,
     a: img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+    box: { x: box.left, y: box.top, w: box.width, h: box.height },
   };
 }
 
@@ -500,6 +509,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       iw: above?.w ?? 1,
       ih: above?.h ?? 1,
       ia: above?.a ?? 1,
+      ibox: above?.box ?? { x: 0, y: 0, w: 0, h: 0 },
       below: imageFields(p.below),
       causes: stacked.get(p.el)?.causes ?? p.causes,
       stack: stacked.get(p.el)?.stack ?? { ...SINGLE, zBottom: p.causes.gap },

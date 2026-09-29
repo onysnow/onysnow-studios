@@ -5,6 +5,7 @@ import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
+import { BOKEH_GLSL } from "@/effects/optics/bokeh.glsl";
 
 /**
  * Fragment shader for one pane of glass.
@@ -124,6 +125,16 @@ uniform sampler2D uBackdrop;  // the photograph behind this pane
 uniform float uHasBackdrop;
 uniform vec4  uImage;         // x, y, w, h of the image element, CSS pixels
 uniform float uImageAspect;   // intrinsic width / height
+// The light the photograph clipped, and the disc the frost spreads it over
+// (effects/optics/bokeh).
+uniform sampler2D uBokeh;       // the photograph above's hidden light
+uniform float uHasBokeh;
+uniform vec4  uImageBox;       // the box it shows in (its section)
+uniform sampler2D uBokehBelow;  // and the photograph below's, for a band on a seam
+uniform float uHasBokehBelow;
+uniform vec4  uImageBelowBox;
+uniform float uBokehRadius;   // CSS px
+uniform float uBokehGain;     // the "Bokeh" knob
 /*
  * The photograph BELOW the pane, for a band on a seam between two: its bottom
  * side face looks down at it. The same image as uBackdrop otherwise.
@@ -229,6 +240,8 @@ vec2 coverUv(vec2 pt, vec4 image, float aspect) {
     : vec2(aspect / boxAspect, 1.0);
   return (rel - 0.5) / scale + 0.5;
 }
+
+${BOKEH_GLSL}
 
 void main() {
   // gl_FragCoord counts up from the bottom; the page counts down from the top.
@@ -805,6 +818,25 @@ void main() {
     texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
   );
   colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
+
+  /*
+   * ---- Bokeh ----
+   *
+   * The light behind the pane that the photograph's file clipped, spread by
+   * the frost over the aperture's hexagon (effects/optics/bokeh). It is the
+   * photograph's own light, so it does not wait for the lamp, and it is only
+   * seen through the face.
+   */
+  if (uHasBokeh + uHasBokehBelow > 0.5 && uBokehGain > 0.0 && uGlowOnly < 0.5) {
+    vec3 discs = vec3(0.0);
+    if (uHasBokeh > 0.5) {
+      discs += bokehAt(uBokeh, frag, uImage, uImageAspect, uImageBox, uBokehRadius, uScale);
+    }
+    if (uHasBokehBelow > 0.5) {
+      discs += bokehAt(uBokehBelow, frag, uImageBelow, uImageBelowAspect, uImageBelowBox, uBokehRadius, uScale);
+    }
+    colour += inside * uBokehGain * discs;
+  }
 
   colour = toneMapGlass(colour);
 
