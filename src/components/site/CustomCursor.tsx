@@ -1,4 +1,4 @@
-import { reportCharge } from "@/effects/light/lights";
+import { claimLamp, moveLamp, reportCharge } from "@/effects/light/lights";
 import { addTask, ease, ORDER } from "@/effects/engine/scheduler";
 import { mountPerfPanel } from "@/effects/engine/perf";
 import { CameraIris } from "./CameraIris";
@@ -270,10 +270,13 @@ export function CustomCursor() {
       // The shader reads these; it runs its own loop.
       lightPos.current.x = ringX;
       lightPos.current.y = ringY;
+      // And the whole scene lights from here: the lamp is where it is drawn.
+      moveLamp(ringX, ringY);
       return !arrived;
     };
     follow = addTask("cursor", ORDER.input, tick);
     follow.wake();
+    const releaseLamp = claimLamp();
 
     window.addEventListener("pointermove", onMove, { passive: true });
     document.addEventListener("pointerleave", onLeave);
@@ -440,6 +443,7 @@ export function CustomCursor() {
     window.addEventListener("click", onClick, true);
 
     return () => {
+      releaseLamp();
       charger.stop();
       window.removeEventListener("click", onClick, true);
       follow?.stop();
