@@ -67,4 +67,20 @@ export function writeSurfaceLight(el: HTMLElement, r: Box, lamp: Light, light: S
   // emitter's radius less its glow, about two fifths of its size.
   el.style.setProperty("--lamp-core", `${(lamp.radius * 0.35).toFixed(1)}px`);
   el.style.setProperty("--lit-angle", `${light.angle.toFixed(1)}deg`);
+  el.style.setProperty("--lit-over", litOver(r, lamp).toFixed(3));
+}
+
+/**
+ * How squarely the lamp is over a surface, 0 to 1: 1 with the lamp's centre
+ * on it, falling to 0 as the lamp moves off it by half the lamp's radius. A
+ * glossy sheet (the plastic) shows the lamp only when the lamp is over it --
+ * its face is a mirror seen straight on, and a mirror shows what is in front
+ * of it, not what is beside it.
+ */
+export function litOver(r: Box, lamp: Pick<Light, "x" | "y" | "radius">): number {
+  const dx = Math.max(r.left - lamp.x, 0, lamp.x - (r.left + r.width));
+  const dy = Math.max(r.top - lamp.y, 0, lamp.y - (r.top + r.height));
+  const reach = Math.max(lamp.radius * 0.5, 8);
+  const t = Math.min(1, Math.hypot(dx, dy) / reach);
+  return 1 - t * t * (3 - 2 * t);
 }

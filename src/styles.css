@@ -1081,32 +1081,27 @@ html[data-try~="shadows"] .glass blockquote {
  * Plastic: the orange buttons.
  *
  * A thin sheet of glossy, translucent orange plastic resting on the glass.
- * What the lamp does to it follows from what it is:
+ * What the lamp does to it follows from what it is -- and all of it happens
+ * only with the lamp OVER the button (Ony, 2026-09-29: "the light would only
+ * appear if the cursor is right on top of it"). --lit-over is how squarely
+ * the lamp is over it (effects/adapters/css-vars litOver), times the lamp
+ * being lit at all (--lit-on).
  *
- *   LIGHT THROUGH IT. Coloured plastic is a filter, like a stage-lighting gel:
- *   the pigment absorbs blue and green and passes red and orange. With the
- *   lamp over it, the light that gets through lands on whatever is behind it
- *   as ORANGE LIGHT -- the button's shape, projected. Not a shadow. It lands
- *   thrown away from the lamp by the same cast vector every surface on the
- *   pane uses (half a print's stand-off), as soft as the lamp's size makes
- *   it, and brighter the closer and more lit the lamp is. Straight overhead
- *   the patch is right behind the button and shows as an orange glow round
- *   its edges; off to one side it slides out from under it. The two faces are
- *   flat and parallel, so the light is coloured but never bent: no band, no
- *   seam, no caustic.
+ *   SPECULAR. The face is glossy: it mirrors the lamp's bright core as a
+ *   small, sharp highlight exactly where the lamp is over it -- the camera
+ *   looks straight on, so that is where the reflection geometry puts it.
  *
- *   SPECULAR. The face is glossy: it mirrors the lamp's bright core as a small,
- *   sharp highlight exactly where the lamp is over it (the camera looks
- *   straight on, so that is where the reflection geometry puts it), about 4%
- *   of the core's brightness -- which, the core being many times white, is a
- *   near-white spot. The rounded edge facing the lamp catches it too, as a
- *   thin rim that keeps its highlight from wider angles than the flat face.
+ *   LIGHT THROUGH IT, AND THE EDGE'S SHADOW. Coloured plastic is a filter:
+ *   it passes orange. The light through the flat sheet lands behind it as a
+ *   MILD orange glow, a little wider than the button (the lamp is close, so
+ *   the projection is magnified). The rounded edge does not pass it on --
+ *   it bends it away -- so the glow is ringed by the edge's shadow, a thin
+ *   dark line hugging the button, before the orange shows beyond it.
  *
- * This replaces a generic drop shadow (shadow-lg), and then an orange shadow,
- * which was the wrong idea: a filter passes coloured light, it does not cast
- * a coloured darkness.
+ *   THE RIM. The rounded edge facing the lamp catches it as a thin line.
  */
 .plastic {
+  --plastic-on: calc(var(--lit-over, 0) * var(--lit-on, 0));
   position: relative;
   background-image: radial-gradient(
     circle calc(var(--lamp-core, 16px) * 1.6) at var(--lit-x, -999px) var(--lit-y, -999px),
@@ -1116,21 +1111,25 @@ html[data-try~="shadows"] .glass blockquote {
     transparent 100%
   );
   background-repeat: no-repeat;
+  /* The edge's shadow: the light the rounded edge bent away, a thin dark line round it. */
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / calc(0.45 * var(--plastic-on))),
+    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on)));
 }
 
-/* The orange light the lamp throws through it, onto what is behind. */
+/* The orange light the lamp throws through it, onto what is behind: mild, a little wider than the button. */
 .plastic::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -7px;
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
   background: oklch(0.8 0.17 58);
   transform: translate(calc(var(--cast-x, 0px) * 0.5), calc(var(--cast-y, 0px) * 0.5));
-  filter: blur(calc(var(--cast-blur, 0px) * 0.5 + 3px));
+  filter: blur(calc(var(--cast-blur, 0px) * 0.5 + 5px));
   mix-blend-mode: plus-lighter;
-  opacity: calc(var(--cast-alpha, 0) * 1.4);
+  opacity: calc(var(--plastic-on) * 0.28);
 }
 
 html[data-try~="shadows"] .plastic::before {
@@ -1149,7 +1148,7 @@ html[data-try~="shadows"] .plastic::before {
   pointer-events: none;
   background: linear-gradient(
     var(--lit-angle, 180deg),
-    rgb(255 255 255 / calc(0.14 + 0.75 * var(--lit-on, 0) * var(--lit-near, 0))) 0%,
+    rgb(255 255 255 / calc(0.14 + 0.75 * var(--plastic-on))) 0%,
     rgb(255 255 255 / 0.06) 40%,
     transparent 65%
   );
