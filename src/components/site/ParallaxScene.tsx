@@ -39,8 +39,21 @@ const SCRIM = {
  * Parallax is switched off under `prefers-reduced-motion` and on small screens,
  * where the effect tends to stutter and costs more than it gives.
  */
+/**
+ * How wide the photograph is drawn, for its srcset. Not "100vw": it covers a
+ * box 128% as tall as a section that is itself most of a screen or more, so
+ * a wide photograph is drawn well past the screen's width, and "100vw" had the
+ * browser fetch a file smaller than that and stretch it. About 1.1 screens tall
+ * times 1.28 times the photograph's shape covers every section here.
+ */
+function sceneSizes(image: ImgSource | null | undefined): string {
+  const aspect = image?.width && image.height ? image.width / image.height : 1.5;
+  return `max(100vw, ${(140 * aspect).toFixed(1)}vh)`;
+}
+
 export function ParallaxScene({
   image,
+  focus,
   children,
   depth = "standard",
   scrim = "bottom",
@@ -48,6 +61,8 @@ export function ParallaxScene({
   className,
 }: {
   image: ImgSource | null | undefined;
+  /** The focal point chosen for this spot in the Studio (lib/page-photos). */
+  focus?: { x: number; y: number } | null | undefined;
   children?: ReactNode;
   depth?: keyof typeof DEPTH;
   scrim?: keyof typeof SCRIM;
@@ -104,8 +119,9 @@ export function ParallaxScene({
             <Img
               image={image}
               className="h-[128%] w-full"
-              sizes="100vw"
+              sizes={sceneSizes(image)}
               imgClassName="object-cover"
+              focus={focus}
             />
           </div>
         </motion.div>

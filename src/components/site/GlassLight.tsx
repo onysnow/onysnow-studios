@@ -123,7 +123,7 @@ export function GlassLight({
     const uThickness = U("uThickness");
     const uSeed = U("uSeed");
     const uImage = U("uImage");
-    const uImageAspect = U("uImageAspect");
+    const uImageFit = U("uImageFit");
     const uHasBackdrop = U("uHasBackdrop");
     const uHasBokeh = U("uHasBokeh");
     const uHasBokehBelow = U("uHasBokehBelow");
@@ -138,7 +138,7 @@ export function GlassLight({
     const uGap = U("uGap");
     const uHasBelow = U("uHasBelow");
     const uImageBelow = U("uImageBelow");
-    const uImageBelowAspect = U("uImageBelowAspect");
+    const uImageBelowFit = U("uImageBelowFit");
     const uRestEdge = U("uRestEdge");
     const uGlowOnly = U("uGlowOnly");
     const uEdgeBloom = U("uEdgeBloom");
@@ -607,7 +607,7 @@ export function GlassLight({
         gl.uniform1f(uHasBelow, below ? 1 : 0);
         if (pane.below) {
           gl.uniform4f(uImageBelow, pane.below.x, pane.below.y, pane.below.w, pane.below.h);
-          gl.uniform1f(uImageBelowAspect, pane.below.a);
+          gl.uniform3f(uImageBelowFit, pane.below.a, pane.below.focus.x, pane.below.focus.y);
         }
 
         gl.uniform4f(uRect, pane.x, pane.y, pane.w, pane.h);
@@ -676,7 +676,7 @@ export function GlassLight({
         gl.uniform1f(uGrimeSpecks, t("grimeSpecks") * scratch);
         gl.uniform1f(uSeed, pane.s);
         gl.uniform4f(uImage, pane.ix, pane.iy, pane.iw, pane.ih);
-        gl.uniform1f(uImageAspect, pane.ia);
+        gl.uniform3f(uImageFit, pane.ia, pane.ifocus.x, pane.ifocus.y);
 
         /*
          * What is standing on this pane, as shapes the shader can test.

@@ -108,10 +108,21 @@ export type GlassRect = {
   ih: number;
   /** Intrinsic aspect, for the object-fit: cover mapping. */
   ia: number;
+  /** Its object-position, 0..1 each way: the focal point it is framed on. */
+  ifocus: Focus;
   /** The box the photograph shows in: its section, which clips it. */
   ibox: Box;
   /** The photograph BELOW the pane, which its bottom side face reflects. */
-  below: { src: string; x: number; y: number; w: number; h: number; a: number; box: Box } | null;
+  below: {
+    src: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    a: number;
+    focus: Focus;
+    box: Box;
+  } | null;
   /** What this pane is, as <Pane> declared it (effects/materials/pane-causes). */
   causes: PaneCauses;
   /**
@@ -458,6 +469,27 @@ function invalidate() {
   version += 1;
 }
 
+/** A photograph's framing point, 0..1 each way from its top-left. */
+export type Focus = { x: number; y: number };
+const CENTRED: Focus = { x: 0.5, y: 0.5 };
+
+/**
+ * Where a photograph is framed: its inline object-position, which is where a
+ * chosen focal point is put (components/site/Img `focus`). Read off the
+ * element's own style, not the computed one, so it costs nothing per frame;
+ * a picture framed only by a stylesheet class reads as centred, and those are
+ * phone-only, where the glass is not drawn.
+ */
+export function focusOf(img: HTMLImageElement): Focus {
+  const parts = img.style.objectPosition.trim().split(/\s+/);
+  const at = (v: string | undefined) => {
+    if (!v?.endsWith("%")) return 0.5;
+    const n = Number.parseFloat(v) / 100;
+    return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
+  };
+  return parts[0] ? { x: at(parts[0]), y: at(parts[1] ?? parts[0]) } : CENTRED;
+}
+
 function imageFields(reading: ImageReading | null) {
   if (!reading) return null;
   const { img, rect, box } = reading;
@@ -468,6 +500,7 @@ function imageFields(reading: ImageReading | null) {
     w: rect.width,
     h: rect.height,
     a: img.naturalHeight > 0 ? img.naturalWidth / img.naturalHeight : 1,
+    focus: focusOf(img),
     box: { x: box.left, y: box.top, w: box.width, h: box.height },
   };
 }
@@ -541,6 +574,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       iw: above?.w ?? 1,
       ih: above?.h ?? 1,
       ia: above?.a ?? 1,
+      ifocus: above?.focus ?? CENTRED,
       ibox: above?.box ?? { x: 0, y: 0, w: 0, h: 0 },
       below: imageFields(p.below),
       causes: stacked.get(p.el)?.causes ?? p.causes,
