@@ -1004,6 +1004,32 @@ export function loadSavedTuning() {
   applyTuning();
 }
 
+/**
+ * The site's published tuning: the site_settings row the lab writes, which
+ * every visitor's browser applies (components/site/CustomCss). What Ony sets
+ * in /lab is how the site looks for everyone.
+ */
+export const SITE_TUNING_KEY = "effect_tuning";
+
+/**
+ * Apply the published tuning: back to the source's values, then the knobs
+ * the lab moved. An empty or unreadable value leaves the source's values.
+ */
+export function applySiteTuning(raw: string | undefined | null) {
+  resetTuning(TUNING_DEFAULTS);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (parsed["v"] === SAVED_TUNING_VERSION) {
+        restoreTuning(parsed as Parameters<typeof restoreTuning>[0]);
+      }
+    } catch {
+      // A malformed row is not a reason to fail to render the site.
+    }
+  }
+  applyTuning();
+}
+
 /** The shape the lab saves now: only the knobs that were moved. */
 export const SAVED_TUNING_VERSION = 2;
 

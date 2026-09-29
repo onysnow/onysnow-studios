@@ -112,3 +112,10 @@ test.describe("/lab", () => {
     expect(html).toMatch(/<meta[^>]+name="robots"[^>]+noindex/);
   });
 });
+
+test("says whether changes are saved for every visitor", async ({ page }) => {
+  await page.goto("/lab");
+  await page.waitForLoadState("networkidle");
+  // Signed out in a test browser: it must not pretend to publish.
+  await expect(page.locator("[data-lab-save]")).toContainText("Sign in as the admin");
+});

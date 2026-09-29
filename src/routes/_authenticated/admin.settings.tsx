@@ -6,6 +6,7 @@ import { Save } from "lucide-react";
 import { AdminHeading } from "@/components/admin/AdminHeading";
 import { adminSettingsQuery, updateRow } from "@/lib/admin";
 import { uploadSiteAsset } from "@/lib/image-upload";
+import { SITE_TUNING_KEY } from "@/lib/tuning";
 import { useContentRefresh } from "@/hooks/use-admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -164,7 +165,8 @@ function SettingsPage() {
   }
 
   // Custom CSS has its own editor under Advanced.
-  const rows = (settings.data ?? []).filter((s) => s.kind !== "css");
+  // The lab's published tuning is edited in /lab, not here (SITE_TUNING_KEY).
+  const rows = (settings.data ?? []).filter((s) => s.kind !== "css" && s.key !== SITE_TUNING_KEY);
   const dirty = Object.keys(drafts).length > 0;
 
   return (

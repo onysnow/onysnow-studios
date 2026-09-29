@@ -117,3 +117,23 @@ describe("the lab's saved tuning", () => {
     }
   });
 });
+
+describe("the site's published tuning", () => {
+  it("applies the moved knobs over the source's values, for everyone", async () => {
+    const mod = await import("./tuning");
+    mod.applySiteTuning(
+      JSON.stringify({ v: 2, css: { edgeBloom: 0.4 }, raster: { edgeBloom: 0.4 } }),
+    );
+    expect(mod.t("edgeBloom")).toBe(0.4);
+    // A later publish that no longer moves it puts the source's value back.
+    mod.applySiteTuning(JSON.stringify({ v: 2, css: {}, raster: {} }));
+    expect(mod.t("edgeBloom")).toBe(mod.TUNING_DEFAULTS["edgeBloom"]);
+  });
+
+  it("ignores an empty or malformed row", async () => {
+    const mod = await import("./tuning");
+    mod.applySiteTuning("");
+    mod.applySiteTuning("{not json");
+    expect(mod.t("edgeBloom")).toBe(mod.TUNING_DEFAULTS["edgeBloom"]);
+  });
+});
