@@ -155,8 +155,33 @@ export function FloorLight() {
       }
       return layer;
     };
+    /*
+     * What stands above this canvas but lies on the floor all the same (the
+     * footer's photo strip, [data-floor-receiver]): the floor light is drawn
+     * onto it too, in a layer over it, so the lamp's light and the glass's
+     * shadows reach it as they reach the photographs (2m).
+     */
+    const received = new Map<HTMLElement, HTMLCanvasElement>();
+    const receiverFor = (el: HTMLElement, w: number, h: number) => {
+      let layer = received.get(el);
+      if (!layer || !layer.isConnected) {
+        layer = document.createElement("canvas");
+        layer.className = "floor-received";
+        layer.setAttribute("aria-hidden", "true");
+        el.appendChild(layer);
+        received.set(el, layer);
+      }
+      if (layer.width !== w || layer.height !== h) {
+        layer.width = w;
+        layer.height = h;
+      }
+      return layer;
+    };
     const clearUnder = () => {
       for (const layer of under.values()) {
+        layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
+      }
+      for (const layer of received.values()) {
         layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
       }
     };
@@ -327,6 +352,25 @@ export function FloorLight() {
         }
       }
 
+      // The floor that lies above this canvas: the same light, drawn onto it.
+      for (const el of document.querySelectorAll<HTMLElement>("[data-floor-receiver]")) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > vh || r.width < 1 || r.height < 1) continue;
+        const w = Math.max(1, Math.round(r.width * scale));
+        const h = Math.max(1, Math.round(r.height * scale));
+        const layer = receiverFor(el, w, h);
+        const ctx = layer.getContext("2d");
+        if (!ctx) continue;
+        ctx.clearRect(0, 0, w, h);
+        const sx = r.left * scale;
+        const sy = r.top * scale;
+        const cx = Math.max(0, Math.floor(sx));
+        const cy = Math.max(0, Math.floor(sy));
+        const cw = Math.min(buffer.width, Math.ceil(sx + w)) - cx;
+        const ch = Math.min(buffer.height, Math.ceil(sy + h)) - cy;
+        if (cw > 0 && ch > 0) ctx.drawImage(buffer, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
+      }
+
       /*
        * And then taken OUT of the page-wide canvas under each pane.
        *
@@ -375,6 +419,7 @@ export function FloorLight() {
       stopCharge();
       stopFlash();
       for (const layer of under.values()) layer.remove();
+      for (const layer of received.values()) layer.remove();
       for (const tex of layers.values()) gl.deleteTexture(tex);
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
