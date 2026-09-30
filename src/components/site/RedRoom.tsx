@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { previewing } from "@/effects/engine/preview";
-import { enterRedRoom, leaveRedRoom, onRedRoom, redRoomOn } from "@/effects/secrets/red-room";
+import {
+  enterRedRoom,
+  leaveRedRoom,
+  onRedRoom,
+  redRoomOn,
+  redRoomPrint,
+} from "@/effects/secrets/red-room";
+import { HangingPrint } from "./HangingPrint";
 import { SHUTTER_EVENT } from "@/lib/shutter-event";
 
 /** The loupe's radius, CSS px: about a 4x loupe's field at arm's length. */
@@ -27,8 +34,16 @@ export function RedRoom() {
     const onShutter = (e: Event) => {
       const at = (e as CustomEvent<{ x: number; y: number } | undefined>).detail;
       if (!at) return;
-      const hit = document.elementsFromPoint(at.x, at.y).some((n) => n.closest("[data-photo]"));
-      if (hit && !redRoomOn()) enterRedRoom();
+      const photo = document
+        .elementsFromPoint(at.x, at.y)
+        .map((n) => n.closest("[data-photo]"))
+        .find((n): n is Element => !!n);
+      if (!photo || redRoomOn()) return;
+      // The sharp picture, not a blurred stand-in: the largest one that is loaded.
+      const img = [...photo.querySelectorAll("img")]
+        .filter((i) => (i.currentSrc || i.src) && !(i.currentSrc || i.src).startsWith("data:"))
+        .sort((x, y) => y.naturalWidth * y.naturalHeight - x.naturalWidth * x.naturalHeight)[0];
+      enterRedRoom(img ? img.currentSrc || img.src : null);
     };
     window.addEventListener(SHUTTER_EVENT, onShutter);
     return () => {
@@ -75,6 +90,7 @@ export function RedRoom() {
       <div ref={wash} className="red-room red-room__negative" style={loupe} aria-hidden="true" />
       <div ref={tint} className="red-room red-room__safelight" style={loupe} aria-hidden="true" />
       <div ref={ring} className="red-room__loupe" style={loupe} aria-hidden="true" />
+      {redRoomPrint() && <HangingPrint src={redRoomPrint()!} />}
       <button type="button" className="red-room__leave" onClick={() => leaveRedRoom()}>
         Lights on
       </button>

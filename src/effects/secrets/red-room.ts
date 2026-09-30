@@ -22,6 +22,7 @@ export const SAFELIGHT_COLOUR = [1.0, 0.1, 0.03] as const;
 const FOUND_KEY = "onysnow:secret-redroom";
 
 let active = false;
+let print: string | null = null;
 const watchers = new Set<(on: boolean) => void>();
 
 /** Whether the room is lit by the safelight now. */
@@ -46,8 +47,14 @@ function set(on: boolean) {
   for (const fn of watchers) fn(on);
 }
 
-/** Into the darkroom: the room is found. */
-export function enterRedRoom() {
+/** The photograph that was taken to get in, hanging on the line (item 40). */
+export function redRoomPrint(): string | null {
+  return print;
+}
+
+/** Into the darkroom: the room is found; `photo` is the picture that was taken, to hang. */
+export function enterRedRoom(photo?: string | null) {
+  print = photo ?? null;
   try {
     localStorage.setItem(FOUND_KEY, "1");
   } catch {
