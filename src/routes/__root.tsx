@@ -27,6 +27,7 @@ import { CustomCss } from "@/components/site/CustomCss";
 import { listenForLabDraft, reportLabPath } from "@/lib/lab-bridge";
 import { Magnifier } from "@/components/site/Magnifier";
 import { FlareTorch } from "@/components/site/FlareTorch";
+import { LaserDot } from "@/components/site/LaserDot";
 import { previewing } from "@/effects/engine/preview";
 import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
@@ -139,12 +140,21 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 function ToolsIfTried() {
-  const [on, setOn] = useState({ magnifier: false, flare: false });
-  useEffect(() => setOn({ magnifier: previewing("magnifier"), flare: previewing("flare") }), []);
+  const [on, setOn] = useState({ magnifier: false, flare: false, laser: false });
+  useEffect(
+    () =>
+      setOn({
+        magnifier: previewing("magnifier"),
+        flare: previewing("flare"),
+        laser: previewing("laser"),
+      }),
+    [],
+  );
   return (
     <>
       {on.magnifier ? <Magnifier /> : null}
       {on.flare ? <FlareTorch /> : null}
+      {on.laser ? <LaserDot /> : null}
     </>
   );
 }

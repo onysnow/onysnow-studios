@@ -286,6 +286,83 @@ export function lightFlare(): () => void {
   };
 }
 
+/*
+ * A laser pointer (item 24, ?try=laser, colour by ?laser=red|green|violet).
+ *
+ * A laser diode's light is one wavelength -- as saturated a colour as light
+ * gets -- from a spot a millimetre across, held close to the glass: a tiny,
+ * fierce, hard-edged point. Where it strikes a pane, what the frost and the
+ * grime scatter is trapped between the faces and piped to the rims, which
+ * glow in the laser's colour (the glass pass's piped light). It shakes with
+ * the hand that holds it.
+ */
+export const LASER_COLOURS = {
+  red: [1.0, 0.04, 0.03],
+  green: [0.18, 1.0, 0.08],
+  violet: [0.42, 0.08, 1.0],
+} as const;
+export type LaserColour = keyof typeof LASER_COLOURS;
+/** How much stronger than the lamp a laser spot is: small, but concentrated. */
+export const LASER_GAIN = 2.2;
+
+let laserColour: LaserColour = "red";
+export const laserLight: Light = {
+  id: "laser",
+  kind: "point",
+  x: -9999,
+  y: -9999,
+  // Held close: the beam meets the glass a finger's width from the spot.
+  height: 14,
+  radius: 2,
+  get colour() {
+    return LASER_COLOURS[laserColour];
+  },
+  get gain() {
+    return t("coreGain") * LASER_GAIN;
+  },
+  charge: 0,
+  uv: 0,
+};
+
+/** The laser's colour now, for what draws its spot. */
+export function laserColourNow(): LaserColour {
+  return laserColour;
+}
+
+let laserFrame = 0;
+/** Switch the laser on in a colour (returns the switch-off). It follows the lamp, trembling. */
+export function holdLaser(colour: LaserColour = "red"): () => void {
+  if (typeof window === "undefined") return () => {};
+  laserColour = colour;
+  const start = performance.now();
+  let lastX = NaN;
+  let lastY = NaN;
+  const step = (now: number) => {
+    laserFrame = requestAnimationFrame(step);
+    const s = (now - start) / 1000;
+    const held = pointer.x > -9999;
+    // A hand's tremor: a few hertz, well under a pixel -- visible as life, not as shake.
+    const x = pointer.x + 0.7 * Math.sin(s * 8.7) + 0.4 * Math.sin(s * 17.3 + 1.1);
+    const y = pointer.y + 0.7 * Math.sin(s * 7.9 + 0.5) + 0.4 * Math.sin(s * 15.1);
+    const on = held ? 1 : 0;
+    if (on === laserLight.charge && Math.abs(x - lastX) < 0.25 && Math.abs(y - lastY) < 0.25)
+      return;
+    lastX = x;
+    lastY = y;
+    laserLight.charge = on;
+    laserLight.x = x;
+    laserLight.y = y;
+    changed();
+    for (const fn of flashWatchers) fn();
+  };
+  laserFrame = requestAnimationFrame(step);
+  return () => {
+    cancelAnimationFrame(laserFrame);
+    laserLight.charge = 0;
+    changed();
+  };
+}
+
 /** How brightly the flare is burning this moment, for what draws its flame. */
 export function flareBrightness(): number {
   return flareLight.charge * flareFlicker;
@@ -355,13 +432,19 @@ export function pointLights(): Light[] {
   const out = lights.filter((l) => l.kind === "point");
   if (flashLight.charge > 0) out.push(flashLight);
   if (flareLight.charge > 0) out.push(flareLight);
+  if (laserLight.charge > 0) out.push(laserLight);
   for (const e of emitters) if (e.charge > 0) out.push(e);
   return out;
 }
 
 /** How hard the most strongly burning point light is burning: whether to draw at all. */
 export function strongestCharge(): number {
-  let strongest = Math.max(cursorLamp.charge, flashLight.charge, flareLight.charge);
+  let strongest = Math.max(
+    cursorLamp.charge,
+    flashLight.charge,
+    flareLight.charge,
+    laserLight.charge,
+  );
   for (const e of emitters) strongest = Math.max(strongest, e.charge);
   return strongest;
 }

@@ -2986,3 +2986,43 @@ html.is-winding * {
     --lit: 1 !important;
   }
 }
+
+/* ===================== The laser pointer (item 24, ?try=laser) =====================
+ * components/site/LaserDot. --laser is its colour. The core burns white (the
+ * eye and the camera both clip it), the colour is round it, the speckle
+ * fizzes in a ring of scattered light.
+ */
+.laser-dot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9992;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.laser-dot::before {
+  content: "";
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255) 0 1.6px,
+    color-mix(in srgb, var(--laser, red), white 35%) 2.6px,
+    var(--laser, red) 3.6px,
+    color-mix(in srgb, var(--laser, red) 35%, transparent) 6px,
+    transparent 13px
+  );
+  mix-blend-mode: screen;
+}
+
+.laser-dot__speckle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+}

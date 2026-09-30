@@ -31,6 +31,8 @@ export const PREVIEWS = {
     "A detective's magnifying glass where the lamp is: the live page enlarged through a real lens, swimming and colour-fringed at the rim",
   flare:
     "A burning road flare where the lamp is: deep red, flickering and sputtering, lighting the glass and the photographs",
+  laser:
+    "A laser pointer where the lamp is (?laser=red|green|violet): a tiny fierce spot with speckle, piping its colour to the rims of the glass it strikes",
   liquidlights:
     "Liquid glass lit only by the scene's lights: its own fixed gloss, rim glow, white Fresnel and drop shadow are off",
 } as const;
