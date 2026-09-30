@@ -1035,6 +1035,28 @@ span:has(> .photo-surface) {
 }
 
 /*
+ * On a card, the shadow is the card's, in the pane's lowest layer (a
+ * negative z-index in the pane's stacking context, above its own light
+ * layers by document order): under every card, so one card's shadow never
+ * lies across its neighbour's photograph (2h). The photograph's own shadow
+ * is off there.
+ */
+[data-cast] > span:has(> .photo-surface) {
+  box-shadow: none;
+}
+
+[data-cast]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px) var(--cast-spread, 0px)
+    rgba(0, 0, 0, var(--cast-alpha, 0));
+}
+
+/*
  * Type, the same way.
  *
  * Kept well under the photographs': a line of type stands off the glass by a
