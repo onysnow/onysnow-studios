@@ -9,6 +9,7 @@ import { Stack } from "@/effects/react/Stack";
 import { Neon } from "@/components/site/Neon";
 import { GlowPaint } from "@/components/site/GlowPaint";
 import { GlassSolid } from "@/components/site/GlassSolid";
+import { BrokenGlass } from "@/components/site/BrokenGlass";
 import { previewing } from "@/effects/engine/preview";
 import { useEffect, useState } from "react";
 
@@ -37,7 +38,11 @@ function LabSamples() {
   const photo = photos.data?.[0];
   // The glass solids are a preview (?try=solids) until Ony approves them.
   const [solids, setSolids] = useState(false);
-  useEffect(() => setSolids(previewing("solids")), []);
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setSolids(previewing("solids"));
+    setBroken(previewing("broken"));
+  }, []);
 
   return (
     <div className="min-h-screen pb-32">
@@ -162,6 +167,30 @@ function LabSamples() {
                 and shine the beam across it -- white light comes out a spectrum.
               </p>
             </Pane>
+          </div>
+        </ParallaxScene>
+      ) : null}
+
+      {/*
+       * Broken glass (item 10, ?try=broken): three panes, broken the way each
+       * kind of glass breaks (effects/optics/fracture).
+       */}
+      {broken ? (
+        <ParallaxScene image={photos.data?.[2] ?? photo} scrim="none" height="">
+          <div className="mx-auto grid max-w-5xl gap-6 px-6 py-20 sm:grid-cols-3" data-lab-broken>
+            {(
+              [
+                ["annealed", "Annealed: long radial shards, rings near the impact."],
+                ["tempered", "Tempered: dices into small, blunt, even pieces."],
+                ["laminated", "Laminated: held by its interlayer, a spider web."],
+              ] as const
+            ).map(([kind, text]) => (
+              <Pane key={kind} className="relative h-64 !p-5">
+                <BrokenGlass kind={kind} />
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{kind}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{text}</p>
+              </Pane>
+            ))}
           </div>
         </ParallaxScene>
       ) : null}

@@ -33,6 +33,8 @@ export const PREVIEWS = {
     "A burning road flare where the lamp is: deep red, flickering and sputtering, lighting the glass and the photographs",
   laser:
     "A laser pointer's beam across the page (?laser=red|green|violet): it enters the panes at their edges, bends, splits, is guided and absorbed as real glass does; press and drag to aim",
+  broken:
+    "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
   solids:
     "Glass solids on Lab samples -- prism, sphere, cube, cone, pyramid, rod -- ray traced through their glass",
   tools:
