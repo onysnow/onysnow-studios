@@ -76,3 +76,50 @@ export function magnifierMap(size: number, scale = MAP_SCALE): Uint8ClampedArray
   }
   return data;
 }
+
+/*
+ * ---- The lens as an object in the light (item 25e) ----
+ *
+ * A simple magnifier held a distance d above the page shows it enlarged by
+ * M = f / (f - d) (the thin-lens magnifier with the eye far away), so the
+ * magnification above fixes how high it is held for a lens of a given focal
+ * length: d = f (1 - 1 / M).
+ *
+ * Held in the light of something other than itself, it throws a shadow: the
+ * brass rim and the handle block, the lens does not -- it bends what it
+ * passes into a smaller, brighter patch (a burning glass). For a source at
+ * height H, a distance u = H - d above the lens, the thin-lens equation
+ * puts the source's image at 1/v = 1/f - 1/u below the lens, so the beam
+ * through the lens, D across at the lens, is D |1 - d/v| across on the page.
+ * With no lens (f infinite) that is D (1 + d/u) -- the rim's own shadow,
+ * which is how the one shadow model (effects/optics/shadow) grows it. The
+ * light the lens passes is spread over that patch instead of the rim's
+ * footprint, so the patch is brighter by the ratio of their areas.
+ */
+
+/** The lens's focal length, in lens radii: a reading glass of 3-4 in across has f near 10 in. */
+export const FOCAL_RADII = 3;
+
+/** How high the lens is held above the page for its magnification, CSS px. */
+export function holdHeight(radius: number, focalRadii = FOCAL_RADII): number {
+  return focalRadii * radius * (1 - 1 / MAGNIFICATION);
+}
+
+export type LensPatch = {
+  /** The patch's diameter over the lens's, on the page. */
+  spread: number;
+  /** The rim's shadow's diameter over the lens's (the same thing with no lens). */
+  shadow: number;
+  /** How much brighter the patch is than the light falling round it (< 1 if it spreads). */
+  gain: number;
+};
+
+/**
+ * The bright patch a lens of focal length f, held d above the page, makes of
+ * a source u above the lens.
+ */
+export function lensPatch(f: number, d: number, u: number): LensPatch {
+  const shadow = 1 + d / Math.max(u, 1e-6);
+  const spread = Math.max(Math.abs(1 - d / f + d / Math.max(u, 1e-6)), 0.02);
+  return { spread, shadow, gain: (shadow / spread) ** 2 };
+}

@@ -2810,11 +2810,13 @@ html.is-winding * {
   }
 }
 
-/* ===================== The magnifying glass (item 21, ?try=magnifier) =====================
+/* ===================== The magnifying glass (items 21, 25e; ?try=magnifier) =====================
  *
  * components/site/Magnifier: the lens is the live page through a displacement
- * map (effects/optics/magnifier); these are the glass's reflections and the
- * brass and wood round it. Under the cursor and the flash, over everything else.
+ * map (effects/optics/magnifier). What it shows beyond that is the scene's:
+ * --ring is its ring lamp (the lamp's charge), --lens-room the room's
+ * brightness it mirrors, --lens-rx/ry where in the room it looks. Under the
+ * cursor and the flash, over everything else.
  */
 .magnifier {
   position: fixed;
@@ -2832,35 +2834,123 @@ html.is-winding * {
   border-radius: 50%;
   backdrop-filter: url("#magnifier-lens");
   /*
-   * What the glass reflects: the room's brightest window as a soft oval high
-   * on the face, and the rim's own bright line round the inside, where the
-   * lens surface turns steepest toward the room.
+   * The ring lamp, seen in the lens's surface where it turns steepest toward
+   * the rim: a bright line round the inside, as bright as the lamp is.
    */
-  background:
-    radial-gradient(ellipse 34% 22% at 34% 26%, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.06) 55%, transparent 100%),
-    radial-gradient(circle closest-side, transparent 88%, rgb(255 250 235 / 0.16) 96%, rgb(255 250 235 / 0.35) 99.5%, transparent 100%);
+  background: radial-gradient(
+    circle closest-side,
+    transparent 86%,
+    rgb(255 244 222 / calc(0.22 * var(--ring, 0))) 95%,
+    rgb(255 250 238 / calc(0.75 * var(--ring, 0))) 99.4%,
+    transparent 100%
+  );
   box-shadow:
     inset 0 0 22px rgb(0 0 0 / 0.28),
-    inset 0 0 0 1px rgb(255 255 255 / 0.22);
+    inset 0 0 0 1px rgb(255 255 255 / 0.18);
 }
 
-.magnifier__shadow {
+/*
+ * The room, in the lens's face. A convex surface is a wide-angle mirror, so
+ * it holds the whole room small, and it reflects as glass does: about 4%
+ * straight on, rising steeply toward the rim (Fresnel).
+ */
+.magnifier__lens::after {
+  content: "";
   position: absolute;
-  inset: -11px;
+  inset: 0;
   border-radius: 50%;
-  box-shadow: 0 10px 26px rgb(0 0 0 / 0.5);
+  background-image: var(--room, url("/rooms/metro.jpg"));
+  background-size: auto 140%;
+  background-position: var(--lens-rx, 50%) var(--lens-ry, 50%);
+  background-repeat: no-repeat;
+  transform: scale(-1, 1);
+  mix-blend-mode: screen;
+  opacity: var(--lens-room, 1);
+  -webkit-mask: radial-gradient(circle closest-side, rgb(0 0 0 / 0.04) 0%, rgb(0 0 0 / 0.06) 55%, rgb(0 0 0 / 0.22) 88%, rgb(0 0 0 / 0.5) 99%, transparent 100%);
+  mask: radial-gradient(circle closest-side, rgb(0 0 0 / 0.04) 0%, rgb(0 0 0 / 0.06) 55%, rgb(0 0 0 / 0.22) 88%, rgb(0 0 0 / 0.5) 99%, transparent 100%);
 }
 
-/* The brass rim: turned metal, catching the light round its circumference. */
+/*
+ * The brass rim: turned metal, and metal is a coloured mirror -- what it
+ * shows is the room, tinted gold, over the dark of the brass itself. Its
+ * inner edge catches the ring lamp.
+ */
 .magnifier__rim {
   position: absolute;
   inset: -11px;
   border-radius: 50%;
   background:
-    radial-gradient(circle closest-side, transparent 89.5%, rgb(60 40 12 / 0.9) 90%, transparent 92%, transparent 97%, rgb(40 26 8 / 0.8) 100%),
-    conic-gradient(from 200deg, #6e4f1f, #d9b25e 12%, #f6e2a4 18%, #b48633 30%, #6a4a1b 45%, #c79a45 62%, #f1d890 70%, #9a7129 84%, #6e4f1f);
+    radial-gradient(circle closest-side, transparent 89.5%, rgb(255 236 190 / calc(0.8 * var(--ring, 0))) 90.4%, transparent 93%),
+    radial-gradient(circle closest-side, transparent 89.5%, rgb(40 26 8 / 0.85) 90%, transparent 91.5%, transparent 97%, rgb(40 26 8 / 0.8) 100%),
+    linear-gradient(rgb(214 170 88), rgb(214 170 88)),
+    var(--room, url("/rooms/metro.jpg")) var(--lens-rx, 50%) var(--lens-ry, 50%) / auto 100% no-repeat,
+    rgb(74 52 20);
+  background-blend-mode: normal, normal, multiply, normal, normal;
   -webkit-mask: radial-gradient(circle closest-side, transparent 89.6%, #000 90.2%);
   mask: radial-gradient(circle closest-side, transparent 89.6%, #000 90.2%);
+}
+
+/*
+ * What the magnifier casts on the page, one per light (the room overhead,
+ * the flash): the rim and the handle's shade, and the patch the lens gathers
+ * the light it passes into. Placed, grown and softened by the one shadow
+ * model; --shade is how much of the page's light the source is, --patch the
+ * patch's size in the rim's footprint, --patch-gain how much it adds.
+ */
+.magnifier-cast {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9989;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  filter: blur(var(--blur, 0px));
+}
+
+.magnifier-cast__shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / var(--shade, 0));
+}
+
+.magnifier-cast__handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 118px;
+  margin-left: -12px;
+  transform-origin: 50% 0;
+  transform: rotate(-45deg) translateY(104px);
+  border-radius: 8px 8px 12px 12px;
+  background: rgb(0 0 0 / var(--shade, 0));
+}
+
+.magnifier-patch {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9989;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  mix-blend-mode: plus-lighter;
+  filter: blur(var(--blur, 0px));
+}
+
+.magnifier-patch::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* The lens's share of the rim's footprint (96 of 107 px), times the patch's. */
+  width: calc(100% * var(--patch, 1) * 96 / 107);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--patch-colour, white);
 }
 
 /* The handle: dark turned wood on a brass ferrule, down and to the right. */

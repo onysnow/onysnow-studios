@@ -29,14 +29,20 @@ export type Tool = {
    * magnifier has -- so the lamp stays with it.
    */
   lamp: "white" | "uv" | null;
+  /**
+   * Whether the lamp is seen as the lamp (the drawn lamp: its core and the
+   * camera's flare round it). In the magnifier it is a ring in the rim,
+   * which the magnifier draws itself.
+   */
+  lampSeen: boolean;
 };
 
 export const TOOLS: readonly Tool[] = [
-  { id: "lamp", label: "Lamp", lamp: "white" },
-  { id: "blacklight", label: "Black light", lamp: "uv" },
-  { id: "flare", label: "Flare", lamp: null },
-  { id: "laser", label: "Laser", lamp: null },
-  { id: "magnifier", label: "Magnifier", lamp: "white" },
+  { id: "lamp", label: "Lamp", lamp: "white", lampSeen: true },
+  { id: "blacklight", label: "Black light", lamp: "uv", lampSeen: true },
+  { id: "flare", label: "Flare", lamp: null, lampSeen: false },
+  { id: "laser", label: "Laser", lamp: null, lampSeen: false },
+  { id: "magnifier", label: "Magnifier", lamp: "white", lampSeen: false },
 ];
 
 const byId = new Map(TOOLS.map((t) => [t.id, t]));
@@ -80,6 +86,11 @@ export function onToolChange(fn: (id: ToolId) => void): () => void {
 export function lampMode(): Tool["lamp"] {
   const tool = byId.get(heldTool());
   return tool ? tool.lamp : "white";
+}
+
+/** Whether the lamp is drawn as the lamp (not inside a magnifier's rim, nor put down). */
+export function lampSeen(): boolean {
+  return byId.get(heldTool())?.lampSeen ?? true;
 }
 
 /** Whether the tray is shown (?try=tools). */

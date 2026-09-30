@@ -1,23 +1,114 @@
-import { useEffect, useMemo, useRef } from "react";
-import { MAP_SCALE, magnifierMap } from "@/effects/optics/magnifier";
-import { onLightChange, pointer } from "@/effects/light/lights";
+import { Fragment, useEffect, useMemo, useRef } from "react";
+import {
+  FOCAL_RADII,
+  MAP_SCALE,
+  holdHeight,
+  lensPatch,
+  magnifierMap,
+} from "@/effects/optics/magnifier";
+import { castShadow } from "@/effects/optics/shadow";
+import {
+  cursorLamp,
+  flashLight,
+  onFlash,
+  onLightChange,
+  pointer,
+  roomLight,
+  type Light,
+} from "@/effects/light/lights";
+import { viewState } from "@/effects/scene/scene";
+import { camera } from "@/effects/camera/camera";
 
 /** The lens's radius, CSS px: a big reading glass held near the page. */
 const LENS_RADIUS = 96;
 /** The texture the displacement is read from. The lens is smooth; 256 is plenty. */
 const MAP_SIZE = 256;
+/** The brass rim's width round the lens, CSS px (.magnifier__rim's inset). */
+const RIM = 11;
+/**
+ * The room's lights, taken as one broad source overhead: the ceiling seen
+ * from the page is most of a hemisphere, so its radius is a large share of
+ * its height, and what it casts is a soft, faint shade.
+ */
+const ROOM_SPREAD = 0.5;
+/** How much of what lights the page each source's shade takes at full strength. */
+const ROOM_SHADE = 0.3;
+const FLASH_SHADE = 0.55;
 
 /**
- * The magnifying glass (item 21, ?try=magnifier), held where the lamp is.
+ * Where one source throws the magnifier's shadow and bright patch, as styles
+ * for its cast element. The lens's own ring lamp is not one of them: a light
+ * cannot shadow the thing it is fixed to.
+ */
+function castBy(
+  cast: { shade: HTMLElement | null; patch: HTMLElement | null },
+  light: Light,
+  strength: number,
+  x: number,
+  y: number,
+) {
+  const el = cast.shade;
+  const patchEl = cast.patch;
+  if (!el || !patchEl) return;
+  if (strength <= 0.002) {
+    el.style.opacity = "0";
+    patchEl.style.opacity = "0";
+    return;
+  }
+  const d = holdHeight(LENS_RADIUS);
+  const shadow = castShadow({
+    lampX: light.x,
+    lampY: light.y,
+    height: light.height,
+    radius: light.radius,
+    gap: d,
+    x,
+    y,
+  });
+  const patch = lensPatch(FOCAL_RADII * LENS_RADIUS, d, light.height - d);
+  const size = (LENS_RADIUS + RIM) * 2;
+  const [r, g, b] = light.colour;
+  const blur = `${(shadow.across / shadow.scale).toFixed(1)}px`;
+  const place = `translate3d(${shadow.x - size / 2}px, ${shadow.y - size / 2}px, 0) scale(${shadow.scale.toFixed(4)})`;
+  el.style.opacity = "1";
+  el.style.transform = place;
+  el.style.setProperty(
+    "--shade",
+    (strength * (light === flashLight ? FLASH_SHADE : ROOM_SHADE)).toFixed(3),
+  );
+  el.style.setProperty("--blur", blur);
+  /*
+   * The patch: the light the lens passed, gathered into a disc its share of
+   * the rim's footprint, brighter by the areas' ratio. Added to the page, so
+   * it is its own element (a blend inside the shade's group would only
+   * blend with the shade).
+   */
+  patchEl.style.transform = place;
+  patchEl.style.setProperty("--blur", blur);
+  patchEl.style.setProperty("--patch", (patch.spread / patch.shadow).toFixed(4));
+  patchEl.style.opacity = Math.min(1, strength * (patch.gain - 1) * 0.12).toFixed(3);
+  patchEl.style.setProperty(
+    "--patch-colour",
+    `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`,
+  );
+}
+
+/**
+ * The magnifying glass (item 21, redone in 25e), held in the hand.
  *
  * The lens is a backdrop-filter: the real page behind it, live -- photographs,
  * glass, light and all -- pulled through a displacement map that is the
  * lens's own mapping (effects/optics/magnifier): enlarged in the middle,
  * swimming outward toward the rim, and read three times at slightly different
  * strengths so the colours come apart where the lens bends most, as a simple
- * lens's do. Over it, what the glass reflects: a soft window of the room on
- * its face and a bright line round the inside of the rim. Round it, a brass
- * rim and a turned handle.
+ * lens's do.
+ *
+ * It is an illuminated magnifier: the lamp is a ring of light in its rim
+ * (effects/tools/held), glowing as the lamp is wound. Everything else it
+ * shows comes from the scene: its face and its brass mirror the room the
+ * panes mirror, at the room's brightness, and it throws its shadow -- the
+ * rim and the handle, with the lens's bright patch inside -- from the room's
+ * light overhead and from the flash, by the one shadow model.
  *
  * Chromium only (SVG filters in backdrop-filter); elsewhere the lens shows
  * the page unmagnified, which is a clear disc in a brass rim -- still a glass.
@@ -39,7 +130,12 @@ export function Magnifier() {
     return canvas.toDataURL("image/png");
   }, []);
 
-  // Follow the lamp: moved only when the lights move, not every frame.
+  const roomCast = useRef<HTMLDivElement>(null);
+  const roomPatch = useRef<HTMLDivElement>(null);
+  const flashCast = useRef<HTMLDivElement>(null);
+  const flashPatch = useRef<HTMLDivElement>(null);
+
+  // Follow the hand: moved only when the lights move, not every frame.
   useEffect(() => {
     let frame = 0;
     const place = () => {
@@ -48,16 +144,64 @@ export function Magnifier() {
       if (!el) return;
       const off = pointer.x <= -9999;
       el.style.opacity = off ? "0" : "1";
-      if (!off) {
-        el.style.transform = `translate3d(${pointer.x - LENS_RADIUS}px, ${pointer.y - LENS_RADIUS}px, 0)`;
+      if (off) {
+        for (const c of [roomCast, roomPatch, flashCast, flashPatch]) {
+          if (c.current) c.current.style.opacity = "0";
+        }
+        return;
       }
+      const x = pointer.x;
+      const y = pointer.y;
+      el.style.transform = `translate3d(${x - LENS_RADIUS}px, ${y - LENS_RADIUS}px, 0)`;
+      const vw = document.documentElement.clientWidth;
+      const vh = document.documentElement.clientHeight;
+      /*
+       * What the glass shows of the scene's lights. Its ring lamp is the
+       * lamp: it glows as the lamp is wound. The face and the brass mirror
+       * the room, as the panes do -- where in it depends on where the lens
+       * is -- at the room's brightness.
+       */
+      el.style.setProperty("--ring", cursorLamp.charge.toFixed(3));
+      el.style.setProperty("--lens-room", Math.min(1, roomLight.gain).toFixed(3));
+      el.style.setProperty("--lens-rx", `${((x / vw) * 100).toFixed(1)}%`);
+      el.style.setProperty("--lens-ry", `${((y / vh) * 100).toFixed(1)}%`);
+      /*
+       * What it casts. The room is lit from overhead, where the viewer's eye
+       * is; the flash is at the eye (effects/light). Each throws the rim's
+       * shade and the lens's bright patch by the one shadow model.
+       */
+      const room: Light = {
+        ...roomLight,
+        x: vw / 2 + viewState.eyeX,
+        y: vh / 2 + viewState.eyeY,
+        height: camera.distance(vw),
+        radius: camera.distance(vw) * ROOM_SPREAD,
+        colour: [1, 1, 1],
+      };
+      castBy(
+        { shade: roomCast.current, patch: roomPatch.current },
+        room,
+        Math.min(1, roomLight.gain),
+        x,
+        y,
+      );
+      castBy(
+        { shade: flashCast.current, patch: flashPatch.current },
+        flashLight,
+        flashLight.charge,
+        x,
+        y,
+      );
     };
-    const stop = onLightChange(() => {
+    const wake = () => {
       if (!frame) frame = requestAnimationFrame(place);
-    });
+    };
+    const stop = onLightChange(wake);
+    const stopFlash = onFlash(wake);
     place();
     return () => {
       stop();
+      stopFlash();
       cancelAnimationFrame(frame);
     };
   }, []);
@@ -122,6 +266,28 @@ export function Magnifier() {
           <feBlend in="rg" in2="onlyB" mode="screen" />
         </filter>
       </svg>
+      {[
+        [roomCast, roomPatch],
+        [flashCast, flashPatch],
+      ].map(([shade, patch], i) => (
+        <Fragment key={i}>
+          <div
+            ref={shade}
+            aria-hidden="true"
+            className="magnifier-cast"
+            style={{ width: (LENS_RADIUS + RIM) * 2, height: (LENS_RADIUS + RIM) * 2, opacity: 0 }}
+          >
+            <div className="magnifier-cast__shade" />
+            <div className="magnifier-cast__handle" />
+          </div>
+          <div
+            ref={patch}
+            aria-hidden="true"
+            className="magnifier-patch"
+            style={{ width: (LENS_RADIUS + RIM) * 2, height: (LENS_RADIUS + RIM) * 2, opacity: 0 }}
+          />
+        </Fragment>
+      ))}
       <div
         ref={holder}
         aria-hidden="true"
@@ -129,7 +295,6 @@ export function Magnifier() {
         style={{ width: LENS_RADIUS * 2, height: LENS_RADIUS * 2, opacity: 0 }}
       >
         <div className="magnifier__handle" />
-        <div className="magnifier__shadow" />
         <div className="magnifier__lens" />
         <div className="magnifier__rim" />
       </div>

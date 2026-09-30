@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { LAMP_COLOUR, cursorLamp, onCharge } from "@/effects/light/lights";
-import { onToolChange } from "@/effects/tools/held";
+import { lampSeen, onToolChange } from "@/effects/tools/held";
 import { camera } from "@/effects/camera/camera";
 import { sleepingLoop } from "@/lib/gl-loop";
 import {
@@ -171,8 +171,8 @@ export function CursorLight({
 
     /* Returns whether there is still something to draw; false parks the loop. */
     const step = (now: number) => {
-      // The lamp is drawn only while it is in the hand (effects/tools/held).
-      const charge = cursorLamp.charge > 0 ? chargeRef.current : 0;
+      // The lamp is drawn only while it is in the hand and seen as itself (effects/tools/held).
+      const charge = cursorLamp.charge > 0 && lampSeen() ? chargeRef.current : 0;
       if (charge <= 0.002) {
         if (wasLit) {
           clear2d(canvas);
