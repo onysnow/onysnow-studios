@@ -40,10 +40,12 @@ function LabSamples() {
   const [solids, setSolids] = useState(false);
   const [broken, setBroken] = useState(false);
   const [contact, setContact] = useState(false);
+  const [coating, setCoating] = useState(false);
   useEffect(() => {
     setSolids(previewing("solids"));
     setBroken(previewing("broken"));
     setContact(previewing("contact"));
+    setCoating(previewing("coating"));
   }, []);
 
   return (
@@ -125,6 +127,26 @@ function LabSamples() {
               </Stack>
             ))}
           </div>
+          {/*
+           * ?try=coating (catalogue item 32c): polished glass bare, beside
+           * museum glass -- the same glass with an anti-reflection coating on
+           * each face. The room's reflection falls to a third and turns a
+           * faint purple.
+           */}
+          {coating ? (
+            <div className="mt-10 grid gap-10 sm:grid-cols-2" data-lab-coating>
+              {(
+                [
+                  ["Polished, bare", "optical-crown"],
+                  ["Museum glass (coated)", "museum"],
+                ] as const
+              ).map(([label, material]) => (
+                <Pane key={label} className="h-40 !p-4" thickness={6} material={material}>
+                  <span className="text-xs">{label}</span>
+                </Pane>
+              ))}
+            </div>
+          ) : null}
         </div>
       </ParallaxScene>
 

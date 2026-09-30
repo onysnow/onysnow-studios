@@ -144,6 +144,7 @@ uniform sampler2D uRoom;
 uniform float uHasRoom;
 uniform float uRoomWidth;       // texels round the full 360 degrees
 uniform float uCameraDistance;  // CSS pixels from the screen
+uniform vec3  uCoat;            // what an anti-reflection coating leaves of each reflection (1 for none)
 uniform float uExactFresnel;    // ?try=polariser: s and p Fresnel, and the camera's filter
 uniform float uPolariser;       // how perfect the camera's polarising filter is, 0 none
 uniform float uPolariserAngle;  // its axis, radians across the screen
@@ -1068,7 +1069,7 @@ void main() {
      * white here), a red flare's or a laser spot's reads in its own colour.
      */
     vec3 mirrored = mix(uLightColour[i] / LAMP_WHITE, uLightColour[i], uvShare);
-    lampSpecular += mirrored * specular * inside * lit;
+    lampSpecular += mirrored * specular * inside * lit * uCoat;
     lampEdge += mirrored * bevel * lit;
 
     /*
@@ -1185,7 +1186,7 @@ void main() {
     texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
   );
   if (uRoomKnee > 0.0) room = room / (1.0 + room / uRoomKnee);
-  colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
+  colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale * uCoat;
 
   /*
    * ---- A dry contact: the air film under this pane (?try=contact) ----

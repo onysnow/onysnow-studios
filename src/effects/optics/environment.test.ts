@@ -115,7 +115,7 @@ describe("the reflection is worked out from causes", () => {
     expect(src.split(ENVIRONMENT_GLSL).length - 1).toBe(1);
     expect(src).toContain("fresnelSchlick(cosView, uIor)");
     expect(src).toMatch(
-      /colour \+= inside \* reflectance \* room \* uRoomExposure \* uHasRoom \* uReflectScale;/,
+      /colour \+= inside \* reflectance \* room \* uRoomExposure \* uHasRoom \* uReflectScale \* uCoat;/,
     );
   });
 

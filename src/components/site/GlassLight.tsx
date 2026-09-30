@@ -1,3 +1,4 @@
+import { coatingRgb } from "@/effects/optics/coating";
 import { useEffect, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
@@ -89,6 +90,9 @@ const viewportHeight = () => document.documentElement.clientHeight || window.inn
 
 /** How far outside a pane the bloom still has something to contribute. */
 const BLEED = LIGHT_BLEED;
+
+/** No coating: every reflection whole. */
+const NO_COAT = [1, 1, 1] as const;
 
 export function GlassLight({
   chargeRef,
@@ -230,6 +234,7 @@ export function GlassLight({
     const uRoomWidth = U("uRoomWidth");
     const uCameraDistance = U("uCameraDistance");
     const uExactFresnel = U("uExactFresnel");
+    const uCoat = U("uCoat");
     const uPolariser = U("uPolariser");
     const uPolariserAngle = U("uPolariserAngle");
     const uFrontRoughness = U("uFrontRoughness");
@@ -696,6 +701,8 @@ export function GlassLight({
          */
         const { material, thickness, gap, smudge, scratch } = pane.causes;
         gl.uniform1f(uIor, material.ior);
+        const coat = material.coating ? coatingRgb(material.ior, material.coating) : NO_COAT;
+        gl.uniform3f(uCoat, coat[0], coat[1], coat[2]);
         gl.uniform1f(uFrost, material.frost);
         gl.uniform1f(uBounce, previewing("bounce") ? 1 : 0);
         gl.uniform1f(uFloorGain, t("floorLight"));

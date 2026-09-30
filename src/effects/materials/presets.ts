@@ -1,4 +1,5 @@
 import { POLISHED_ROUGHNESS, frostRoughness } from "@/effects/optics/reflection";
+import { MGF2_QUARTER_WAVE, type Coating } from "@/effects/optics/coating";
 
 /**
  * What the glass is made of, as data (optics plan step 2).
@@ -43,9 +44,11 @@ export type Material = {
    * under a pane still fluoresces under a black light, somewhat less.
    */
   uvTransmit: number;
+  /** An anti-reflection coating on its faces, if it has one (effects/optics/coating). */
+  coating?: Coating;
 };
 
-export type MaterialId = "frosted-float" | "optical-crown" | "dense-flint";
+export type MaterialId = "frosted-float" | "optical-crown" | "dense-flint" | "museum";
 
 /**
  * Soda-lime float glass, satin-etched on the back: today's panes.
@@ -98,10 +101,30 @@ export const DENSE_FLINT: Material = {
   uvTransmit: 0.4,
 };
 
+/**
+ * Museum glass (catalogue item 32c): the clear, anti-reflective glass a
+ * photograph is framed behind in a gallery. Low-iron float glass, polished,
+ * each face coated with a quarter wave of magnesium fluoride (the
+ * reflection falls from 4.2% to about 1.3% a face, leaving a faint purple
+ * sheen), and a UV-filtering layer that takes about 99% of UV-A, to keep
+ * the print from fading.
+ */
+export const MUSEUM_GLASS: Material = {
+  id: "museum",
+  ior: 1.518,
+  abbe: 60,
+  frost: 0,
+  frostedFace: "back",
+  absorb: [0.3, 0.12, 0.18],
+  uvTransmit: 0.01,
+  coating: MGF2_QUARTER_WAVE,
+};
+
 export const MATERIALS: Readonly<Record<MaterialId, Material>> = {
   "frosted-float": FROSTED_FLOAT,
   "optical-crown": OPTICAL_CROWN,
   "dense-flint": DENSE_FLINT,
+  museum: MUSEUM_GLASS,
 };
 
 export const DEFAULT_MATERIAL: MaterialId = "frosted-float";
