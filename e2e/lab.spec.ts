@@ -40,6 +40,18 @@ async function setKnob(page: import("@playwright/test").Page, key: string, value
 }
 
 test.describe("/lab", () => {
+  test("picks what the preview's pointer holds (25h)", async ({ page }) => {
+    await openLab(page);
+    const frame = await previewFrame(page);
+    // The magnifier is drawn only while it is held.
+    await expect(frame.locator(".magnifier")).toHaveCount(0);
+    await page.locator("[data-lab-tool]").selectOption("magnifier");
+    await expect(frame.locator(".magnifier")).toHaveCount(1, { timeout: 15_000 });
+    // And back: put down, it is gone.
+    await page.locator("[data-lab-tool]").selectOption("lamp");
+    await expect(frame.locator(".magnifier")).toHaveCount(0);
+  });
+
   test("puts every knob on a control", async ({ page }) => {
     await openLab(page);
 

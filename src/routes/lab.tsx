@@ -37,7 +37,8 @@ import {
   type TuningMode,
 } from "@/lib/tuning";
 import { getGlassMode, toggleGlassMode, useGlassMode } from "@/lib/glass-mode";
-import { isFromFrame, sendLabDraft } from "@/lib/lab-bridge";
+import { isFromFrame, isToolId, sendLabDraft, sendLabHold } from "@/lib/lab-bridge";
+import { TOOLS, type ToolId } from "@/effects/tools/held";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -134,6 +135,9 @@ function Lab() {
   const [reloads, setReloads] = useState(0);
   const [device, setDevice] = useState<Device>("desktop");
   const [query, setQuery] = useState("");
+  /** What the preview's pointer holds (item 25h): the lamp until another is picked. */
+  const [tool, setTool] = useState<ToolId>("lamp");
+  const toolRef = useRef<ToolId>("lamp");
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   /** What is live for visitors, in the same shape as a draft. */
@@ -186,8 +190,14 @@ function Lab() {
       if (data.type === "onysnow:lab-ready") {
         setFramePath(data.path);
         if (published.current !== null) push();
+        // A reloaded or navigated preview keeps the tool picked here.
+        if (data.tool !== toolRef.current) sendLabHold(frame.current, toolRef.current);
       } else if (data.type === "onysnow:lab-path") {
         setFramePath(data.path);
+      } else if (data.type === "onysnow:lab-tool" && isToolId(data.tool)) {
+        // The page's own tray changed the hand: follow it.
+        toolRef.current = data.tool;
+        setTool(data.tool);
       }
     };
     window.addEventListener("message", onMessage);
@@ -366,6 +376,28 @@ function Lab() {
           >
             <Layers /> {mode === "raster" ? "Liquid glass" : "CSS glass"}
           </Button>
+          <label htmlFor="lab-tool" className="sr-only">
+            What the pointer holds in the preview
+          </label>
+          <select
+            id="lab-tool"
+            data-lab-tool
+            value={tool}
+            onChange={(e) => {
+              if (!isToolId(e.target.value)) return;
+              toolRef.current = e.target.value;
+              setTool(e.target.value);
+              sendLabHold(frame.current, e.target.value);
+            }}
+            title="What the pointer holds in the preview (the hammer breaks the pane you strike). Only the preview: visitors keep the lamp."
+            className="h-8 w-[8.5rem] flex-none rounded-md border border-input bg-transparent px-2 text-sm"
+          >
+            {TOOLS.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <p
