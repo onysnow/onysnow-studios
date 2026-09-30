@@ -573,11 +573,22 @@ function stacksOf(
     );
     panes.forEach((p, i) => {
       const up = panes[i + 1];
+      const down = i > 0 ? panes[i - 1] : undefined;
       const stack = {
         ...placed[i]!,
         aboveRect: up
           ? { x: up.rect.left, y: up.rect.top, w: up.rect.width, h: up.rect.height, r: up.radius }
           : null,
+        belowRect: down
+          ? {
+              x: down.rect.left,
+              y: down.rect.top,
+              w: down.rect.width,
+              h: down.rect.height,
+              r: down.radius,
+            }
+          : null,
+        belowMaterial: down ? down.causes.material : null,
       };
       let thickness = p.causes.thickness;
       if (link.kind === "bonded" && i === panes.length - 1) {

@@ -36,7 +36,8 @@ import { SURFACE_MATERIALS } from "@/effects/materials/surfaces";
 import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
-import { frontRoughness } from "@/effects/materials/presets";
+import { FROSTED_FLOAT, frontRoughness } from "@/effects/materials/presets";
+import { faceRoughnessNm, filmLut } from "@/effects/optics/thin-film";
 import { ROOM_KNEE, roomMipChain } from "@/effects/optics/environment";
 import { camera } from "@/effects/camera/camera";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
@@ -190,6 +191,29 @@ export function GlassLight({
     const uFrost = U("uFrost");
     const uBounce = U("uBounce");
     const uFloorGain = U("uFloorGain");
+    const uContact = U("uContact");
+    const uFilmRect = U("uFilmRect");
+    const uFilmSigma = U("uFilmSigma");
+    gl.uniform1i(U("uFilmLut"), 7);
+    // The air film's reflectance by gap, a 256 x 1 table (effects/optics/thin-film).
+    const filmTable = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, filmTable);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      256,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      filmLut(FROSTED_FLOAT.ior),
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const uFaceLamp = U("uFaceLamp");
 
     // The site's amber and teal in linear light — the shader works in linear
@@ -666,6 +690,29 @@ export function GlassLight({
         gl.uniform1f(uFrost, material.frost);
         gl.uniform1f(uBounce, previewing("bounce") ? 1 : 0);
         gl.uniform1f(uFloorGain, t("floorLight"));
+        /*
+         * Resting dry on the pane below (?try=contact): the air film between
+         * this pane's back face and its front, where the two overlap.
+         */
+        const under = pane.stack.belowRect;
+        const onContact =
+          previewing("contact") && pane.stack.below?.kind === "contact" && under !== null;
+        gl.uniform1f(uContact, onContact ? 1 : 0);
+        if (onContact && under) {
+          const x0 = Math.max(pane.x, under.x);
+          const y0 = Math.max(pane.y, under.y);
+          const x1 = Math.min(pane.x + pane.w, under.x + under.w);
+          const y1 = Math.min(pane.y + pane.h, under.y + under.h);
+          // They touch in the middle of their overlap, and the gap opens from there.
+          gl.uniform4f(uFilmRect, x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0));
+          const lower = pane.stack.belowMaterial ?? material;
+          gl.uniform1f(
+            uFilmSigma,
+            Math.hypot(faceRoughnessNm(material, "back"), faceRoughnessNm(lower, "front")),
+          );
+          gl.activeTexture(gl.TEXTURE7);
+          gl.bindTexture(gl.TEXTURE_2D, filmTable);
+        }
         // ?try=satin: the front face etched like the back, so the room it
         // reflects spreads into a soft glow instead of a mirror image.
         gl.uniform1f(

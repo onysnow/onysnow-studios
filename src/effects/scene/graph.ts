@@ -64,6 +64,13 @@ export type StackPlacement = {
    * measures the rects; placeStack leaves it null.
    */
   aboveRect: { x: number; y: number; w: number; h: number; r: number } | null;
+  /**
+   * The layer below, where it stands and what it is made of, for what
+   * happens between the two faces that meet (a dry contact's air film,
+   * effects/optics/thin-film). Null for the bottom layer and a pane on its own.
+   */
+  belowRect: { x: number; y: number; w: number; h: number; r: number } | null;
+  belowMaterial: PaneCauses["material"] | null;
 };
 
 const ONE: RGB = [1, 1, 1];
@@ -79,6 +86,8 @@ export const SINGLE: StackPlacement = {
   throughScale: ONE,
   reflectScale: ONE,
   aboveRect: null,
+  belowRect: null,
+  belowMaterial: null,
 };
 
 /** The interface a stack element declares (air with no gap if it says nothing). */
@@ -132,6 +141,8 @@ export function placeStack(layers: readonly PaneCauses[], link: Interface): Stac
       throughScale: i === 0 && n > 1 ? ratio(whole.T, bottom.T) : ONE,
       reflectScale: i === n - 1 && n > 1 ? ratio(whole.Rf, top.Rf) : ONE,
       aboveRect: null,
+      belowRect: null,
+      belowMaterial: null,
     };
   });
 }

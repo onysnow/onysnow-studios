@@ -7,6 +7,7 @@ import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { LAMP_COLOUR } from "@/effects/light/lights";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { BOKEH_GLSL } from "@/effects/optics/bokeh.glsl";
+import { CONTACT_GAP_GLSL, FILM_LUT_MAX, FILM_LUT_SCALE } from "@/effects/optics/thin-film";
 
 /**
  * Fragment shader for one pane of glass.
@@ -107,6 +108,10 @@ uniform float uGap;         // this pane's gap to the photographs behind it, CSS
 uniform float uIor;          // this pane's material
 uniform float uFrost;        // this pane's material
 uniform float uBounce;       // 1: light bouncing off the lit photograph lights the glass from below (?try=bounce, effects/light/bounce)
+uniform float uContact;      // 1: resting dry on the pane below (?try=contact, effects/optics/thin-film)
+uniform vec4 uFilmRect;      // where it overlaps that pane, CSS px
+uniform float uFilmSigma;    // rms roughness of the two faces that meet, nm
+uniform sampler2D uFilmLut;  // the air film's reflectance by gap (thin-film filmLut)
 uniform float uFloorGain;    // the floor pass's light gain ("Floor light"): how lit the print is shown
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
 // The lights: position, height above this pane, colour, power, size, charge.
@@ -271,6 +276,7 @@ vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
 }
 
 ${BOKEH_GLSL}
+${CONTACT_GAP_GLSL}
 
 /*
  * The print at a point of the page (?try=bounce): the photograph below the seam
@@ -844,6 +850,7 @@ void main() {
   vec3 lampLight = vec3(0.0);     // (tint * face + mirror) * lit, per light
   vec3 lampGlow = vec3(0.0);      // tint * rim * lit: the lit edge and its bloom, per light
   vec3 lampSpecular = vec3(0.0);  // the Blinn-Phong highlight, per light
+  vec3 lampMirror = vec3(0.0);    // the face's image of each light (lampReflection), for the contact film
   vec3 bounceUp = vec3(0.0);      // light bounced off the photograph into the glass from below
   vec3 lampEdge = vec3(0.0);      // the bevel's share of each light, in its colour
   for (int i = 0; i < MAX_LIGHTS; i++) {
@@ -1025,6 +1032,7 @@ void main() {
       * (smear * uOilGlow + glint * uDustGlow);
 
     lampLight += (tint * face + mirror) * lit + fluor * lit;
+    lampMirror += mirror * lit;
     lampGlow += tint * rim * lit;
     /*
      * A glass surface reflects light as it comes, so a highlight is the
@@ -1139,6 +1147,36 @@ void main() {
   );
   if (uRoomKnee > 0.0) room = room / (1.0 + room / uRoomKnee);
   colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
+
+  /*
+   * ---- A dry contact: the air film under this pane (?try=contact) ----
+   *
+   * Resting on the pane below, this pane's back face and that one's front
+   * stand a fraction of a micron apart where they do not touch. The stack's
+   * sums (uReflectScale) count the two faces' reflections as incoherent; a
+   * film that thin reflects as a wave (effects/optics/thin-film): black where
+   * the glass touches, Newton's colours as the gap opens, the plain grey past
+   * a micron and a half. What is drawn here is the difference, times what
+   * the faces reflect -- the room and the lamp -- seen back through this
+   * pane's front face. A rough face scatters the phase and it fades to
+   * nothing (Bennett & Porteus): satin-etched glass shows no colours.
+   */
+  if (uContact > 0.5) {
+    vec2 fq = frag - uFilmRect.xy;
+    if (fq.x >= 0.0 && fq.y >= 0.0 && fq.x <= uFilmRect.z && fq.y <= uFilmRect.w) {
+      float gapNm = contactGap(fq - 0.5 * uFilmRect.zw) * cosView;
+      float lutAt = clamp(gapNm / ${FILM_LUT_MAX.toFixed(1)}, 0.0, 1.0) * (255.0 / 256.0) + 0.5 / 256.0;
+      vec3 film = texture2D(uFilmLut, vec2(lutAt, 0.5)).rgb * ${FILM_LUT_SCALE.toFixed(3)};
+      float r0 = pow((uIor - 1.0) / (uIor + 1.0), 2.0);
+      float filmMean = 2.0 * r0 / (1.0 + r0);
+      float kk = 4.0 * 3.14159265 * uFilmSigma * cosView / 550.0;
+      vec3 dev = (film - filmMean) * exp(-0.5 * kk * kk);
+      float through = (1.0 - r0) * (1.0 - r0);
+      // What the faces reflect: the room, and each light's image and highlight (per unit of the face's own Fresnel).
+      vec3 seen = room * uRoomExposure * uHasRoom + (lampSpecular + lampMirror) * lightIn / r0;
+      colour += inside * dev * through * seen;
+    }
+  }
 
   /*
    * ---- Bokeh ----

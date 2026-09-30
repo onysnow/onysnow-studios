@@ -39,9 +39,11 @@ function LabSamples() {
   // The glass solids are a preview (?try=solids) until Ony approves them.
   const [solids, setSolids] = useState(false);
   const [broken, setBroken] = useState(false);
+  const [contact, setContact] = useState(false);
   useEffect(() => {
     setSolids(previewing("solids"));
     setBroken(previewing("broken"));
+    setContact(previewing("contact"));
   }, []);
 
   return (
@@ -87,19 +89,37 @@ function LabSamples() {
               and the light bounces between them; bonded, they are one thick pane.
             </p>
           </Pane>
-          <div className="mt-8 grid gap-10 sm:grid-cols-3">
+          <div className={`mt-8 grid gap-10 ${contact ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}>
             {(
               [
-                ["air", 24, "Air, 24 px"],
-                ["contact", 0, "Contact"],
-                ["bonded", 0, "Bonded"],
+                ["air", 24, "Air, 24 px", "frosted-float"],
+                ["contact", 0, "Contact", "frosted-float"],
+                ["bonded", 0, "Bonded", "frosted-float"],
+                /*
+                 * ?try=contact (light step G): two polished plates resting
+                 * dry -- optical flats, the classic Newton's rings -- beside
+                 * the satin panes above, whose etched faces are too rough
+                 * to show any colour.
+                 */
+                ...(contact
+                  ? ([["contact", 0, "Contact, polished", "optical-crown"]] as const)
+                  : []),
               ] as const
-            ).map(([link, gap, label]) => (
-              <Stack key={link} interface={link} gap={gap} className="relative h-56">
-                <Pane className="!absolute left-0 top-0 h-40 w-[80%] !p-4" thickness={18}>
+            ).map(([link, gap, label, material]) => (
+              <Stack key={label} interface={link} gap={gap} className="relative h-56">
+                <Pane
+                  className="!absolute left-0 top-0 h-40 w-[80%] !p-4"
+                  thickness={18}
+                  material={material}
+                >
                   <span className="text-xs text-muted-foreground">below</span>
                 </Pane>
-                <Pane className="!absolute bottom-0 right-0 h-40 w-[80%] !p-4" thickness={18}>
+                <Pane
+                  className="!absolute bottom-0 right-0 h-40 w-[80%] !p-4"
+                  thickness={18}
+                  material={material}
+                  data-lab-stack={label}
+                >
                   <span className="text-xs">{label}</span>
                 </Pane>
               </Stack>
