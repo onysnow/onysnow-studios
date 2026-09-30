@@ -139,7 +139,7 @@ export function GlowPaint({ className }: { className?: string }) {
       const rect = host.getBoundingClientRect();
       // Every light charges what it reaches, by how much of it is short enough to.
       charging = false;
-      const lamps = pointLights().filter((l) => l.id !== glowLight.id && l.charge > 0);
+      const lamps = pointLights().filter((l) => l.id !== glowLight.id && l.charge > 0 && !l.below);
       const reference = Math.max(cursorLamp.gain, 1e-6);
       for (const light of lamps) {
         const share = excitationShare(light);

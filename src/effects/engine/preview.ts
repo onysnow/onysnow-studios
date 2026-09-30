@@ -35,6 +35,8 @@ export const PREVIEWS = {
     "Light engine step H: the glass's reflections by the exact Fresnel equations, s and p apart, and a polarising filter on the camera (Camera > Polarising filter) to cut or keep them",
   roughglass:
     "Light engine step H: the light through a frosted face from its microfacets (Walter et al. 2007) -- how much gets through and how widely it scatters -- in place of two rules of thumb",
+  photolights:
+    "Light engine step I: the brightest spots of the photographs behind the panes -- neon, windows, lamps they recorded -- are lights under the glass, shining up into it in their own colour and following the photographs as they slide",
   flashlight:
     "A flashlight where the lamp is (item 25i): a beam -- a bright hotspot and a dim spill. Press and hold to plant it; it stays where you pressed and turns to point where the pointer goes, lighting whatever the beam falls on",
   laser:

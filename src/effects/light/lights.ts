@@ -75,6 +75,12 @@ export type Light = {
    * (effects/light/beam).
    */
   readonly aim?: Aim | undefined;
+  /**
+   * A light UNDER the glass, on the photographs (a photograph's own bright
+   * spot, item 31): it shines up into the pane from `height` below it, and
+   * lights nothing on the photographs' own plane.
+   */
+  readonly below?: boolean;
 };
 
 /** The lamp's colour: a warm white, a little under daylight. */
@@ -368,6 +374,50 @@ export function makeEmitter(
     charge: 0,
     uv: 0,
     level: 1,
+  };
+}
+
+/** A light under the glass that can be moved and recoloured: `set` its colour and radius. */
+export type UnderLight = Light & {
+  x: number;
+  y: number;
+  charge: number;
+  set: (colour: readonly [number, number, number], radius: number) => void;
+};
+
+/**
+ * A light under the glass, on the photographs (item 31: a photograph's own
+ * bright spot): it shines up across the gap to the glass ("Glass height"),
+ * `share` of the lamp's strength at full charge. Its colour and size are
+ * whatever spot it stands for at the moment.
+ */
+export function makeUnderLight(id: string, share: number): UnderLight {
+  let colour: readonly [number, number, number] = [1, 1, 1];
+  let radius = 8;
+  return {
+    id,
+    kind: "point",
+    x: -9999,
+    y: -9999,
+    get height() {
+      return t("floorGap");
+    },
+    get radius() {
+      return radius;
+    },
+    get colour() {
+      return colour;
+    },
+    get gain() {
+      return t("coreGain") * share;
+    },
+    charge: 0,
+    uv: 0,
+    below: true,
+    set(c, r) {
+      colour = c;
+      radius = r;
+    },
   };
 }
 

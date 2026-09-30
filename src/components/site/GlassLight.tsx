@@ -608,6 +608,7 @@ export function GlassLight({
         aim: l.aim,
       }));
       const heights = packed.map((l) => l.height);
+      const belows = pointLights().map((l) => l.below === true);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uRestEdge, t("restEdge"));
       gl.uniform1f(uEdgeBloom, camera.lens.edgeBloom);
@@ -733,7 +734,10 @@ export function GlassLight({
         gl.uniform1f(uThickness, thickness);
         gl.uniform1f(uGap, gap);
         // Each light's height above THIS glass: its height less the pane's gap.
-        for (let k = 0; k < packed.length; k++) packed[k]!.height = Math.max(heights[k]! - gap, 1);
+        // A light under the glass (a photograph's own) is the gap below it instead.
+        for (let k = 0; k < packed.length; k++) {
+          packed[k]!.height = belows[k] ? Math.max(gap, 1) : Math.max(heights[k]! - gap, 1);
+        }
         uploadLights(gl, lightLoc, packed);
         // Its place in a stack: what reaches it from above, and the stack's reflection.
         gl.uniform3fv(uLightIn, pane.stack.lightIn);

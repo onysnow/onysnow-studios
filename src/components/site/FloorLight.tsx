@@ -296,18 +296,21 @@ export function FloorLight() {
       uploadLights(
         gl,
         lightLoc,
-        pointLights().map((l) => ({
-          x: l.x,
-          y: l.y,
-          height: l.height,
-          colour: l.colour,
-          power: lampPower(l),
-          radius: l.radius,
-          charge: l.charge,
-          uv: l.uv,
-          span: l.span,
-          aim: l.aim,
-        })),
+        // What lies on the photographs does not light them through the glass.
+        pointLights()
+          .filter((l) => !l.below)
+          .map((l) => ({
+            x: l.x,
+            y: l.y,
+            height: l.height,
+            colour: l.colour,
+            power: lampPower(l),
+            radius: l.radius,
+            charge: l.charge,
+            uv: l.uv,
+            span: l.span,
+            aim: l.aim,
+          })),
       );
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uCorners, previewing("corners") ? 1 : 0);
