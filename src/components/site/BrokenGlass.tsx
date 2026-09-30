@@ -1,5 +1,14 @@
 import { useEffect, useRef } from "react";
-import { fracture, type Crack, type GlassKind, type Pt } from "@/effects/optics/fracture";
+import {
+  fracture,
+  type Crack,
+  type GlassKind,
+  type Pt,
+  type Shard,
+} from "@/effects/optics/fracture";
+import { photoBreak, placementFor, type Placement } from "@/effects/optics/crack-photo";
+import { loadCrackPhoto, type LoadedCrackPhoto } from "@/effects/optics/crack-photo-loader";
+import { crackPhotoFor } from "@/lib/crack-photos";
 import { cursorLamp, onLightChange } from "@/effects/light/lights";
 import { viewState } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
@@ -96,8 +105,31 @@ export function BrokenGlass({
     const canvas = view.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    let broken: ReturnType<typeof fracture> | null = null;
+    /*
+     * The break: from a photograph of broken glass of this kind when there is
+     * one (lib/crack-photos) -- its cracks ARE the cracks, and the shards are
+     * the pieces they cut -- otherwise generated (effects/optics/fracture).
+     */
+    type Break = {
+      shards: (Shard & { holes?: Pt[][] })[];
+      cracks: Crack[];
+      impact: Pt;
+      crush: number;
+      photo?: { loaded: LoadedCrackPhoto; placement: Placement };
+    };
+    let broken: Break | null = null;
     let brokeFor = "";
+    let photo: LoadedCrackPhoto | null = null;
+    let disposed = false;
+    const photoUrl = crackPhotoFor(kind, seed);
+    if (photoUrl) {
+      void loadCrackPhoto(photoUrl).then((loaded) => {
+        if (disposed || !loaded) return;
+        photo = loaded;
+        brokeFor = "";
+        wake();
+      });
+    }
     let frame = 0;
     // The frosted photograph, cached: blurring is the costly part.
     const frost = document.createElement("canvas");
@@ -110,9 +142,35 @@ export function BrokenGlass({
       const h = rect.height;
       if (w < 2 || h < 2) return;
       const key = `${Math.round(w)}x${Math.round(h)}`;
-      if (key !== brokeFor) {
-        broken = fracture({ w, h, at: { x: at.x * w, y: at.y * h }, energy, kind, seed });
-        brokeFor = key;
+      const breakKey = `${key}|${photo ? "photo" : "made"}`;
+      if (breakKey !== brokeFor) {
+        const struck = { x: at.x * w, y: at.y * h };
+        if (photo) {
+          // Turned a different way strike by strike, so one photograph never repeats exactly.
+          const placement = placementFor(
+            photo.map,
+            { w, h, at: struck },
+            energy,
+            hash(seed, 77) * Math.PI * 2,
+          );
+          const pb = photoBreak(
+            photo.map,
+            photo.regions,
+            placement,
+            seed,
+            kind === "annealed" ? energy : 0,
+          );
+          broken = {
+            shards: pb.shards,
+            cracks: pb.cracks,
+            impact: struck,
+            crush: 0,
+            photo: { loaded: photo, placement },
+          };
+        } else {
+          broken = fracture({ w, h, at: struck, energy, kind, seed });
+        }
+        brokeFor = breakKey;
       }
       if (!broken) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -146,15 +204,26 @@ export function BrokenGlass({
           fc.filter = "none";
           frostFor = fkey;
         }
-        const path = (poly: readonly Pt[]) => {
+        const path = (s: { poly: readonly Pt[]; holes?: readonly (readonly Pt[])[] }) => {
           ctx.beginPath();
-          poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-          ctx.closePath();
+          for (const loop of [s.poly, ...(s.holes ?? [])]) {
+            loop.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+            ctx.closePath();
+          }
         };
+        /*
+         * The glass that did not break (past a photographed break's reach)
+         * seen the same way as the pieces, unmoved, so the break has no edge
+         * of its own where the pieces stop.
+         */
+        ctx.drawImage(frost, -MARGIN, -MARGIN, w + 2 * MARGIN, h + 2 * MARGIN);
+        ctx.fillStyle = "rgb(255 255 255 / 0.06)";
+        ctx.fillRect(0, 0, w, h);
         for (const s of broken.shards) {
           ctx.save();
-          path(s.poly);
-          ctx.clip();
+          path(s);
+          // A photographed piece can wrap round a smaller one: its holes are not its glass.
+          ctx.clip("evenodd");
           if (s.missing) {
             // A hole: the photograph behind, seen with no glass in the way.
             ctx.drawImage(img, sx, sy, sw, sh, ox, oy, r.width, r.height);
@@ -180,7 +249,34 @@ export function BrokenGlass({
       const ix = broken.impact.x;
       const iy = broken.impact.y;
       const crushed = broken.shards.find((s) => s.crushed);
-      if (crushed && !crushed.missing) {
+      if (broken.photo) {
+        /*
+         * ---- The photographed cracks: the photograph itself, where it is crack ----
+         *
+         * Laid with its strike on the struck point, turned and scaled as the
+         * shards were; not inside a hole, where the glass has gone.
+         */
+        const { loaded, placement } = broken.photo;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, w, h);
+        for (const s of broken.shards) {
+          if (!s.missing) continue;
+          s.poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.closePath();
+        }
+        ctx.clip("evenodd");
+        ctx.translate(placement.at.x, placement.at.y);
+        ctx.rotate(placement.turn);
+        const k = placement.scale / loaded.layerScale;
+        ctx.scale(k, k);
+        ctx.translate(
+          -loaded.map.strike.x * loaded.layerScale,
+          -loaded.map.strike.y * loaded.layerScale,
+        );
+        ctx.drawImage(loaded.layer, 0, 0);
+        ctx.restore();
+      } else if (crushed && !crushed.missing) {
         ctx.save();
         ctx.beginPath();
         crushed.poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
@@ -219,7 +315,7 @@ export function BrokenGlass({
        * short to cut anything off, fading as they run out (the white burst at
        * the heart of every impact photograph).
        */
-      if (!crushed?.missing && broken.crush > 0) {
+      if (!broken.photo && !crushed?.missing && broken.crush > 0) {
         ctx.globalCompositeOperation = "lighter";
         const n = Math.round(30 + 50 * energy);
         for (let k = 0; k < n; k++) {
@@ -267,6 +363,7 @@ export function BrokenGlass({
       const L = { x: lamp.x - rect.left, y: lamp.y - rect.top, z: lamp.height };
       const depth = THICKNESS / N_GLASS;
       const roughReach = broken.crush * 4 + 10;
+      const photoCracks = !!broken.photo;
       broken.cracks.forEach((c: Crack, ck) => {
         if (c.kind === "crush" && crushed?.missing) return;
         let run = 0;
@@ -342,6 +439,25 @@ export function BrokenGlass({
            */
           const room = 0.32 + 0.08 * Math.min(1, Math.abs(wide) / 3) + 0.3 * rough;
           const lit = Math.min(1, room + flash * 1.4 + piped);
+          if (photoCracks) {
+            /*
+             * Photographed: the photograph already shows the crack as the room
+             * lights it. What it cannot show is this lamp, so only the lamp's
+             * flash and its piped light are added -- along the pieces' edges,
+             * each crack being two pieces' edge, so at half each time.
+             */
+            const extra = Math.min(1, flash * 1.4 + piped) * 0.5;
+            if (extra > 0.01) {
+              ctx.globalCompositeOperation = "lighter";
+              ctx.strokeStyle = `rgb(245 250 248 / ${extra.toFixed(3)})`;
+              ctx.lineWidth = 1.1;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+            }
+            continue;
+          }
 
           // The air gap: light from behind it is turned away, a hairline of shade.
           ctx.globalCompositeOperation = "source-over";
@@ -413,6 +529,7 @@ export function BrokenGlass({
     // The photograph may arrive after the first draw.
     const late = window.setTimeout(wake, 1500);
     return () => {
+      disposed = true;
       cancelAnimationFrame(frame);
       window.clearTimeout(late);
       stop();
