@@ -2704,9 +2704,21 @@ html.is-winding * {
  */
 [data-seam] > .bokeh-field,
 [data-seam] > .transmitted,
-[data-seam] > .glass {
+[data-seam] > .glass,
+[data-scene-content] > .glass {
   z-index: 1;
 }
+
+/*
+ * The same fix as the seam bands, for the ordinary photo sections: the pane's
+ * light layer sits at inset: -90px, so its bottom bloom spills past the pane's
+ * edge onto the NEXT section's photograph -- which paints later in document
+ * order and covers it, leaving a hard horizontal line. Lifting the pane above
+ * that photograph lets the bleed land on it. The pane is already its own
+ * stacking context (isolation: isolate), so only it moves; the wrapper stays
+ * un-z-indexed so the backdrop-filter still sees the photograph underneath
+ * (see SeamSection in PhotoSection).
+ */
 
 /*
  * Under liquid glass only, the band itself is lifted too.
