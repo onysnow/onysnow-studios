@@ -3026,3 +3026,41 @@ html.is-winding * {
   mix-blend-mode: screen;
   opacity: 0.85;
 }
+
+/* ===================== Glow-in-the-dark paint (item 25) =====================
+ * components/site/GlowPaint: a board coated in phosphor paint. Unlit, the
+ * paint is a pale grey-green film on it; lit, the canvas's glow is added on
+ * top, soft, bleeding a little into the air.
+ */
+.glow-paint {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  touch-action: none;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgb(210 225 205 / 0.07), transparent 60%),
+    rgb(22 24 22 / 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 18px 40px rgb(0 0 0 / 0.45);
+}
+
+.glow-paint__light {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  filter: blur(1.5px) drop-shadow(0 0 6px rgb(120 255 150 / 0.55));
+}
+
+.glow-paint__hint {
+  position: absolute;
+  left: 18px;
+  bottom: 14px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: rgb(200 215 200 / 0.35);
+  pointer-events: none;
+}

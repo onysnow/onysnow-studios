@@ -7,6 +7,7 @@ import { Img } from "@/components/site/Img";
 import { Pane } from "@/effects/react/Pane";
 import { Stack } from "@/effects/react/Stack";
 import { Neon } from "@/components/site/Neon";
+import { GlowPaint } from "@/components/site/GlowPaint";
 
 export const Route = createFileRoute("/lab-samples")({
   ssr: false,
@@ -120,6 +121,19 @@ function LabSamples() {
           </Pane>
         </div>
       </ParallaxScene>
+
+      {/* Glow-in-the-dark paint (item 25): draw on it, shine the lamp on it, fire the flash. */}
+      <section className="mx-auto max-w-5xl px-6 py-20">
+        <p className="mb-4 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          Glow-in-the-dark paint
+        </p>
+        <GlowPaint className="h-80 w-full" />
+        <p className="mt-4 max-w-2xl text-sm text-muted-foreground">
+          Phosphor paint keeps light in two stores: one empties in a second or two (the bright first
+          flare), the other leaks for minutes (the mid glow that is left). So it drops hard, then
+          sits and fades slowly to nothing.
+        </p>
+      </section>
     </div>
   );
 }
