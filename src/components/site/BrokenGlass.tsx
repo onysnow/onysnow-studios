@@ -10,7 +10,9 @@ import { photoBreak, placementFor, type Placement } from "@/effects/optics/crack
 import { loadCrackPhoto, type LoadedCrackPhoto } from "@/effects/optics/crack-photo-loader";
 import { crackPhotoFor } from "@/lib/crack-photos";
 import { loadShard, shardOutline, shardsFor } from "@/lib/glass-shards";
-import { cursorLamp, onLightChange } from "@/effects/light/lights";
+import { cursorLamp, onLightChange, pointLights } from "@/effects/light/lights";
+// Glass's index: a crack face seen through the pane lies at 1/n of its depth.
+import { N_GLASS, crackGlow, type CrackLightSource } from "@/effects/optics/crack-light";
 import { viewState } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
 
@@ -20,10 +22,6 @@ const FROST_BLUR = 30;
 const MARGIN = 24;
 /** The pane's thickness, px: a crack face is this tall. */
 const THICKNESS = 18;
-/** How far the light piped along the pane reaches before it is spent (glass shader: exp(-d/780)). */
-const PIPED_REACH = 780;
-/** Glass's critical angle, n = 1.518: past this from a crack face's normal, the face is a mirror. */
-const CRITICAL = Math.asin(1 / 1.518);
 
 /** The sharpest image under a point of the page. */
 function photoUnder(el: HTMLElement, x: number, y: number): HTMLImageElement | null {
@@ -38,9 +36,6 @@ function photoUnder(el: HTMLElement, x: number, y: number): HTMLImageElement | n
   }
   return null;
 }
-
-/** Glass's index: a crack face seen through the pane lies at 1/n of its depth. */
-const N_GLASS = 1.518;
 
 /** A repeatable number in [0, 1) for a crack and a use. */
 function hash(k: number, n: number): number {
@@ -60,6 +55,25 @@ function leanAt(k: number, s: number, rough: number): number {
     (0.65 * Math.sin(s / (31 + 20 * hash(k, 1)) + 6.3 * hash(k, 2)) +
       0.35 * Math.sin(s / (9 + 6 * hash(k, 3)) + 6.3 * hash(k, 4)))
   );
+}
+
+/**
+ * One stroke that adds `tint` at `amount` and the lights' `glow` at
+ * `share`, as a colour for the "lighter" blend (which adds colour times
+ * alpha); null if it adds nothing.
+ */
+function additive(
+  tint: readonly [number, number, number],
+  amount: number,
+  glow: readonly [number, number, number],
+  share: number,
+): string | null {
+  const add = [0, 1, 2].map((i) => tint[i]! * amount + glow[i]! * share);
+  const peak = Math.max(add[0]!, add[1]!, add[2]!);
+  if (peak < 0.004) return null;
+  const alpha = Math.min(1, peak);
+  const [r, g, b] = add.map((v) => Math.round(Math.min(255, (v / peak) * 255)));
+  return `rgb(${r} ${g} ${b} / ${alpha.toFixed(3)})`;
 }
 
 /** The glass's own green, seen through the depth of a crack face (sRGB). */
@@ -89,7 +103,9 @@ type Props = {
  *     they are mirrors: a crack flashes silver where the lamp, the face and
  *     your eye line up, and reads as a dark line where they do not;
  *   the lamp's light piped along the pane escapes at the cracks, so they
- *     glow near the lamp;
+ *     glow near the lamp -- and every other light's too, the flash, a
+ *     flare, the flashlight's beam where it points, each in its colour
+ *     (effects/optics/crack-light);
  *   near the impact the fracture face turns from mirror to frosted mist and
  *     rough hackle -- whiter, wider cracks and a crushed star -- and the
  *     chipped edges split light into colour.
@@ -454,14 +470,21 @@ export function BrokenGlass({
       }
 
       // ---- The cracks: each a fracture face seen through the glass. ----
-      const lamp = cursorLamp;
-      const lampOn = lamp.charge;
+      // Every light in the scene, as the crack sees it: in the pane's pixels, against the lamp.
+      const reference = Math.max(cursorLamp.gain, 1e-6);
+      const sources: CrackLightSource[] = pointLights().map((l) => ({
+        at: { x: l.x - rect.left, y: l.y - rect.top, z: l.height },
+        colour: l.colour,
+        strength: l.gain / reference,
+        radiance: l.gain,
+        charge: l.charge,
+        aim: l.aim,
+      }));
       const eye = {
         x: document.documentElement.clientWidth / 2 + viewState.eyeX - rect.left,
         y: document.documentElement.clientHeight / 2 + viewState.eyeY - rect.top,
         z: camera.distance(document.documentElement.clientWidth),
       };
-      const L = { x: lamp.x - rect.left, y: lamp.y - rect.top, z: lamp.height };
       const depth = THICKNESS / N_GLASS;
       const roughReach = broken.crush * 4 + 10;
       const photoCracks = !!broken.photo;
@@ -496,41 +519,8 @@ export function BrokenGlass({
 
           // The face's normal, leaning with it: (n cos lean, sin lean).
           const fn = { x: nx * Math.cos(lean), y: ny * Math.cos(lean), z: Math.sin(lean) };
-          // Light from the lamp into the glass (it steepens, n = 1.518).
-          const tl = { x: mx - L.x, y: my - L.y, z: -L.z };
-          const tll = Math.hypot(tl.x, tl.y, tl.z) || 1;
-          const horiz = Math.hypot(tl.x, tl.y) || 1;
-          const sinIn = horiz / tll / N_GLASS;
-          const inGlass = {
-            x: (tl.x / horiz) * sinIn,
-            y: (tl.y / horiz) * sinIn,
-            z: -Math.sqrt(1 - sinIn * sinIn),
-          };
-          const d = inGlass.x * fn.x + inGlass.y * fn.y + inGlass.z * fn.z;
-          const incidence = Math.acos(Math.min(1, Math.abs(d)));
-          // Past the critical angle the air gap is a perfect mirror; short of it, the Fresnel share.
-          const mirror = incidence > CRITICAL ? 1 : 0.08 + 0.3 * Math.pow(incidence / CRITICAL, 6);
-          const out = {
-            x: inGlass.x - 2 * d * fn.x,
-            y: inGlass.y - 2 * d * fn.y,
-            z: inGlass.z - 2 * d * fn.z,
-          };
-          const te = { x: eye.x - mx, y: eye.y - my, z: eye.z };
-          const tel = Math.hypot(te.x, te.y, te.z) || 1;
-          let flash = 0;
-          if (out.z > 0) {
-            const outH = Math.hypot(out.x, out.y) || 1;
-            const sinOut = Math.min(1, (outH / Math.hypot(out.x, out.y, out.z)) * N_GLASS);
-            const leave = {
-              x: (out.x / outH) * sinOut,
-              y: (out.y / outH) * sinOut,
-              z: Math.sqrt(1 - sinOut * sinOut),
-            };
-            const aligned = Math.max(0, (leave.x * te.x + leave.y * te.y + leave.z * te.z) / tel);
-            flash = mirror * Math.pow(aligned, 60 - 50 * rough) * lampOn;
-          }
-          // Light piped along the pane escapes at the crack, brighter near the lamp.
-          const piped = lampOn * Math.exp(-Math.hypot(mx - L.x, my - L.y) / PIPED_REACH) * 0.12;
+          // What every light sends to the eye from this face: its mirror flash and the piped light.
+          const { rgb: glow, flash } = crackGlow(sources, { x: mx, y: my }, fn, eye, rough);
           /*
            * The room: a fracture face is a new, clean mirror, and seen at a
            * slant it shows the lit room and the light through the pane --
@@ -539,7 +529,6 @@ export function BrokenGlass({
            * scatter it white.
            */
           const room = 0.32 + 0.08 * Math.min(1, Math.abs(wide) / 3) + 0.3 * rough;
-          const lit = Math.min(1, room + flash * 1.4 + piped);
           if (photoCracks) {
             /*
              * Photographed: the photograph already shows the crack as the room
@@ -547,10 +536,10 @@ export function BrokenGlass({
              * flash and its piped light are added -- along the pieces' edges,
              * each crack being two pieces' edge, so at half each time.
              */
-            const extra = Math.min(1, flash * 1.4 + piped) * 0.5;
-            if (extra > 0.01) {
+            const extra = additive([0, 0, 0], 0, glow, 0.5);
+            if (extra) {
               ctx.globalCompositeOperation = "lighter";
-              ctx.strokeStyle = `rgb(245 250 248 / ${extra.toFixed(3)})`;
+              ctx.strokeStyle = extra;
               ctx.lineWidth = 1.1;
               ctx.beginPath();
               ctx.moveTo(a.x, a.y);
@@ -572,9 +561,13 @@ export function BrokenGlass({
           ctx.globalCompositeOperation = "lighter";
           const [fr, fg, fb] = FACE_TINT;
           const white = rough * 0.7;
-          const col = `${Math.round(fr + (255 - fr) * white)} ${Math.round(fg + (255 - fg) * white)} ${Math.round(fb + (255 - fb) * white)}`;
+          const tint = [
+            (fr + (255 - fr) * white) / 255,
+            (fg + (255 - fg) * white) / 255,
+            (fb + (255 - fb) * white) / 255,
+          ] as const;
           if (Math.abs(wide) > 0.6) {
-            ctx.fillStyle = `rgb(${col} / ${(lit * 0.22).toFixed(3)})`;
+            ctx.fillStyle = additive(tint, room * 0.22, glow, 0.22) ?? "transparent";
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
@@ -584,7 +577,7 @@ export function BrokenGlass({
             ctx.fill();
           }
           // Its far edge, where the face meets the pane's surface, catches the most.
-          ctx.strokeStyle = `rgb(${col} / ${lit.toFixed(3)})`;
+          ctx.strokeStyle = additive(tint, room, glow, 1) ?? "transparent";
           ctx.lineWidth = 0.55 + 0.6 * rough;
           ctx.beginPath();
           ctx.moveTo(a.x + ox, a.y + oy);
