@@ -369,7 +369,9 @@ void main() {
     if (i >= uLightCount) break;
     float c = uLightCharge[i];
     float lit = c * c * (3.0 - 2.0 * c);
-    vec4 one = floorAt(look - uViewShift, lit, uLightPos[i].xy, uLightPos[i].z, uLightRadius[i]);
+    vec2 at = look - uViewShift;
+    // A line light (a neon tube) reaches this point from its nearest point.
+    vec4 one = floorAt(at, lit, nearestOnLight(at, uLightPos[i].xy, uLightSpan[i]), uLightPos[i].z, uLightRadius[i]);
     f += one;
     coloured += one.rgb * uLightColour[i];
   }

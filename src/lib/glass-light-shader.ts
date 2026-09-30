@@ -337,7 +337,7 @@ vec3 plasticFace(vec2 local) {
     ) + 1e-6);
     for (int i = 0; i < MAX_LIGHTS; i++) {
       if (i >= uLightCount) break;
-      vec2 L = uLightPos[i].xy - uRect.xy;
+      vec2 L = nearestOnLight(local + uRect.xy, uLightPos[i].xy, uLightSpan[i]) - uRect.xy;
       float c = uLightCharge[i];
       float lit = c * c * (3.0 - 2.0 * c);
       float over = plasticOver(L, r, uLightRadius[i]);
@@ -368,7 +368,7 @@ vec3 plasticThrough(vec2 local) {
     for (int i = 0; i < MAX_LIGHTS; i++) {
       if (i >= uLightCount) break;
       float c = uLightCharge[i];
-      on += plasticOver(uLightPos[i].xy - uRect.xy, r, uLightRadius[i]) * c * c * (3.0 - 2.0 * c);
+      on += plasticOver(nearestOnLight(r.xy + uRect.xy, uLightPos[i].xy, uLightSpan[i]) - uRect.xy, r, uLightRadius[i]) * c * c * (3.0 - 2.0 * c);
     }
     if (on <= 0.0) continue;
     // A little wider than the button (7 px), grown and moved by its cast, and soft.
@@ -831,7 +831,8 @@ void main() {
   float lampEdge = 0.0;           // the bevel's share of each light
   for (int i = 0; i < MAX_LIGHTS; i++) {
     if (i >= uLightCount) break;
-    vec2 lightXY = uLightPos[i].xy;
+    // A line light (a neon tube) reaches this point from its nearest point.
+    vec2 lightXY = nearestOnLight(frag, uLightPos[i].xy, uLightSpan[i]);
     float lightHeight = uLightPos[i].z;
     float lightPower = uLightPower[i];
     float charge = uLightCharge[i];

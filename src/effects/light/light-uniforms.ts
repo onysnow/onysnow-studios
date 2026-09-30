@@ -24,6 +24,21 @@ uniform float uLightPower[MAX_LIGHTS];     // radiant power (glass) or gain (len
 uniform float uLightRadius[MAX_LIGHTS];    // the source's radius, CSS px
 uniform float uLightCharge[MAX_LIGHTS];    // how hard it is burning, 0 to 1
 uniform float uLightUv[MAX_LIGHTS];        // how much of its output is ultraviolet, 0 to 1
+uniform vec2  uLightSpan[MAX_LIGHTS];      // half a line light's length, as a vector (0 for a point)
+
+/*
+ * Where a light reaches p from: its position c for a point light; for a line
+ * light (a neon tube) the nearest point on its segment, c +- h, which is
+ * where most of the light arriving at p comes from. A zero h is the point.
+ * Called as nearestOnLight(p, uLightPos[i].xy, uLightSpan[i]) inside a loop
+ * over the lights: GLSL ES 1.0 only lets a loop index address a uniform array.
+ */
+vec2 nearestOnLight(vec2 p, vec2 c, vec2 h) {
+  float len2 = dot(h, h);
+  if (len2 < 1e-6) return c;
+  float t = clamp(dot(p - c, h) / len2, -1.0, 1.0);
+  return c + h * t;
+}
 `;
 
 /** One light, packed for a pass: already resolved to that pass's receiver. */
@@ -38,6 +53,8 @@ export type PackedLight = {
   charge: number;
   /** How much of its output is ultraviolet (Light.uv); 0 if left out. */
   uv?: number;
+  /** Half a line light's length, as a vector (Light.span); a point if left out. */
+  span?: readonly [number, number] | undefined;
 };
 
 export type LightLocations = {
@@ -48,6 +65,7 @@ export type LightLocations = {
   radius: WebGLUniformLocation | null;
   charge: WebGLUniformLocation | null;
   uv: WebGLUniformLocation | null;
+  span: WebGLUniformLocation | null;
 };
 
 export function lightLocations(gl: WebGLRenderingContext, program: WebGLProgram): LightLocations {
@@ -60,6 +78,7 @@ export function lightLocations(gl: WebGLRenderingContext, program: WebGLProgram)
     radius: U("uLightRadius"),
     charge: U("uLightCharge"),
     uv: U("uLightUv"),
+    span: U("uLightSpan"),
   };
 }
 
@@ -70,6 +89,7 @@ const power = new Float32Array(MAX_LIGHTS);
 const radius = new Float32Array(MAX_LIGHTS);
 const charge = new Float32Array(MAX_LIGHTS);
 const uv = new Float32Array(MAX_LIGHTS);
+const span = new Float32Array(MAX_LIGHTS * 2);
 
 /** Upload up to MAX_LIGHTS lights; the program must be in use. */
 export function uploadLights(
@@ -90,8 +110,14 @@ export function uploadLights(
     radius[i] = l.radius;
     charge[i] = l.charge;
     uv[i] = l.uv ?? 0;
+    span[i * 2] = l.span?.[0] ?? 0;
+    span[i * 2 + 1] = l.span?.[1] ?? 0;
   }
-  for (let i = n; i < MAX_LIGHTS; i++) uv[i] = 0;
+  for (let i = n; i < MAX_LIGHTS; i++) {
+    uv[i] = 0;
+    span[i * 2] = 0;
+    span[i * 2 + 1] = 0;
+  }
   gl.uniform1i(loc.count, n);
   gl.uniform3fv(loc.pos, pos);
   gl.uniform3fv(loc.colour, colour);
@@ -99,4 +125,20 @@ export function uploadLights(
   gl.uniform1fv(loc.radius, radius);
   gl.uniform1fv(loc.charge, charge);
   gl.uniform1fv(loc.uv, uv);
+  gl.uniform2fv(loc.span, span);
+}
+
+/** The TS twin of nearestOnLight in LIGHTS_GLSL. */
+export function nearestOnLight(
+  p: readonly [number, number],
+  centre: readonly [number, number],
+  span: readonly [number, number] = [0, 0],
+): [number, number] {
+  const len2 = span[0] * span[0] + span[1] * span[1];
+  if (len2 < 1e-6) return [centre[0], centre[1]];
+  const t = Math.max(
+    -1,
+    Math.min(1, ((p[0] - centre[0]) * span[0] + (p[1] - centre[1]) * span[1]) / len2),
+  );
+  return [centre[0] + span[0] * t, centre[1] + span[1] * t];
 }

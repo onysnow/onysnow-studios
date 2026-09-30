@@ -114,9 +114,11 @@ function LabSamples() {
           <Pane className="mx-auto mt-6 max-w-2xl !p-5">
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Neon</p>
             <p className="mt-3 text-sm text-muted-foreground">
-              A tube with gas in it, not glowing text: white-hot at the core, the gas&rsquo;s colour
-              round it, pale glass when it drops out. Each sign is a light in the scene, so this
-              pane catches them. Top: a loose electrode. Bottom: a dying transformer.
+              One glass tube per word, bent the way sign-makers bend it (Tilt Neon), with the runs
+              between letters painted out and an electrode at each end. Lit, the gas burns white in
+              the middle of the tube and in its colour at the walls; dropped out, it is pale glass.
+              Each sign is a line of light in the scene, so this pane catches them. Top: a loose
+              electrode. Bottom: a dying transformer.
             </p>
           </Pane>
         </div>

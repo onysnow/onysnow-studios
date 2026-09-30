@@ -61,6 +61,12 @@ export type Light = {
    * optical brighteners in paper, fluorescent orange plastic.
    */
   readonly uv: number;
+  /**
+   * For a line light (a neon tube), half its length as a vector from its
+   * centre (x, y). Points have none. The passes light each point from the
+   * nearest point on the line.
+   */
+  readonly span?: readonly [number, number] | undefined;
 };
 
 /** The lamp's colour: a warm white, a little under daylight. */
@@ -393,8 +399,12 @@ export function makeEmitter(
   height: number,
   radius: () => number,
   share = 0.8,
+  span?: () => readonly [number, number],
 ): Emitter {
   return {
+    get span() {
+      return span?.();
+    },
     id,
     kind: "point",
     x: -9999,

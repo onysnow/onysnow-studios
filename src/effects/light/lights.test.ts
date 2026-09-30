@@ -156,3 +156,25 @@ describe("the road flare", () => {
     flareLight.charge = 0;
   });
 });
+
+// Item 25c: line lights (a neon tube) light each point from its nearest point.
+describe("line lights", () => {
+  it("are the point itself with no span, and the nearest point on the segment with one", async () => {
+    const { nearestOnLight, LIGHTS_GLSL } = await import("./light-uniforms");
+    expect(nearestOnLight([30, 40], [0, 0])).toEqual([0, 0]);
+    // A tube from x = -100 to 100 at y = 0.
+    expect(nearestOnLight([30, 40], [0, 0], [100, 0])).toEqual([30, 0]);
+    expect(nearestOnLight([300, 40], [0, 0], [100, 0])).toEqual([100, 0]);
+    expect(nearestOnLight([-300, -5], [0, 0], [100, 0])).toEqual([-100, 0]);
+    expect(LIGHTS_GLSL).toContain("vec2 nearestOnLight(vec2 p, vec2 c, vec2 h)");
+  });
+
+  it("are what both passes light from", async () => {
+    const { GLASS_LIGHT_FRAGMENT_SHADER } = await import("@/lib/glass-light-shader");
+    const { FLOOR_FRAGMENT_SHADER } = await import("@/lib/floor-light-shader");
+    expect(GLASS_LIGHT_FRAGMENT_SHADER).toContain(
+      "vec2 lightXY = nearestOnLight(frag, uLightPos[i].xy, uLightSpan[i]);",
+    );
+    expect(FLOOR_FRAGMENT_SHADER).toContain("nearestOnLight(at, uLightPos[i].xy, uLightSpan[i])");
+  });
+});

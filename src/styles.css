@@ -2929,52 +2929,110 @@ html.is-winding * {
   mix-blend-mode: screen;
 }
 
-/* ===================== Neon (item 23) =====================
- * components/site/Neon. --lit is how hard the tube is burning (0 dark, 1
- * full), set as it flickers; --neon-colour is its gas.
+/* ===================== Neon (items 23, 25c) =====================
+ * components/site/Neon. One glass tube per word (claude/tools-research.md):
+ * the tube layer is the glass, always there; the gas layer is the discharge,
+ * faded by opacity as the tube flickers (composited, never repainted); the
+ * plumbing is the blacked-out runs between letters and the electrode caps.
+ * --neon-colour is the gas.
  */
 .neon {
-  --lit: 1;
-  --glow: color-mix(in srgb, var(--neon-colour) calc(var(--lit) * 100%), transparent);
   position: relative;
   display: inline-block;
-  font-family: var(--font-display, inherit);
-  font-weight: 300;
-  letter-spacing: 0.02em;
-  /* The tube: white-hot where the discharge is densest; pale glass with a hint of colour when dark. */
-  color: color-mix(
-    in oklab,
-    color-mix(in oklab, var(--neon-colour) 22%, rgb(210 212 222 / 0.45)),
-    color-mix(in oklab, var(--neon-colour), white 62%) calc(var(--lit) * 100%)
-  );
-  -webkit-text-stroke: 0.6px rgb(255 255 255 / calc(0.12 + 0.1 * (1 - var(--lit))));
-  /* The gas's colour round the core, then the glow it throws into the air. */
-  text-shadow:
-    0 0 1px color-mix(in srgb, white calc(var(--lit) * 90%), transparent),
-    0 0 3px var(--glow),
-    0 0 8px var(--glow),
-    0 0 18px color-mix(in srgb, var(--glow) 70%, transparent),
-    0 0 38px color-mix(in srgb, var(--glow) 45%, transparent),
-    0 0 70px color-mix(in srgb, var(--glow) 25%, transparent);
+  font-family: "Tilt Neon", var(--font-display, sans-serif);
+  font-weight: 400;
+  /* Neon lettering is spaced wide: the glow thickens every line at night. */
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  isolation: isolate;
 }
 
-/* The light it throws on what it hangs on: a soft wash of its colour, wider than the lettering. */
-.neon::after {
-  content: "";
+.neon__tube,
+.neon__gas {
+  display: block;
+  white-space: pre;
+}
+
+/* The glass tube: pale glass with the gas colour faint in it, a highlight along its top. */
+.neon__tube {
+  position: relative;
+  z-index: 1;
+  color: color-mix(in oklab, var(--neon-colour) 20%, rgb(214 218 228 / 0.34));
+  text-shadow:
+    0 -0.03em 0 rgb(255 255 255 / 0.22),
+    0 0.03em 0.02em rgb(0 0 0 / 0.35);
+}
+
+/*
+ * The gas, burning: white-hot where the discharge is densest (the middle of
+ * the tube), its colour toward the walls, and the glow it throws into the
+ * air, fading over a hand's width. Static: the flicker is this layer's
+ * opacity, not its styling.
+ */
+.neon__gas {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  color: color-mix(in oklab, var(--neon-colour), white 64%);
+  -webkit-text-stroke: 0.012em color-mix(in oklab, var(--neon-colour), white 20%);
+  text-shadow:
+    0 0 0.01em rgb(255 255 255 / 0.9),
+    0 0 0.04em var(--neon-colour),
+    0 0 0.1em var(--neon-colour),
+    0 0 0.22em color-mix(in srgb, var(--neon-colour) 70%, transparent),
+    0 0 0.45em color-mix(in srgb, var(--neon-colour) 42%, transparent),
+    0 0 0.9em color-mix(in srgb, var(--neon-colour) 22%, transparent);
+  will-change: opacity;
+}
+
+/* The blacked-out runs and the electrodes: under the lit letters, over the wall. */
+.neon__plumbing {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.neon__run {
+  stroke: rgb(18 16 18 / 0.92);
+  stroke-linecap: round;
+}
+
+/* The painted glass still catches the room along its top. */
+.neon__run-glint {
+  stroke: rgb(255 255 255 / 0.14);
+  stroke-linecap: round;
+}
+
+.neon__electrode {
+  fill: rgb(24 22 24);
+  stroke: rgb(120 118 124 / 0.6);
+  stroke-width: 0.8;
+}
+
+.neon__electrode-cap {
+  fill: rgb(70 68 74);
+}
+
+/* The light the lit tube throws onto what it hangs on: a soft wash of its colour. */
+.neon__wash {
   position: absolute;
   inset: -45% -12%;
-  z-index: -1;
+  z-index: 0;
   pointer-events: none;
   border-radius: 50%;
   background: radial-gradient(closest-side, var(--neon-colour), transparent);
-  opacity: calc(var(--lit) * 0.22);
+  opacity: 0.22;
   filter: blur(18px);
   mix-blend-mode: screen;
+  will-change: opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .neon {
-    --lit: 1 !important;
+  .neon__gas {
+    opacity: 1 !important;
   }
 }
 
