@@ -18,6 +18,12 @@ import type { SurfaceMaterial } from "@/effects/materials/surfaces";
 /** How the lamp falls on one surface resting on the glass (worked out by the scene). */
 export type SurfaceLight = {
   near: number;
+  /**
+   * How much of the lamp's UV reaches it, relative to straight under the
+   * lamp: the physical falloff (effects/optics/transmission irradianceFalloff), which
+   * reaches much further than `near`, the lamp's stylised reach.
+   */
+  uvReach: number;
   cast: { x: number; y: number; blur: number; model?: import("@/effects/optics/shadow").Shadow };
   alpha: number;
   lit: number;
@@ -88,13 +94,13 @@ export function writeSurfaceLight(
   }
 }
 
-/** How strongly a surface fluoresces: the UV reaching it (near x lit x uv) times its yield. */
+/** How strongly a surface fluoresces: the UV reaching it (uvReach x lit x uv) times its yield. */
 export function fluorescenceOn(
-  light: Pick<SurfaceLight, "near" | "lit">,
+  light: Pick<SurfaceLight, "uvReach" | "lit">,
   lamp: Pick<Light, "uv">,
   material: SurfaceMaterial,
 ): number {
-  return light.near * light.lit * lamp.uv * material.fluorescence.yield;
+  return light.uvReach * light.lit * lamp.uv * material.fluorescence.yield;
 }
 
 function fluorColour(material: SurfaceMaterial | undefined, alpha: number): string {

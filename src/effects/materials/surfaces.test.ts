@@ -23,11 +23,11 @@ describe("fluorescence", () => {
   });
 
   it("glows only where UV arrives", () => {
-    const light = { near: 1, lit: 1 };
+    const light = { uvReach: 1, lit: 1 };
     const dayglo = SURFACE_MATERIALS["dayglo-orange"];
     expect(fluorescenceOn(light, { uv: 0 }, dayglo)).toBe(0);
     expect(fluorescenceOn(light, { uv: 1 }, dayglo)).toBeCloseTo(1);
-    expect(fluorescenceOn({ near: 0, lit: 1 }, { uv: 1 }, dayglo)).toBe(0);
+    expect(fluorescenceOn({ uvReach: 0, lit: 1 }, { uv: 1 }, dayglo)).toBe(0);
   });
 
   it("treats an unknown material as ink, and lets most UV-A through the glass", () => {

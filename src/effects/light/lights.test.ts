@@ -178,3 +178,20 @@ describe("line lights", () => {
     expect(FLOOR_FRAGMENT_SHADER).toContain("nearestOnLight(at, uLightPos[i].xy, uLightSpan[i])");
   });
 });
+
+// Item 25b: a black light's UV reaches by the physical falloff, far past the lamp's stylised reach.
+describe("the physical falloff", () => {
+  it("is the inverse square with the slant, 1 straight under the light", async () => {
+    const { irradianceFalloff } = await import("@/effects/optics/transmission");
+    expect(irradianceFalloff(0, 300)).toBeCloseTo(1, 6);
+    // At a distance equal to the height: cos^3 of 45 degrees.
+    expect(irradianceFalloff(300, 300)).toBeCloseTo(Math.pow(0.5, 1.5), 6);
+    // Still a tenth of the light nearly two heights away -- plainly visible in the dark.
+    expect(irradianceFalloff(560, 300)).toBeGreaterThan(0.1);
+  });
+
+  it("is what the glass's fluorescence reads", async () => {
+    const { GLASS_LIGHT_FRAGMENT_SHADER } = await import("@/lib/glass-light-shader");
+    expect(GLASS_LIGHT_FRAGMENT_SHADER).toContain("uvCos * uvCos * uvCos");
+  });
+});

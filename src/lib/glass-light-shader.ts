@@ -996,10 +996,15 @@ void main() {
      * (effects/materials/surfaces): the specks -- dust and lint, fibres
      * carrying laundry brighteners -- glow blue-white; the smears -- finger
      * grease -- barely at all, as untreated prints do not. The UV reaches
-     * them as the grime's light does (rake), and not where something standing
-     * on the glass shades them. The clean glass does not glow.
+     * them by the physical falloff (inverse square, with the slant), not the
+     * grime's tight rake: in the dark a black light leaves, a mark lit by a
+     * tenth of the UV under the lamp still glows plainly, so its reach looks
+     * far longer than the lamp's light did. Not where something standing on
+     * the glass shades them. The clean glass does not glow.
      */
-    vec3 fluor = onFace * rake * unlit * uvShare * FLUOR_GAIN
+    // cos^3 of the slant: the irradiance falloff of effects/optics/transmission.
+    float uvCos = lightHeight / sqrt(dl * dl + lightHeight * lightHeight);
+    vec3 fluor = onFace * uvCos * uvCos * uvCos * unlit * uvShare * FLUOR_GAIN
       * (smear * uOilGlow + glint * uDustGlow);
 
     lampLight += (tint * face + mirror) * lit + fluor * lit;

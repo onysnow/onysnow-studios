@@ -27,6 +27,7 @@
  *
  * No React here; components register elements and the engine does the rest.
  */
+import { irradianceFalloff } from "@/effects/optics/transmission";
 import {
   SURFACE_MATERIALS,
   type SurfaceMaterial,
@@ -704,7 +705,11 @@ function lightOnSurface(r: DOMRect, standoff = 1): SurfaceLight {
   // Which way the light comes from, as a CSS gradient angle pointing AWAY
   // from it, so a gradient's 0% sits on the side facing the lamp.
   const angle = (Math.atan2(centreX - x, -(centreY - y)) * 180) / Math.PI;
-  return { near, cast, alpha, lit, angle };
+  // The UV's reach is the physical falloff, from the nearest point of the surface.
+  const dx = Math.max(r.left - x, 0, x - r.right);
+  const dy = Math.max(r.top - y, 0, y - r.bottom);
+  const uvReach = irradianceFalloff(Math.hypot(dx, dy), cursorLamp.height);
+  return { near, uvReach, cast, alpha, lit, angle };
 }
 
 /**
