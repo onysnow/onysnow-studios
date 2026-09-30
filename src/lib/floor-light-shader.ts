@@ -64,6 +64,7 @@ uniform vec2 uViewport;
 uniform float uScale;
 
 uniform float uLightGain;
+uniform float uCorners;  // ?try=corners: the bevel's bend turns the corner smoothly
 uniform float uShadowGain;
 uniform float uCaustics;
 /*
@@ -346,9 +347,24 @@ void main() {
     float dx = straight ? 1e5 : hs.x - abs(q.x);
     float d = min(dx, dy);
     if (d <= 0.0) continue;
+    /*
+     * ?try=corners (item 2a): round the corner. The nearer side decided the
+     * bend's direction outright, so at the diagonal it flipped from sideways
+     * to up-and-down in one pixel and the floor seen through the bevel broke
+     * along a line running in from each corner. Blended across the diagonal
+     * over the bevel's width (and the depth smoothed the same way), it turns.
+     */
+    vec2 outward = dy < dx ? vec2(0.0, sign(q.y)) : vec2(sign(q.x), 0.0);
+    if (uCorners > 0.5 && !straight) {
+      float k = max(min(0.5 * (dx + dy), uEdge[i]), 1e-3);
+      float hk = max(k - abs(dx - dy), 0.0) / k;
+      d = min(dx, dy) - hk * hk * k * 0.25;
+      if (d <= 0.0) continue;
+      float wy = smoothstep(-k, k, dx - dy);
+      outward = normalize(mix(vec2(sign(q.x), 0.0), vec2(0.0, sign(q.y)), wy));
+    }
     float x = edgeBand(d, uEdge[i]);
     float bend = (1.0 - x) * (1.0 - x) * uEdge[i] * 0.9 * uView;
-    vec2 outward = dy < dx ? vec2(0.0, sign(q.y)) : vec2(sign(q.x), 0.0);
     look = P + outward * bend;
     break;
   }

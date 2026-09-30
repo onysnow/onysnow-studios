@@ -191,6 +191,7 @@ export function GlassLight({
     const uFrost = U("uFrost");
     const uBounce = U("uBounce");
     const uFloorGain = U("uFloorGain");
+    const uCornerSoft = U("uCornerSoft");
     const uContact = U("uContact");
     const uFilmRect = U("uFilmRect");
     const uFilmSigma = U("uFilmSigma");
@@ -690,6 +691,7 @@ export function GlassLight({
         gl.uniform1f(uFrost, material.frost);
         gl.uniform1f(uBounce, previewing("bounce") ? 1 : 0);
         gl.uniform1f(uFloorGain, t("floorLight"));
+        gl.uniform1f(uCornerSoft, previewing("corners") ? pane.e : 0);
         /*
          * Resting dry on the pane below (?try=contact): the air film between
          * this pane's back face and its front, where the two overlap.

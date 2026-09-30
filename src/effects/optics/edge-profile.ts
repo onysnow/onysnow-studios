@@ -44,6 +44,39 @@ export function readEdgeWidth(el: Element, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+/**
+ * The pane's signed distance with the bevel's inner contours rounded through
+ * the corners (?try=corners, item 2a; twin of paneField in the glass light
+ * shader). A rounded box's contours keep its corner radius only until they
+ * are that deep; past it they meet in a mitre, and the bevel's normal flips
+ * across the diagonal -- a line running in from every corner. Here the depth
+ * to the two nearest sides is joined by a smooth minimum as wide as their
+ * mean depth (capped at `soft`), so the rim is untouched and every contour
+ * inside curves round the corner.
+ */
+export function roundedRectSDFSmooth(
+  px: number,
+  py: number,
+  halfW: number,
+  halfH: number,
+  radius: number,
+  soft: number,
+): number {
+  const d0 = roundedRectSDF(px, py, halfW, halfH, radius);
+  if (soft <= 0 || d0 >= 0) return d0;
+  // Depth to the two nearest sides, joined by a smooth minimum as wide as
+  // their mean depth (a smooth quantity, so the join itself has no crease),
+  // capped at `soft`.
+  const ex = halfW - Math.abs(px);
+  const ey = halfH - Math.abs(py);
+  const k = Math.min(0.5 * (ex + ey), soft);
+  if (k < 1e-3) return d0;
+  const h = Math.max(k - Math.abs(ex - ey), 0) / k;
+  const m = Math.min(ex, ey) - h * h * k * 0.25;
+  // Within the pane's own corner radius of the rim, its rounded corner.
+  return Math.max(d0, -m);
+}
+
 /** Signed distance to a rounded rectangle centred on the origin. Negative inside. */
 export function roundedRectSDF(
   px: number,

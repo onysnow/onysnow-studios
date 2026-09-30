@@ -112,7 +112,8 @@ uniform float uContact;      // 1: resting dry on the pane below (?try=contact, 
 uniform vec4 uFilmRect;      // where it overlaps that pane, CSS px
 uniform float uFilmSigma;    // rms roughness of the two faces that meet, nm
 uniform sampler2D uFilmLut;  // the air film's reflectance by gap (thin-film filmLut)
-uniform float uFloorGain;    // the floor pass's light gain ("Floor light"): how lit the print is shown
+uniform float uFloorGain;
+uniform float uCornerSoft;   // ?try=corners: how far in the bevel's lines round the corners, px (0: the old mitre)    // the floor pass's light gain ("Floor light"): how lit the print is shown
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
 // The lights: position, height above this pane, colour, power, size, charge.
 ${LIGHTS_GLSL}
@@ -279,6 +280,27 @@ ${BOKEH_GLSL}
 ${CONTACT_GAP_GLSL}
 
 /*
+ * The pane's signed distance, with the bevel's lines rounded through the
+ * corners (?try=corners, item 2a). A rounded box's inner contours keep its
+ * corner radius only until they are that deep; past it they meet in a mitre,
+ * and the bevel's normal flips across the diagonal -- a thin line running in
+ * from every corner. Here the depth to the two nearest sides is joined by a
+ * smooth minimum as wide as their mean depth (capped at uCornerSoft), so the
+ * rim is untouched and every contour inside curves round the corner
+ * (edge-profile roundedRectSDFSmooth is the twin).
+ */
+float paneField(vec2 p, vec2 halfSize, float radius) {
+  float d0 = roundedBox(p, halfSize, radius);
+  if (uCornerSoft <= 0.0 || d0 >= 0.0) return d0;
+  vec2 e = halfSize - abs(p);
+  float k = min(0.5 * (e.x + e.y), uCornerSoft);
+  if (k < 1e-3) return d0;
+  float h = max(k - abs(e.x - e.y), 0.0) / k;
+  float m = min(e.x, e.y) - h * h * k * 0.25;
+  return max(d0, -m);
+}
+
+/*
  * The print at a point of the page (?try=bounce): the photograph below the seam
  * where a band crosses one and the point is past it, else the one behind; nothing
  * off the edge of either.
@@ -441,7 +463,7 @@ void main() {
    * bevel and the bend run straight across and nothing turns a corner.
    */
   vec2 edgeHalf = uStraight > 0.5 ? vec2(1e5, halfSize.y) : halfSize;
-  float d = roundedBox(p, edgeHalf, uRadius);
+  float d = paneField(p, edgeHalf, uRadius);
   float inside = smoothstep(0.5, -0.5, d);
   /*
    * The lit edge's own layer (uGlowOnly) is nothing but the edge and its
@@ -463,10 +485,10 @@ void main() {
    * across the middle, which is exactly how a pane behaves.
    */
   const float EPS = 1.0;
-  float dx = roundedBox(p + vec2(EPS, 0.0), edgeHalf, uRadius)
-           - roundedBox(p - vec2(EPS, 0.0), edgeHalf, uRadius);
-  float dy = roundedBox(p + vec2(0.0, EPS), edgeHalf, uRadius)
-           - roundedBox(p - vec2(0.0, EPS), edgeHalf, uRadius);
+  float dx = paneField(p + vec2(EPS, 0.0), edgeHalf, uRadius)
+           - paneField(p - vec2(EPS, 0.0), edgeHalf, uRadius);
+  float dy = paneField(p + vec2(0.0, EPS), edgeHalf, uRadius)
+           - paneField(p - vec2(0.0, EPS), edgeHalf, uRadius);
   vec2 grad = normalize(vec2(dx, dy) + 1e-6);
 
   float depth = -d;                       // positive inside

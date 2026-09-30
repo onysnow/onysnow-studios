@@ -35,6 +35,8 @@ export const PREVIEWS = {
     "A laser pointer's beam across the page (?laser=red|green|violet): it enters the panes at their edges, bends, splits, is guided and absorbed as real glass does; press and drag to aim",
   bounce:
     "Light bouncing off a lit photograph lights the frosted glass above it from below, in the photograph's colour (light engine step F)",
+  corners:
+    "The bevel's lines round each corner in a curve instead of meeting in a mitre, so no thin line runs in from the corners (item 2a)",
   contact:
     "Two panes resting dry on each other (the Contact stack on Lab samples): the air film between them shows Newton's colours where both faces are polished, black where they touch (light engine step G)",
   broken:

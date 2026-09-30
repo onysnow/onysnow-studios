@@ -74,6 +74,7 @@ export function FloorLight() {
     const uFrost = U("uFrost");
     const uEdge = U("uEdge");
     const uLightGain = U("uLightGain");
+    const uCorners = U("uCorners");
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
     const uGrimeFloor = U("uGrimeFloor");
@@ -272,6 +273,7 @@ export function FloorLight() {
         })),
       );
       gl.uniform1f(uLightGain, t("floorLight"));
+      gl.uniform1f(uCorners, previewing("corners") ? 1 : 0);
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
