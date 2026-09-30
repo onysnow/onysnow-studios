@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { Magnifier } from "@/components/site/Magnifier";
 import { FlareTorch } from "@/components/site/FlareTorch";
 import { LaserBeam } from "@/components/site/LaserBeam";
+import { Hammer } from "@/components/site/Hammer";
 import {
-  TOOLS,
   heldTool,
   holdTool,
   onToolChange,
   toolTray,
+  toolsOffered,
   type ToolId,
 } from "@/effects/tools/held";
 
@@ -43,13 +44,19 @@ const ICONS: Record<ToolId, React.ReactNode> = {
       <path d="m12.2 12.2 5 5" />
     </>
   ),
+  hammer: (
+    <>
+      <path d="M4.5 5.5 9 3l2.5 2.5L9 8z" />
+      <path d="m8.5 7.5 8 8.5" />
+    </>
+  ),
 };
 
 /** The tray: pick up one tool, putting down the last (?try=tools). */
 function Tray({ held }: { held: ToolId }) {
   return (
     <div className="tool-tray" data-tool-tray role="toolbar" aria-label="What you hold">
-      {TOOLS.map((tool) => (
+      {toolsOffered().map((tool) => (
         <button
           key={tool.id}
           type="button"
@@ -97,6 +104,7 @@ export function HeldTool() {
       {held === "magnifier" ? <Magnifier /> : null}
       {held === "flare" ? <FlareTorch /> : null}
       {held === "laser" ? <LaserBeam /> : null}
+      {held === "hammer" ? <Hammer /> : null}
       {tray ? <Tray held={held} /> : null}
     </>
   );

@@ -17,7 +17,7 @@ import { previewing } from "@/effects/engine/preview";
  * shows the tray to change it.
  */
 
-export type ToolId = "lamp" | "blacklight" | "flare" | "laser" | "magnifier";
+export type ToolId = "lamp" | "blacklight" | "flare" | "laser" | "magnifier" | "hammer";
 
 export type Tool = {
   id: ToolId;
@@ -43,6 +43,11 @@ export const TOOLS: readonly Tool[] = [
   { id: "flare", label: "Flare", lamp: null, lampSeen: false },
   { id: "laser", label: "Laser", lamp: null, lampSeen: false },
   { id: "magnifier", label: "Magnifier", lamp: "white", lampSeen: false },
+  /*
+   * A glazier's hammer, to break a pane (item 10, ?try=broken): a strike
+   * is a moment, so the lamp stays in the other hand to see the cracks by.
+   */
+  { id: "hammer", label: "Hammer", lamp: "white", lampSeen: true },
 ];
 
 const byId = new Map(TOOLS.map((t) => [t.id, t]));
@@ -93,9 +98,14 @@ export function lampSeen(): boolean {
   return byId.get(heldTool())?.lampSeen ?? true;
 }
 
-/** Whether the tray is shown (?try=tools). */
+/** Whether the tray is shown (?try=tools, or ?try=broken for the hammer). */
 export function toolTray(): boolean {
-  return previewing("tools");
+  return previewing("tools") || previewing("broken");
+}
+
+/** The tools on offer: the hammer only while breaking glass is being tried (?try=broken). */
+export function toolsOffered(): readonly Tool[] {
+  return TOOLS.filter((t) => t.id !== "hammer" || previewing("broken"));
 }
 
 /** For tests: put the hand back as a fresh page load would find it. */
