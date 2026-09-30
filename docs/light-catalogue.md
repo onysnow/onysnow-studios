@@ -33,7 +33,7 @@ Updated 2026-09-30 with what the light engine steps E–I and item 32 have built
 | Rough transmission (frosted face)            | microfacet BTDF ([Walter et al. 2007](https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.html)) | Now (approximate); Preview `?try=roughglass` (full BTDF, `effects/optics/rough-transmission`) |
 | Diffuse reflection (paper, photo)            | Lambert, one bounce                                                                                   | Preview `?try=bounce`                                                                         |
 | Thin-film interference                       | Airy, CIE colour, Bennett–Porteus roughness loss                                                      | Preview `?try=contact` (`effects/optics/thin-film`)                                           |
-| Anti-reflection coatings                     | quarter-wave film                                                                                     | Plan (a material option; the thin-film code can compute it)                                   |
+| Anti-reflection coatings                     | quarter-wave film                                                                                     | Preview `?try=coating` (museum glass, `effects/optics/coating`)                               |
 
 ### 3.3 Inside a material
 
@@ -77,5 +77,5 @@ Updated 2026-09-30 with what the light engine steps E–I and item 32 have built
 | Chromatic aberration of the lens      | Now                                                                                                                            |
 | Polarising filter                     | Preview `?try=polariser`                                                                                                       |
 | Depth of field (the photos' own blur) | In the photographs themselves                                                                                                  |
-| Vignetting                            | Plan (camera)                                                                                                                  |
+| Vignetting                            | Preview `?try=vignette` (cos⁴ law, `effects/camera/vignette`)                                                                  |
 | Afterimage and adaptation             | Now                                                                                                                            |
