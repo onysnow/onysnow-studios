@@ -95,6 +95,20 @@ uniform float uEdge[${MAX_FLOOR_PANES}];
 uniform float uGap[${MAX_FLOOR_PANES}];
 uniform float uIor[${MAX_FLOOR_PANES}];
 uniform float uFrost[${MAX_FLOOR_PANES}];
+// ?try=roughglass (step H, 30b): each pane's frosted face from the microfacet
+// BTDF (effects/optics/rough-transmission) -- its transmission against a
+// smooth face's, and its spread, at the cosines 1, 0.7, 0.4, 0.15.
+uniform float uRoughGlass;
+uniform vec4 uRoughRatio[${MAX_FLOOR_PANES}];
+uniform vec4 uRoughSpread[${MAX_FLOOR_PANES}];
+
+/* A pane's row read at an angle's cosine, piecewise linear (rough-transmission.ts roughAt). */
+float roughAt(vec4 v, float cosTheta) {
+  float c = clamp(cosTheta, 0.15, 1.0);
+  if (c >= 0.7) return mix(v.y, v.x, (c - 0.7) / 0.3);
+  if (c >= 0.4) return mix(v.z, v.y, (c - 0.4) / 0.3);
+  return mix(v.w, v.z, (c - 0.15) / 0.25);
+}
 /*
  * For the bottom layer of a stack: what the whole stack lets through,
  * relative to this layer alone (effects/scene/graph). Exactly 1 for a pane
@@ -207,6 +221,15 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     // lamp and less at a slant, where more of it is reflected away.
     float passes = transmittance(cosT, ior) / transmittance(1.0, ior);
     float frostBlur = frostSpread(frost, ior, gap, cosT);
+    // What of the light the frosted face lets through, against a smooth face.
+    float faceThrough = 1.0 - 0.18 * frost;
+    if (uRoughGlass > 0.5) {
+      // From the facets themselves (Walter et al. 2007): the lobe's spread
+      // carried over the slant path, and the rough face's real loss.
+      float cs = max(cosT, 0.05);
+      frostBlur = roughAt(uRoughSpread[i], cosT) * gap / (cs * cs);
+      faceThrough = roughAt(uRoughRatio[i], cosT);
+    }
     // A distance on the floor, as a distance on the glass plane.
     float toGlass = max(height - gap, 1.0) / max(height, 1.0);
     // Back along the ray to this pane's plane.
@@ -241,7 +264,7 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
      * the beam (see frostBlur above) and sends a little back.
      */
     float onFace = smoothstep(1.0 - soft, 1.0 + soft, x);
-    vec3 through = vec3(pool * passes * (1.0 - 0.18 * frost) * onFace);
+    vec3 through = vec3(pool * passes * faceThrough * onFace);
 
     /*
      * The bevel: a clear, polished strip, angled. Every ray through it is
