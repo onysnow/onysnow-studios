@@ -27,7 +27,7 @@ import { CustomCss } from "@/components/site/CustomCss";
 import { listenForLabDraft, reportLabPath } from "@/lib/lab-bridge";
 import { Magnifier } from "@/components/site/Magnifier";
 import { FlareTorch } from "@/components/site/FlareTorch";
-import { LaserDot } from "@/components/site/LaserDot";
+import { LaserBeam } from "@/components/site/LaserBeam";
 import { previewing } from "@/effects/engine/preview";
 import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
@@ -154,7 +154,7 @@ function ToolsIfTried() {
     <>
       {on.magnifier ? <Magnifier /> : null}
       {on.flare ? <FlareTorch /> : null}
-      {on.laser ? <LaserDot /> : null}
+      {on.laser ? <LaserBeam /> : null}
     </>
   );
 }

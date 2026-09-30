@@ -828,7 +828,7 @@ void main() {
   vec3 lampLight = vec3(0.0);     // (tint * face + mirror) * lit, per light
   vec3 lampGlow = vec3(0.0);      // tint * rim * lit: the lit edge and its bloom, per light
   vec3 lampSpecular = vec3(0.0);  // the Blinn-Phong highlight, per light
-  float lampEdge = 0.0;           // the bevel's share of each light
+  vec3 lampEdge = vec3(0.0);      // the bevel's share of each light, in its colour
   for (int i = 0; i < MAX_LIGHTS; i++) {
     if (i >= uLightCount) break;
     // A line light (a neon tube) reaches this point from its nearest point.
@@ -1009,8 +1009,14 @@ void main() {
 
     lampLight += (tint * face + mirror) * lit + fluor * lit;
     lampGlow += tint * rim * lit;
-    lampSpecular += mix(vec3(1.0), uLightColour[i], uvShare) * specular * inside * lit;
-    lampEdge += bevel * lit;
+    /*
+     * A glass surface reflects light as it comes, so a highlight is the
+     * colour of the light it mirrors: the lamp's reads white (it is the
+     * white here), a red flare's or a laser spot's reads in its own colour.
+     */
+    vec3 mirrored = mix(uLightColour[i] / LAMP_WHITE, uLightColour[i], uvShare);
+    lampSpecular += mirrored * specular * inside * lit;
+    lampEdge += mirrored * bevel * lit;
   }
 
   vec3 colour = sideLight + arrisRoom;
