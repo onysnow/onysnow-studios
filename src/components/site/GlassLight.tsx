@@ -32,6 +32,7 @@ import {
 import { LIGHT_BLEED } from "@/effects/engine/compositor";
 import { castShadow as castByModel } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
+import { SURFACE_MATERIALS } from "@/effects/materials/surfaces";
 import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
@@ -166,6 +167,8 @@ export function GlassLight({
     const uPlasticLand = U("uPlasticLand");
     const uPlasticRadius = U("uPlasticRadius");
     const uPlasticCount = U("uPlasticCount");
+    const uOilGlow = U("uOilGlow");
+    const uDustGlow = U("uDustGlow");
     // Item 18b: the plastic lit here, not by CSS (html[data-try~="shaderplastic"] in styles.css).
     const shaderPlastic = previewing("shaderplastic");
 
@@ -578,6 +581,13 @@ export function GlassLight({
       gl.uniform1f(uEdgeBloom, camera.lens.edgeBloom);
       gl.uniform1f(uBokehGain, camera.bokeh);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
+      // What the grime gives back under UV: its materials' fluorescence.
+      const glow = (id: "grime-oil" | "grime-dust") => {
+        const f = SURFACE_MATERIALS[id].fluorescence;
+        return [f.colour[0] * f.yield, f.colour[1] * f.yield, f.colour[2] * f.yield] as const;
+      };
+      gl.uniform3fv(uOilGlow, glow("grime-oil"));
+      gl.uniform3fv(uDustGlow, glow("grime-dust"));
       gl.uniform1f(uBurn, previewing("burn") ? 1 : 0);
       gl.uniform1f(uRoomKnee, previewing("dimroom") ? ROOM_KNEE : 0);
       /*

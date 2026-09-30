@@ -1086,10 +1086,18 @@ span:has(> .photo-surface) {
     transparent 100%
   );
   background-repeat: no-repeat;
-  /* The edge's shadow: the light the rounded edge bent away, a thin dark line round it. */
+  /*
+   * The edge's shadow: the light the rounded edge bent away, a thin dark line
+   * round it. Then what it gives back under UV (--fluor-face, --fluor-glow,
+   * from its material via the CSS adapter; transparent without UV): a
+   * day-glo pigment glows hard in its own colour, over its face and out
+   * into the air round it.
+   */
   box-shadow:
     0 0 0 1px rgb(0 0 0 / calc(0.45 * var(--plastic-on))),
-    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on)));
+    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on))),
+    inset 0 0 0 999px var(--fluor-face, transparent),
+    0 0 18px 3px var(--fluor-glow, transparent);
 }
 
 /* The orange light the lamp throws through it, onto what is behind: mild, a little wider than the button. */
@@ -1145,23 +1153,6 @@ span:has(> .photo-surface) {
  * darkens, and that layer only adds) and the rim's resting sheen from the
  * room.
  */
-/*
- * ?try=blacklight (item 20): what fluoresces under the lamp's UV (--uv-on,
- * how much reaches each surface, from the CSS adapter). White type carries
- * optical brighteners and glows blue; the orange plastic is fluorescent and
- * glows its own orange, hard. The photographs are ordinary surfaces: they
- * barely answer. The smears on the glass glow in the glass light pass.
- */
-html[data-try~="blacklight"] .glass :is(h1, h2, h3, h4, p, blockquote) {
-  color: color-mix(in oklab, currentColor, rgb(185 200 255) calc(var(--uv-on, 0) * 55%));
-  filter: drop-shadow(0 0 3px rgb(140 165 255 / calc(var(--uv-on, 0) * 0.85)));
-}
-
-html[data-try~="blacklight"] .plastic {
-  filter: brightness(calc(1 + var(--uv-on, 0) * 0.45)) saturate(calc(1 + var(--uv-on, 0) * 0.6))
-    drop-shadow(0 0 10px rgb(255 130 30 / calc(var(--uv-on, 0) * 0.75)));
-}
-
 html[data-try~="shaderplastic"] .glass .plastic {
   background-image: none;
 }

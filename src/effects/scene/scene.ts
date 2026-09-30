@@ -27,6 +27,11 @@
  *
  * No React here; components register elements and the engine does the rest.
  */
+import {
+  SURFACE_MATERIALS,
+  type SurfaceMaterial,
+  type SurfaceMaterialId,
+} from "@/effects/materials/surfaces";
 import { t } from "@/lib/tuning";
 import { GLOW_LAYER_Z, LIGHT_BLEED, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
@@ -181,6 +186,8 @@ const litSurfaces = new Set<HTMLElement>();
 const nonOccluding = new WeakSet<HTMLElement>();
 /** How far each surface stands off the glass, as a share of "Content depth" (1 if unset). */
 const standoffs = new WeakMap<HTMLElement, number>();
+/** What each surface is made of, optically (ink if unset). */
+const surfaceMaterials = new WeakMap<HTMLElement, SurfaceMaterial>();
 
 /** Each pane's side faces, siblings of it (see .glass-side). */
 type SideLayers = {
@@ -381,6 +388,8 @@ type SurfaceReading = {
   pane: HTMLElement | null;
   /** How far it stands off the glass, as a share of "Content depth". */
   standoff: number;
+  /** What it is made of, optically (effects/materials/surfaces). */
+  material: SurfaceMaterial;
 };
 
 type SceneReading = {
@@ -442,6 +451,7 @@ function readSurface(el: HTMLElement): SurfaceReading {
     radius: cornerRadius(el),
     pane: nonOccluding.has(el) ? null : el.closest<HTMLElement>(".glass"),
     standoff: standoffs.get(el) ?? 1,
+    material: surfaceMaterials.get(el) ?? SURFACE_MATERIALS.ink,
   };
 }
 
@@ -896,7 +906,7 @@ function writeSurface(s: SurfaceReading, light: SurfaceLight) {
   const el = s.el;
   const r = s.rect;
   if (r.width === 0 || r.height === 0) return;
-  writeSurfaceLight(el, r, cursorLamp, light);
+  writeSurfaceLight(el, r, cursorLamp, light, s.material);
   // For the room reflection, offset for the surface's height above the glass.
   el.style.setProperty("--surface-x", `${Math.round(r.left)}px`);
   el.style.setProperty("--surface-y", `${Math.round(r.top)}px`);
@@ -1023,6 +1033,8 @@ export type LitSurfaceOptions = {
    * shadow is and how soft all follow from it (effects/optics/shadow).
    */
   standoff?: number;
+  /** What it is made of, optically: what it does under UV (effects/materials/surfaces). */
+  material?: SurfaceMaterialId;
 };
 
 /** Add a surface resting on the glass; it is told where the light falls on it. */
@@ -1031,6 +1043,8 @@ export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions =
   else nonOccluding.delete(el);
   if (options.standoff !== undefined) standoffs.set(el, options.standoff);
   else standoffs.delete(el);
+  if (options.material) surfaceMaterials.set(el, SURFACE_MATERIALS[options.material]);
+  else surfaceMaterials.delete(el);
   litSurfaces.add(el);
   bind();
   reschedule();

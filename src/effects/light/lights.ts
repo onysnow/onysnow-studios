@@ -67,11 +67,13 @@ export type Light = {
 export const LAMP_COLOUR = [1.0, 0.94, 0.84] as const;
 
 /**
- * A black light's visible leak (?try=blacklight): the deep violet a UV-A
- * tube lets through its filter glass, a fraction of a lamp's brightness.
- * Everything else it gives off is ultraviolet (Light.uv).
+ * A black light's visible leak (?try=blacklight). A 365 nm lamp's output
+ * tails off before 400 nm, leaving only a dull bluish-white glow -- a few
+ * per cent of a lamp -- which is why what fluoresces reads so clearly under
+ * it; a 395 nm torch's strong violet washes faint glows out
+ * (claude/tools-research.md). Everything else it gives off is UV (Light.uv).
  */
-export const BLACKLIGHT_VISIBLE = [0.3, 0.1, 0.62] as const;
+export const BLACKLIGHT_VISIBLE = [0.07, 0.07, 0.11] as const;
 
 /** The lamp the cursor carries. First in the list, always there. */
 export const cursorLamp: Light = {

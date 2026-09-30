@@ -81,6 +81,10 @@ uniform vec4 uPlasticLand[MAX_PLASTIC];
 uniform float uPlasticRadius[MAX_PLASTIC];
 uniform float uPlasticCount;
 
+/* The grime's fluorescence, colour x yield (effects/materials/surfaces): smears (oil), specks (dust). */
+uniform vec3 uOilGlow;
+uniform vec3 uDustGlow;
+
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
 uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one edge every effect shares
@@ -287,8 +291,12 @@ ${BOKEH_GLSL}
 /* The lamp's own colour: what the glass's warm and cool tints are measured against. */
 const vec3 LAMP_WHITE = vec3(${LAMP_COLOUR.join(", ")});
 
-/* The glow of skin oil and dust under UV: blue-white, as in a forensic photograph. */
-const vec3 FLUORESCENT_SMEAR = vec3(0.55, 0.78, 1.0);
+/*
+ * How bright a fluorescence of yield 1 is against the grime's own raked
+ * light: the strongest fluorescent thing on the page (a day-glo pigment)
+ * glows several times brighter than the same spot merely lit.
+ */
+const float FLUOR_GAIN = 3.0;
 
 const vec3 PLASTIC_ORANGE = vec3(1.0, 0.62, 0.225); // oklch(0.8 0.17 58), the buttons' own
 
@@ -982,16 +990,18 @@ void main() {
     tint = mix(tint, uLightColour[i], uvShare);
 
     /*
-     * Fluorescence (item 20, ?try=blacklight). What a UV light shows is not
-     * what it lights but what glows under it: skin oil and dust in the
-     * smears and specks turn the invisible light into a blue-white glow,
-     * where the UV reaches them -- the same reach the grime is raked by --
-     * and not where something standing on the glass shades them. Clean
-     * glass barely fluoresces; the marks are all you see.
+     * Fluorescence (items 20, 25a). A UV light shows not what it lights but
+     * what glows under it, and that is the materials' business
+     * (effects/materials/surfaces): the specks -- dust and lint, fibres
+     * carrying laundry brighteners -- glow blue-white; the smears -- finger
+     * grease -- barely at all, as untreated prints do not. The UV reaches
+     * them as the grime's light does (rake), and not where something standing
+     * on the glass shades them. The clean glass does not glow.
      */
-    float fluor = onFace * rake * (smear * 2.4 + glint * 0.9) * unlit * uvShare;
+    vec3 fluor = onFace * rake * unlit * uvShare * FLUOR_GAIN
+      * (smear * uOilGlow + glint * uDustGlow);
 
-    lampLight += (tint * face + mirror) * lit + FLUORESCENT_SMEAR * fluor * lit;
+    lampLight += (tint * face + mirror) * lit + fluor * lit;
     lampGlow += tint * rim * lit;
     lampSpecular += mix(vec3(1.0), uLightColour[i], uvShare) * specular * inside * lit;
     lampEdge += bevel * lit;

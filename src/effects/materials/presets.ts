@@ -36,6 +36,13 @@ export type Material = {
    * glass from Ony's reference photographs; see effects/optics/edge-side.ts.
    */
   absorb: readonly [number, number, number];
+  /**
+   * The share of near ultraviolet (UV-A, a black light's 365 nm) that gets
+   * through the pane. Soda-lime glass blocks nearly everything below 300 nm
+   * and passes about 70-75% of UV-A (claude/tools-research.md), so what is
+   * under a pane still fluoresces under a black light, somewhat less.
+   */
+  uvTransmit: number;
 };
 
 export type MaterialId = "frosted-float";
@@ -55,6 +62,7 @@ export const FROSTED_FLOAT: Material = {
   frost: 0.6,
   frostedFace: "back",
   absorb: [2.7, 0.9, 1.2],
+  uvTransmit: 0.72,
 };
 
 export const MATERIALS: Readonly<Record<MaterialId, Material>> = {
