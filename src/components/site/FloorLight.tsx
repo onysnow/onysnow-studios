@@ -159,7 +159,16 @@ export function FloorLight() {
         layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
       }
     };
-    const drawnPanes: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
+    type Drawn = {
+      el: HTMLElement;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      /** Where the layer above it in a stack lies over it: that part is the upper layer's to show. */
+      over: { x: number; y: number; w: number; h: number } | null;
+    };
+    const drawnPanes: Drawn[] = [];
 
     /*
      * Dynamic only while there is something to show. The liquid glass
@@ -195,8 +204,37 @@ export function FloorLight() {
         if (n >= MAX_FLOOR_PANES) break;
         if (pane.y + pane.h < -200 || pane.y > vh + 200) continue;
         if (pane.w < 120 || pane.h < 40) continue; // buttons and menus throw nothing worth drawing
-        // A stack throws one shadow: its bottom layer's, carrying the whole stack (uThrough).
-        if (pane.stack.index > 0) continue;
+        /*
+         * A stack throws one shadow: its bottom layer's, carrying the whole
+         * stack (uThrough). The layers above it throw none of their own, but
+         * each still shows the floor under it in its own layer -- the light
+         * that has come through the WHOLE stack -- and the layer below it
+         * leaves the part it covers to it (2a, Ony 2026-09-30: a pane under
+         * another sees only what came through the one above). Left to the
+         * lower layer, the upper pane's frost blurred a layer inside another
+         * pane that redraws every frame, and it came out as a hard rectangle
+         * in the overlap.
+         */
+        const over = pane.stack.aboveRect;
+        const overlap = over
+          ? {
+              x: Math.max(pane.x, over.x),
+              y: Math.max(pane.y, over.y),
+              w: Math.min(pane.x + pane.w, over.x + over.w) - Math.max(pane.x, over.x),
+              h: Math.min(pane.y + pane.h, over.y + over.h) - Math.max(pane.y, over.y),
+            }
+          : null;
+        if (pane.stack.index > 0) {
+          drawnPanes.push({
+            el: pane.el,
+            x: pane.x,
+            y: pane.y,
+            w: pane.w,
+            h: pane.h,
+            over: overlap,
+          });
+          continue;
+        }
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
         edges[n] = pane.e;
@@ -206,7 +244,7 @@ export function FloorLight() {
         throughs.set(pane.stack.throughScale, n * 3);
         marks[n * 2] = pane.causes.scratch;
         marks[n * 2 + 1] = pane.causes.smudge;
-        drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
+        drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h, over: overlap });
         n += 1;
       }
 
@@ -276,6 +314,15 @@ export function FloorLight() {
         const ch = Math.min(buffer.height, Math.ceil(sy + h)) - cy;
         if (cw <= 0 || ch <= 0) continue;
         ctx.drawImage(buffer, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
+        // The part a layer above covers is that layer's to show.
+        if (pane.over && pane.over.w > 0 && pane.over.h > 0) {
+          ctx.clearRect(
+            (pane.over.x - pane.x) * scale,
+            (pane.over.y - pane.y) * scale,
+            pane.over.w * scale,
+            pane.over.h * scale,
+          );
+        }
       }
 
       /*
