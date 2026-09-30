@@ -14,6 +14,7 @@ import {
   LogOut,
   MessageSquareQuote,
   Settings,
+  SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,6 +53,7 @@ const NAV: { to: string; label: string; icon: typeof Images; exact?: boolean }[]
   { to: "/admin/subscribers", label: "Subscribers", icon: Inbox },
   { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/admin/advanced", label: "Advanced", icon: Code2 },
+  { to: "/lab", label: "Effect lab", icon: SlidersHorizontal },
 ];
 
 function AdminLayout() {

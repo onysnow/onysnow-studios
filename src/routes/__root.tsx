@@ -11,7 +11,7 @@ import {
   createRootRouteWithContext,
   useRouterState,
 } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { CustomCursor } from "@/components/site/CustomCursor";
@@ -24,6 +24,7 @@ import { useRasterGlass } from "@/lib/glass-mode";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
+import { listenForLabDraft, reportLabPath } from "@/lib/lab-bridge";
 import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 function NotFoundComponent() {
@@ -137,8 +138,19 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { location } = useRouterState({ select: (s) => ({ location: s.location }) });
-  const isAdmin = location.pathname.startsWith("/admin") || location.pathname.startsWith("/auth");
+  /*
+   * Pages that are not the site: the Studio, sign-in, and the lab's editor
+   * (the lab shows the site in a frame beside its controls -- see lab.tsx --
+   * so the editor itself is an app screen, with no effect layer of its own).
+   */
+  const isAdmin =
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/auth") ||
+    location.pathname === "/lab";
   const raster = useRasterGlass();
+  // Inside the lab's preview frame: take the editor's draft tuning (lab-bridge).
+  useEffect(() => listenForLabDraft(), []);
+  useEffect(() => reportLabPath(location.pathname), [location.pathname]);
   return (
     <QueryClientProvider client={queryClient}>
       {isAdmin ? (

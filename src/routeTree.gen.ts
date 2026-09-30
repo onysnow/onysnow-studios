@@ -17,6 +17,7 @@ import { Route as BookRouteImport } from './routes/book'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as DuoRouteImport } from './routes/duo'
 import { Route as LabRouteImport } from './routes/lab'
+import { Route as LabSamplesRouteImport } from './routes/lab-samples'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ServicesRouteImport } from './routes/services'
@@ -76,6 +77,11 @@ const DuoRoute = DuoRouteImport.update({
 const LabRoute = LabRouteImport.update({
   id: '/lab',
   path: '/lab',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LabSamplesRoute = LabSamplesRouteImport.update({
+  id: '/lab-samples',
+  path: '/lab-samples',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PortfolioRoute = PortfolioRouteImport.update({
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/duo': typeof DuoRoute
   '/lab': typeof LabRoute
+  '/lab-samples': typeof LabSamplesRoute
   '/portfolio': typeof PortfolioRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
@@ -231,6 +238,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/duo': typeof DuoRoute
   '/lab': typeof LabRoute
+  '/lab-samples': typeof LabSamplesRoute
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
@@ -261,6 +269,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/duo': typeof DuoRoute
   '/lab': typeof LabRoute
+  '/lab-samples': typeof LabSamplesRoute
   '/portfolio': typeof PortfolioRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/services': typeof ServicesRoute
@@ -293,6 +302,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/duo'
     | '/lab'
+    | '/lab-samples'
     | '/portfolio'
     | '/privacy'
     | '/services'
@@ -323,6 +333,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/duo'
     | '/lab'
+    | '/lab-samples'
     | '/privacy'
     | '/services'
     | '/terms'
@@ -352,6 +363,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/duo'
     | '/lab'
+    | '/lab-samples'
     | '/portfolio'
     | '/privacy'
     | '/services'
@@ -384,6 +396,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   DuoRoute: typeof DuoRoute
   LabRoute: typeof LabRoute
+  LabSamplesRoute: typeof LabSamplesRoute
   PortfolioRoute: typeof PortfolioRouteWithChildren
   PrivacyRoute: typeof PrivacyRoute
   ServicesRoute: typeof ServicesRoute
@@ -448,6 +461,13 @@ declare module '@tanstack/react-router' {
       path: '/lab'
       fullPath: '/lab'
       preLoaderRoute: typeof LabRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lab-samples': {
+      id: '/lab-samples'
+      path: '/lab-samples'
+      fullPath: '/lab-samples'
+      preLoaderRoute: typeof LabSamplesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/portfolio': {
@@ -667,6 +687,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   DuoRoute: DuoRoute,
   LabRoute: LabRoute,
+  LabSamplesRoute: LabSamplesRoute,
   PortfolioRoute: PortfolioRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
   ServicesRoute: ServicesRoute,

@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures";
 
 /*
- * Stacks (light step E): panes resting on panes, in /lab only. Each layer is
+ * Stacks (light step E): panes resting on panes, in /lab-samples only (a page the lab previews). Each layer is
  * placed by the stack solver: the bottom one gets what came through the top
  * one, and a bonded pair passes more than an air-gapped pair, because the
  * surfaces between them are gone.
@@ -28,7 +28,7 @@ test("the lab's stacks are placed by the stack solver", async ({ page }) => {
   page.on("console", (m) => {
     if (m.type() === "error" && /\b(shader|link):/i.test(m.text())) shaderErrors.push(m.text());
   });
-  await page.goto("/lab?glass=css");
+  await page.goto("/lab-samples?glass=css");
   await page.waitForLoadState("networkidle");
   const stacks = page.locator("[data-lab-stacks] [data-stack]");
   await expect(stacks).toHaveCount(3, { timeout: 15_000 });

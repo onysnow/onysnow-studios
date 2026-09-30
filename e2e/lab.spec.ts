@@ -19,6 +19,26 @@ async function openLab(page: import("@playwright/test").Page) {
   await page.locator("#knob-ringSize").waitFor({ state: "attached" });
 }
 
+/** The site in the lab's preview, once it has rendered. */
+async function previewFrame(page: import("@playwright/test").Page) {
+  const handle = await page.locator("iframe[data-lab-preview]").elementHandle();
+  const frame = await handle!.contentFrame();
+  await frame!.locator(".glass").first().waitFor({ state: "attached", timeout: 60_000 });
+  return frame!;
+}
+
+async function setKnob(page: import("@playwright/test").Page, key: string, value: string) {
+  await page.evaluate(
+    ([key, value]) => {
+      const el = document.getElementById(`knob-${key}`) as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(el, value);
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    [key, value] as const,
+  );
+}
+
 test.describe("/lab", () => {
   test("puts every knob on a control", async ({ page }) => {
     await openLab(page);
@@ -30,38 +50,29 @@ test.describe("/lab", () => {
     expect(await page.locator("input[type=number]").count()).toBe(await sliders.count());
   });
 
-  test("moving a control changes what the effects read", async ({ page }) => {
+  test("moving a control changes the page in the preview, live", async ({ page }) => {
     await openLab(page);
+    const frame = await previewFrame(page);
 
     /*
      * `ringSize` -> `--tune-ring`, which styles.css actually consumes (the
      * cursor ring's size). A cause: the ring is part of the cursor, not a
      * result of the light.
      *
-     * This used to drive `grimeAmount` -> `--tune-grime`, and it passed for as
-     * long as that knob existed -- while nothing in the stylesheet ever read
-     * `--tune-grime`. It proved the slider wrote a variable and said nothing
-     * about whether the variable went anywhere. So it asserts the consumer
-     * too, so it cannot quietly go back to testing a wire to nowhere. (It then
-     * drove `transmit`, until step 7 locked that as a result.)
+     * Read in the PREVIEW, which is a separate window with its own copy of
+     * every module: the editor's own document changing would prove only that
+     * the slider wrote a variable in a page nobody is looking at.
      */
     const read = () =>
-      page.evaluate(() =>
+      frame.evaluate(() =>
         getComputedStyle(document.documentElement).getPropertyValue("--tune-ring").trim(),
       );
 
-    const before = await read();
-    await page.evaluate(() => {
-      const el = document.getElementById("knob-ringSize") as HTMLInputElement;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setter.call(el, "44");
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    expect(await read()).not.toBe("44px");
+    await setKnob(page, "ringSize", "44");
+    await expect.poll(read).toBe("44px");
 
-    await expect.poll(read).not.toBe(before);
-    expect(await read()).toBe("44px");
-
-    const consumed = await page.evaluate(() =>
+    const consumed = await frame.evaluate(() =>
       [...document.styleSheets].some((sheet) => {
         try {
           return [...sheet.cssRules].some((r) => r.cssText.includes("var(--tune-ring"));
@@ -71,6 +82,25 @@ test.describe("/lab", () => {
       }),
     );
     expect(consumed, "--tune-ring must be read by some rule, or this tests nothing").toBe(true);
+  });
+
+  test("keeps a change as a draft until it is saved, and Discard drops it", async ({ page }) => {
+    await openLab(page);
+    const status = page.locator("[data-lab-save]");
+    await expect(status).toHaveAttribute("data-lab-dirty", "no");
+
+    await setKnob(page, "ringSize", "44");
+    await expect(status).toHaveAttribute("data-lab-dirty", "yes");
+
+    // A reload does not lose it: the draft is kept in this browser.
+    await page.reload();
+    await page.locator("#knob-ringSize").waitFor({ state: "attached" });
+    await expect(page.locator("#knob-ringSize")).toHaveValue("44");
+    await expect(status).toHaveAttribute("data-lab-dirty", "yes");
+
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(status).toHaveAttribute("data-lab-dirty", "no");
+    await expect(page.locator("#knob-ringSize")).not.toHaveValue("44");
   });
 
   /*
@@ -99,12 +129,13 @@ test.describe("/lab", () => {
 
   test("previews on the real components, not a swatch", async ({ page }) => {
     await openLab(page);
+    const frame = await previewFrame(page);
 
     // The pieces interact, so tuning one against a mock would be worse than not
-    // tuning it at all.
-    await expect(page.locator(".glass").first()).toBeVisible();
-    expect(await page.locator(".transmitted").count()).toBeGreaterThan(0);
-    expect(await page.locator(".photo-surface").count()).toBeGreaterThan(0);
+    // tuning it at all. The preview is the site itself.
+    await expect(frame.locator(".glass").first()).toBeVisible();
+    await expect.poll(() => frame.locator(".floor-light").count()).toBeGreaterThan(0);
+    await expect.poll(() => frame.locator(".photo-surface").count()).toBeGreaterThan(0);
   });
 
   test("stays out of the index", async ({ request }) => {
