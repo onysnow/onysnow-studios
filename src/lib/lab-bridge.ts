@@ -1,0 +1,100 @@
+import { applySiteTuning } from "@/lib/tuning";
+import { setGlassMode, type GlassMode } from "@/lib/glass-mode";
+
+/**
+ * The lab's live preview: the editor at /lab and the real page in its frame.
+ *
+ * The lab is laid out like an app builder -- controls on the left, the actual
+ * site on the right -- and the site in the frame is a separate window with its
+ * own copy of every module, so moving a slider in the editor changes nothing
+ * there by itself. This is the wire between them: the editor posts its draft
+ * tuning into the frame, and the frame applies it exactly the way every
+ * visitor's browser applies the published tuning (applySiteTuning), so what
+ * the preview shows is what "Save for everyone" will publish.
+ *
+ * Only a same-origin parent is listened to. A page of ours framed by anyone
+ * else ignores every message: the origin check is on the message, and the
+ * source check means a sibling frame cannot pose as the editor.
+ */
+
+export type LabMessage =
+  | { type: "onysnow:lab-draft"; tuning: string; glass: GlassMode }
+  | { type: "onysnow:lab-ready"; path: string }
+  | { type: "onysnow:lab-path"; path: string };
+
+let draftActive = false;
+
+/**
+ * True once the editor has sent this page a draft. The published tuning must
+ * not then be applied over it (CustomCss), or the preview would snap back to
+ * what is live every time the settings refetch.
+ */
+export function labDraftActive(): boolean {
+  return draftActive;
+}
+
+function framed(): boolean {
+  try {
+    return typeof window !== "undefined" && window.parent !== window;
+  } catch {
+    return false;
+  }
+}
+
+function toEditor(message: LabMessage) {
+  if (!framed()) return;
+  try {
+    window.parent.postMessage(message, window.location.origin);
+  } catch {
+    // A parent of another origin: the target origin refuses it, as it should.
+  }
+}
+
+let listening = false;
+
+/**
+ * In the frame: take the editor's draft, and tell it when the page is ready
+ * for one. Installed once, at the root; a no-op for a page that is not framed.
+ */
+export function listenForLabDraft() {
+  if (listening || !framed()) return;
+  listening = true;
+  window.addEventListener("message", (event: MessageEvent<LabMessage>) => {
+    if (event.origin !== window.location.origin || event.source !== window.parent) return;
+    const data = event.data;
+    if (!data || data.type !== "onysnow:lab-draft") return;
+    draftActive = true;
+    applySiteTuning(data.tuning);
+    if (data.glass === "css" || data.glass === "raster") setGlassMode(data.glass);
+  });
+  toEditor({ type: "onysnow:lab-ready", path: window.location.pathname });
+}
+
+/** In the frame: say where the page has navigated to, for the editor's address bar. */
+export function reportLabPath(path: string) {
+  toEditor({ type: "onysnow:lab-path", path });
+}
+
+/** In the editor: send the draft into the frame. */
+export function sendLabDraft(frame: HTMLIFrameElement | null, tuning: string, glass: GlassMode) {
+  const target = frame?.contentWindow;
+  if (!target) return;
+  const message: LabMessage = { type: "onysnow:lab-draft", tuning, glass };
+  target.postMessage(message, window.location.origin);
+}
+
+/** In the editor: messages from its own frame only. */
+export function isFromFrame(
+  event: MessageEvent,
+  frame: HTMLIFrameElement | null,
+): event is MessageEvent<LabMessage> {
+  return (
+    event.origin === window.location.origin &&
+    frame !== null &&
+    event.source === frame.contentWindow &&
+    typeof event.data === "object" &&
+    event.data !== null &&
+    typeof (event.data as { type?: unknown }).type === "string" &&
+    String((event.data as { type: string }).type).startsWith("onysnow:lab-")
+  );
+}

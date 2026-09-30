@@ -51,7 +51,12 @@ function number(el: Attributes, name: string, fallback: number, min: number, max
 export function readPaneCauses(el: Attributes, defaults: PaneDefaults): PaneCauses {
   const preset = materialById(el.getAttribute(MATERIAL_ATTR));
   return {
-    material: { ...preset, frost: defaults.frost },
+    /*
+     * The site's Frost setting is the satin etch's depth: it edits a frosted
+     * glass. A polished one (optical crown or flint, frost 0) has no etch for
+     * it to deepen, and stays polished.
+     */
+    material: { ...preset, frost: preset.frost > 0 ? defaults.frost : 0 },
     thickness: number(el, THICKNESS_ATTR, PANE_THICKNESS, 1, 200),
     gap: number(el, GAP_ATTR, defaults.gap, 0, 2000),
     smudge: number(el, SMUDGE_ATTR, 1, 0, 1),

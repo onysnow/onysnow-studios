@@ -103,7 +103,7 @@ describe("the reflection is worked out from causes", () => {
     // The resting edge is the room, reflected: no room light, no edge.
     expect(src).toMatch(/restEdge = bevel \* bevel \* uRestEdge \* uRoomExposure/);
     // The lamp's share of the edge highlight is its light on the bevel.
-    expect(src).toContain("lampEdge += bevel * lit;");
+    expect(src).toContain("lampEdge += mirrored * bevel * lit;");
     // Piped light runs the whole edge, as it did before cae9b1c.
     expect(src).toContain("float piped = couple * exp(-dl / 780.0);");
     // The marks are on the face only, never the bevel.

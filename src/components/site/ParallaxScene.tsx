@@ -135,7 +135,9 @@ export function ParallaxScene({
            over. No z-index here -- a z-indexed wrapper becomes a stacking
            context / backdrop root and cuts the pane's backdrop-filter off
            (see SeamSection in PhotoSection). */
-        <div data-scene-content className="relative flex h-full flex-col justify-end">{children}</div>
+        <div data-scene-content className="relative flex h-full flex-col justify-end">
+          {children}
+        </div>
       ) : null}
     </div>
   );

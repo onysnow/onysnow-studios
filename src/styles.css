@@ -1086,10 +1086,18 @@ span:has(> .photo-surface) {
     transparent 100%
   );
   background-repeat: no-repeat;
-  /* The edge's shadow: the light the rounded edge bent away, a thin dark line round it. */
+  /*
+   * The edge's shadow: the light the rounded edge bent away, a thin dark line
+   * round it. Then what it gives back under UV (--fluor-face, --fluor-glow,
+   * from its material via the CSS adapter; transparent without UV): a
+   * day-glo pigment glows hard in its own colour, over its face and out
+   * into the air round it.
+   */
   box-shadow:
     0 0 0 1px rgb(0 0 0 / calc(0.45 * var(--plastic-on))),
-    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on)));
+    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on))),
+    inset 0 0 0 999px var(--fluor-face, transparent),
+    0 0 18px 3px var(--fluor-glow, transparent);
 }
 
 /* The orange light the lamp throws through it, onto what is behind: mild, a little wider than the button. */
@@ -1135,6 +1143,31 @@ span:has(> .photo-surface) {
   .plastic::before {
     display: none;
   }
+}
+
+/*
+ * ?try=shaderplastic (item 18b): on a pane, the glass light pass lights the
+ * plastic from the light list -- the face's highlight and the lamp on the
+ * rim (above it, .glass-glow) and the light through it (under it, the
+ * surface layer). What stays here: the edge's shadow (box-shadow, which
+ * darkens, and that layer only adds) and the rim's resting sheen from the
+ * room.
+ */
+html[data-try~="shaderplastic"] .glass .plastic {
+  background-image: none;
+}
+
+html[data-try~="shaderplastic"] .glass .plastic::before {
+  display: none;
+}
+
+html[data-try~="shaderplastic"] .glass .plastic::after {
+  background: linear-gradient(
+    var(--lit-angle, 180deg),
+    rgb(255 255 255 / 0.14) 0%,
+    rgb(255 255 255 / 0.06) 40%,
+    transparent 65%
+  );
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2800,4 +2833,399 @@ html.is-winding * {
   .view-shift {
     transform: none;
   }
+}
+
+/* ===================== The magnifying glass (items 21, 25e; ?try=magnifier) =====================
+ *
+ * components/site/Magnifier: the lens is the live page through a displacement
+ * map (effects/optics/magnifier). What it shows beyond that is the scene's:
+ * --ring is its ring lamp (the lamp's charge), --lens-room the room's
+ * brightness it mirrors, --lens-rx/ry where in the room it looks. Under the
+ * cursor and the flash, over everything else.
+ */
+.magnifier {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9990;
+  pointer-events: none;
+  will-change: transform;
+  transition: opacity 0.2s ease;
+}
+
+.magnifier__lens {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  backdrop-filter: url("#magnifier-lens");
+  /*
+   * The ring lamp, seen in the lens's surface where it turns steepest toward
+   * the rim: a bright line round the inside, as bright as the lamp is.
+   */
+  background: radial-gradient(
+    circle closest-side,
+    transparent 86%,
+    rgb(255 244 222 / calc(0.22 * var(--ring, 0))) 95%,
+    rgb(255 250 238 / calc(0.75 * var(--ring, 0))) 99.4%,
+    transparent 100%
+  );
+  box-shadow:
+    inset 0 0 22px rgb(0 0 0 / 0.28),
+    inset 0 0 0 1px rgb(255 255 255 / 0.18);
+}
+
+/*
+ * The room, in the lens's face. A convex surface is a wide-angle mirror, so
+ * it holds the whole room small, and it reflects as glass does: about 4%
+ * straight on, rising steeply toward the rim (Fresnel).
+ */
+.magnifier__lens::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-image: var(--room, url("/rooms/metro.jpg"));
+  background-size: auto 140%;
+  background-position: var(--lens-rx, 50%) var(--lens-ry, 50%);
+  background-repeat: no-repeat;
+  transform: scale(-1, 1);
+  mix-blend-mode: screen;
+  opacity: var(--lens-room, 1);
+  -webkit-mask: radial-gradient(circle closest-side, rgb(0 0 0 / 0.04) 0%, rgb(0 0 0 / 0.06) 55%, rgb(0 0 0 / 0.22) 88%, rgb(0 0 0 / 0.5) 99%, transparent 100%);
+  mask: radial-gradient(circle closest-side, rgb(0 0 0 / 0.04) 0%, rgb(0 0 0 / 0.06) 55%, rgb(0 0 0 / 0.22) 88%, rgb(0 0 0 / 0.5) 99%, transparent 100%);
+}
+
+/*
+ * The brass rim: turned metal, and metal is a coloured mirror -- what it
+ * shows is the room, tinted gold, over the dark of the brass itself. Its
+ * inner edge catches the ring lamp.
+ */
+.magnifier__rim {
+  position: absolute;
+  inset: -11px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle closest-side, transparent 89.5%, rgb(255 236 190 / calc(0.8 * var(--ring, 0))) 90.4%, transparent 93%),
+    radial-gradient(circle closest-side, transparent 89.5%, rgb(40 26 8 / 0.85) 90%, transparent 91.5%, transparent 97%, rgb(40 26 8 / 0.8) 100%),
+    linear-gradient(rgb(214 170 88), rgb(214 170 88)),
+    var(--room, url("/rooms/metro.jpg")) var(--lens-rx, 50%) var(--lens-ry, 50%) / auto 100% no-repeat,
+    rgb(74 52 20);
+  background-blend-mode: normal, normal, multiply, normal, normal;
+  -webkit-mask: radial-gradient(circle closest-side, transparent 89.6%, #000 90.2%);
+  mask: radial-gradient(circle closest-side, transparent 89.6%, #000 90.2%);
+}
+
+/*
+ * What the magnifier casts on the page, one per light (the room overhead,
+ * the flash): the rim and the handle's shade, and the patch the lens gathers
+ * the light it passes into. Placed, grown and softened by the one shadow
+ * model; --shade is how much of the page's light the source is, --patch the
+ * patch's size in the rim's footprint, --patch-gain how much it adds.
+ */
+.magnifier-cast {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9989;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  filter: blur(var(--blur, 0px));
+}
+
+.magnifier-cast__shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / var(--shade, 0));
+}
+
+.magnifier-cast__handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 118px;
+  margin-left: -12px;
+  transform-origin: 50% 0;
+  transform: rotate(-45deg) translateY(104px);
+  border-radius: 8px 8px 12px 12px;
+  background: rgb(0 0 0 / var(--shade, 0));
+}
+
+.magnifier-patch {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9989;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  mix-blend-mode: plus-lighter;
+  filter: blur(var(--blur, 0px));
+}
+
+.magnifier-patch::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* The lens's share of the rim's footprint (96 of 107 px), times the patch's. */
+  width: calc(100% * var(--patch, 1) * 96 / 107);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--patch-colour, white);
+}
+
+/* The handle: dark turned wood on a brass ferrule, down and to the right. */
+.magnifier__handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 118px;
+  margin-left: -12px;
+  transform-origin: 50% 0;
+  transform: rotate(-45deg) translateY(104px);
+  border-radius: 8px 8px 12px 12px;
+  background: linear-gradient(90deg, #1c110a, #4a2c18 30%, #6b4127 48%, #3a2213 70%, #140b06);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.45);
+}
+
+.magnifier__handle::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: -2px;
+  height: 22px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #6e4f1f, #d9b25e 35%, #f6e2a4 48%, #b48633 65%, #5a3f16);
+}
+
+/* ===================== The road flare (items 22, 25e; ?try=flare) =====================
+ * components/site/FlareTorch draws the flare -- tube, smoke, flame, sparks --
+ * on two canvases round the flame; its light on the scene is the light
+ * list's. The first covers (the tube, the smoke's body); the second is light
+ * and is screened onto the page.
+ */
+.flare-torch {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9991;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.flare-torch--light {
+  z-index: 9992;
+  mix-blend-mode: screen;
+}
+
+/* ===================== Neon (items 23, 25c) =====================
+ * components/site/Neon. One glass tube per word (claude/tools-research.md):
+ * the tube layer is the glass, always there; the gas layer is the discharge,
+ * faded by opacity as the tube flickers (composited, never repainted); the
+ * plumbing is the blacked-out runs between letters and the electrode caps.
+ * --neon-colour is the gas.
+ */
+.neon {
+  position: relative;
+  display: inline-block;
+  font-family: "Tilt Neon", var(--font-display, sans-serif);
+  font-weight: 400;
+  /* Neon lettering is spaced wide: the glow thickens every line at night. */
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  isolation: isolate;
+}
+
+.neon__tube,
+.neon__gas {
+  display: block;
+  white-space: pre;
+}
+
+/* The glass tube: pale glass with the gas colour faint in it, a highlight along its top. */
+.neon__tube {
+  position: relative;
+  z-index: 1;
+  color: color-mix(in oklab, var(--neon-colour) 20%, rgb(214 218 228 / 0.34));
+  text-shadow:
+    0 -0.03em 0 rgb(255 255 255 / 0.22),
+    0 0.03em 0.02em rgb(0 0 0 / 0.35);
+}
+
+/*
+ * The gas, burning: white-hot where the discharge is densest (the middle of
+ * the tube), its colour toward the walls, and the glow it throws into the
+ * air, fading over a hand's width. Static: the flicker is this layer's
+ * opacity, not its styling.
+ */
+.neon__gas {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  color: color-mix(in oklab, var(--neon-colour), white 64%);
+  -webkit-text-stroke: 0.012em color-mix(in oklab, var(--neon-colour), white 20%);
+  text-shadow:
+    0 0 0.01em rgb(255 255 255 / 0.9),
+    0 0 0.04em var(--neon-colour),
+    0 0 0.1em var(--neon-colour),
+    0 0 0.22em color-mix(in srgb, var(--neon-colour) 70%, transparent),
+    0 0 0.45em color-mix(in srgb, var(--neon-colour) 42%, transparent),
+    0 0 0.9em color-mix(in srgb, var(--neon-colour) 22%, transparent);
+  will-change: opacity;
+}
+
+/* The blacked-out runs and the electrodes: under the lit letters, over the wall. */
+.neon__plumbing {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.neon__run {
+  stroke: rgb(18 16 18 / 0.92);
+  stroke-linecap: round;
+}
+
+/* The painted glass still catches the room along its top. */
+.neon__run-glint {
+  stroke: rgb(255 255 255 / 0.14);
+  stroke-linecap: round;
+}
+
+.neon__electrode {
+  fill: rgb(24 22 24);
+  stroke: rgb(120 118 124 / 0.6);
+  stroke-width: 0.8;
+}
+
+.neon__electrode-cap {
+  fill: rgb(70 68 74);
+}
+
+/* The light the lit tube throws onto what it hangs on: a soft wash of its colour. */
+.neon__wash {
+  position: absolute;
+  inset: -45% -12%;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--neon-colour), transparent);
+  opacity: 0.22;
+  filter: blur(18px);
+  mix-blend-mode: screen;
+  will-change: opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neon__gas {
+    opacity: 1 !important;
+  }
+}
+
+/* ===================== The tool tray (item 25e, ?try=tools) =====================
+ * components/site/ToolTray: pick up one tool, putting down the last. A small
+ * dark glass pill in the corner, out of the way of the photographs.
+ */
+.tool-tray {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 9995;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgb(14 14 16 / 0.55);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 10px 30px rgb(0 0 0 / 0.4);
+}
+
+.tool-tray__tool {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: rgb(255 255 255 / 0.6);
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.tool-tray__tool:hover {
+  color: rgb(255 255 255 / 0.9);
+}
+
+.tool-tray__tool[aria-pressed="true"] {
+  color: rgb(20 16 10);
+  background: rgb(232 170 80);
+}
+
+.tool-tray__tool:focus-visible {
+  outline: 2px solid rgb(232 170 80);
+  outline-offset: 2px;
+}
+
+/* ===================== The laser beam (item 25d, ?try=laser) =====================
+ * components/site/LaserBeam: a canvas over the page the beam is drawn on,
+ * added light (the canvas composites "lighter" within itself, and screens
+ * onto the page).
+ */
+.laser-beam {
+  position: fixed;
+  inset: 0;
+  z-index: 9992;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* ===================== Glow-in-the-dark paint (item 25) =====================
+ * components/site/GlowPaint: a board coated in phosphor paint. Unlit, the
+ * paint is a pale grey-green film on it; lit, the canvas's glow is added on
+ * top, soft, bleeding a little into the air.
+ */
+.glow-paint {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  touch-action: none;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgb(210 225 205 / 0.07), transparent 60%),
+    rgb(22 24 22 / 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 18px 40px rgb(0 0 0 / 0.45);
+}
+
+.glow-paint__light {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: plus-lighter;
+  filter: blur(1.5px) drop-shadow(0 0 6px rgb(120 255 150 / 0.55));
+}
+
+.glow-paint__hint {
+  position: absolute;
+  left: 18px;
+  bottom: 14px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: rgb(200 215 200 / 0.35);
+  pointer-events: none;
 }

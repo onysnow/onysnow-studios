@@ -1,80 +1,45 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { RotateCcw, ClipboardCopy, Copy, Layers } from "lucide-react";
-import { coverPhotosQuery, settingsQuery } from "@/lib/content";
+import {
+  ArrowLeft,
+  ClipboardCopy,
+  Copy,
+  ExternalLink,
+  Layers,
+  Monitor,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Smartphone,
+  Tablet,
+  Undo2,
+  Upload,
+} from "lucide-react";
+import { settingsQuery } from "@/lib/content";
 import { saveSiteTuning } from "@/lib/admin";
 import { useAdminStatus } from "@/hooks/use-admin";
-import { PhotoSection } from "@/components/site/PhotoSection";
-import { ParallaxScene } from "@/components/site/ParallaxScene";
-import { Img } from "@/components/site/Img";
 import {
-  applyTuning,
+  applySiteTuning,
   isPerMode,
   isResult,
   RESULTS,
   resetTuning,
-  applySiteTuning,
   savedTuning,
   SITE_TUNING_KEY,
   serializeTuning,
   setValueIn,
   tuning,
-  tuningMode,
-  valueIn,
   TUNING_DEFAULTS,
+  valueIn,
   type Knob,
   type TuningMode,
 } from "@/lib/tuning";
-import { toggleGlassMode, useGlassMode } from "@/lib/glass-mode";
+import { getGlassMode, toggleGlassMode, useGlassMode } from "@/lib/glass-mode";
+import { isFromFrame, sendLabDraft } from "@/lib/lab-bridge";
 import { Button } from "@/components/ui/button";
-import { Pane } from "@/effects/react/Pane";
-import { Stack } from "@/effects/react/Stack";
-
-/** One knob, bound to a given mode's copy of its value. */
-function KnobRow({
-  id,
-  knob,
-  value,
-  onChange,
-}: {
-  id: string;
-  knob: Knob;
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="grid gap-2 sm:grid-cols-[16rem_1fr_6rem] sm:items-center">
-      <label htmlFor={id} className="text-sm">
-        {knob.label}
-      </label>
-      <input
-        id={id}
-        type="range"
-        min={knob.min}
-        max={knob.max}
-        step={knob.step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-[var(--amber)]"
-      />
-      <input
-        type="number"
-        aria-label={`${knob.label} value`}
-        min={knob.min}
-        max={knob.max}
-        step={knob.step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full rounded border border-input bg-transparent px-2 py-1 text-right font-mono text-sm"
-      />
-      {knob.hint ? (
-        <p className="text-sm text-muted-foreground sm:col-span-3 sm:-mt-1">{knob.hint}</p>
-      ) : null}
-    </div>
-  );
-}
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/lab")({
   // Client only: every control here drives a live effect, and there is nothing
@@ -89,70 +54,206 @@ export const Route = createFileRoute("/lab")({
   component: Lab,
 });
 
+/** The pages the preview can show. Any other page is reachable by clicking through. */
+const PAGES = [
+  { path: "/", label: "Home" },
+  { path: "/portfolio", label: "Portfolio" },
+  { path: "/journal", label: "Journal" },
+  { path: "/about", label: "About" },
+  { path: "/services", label: "Services" },
+  { path: "/contact", label: "Contact" },
+  { path: "/book", label: "Book" },
+  { path: "/duo", label: "Duo" },
+  { path: "/lab-samples", label: "Lab samples (stacks)" },
+] as const;
+
+const DEVICES = {
+  desktop: { width: null, label: "Desktop", icon: Monitor },
+  tablet: { width: 834, label: "Tablet width", icon: Tablet },
+  // A narrow frame on a desktop still has a mouse, so the glass effects run
+  // in it; a real phone skips them (styles.css, pointer: coarse).
+  phone: {
+    width: 390,
+    label: "Phone width (a real phone skips the glass effects)",
+    icon: Smartphone,
+  },
+} as const;
+type Device = keyof typeof DEVICES;
+
+/** The unsaved draft, so a reload does not lose an afternoon's tuning. */
+const DRAFT_STORE = "onysnow:lab-draft";
+
+function readDraft(): string | null {
+  try {
+    return window.localStorage.getItem(DRAFT_STORE);
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(value: string | null) {
+  try {
+    if (value === null) window.localStorage.removeItem(DRAFT_STORE);
+    else window.localStorage.setItem(DRAFT_STORE, value);
+  } catch {
+    // Blocked storage: the draft still lives until the tab closes.
+  }
+}
+
 /**
- * Every number in the effect layer, on a slider, over the real thing.
+ * The effect lab: every cause in the effect layer on a control, beside the
+ * real site.
  *
- * The knobs have existed for a while and have been unreachable the whole time,
- * which made "it's tunable" a claim rather than a fact — each one added was
- * another number only I could change, by editing a file and waiting for a
- * rebuild. This is the page that makes them true.
+ * Laid out like an app builder, on request (Ony, 2026-09-29: "like the
+ * Lovable app with the app preview"): the controls on the left, the actual
+ * site in a frame on the right, any page of it, at desktop, tablet or phone
+ * width. A change shows in the frame at once (lab-bridge posts the draft
+ * into it). Nothing reaches visitors until **Save for everyone**, which
+ * writes the site's tuning (SITE_TUNING_KEY in site_settings) -- the values
+ * every visitor's browser applies. Until then the draft is kept in this
+ * browser, and Discard goes back to what is live.
  *
- * The preview is a real `PhotoSection`: an actual photograph, an actual pane
- * over it with actual copy on it. Not a swatch. The whole difficulty with this
- * effect layer is that the pieces interact — the grime dims where a shadow
- * lands, the bevel decides where the light piles up, the paper gloss has to
- * stay under the glass's — so a control that changed one of them in isolation
- * would be worse than none.
- *
- * Values are held in localStorage so a reload does not lose an afternoon's
- * tuning. Reset goes back to what is baked into the source, and Copy gives
- * something to paste over it.
+ * Only causes have controls. The results physics sets from them (RESULTS in
+ * tuning.ts) are not here to move.
  */
 function Lab() {
-  const photos = useQuery(coverPhotosQuery);
-  // The knobs are a plain mutable object read by rAF loops, so React is only
-  // being asked to redraw the controls; the effects pick the values up on their
-  // own next frame.
+  // The knobs are a plain mutable object, so React is only asked to redraw
+  // the controls; the frame is sent the new values.
   const [, redraw] = useState(0);
+  const bump = useCallback(() => redraw((n) => n + 1), []);
 
-  /*
-   * What the lab edits is the SITE's tuning: what every visitor sees
-   * (SITE_TUNING_KEY in site_settings). It starts from what is published;
-   * each change is applied live and, when you are signed in as the admin,
-   * saved for everyone a moment after you stop moving the slider. Signed
-   * out, changes stay in this browser only, and the lab says so.
-   */
   const settings = useQuery(settingsQuery);
   const admin = useAdminStatus();
   const queryClient = useQueryClient();
   const canPublish = Boolean(admin.data?.isAdmin);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const loaded = useRef(false);
-  useEffect(() => {
-    if (loaded.current || settings.data === undefined) return;
-    loaded.current = true;
-    applySiteTuning(settings.data[SITE_TUNING_KEY]);
-    redraw((n) => n + 1);
-  }, [settings.data]);
+  const mode = useGlassMode();
 
-  const saveTimer = useRef<number | null>(null);
-  const publish = useCallback(() => {
-    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      saveTimer.current = null;
-      if (!canPublish) return;
-      setSaveState("saving");
-      saveSiteTuning(SITE_TUNING_KEY, savedTuning())
-        .then(() => {
-          setSaveState("saved");
-          void queryClient.invalidateQueries({ queryKey: ["site_settings"] });
-        })
-        .catch(() => {
-          setSaveState("error");
-          toast.error("Could not save for everyone -- are you signed in as the admin?");
-        });
-    }, 700);
-  }, [canPublish, queryClient]);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [page, setPage] = useState<string>("/");
+  const [framePath, setFramePath] = useState<string>("/");
+  const [reloads, setReloads] = useState(0);
+  const [device, setDevice] = useState<Device>("desktop");
+  const [query, setQuery] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  /** What is live for visitors, in the same shape as a draft. */
+  const published = useRef<string | null>(null);
+
+  // Start from what is published, then any draft left from last time.
+  useEffect(() => {
+    if (published.current !== null || settings.data === undefined) return;
+    applySiteTuning(settings.data[SITE_TUNING_KEY]);
+    published.current = savedTuning();
+    const draft = readDraft();
+    if (draft && draft !== published.current) {
+      applySiteTuning(draft);
+      toast.message("Your unsaved changes from last time are back", {
+        description: "Discard goes back to what visitors see.",
+      });
+    }
+    bump();
+  }, [settings.data, bump]);
+
+  const current = savedTuning();
+  const loaded = published.current !== null;
+  const dirty = loaded && current !== published.current;
+
+  /*
+   * Into the frame, at most once a frame: a slider drag fires far more
+   * change events than there are frames to show them in.
+   */
+  const pending = useRef<number | null>(null);
+  const push = useCallback(() => {
+    if (pending.current !== null) return;
+    pending.current = requestAnimationFrame(() => {
+      pending.current = null;
+      sendLabDraft(frame.current, savedTuning(), getGlassMode());
+    });
+  }, []);
+
+  // Keep the draft in this browser, and the frame in step, whenever it changes.
+  useEffect(() => {
+    if (!loaded) return;
+    writeDraft(dirty ? current : null);
+    push();
+  }, [current, dirty, loaded, push]);
+
+  // The frame says when it is ready for the draft, and where it has navigated.
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (!isFromFrame(event, frame.current)) return;
+      const data = event.data;
+      if (data.type === "onysnow:lab-ready") {
+        setFramePath(data.path);
+        if (published.current !== null) push();
+      } else if (data.type === "onysnow:lab-path") {
+        setFramePath(data.path);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [push]);
+
+  const set = useCallback(
+    (key: string, value: number, inMode: TuningMode) => {
+      if (!tuning[key] || !Number.isFinite(value)) return;
+      setValueIn(key, inMode, value);
+      setSaveState("idle");
+      bump();
+    },
+    [bump],
+  );
+
+  const save = useCallback(async () => {
+    if (!canPublish || !dirty) return;
+    setSaveState("saving");
+    const value = savedTuning();
+    try {
+      await saveSiteTuning(SITE_TUNING_KEY, value);
+      published.current = value;
+      writeDraft(null);
+      setSaveState("saved");
+      bump();
+      void queryClient.invalidateQueries({ queryKey: ["site_settings"] });
+      toast.success("Saved — every visitor now sees the site this way");
+    } catch {
+      setSaveState("error");
+      toast.error("Could not save for everyone — are you signed in as the admin?");
+    }
+  }, [canPublish, dirty, queryClient, bump]);
+
+  const discard = useCallback(() => {
+    applySiteTuning(settings.data?.[SITE_TUNING_KEY]);
+    published.current = savedTuning();
+    writeDraft(null);
+    setSaveState("idle");
+    bump();
+    toast.success("Back to what visitors see");
+  }, [settings.data, bump]);
+
+  // Ctrl/Cmd+S saves, as it does in every editor.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [save]);
+
+  // The preview skips the site's opening curtain; it has been seen.
+  const src = useMemo(() => {
+    try {
+      window.sessionStorage.setItem("onysnow:loaded", "1");
+    } catch {
+      // The curtain then plays once in the frame. Harmless.
+    }
+    return `${page}?glass=${getGlassMode()}`;
+    // The mode is sent by message after this; changing it must not reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, reloads]);
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, [string, Knob][]>();
@@ -166,272 +267,393 @@ function Lab() {
     return [...byGroup.entries()];
   }, []);
 
-  const set = useCallback(
-    (key: string, value: number, mode?: TuningMode) => {
-      const knob = tuning[key];
-      if (!knob) return;
-      setValueIn(key, mode ?? tuningMode(), value);
-      applyTuning();
-      redraw((n) => n + 1);
-      publish();
-    },
-    [publish],
-  );
+  const needle = query.trim().toLowerCase();
+  const matches = ([key, knob]: [string, Knob]) =>
+    !needle ||
+    knob.label.toLowerCase().includes(needle) ||
+    key.toLowerCase().includes(needle) ||
+    knob.group.toLowerCase().includes(needle) ||
+    (knob.hint?.toLowerCase().includes(needle) ?? false);
 
-  const mode = useGlassMode();
-  const photo = photos.data?.[0];
+  const status = canPublish
+    ? saveState === "saving"
+      ? "Saving for everyone…"
+      : saveState === "error"
+        ? "Not saved. Check you are signed in as the admin."
+        : dirty
+          ? "Unsaved changes — only you see them, in the preview."
+          : saveState === "saved"
+            ? "Saved — this is how every visitor sees the site."
+            : "This is what every visitor sees."
+    : "Sign in as the admin to save these for every visitor. Until then, changes are only in this browser.";
+
+  const width = DEVICES[device].width;
 
   return (
-    <main className="min-h-screen pb-32">
-      <PhotoSection image={photo}>
-        <div className="mx-auto max-w-3xl px-6 py-16">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Effect lab</p>
-          <h1 className="mt-3 font-display text-4xl">Every number, over the real thing.</h1>
-          <p className="mt-4 text-muted-foreground">
-            This pane, this photograph and this paragraph are the same components the site is built
-            from, so what you change here is what you will see there. Move the pointer across them
-            while you tune — most of these do nothing until the light is on them.
-          </p>
-          {photo ? (
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <Img image={photo} sizes="(min-width: 640px) 50vw, 100vw" className="aspect-[3/2]" />
-              <Img
-                image={photos.data?.[1] ?? photo}
-                sizes="(min-width: 640px) 50vw, 100vw"
-                className="aspect-[3/2]"
-              />
-            </div>
-          ) : null}
-        </div>
-      </PhotoSection>
+    <main className="flex h-dvh flex-col bg-background text-foreground">
+      {/* ── The bar: where you are, what the preview shows, and publishing. */}
+      <header className="flex flex-wrap items-center gap-2 border-b border-border/60 px-3 py-2">
+        <Button asChild variant="ghost" size="sm">
+          <Link to="/admin" aria-label="Back to the Studio">
+            <ArrowLeft />
+            Studio
+          </Link>
+        </Button>
+        <span className="mr-2 text-sm font-medium">Effect lab</span>
 
-      {/*
-       * Stacks (light step E): the same two panes three ways. Lab only -- no
-       * live page uses a stack yet.
-       */}
-      {/*
-       * On the photograph itself, not on a section pane: a pane inside a pane
-       * cannot see past its container (the outer pane's blur is a backdrop
-       * root), so nested, these frosted a tinted box and drew as hard
-       * squares with the container's shadow round them (Ony, 2026-09-29).
-       * Each stack rests on the picture, as a stack on the site would.
-       */}
-      <ParallaxScene image={photos.data?.[2] ?? photo} scrim="none" height="">
-        <div className="mx-auto max-w-5xl px-6 py-16" data-lab-stacks>
-          <Pane className="max-w-2xl !p-5">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Stacks</p>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Two panes, one resting on the other. With air between them each keeps its own surfaces
-              and the light bounces between them; bonded, they are one thick pane.
-            </p>
-          </Pane>
-          <div className="mt-8 grid gap-10 sm:grid-cols-3">
-            {(
-              [
-                ["air", 24, "Air, 24 px"],
-                ["contact", 0, "Contact"],
-                ["bonded", 0, "Bonded"],
-              ] as const
-            ).map(([link, gap, label]) => (
-              <Stack key={link} interface={link} gap={gap} className="relative h-56">
-                <Pane className="!absolute left-0 top-0 h-40 w-[80%] !p-4" thickness={18}>
-                  <span className="text-xs text-muted-foreground">below</span>
-                </Pane>
-                <Pane className="!absolute bottom-0 right-0 h-40 w-[80%] !p-4" thickness={18}>
-                  <span className="text-xs">{label}</span>
-                </Pane>
-              </Stack>
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
+          <label htmlFor="lab-page" className="sr-only">
+            Page shown in the preview
+          </label>
+          <select
+            id="lab-page"
+            value={PAGES.some((p) => p.path === framePath) ? framePath : ""}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              setPage(e.target.value);
+              setFramePath(e.target.value);
+              setReloads((n) => n + 1);
+            }}
+            className="h-8 max-w-[14rem] rounded-md border border-input bg-transparent px-2 text-sm"
+          >
+            {PAGES.some((p) => p.path === framePath) ? null : <option value="">{framePath}</option>}
+            {PAGES.map((p) => (
+              <option key={p.path} value={p.path}>
+                {p.label}
+              </option>
             ))}
+          </select>
+          <span
+            className="hidden min-w-0 truncate rounded-md border border-border/60 px-2 py-1 font-mono text-xs text-muted-foreground md:block"
+            data-lab-path
+          >
+            {framePath}
+          </span>
+          <IconButton label="Reload the preview" onClick={() => setReloads((n) => n + 1)}>
+            <RefreshCw />
+          </IconButton>
+          <IconButton
+            label="Open this page in a new tab (shows what visitors see)"
+            onClick={() => window.open(framePath, "_blank", "noopener")}
+          >
+            <ExternalLink />
+          </IconButton>
+          <div className="ml-2 hidden items-center rounded-md border border-border/60 sm:flex">
+            {(Object.keys(DEVICES) as Device[]).map((d) => {
+              const Icon = DEVICES[d].icon;
+              return (
+                <IconButton
+                  key={d}
+                  label={DEVICES[d].label}
+                  pressed={device === d}
+                  onClick={() => setDevice(d)}
+                >
+                  <Icon />
+                </IconButton>
+              );
+            })}
           </div>
-        </div>
-      </ParallaxScene>
-
-      <div className="mx-auto max-w-5xl px-6 py-14">
-        <p className="mb-3 text-xs text-muted-foreground" data-lab-save={saveState}>
-          {canPublish
-            ? saveState === "saving"
-              ? "Saving for everyone…"
-              : saveState === "saved"
-                ? "Saved — this is how every visitor sees the site."
-                : saveState === "error"
-                  ? "Not saved. Check you are signed in as the admin."
-                  : "Changes here are saved for every visitor."
-            : "Sign in as the admin to save these for every visitor. Until then, changes are only in this browser and are lost on reload."}
-        </p>
-        <div className="mb-8 flex flex-wrap items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              resetTuning(TUNING_DEFAULTS);
-              redraw((n) => n + 1);
-              publish();
-              toast.success("Back to the values in the source");
-            }}
-          >
-            <RotateCcw /> Reset
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              void navigator.clipboard
-                ?.writeText(serializeTuning())
-                .then(() => toast.success("Copied — paste it over the defaults in tuning.ts"))
-                .catch(() => toast.error("Could not reach the clipboard"));
-            }}
-          >
-            <ClipboardCopy /> Copy values
-          </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
               const next = toggleGlassMode();
-              redraw((n) => n + 1);
+              bump();
+              push();
               toast.success(next === "raster" ? "Liquid glass" : "CSS glass");
             }}
+            title="Which glass the preview runs. Some controls are kept separately for each."
           >
             <Layers /> {mode === "raster" ? "Liquid glass" : "CSS glass"}
           </Button>
-          <span className="text-sm text-muted-foreground">
-            Kept in this browser until you reset. Groups that do nothing in the current mode are
-            folded away. These are causes only: the {Object.keys(RESULTS).length} results they
-            produce have no control.
-          </span>
         </div>
 
-        {/*
-          Nothing on this page shows you a knob that is not connected to what
-          you are looking at.
+        <p
+          className="hidden max-w-[18rem] text-right text-xs text-muted-foreground xl:block"
+          data-lab-save={saveState}
+          data-lab-dirty={dirty ? "yes" : "no"}
+        >
+          {status}
+        </p>
+        <Button variant="ghost" size="sm" onClick={discard} disabled={!dirty}>
+          <Undo2 /> Discard
+        </Button>
+        {canPublish ? (
+          <Button
+            size="sm"
+            onClick={() => void save()}
+            disabled={!dirty || saveState === "saving"}
+            data-lab-publish
+          >
+            <Upload /> Save for everyone
+          </Button>
+        ) : (
+          <Button asChild size="sm" variant="outline">
+            <Link to="/auth">Sign in to save</Link>
+          </Button>
+        )}
+      </header>
+      {/* The status, for widths the bar has no room for it at. */}
+      <p className="border-b border-border/60 px-3 py-1 text-xs text-muted-foreground xl:hidden">
+        {status}
+      </p>
 
-          Two separate problems, and they are not the same problem:
-
-          1. DEAD IN THIS MODE. The Liquid glass group drives ybouane's
-             shader, which only runs under `?glass=raster`. In CSS mode those
-             sliders move and nothing happens. They are folded away rather
-             than deleted -- you can still open them, and the summary says why
-             they are shut.
-
-          2. LIVE IN BOTH, BUT NOT THE SAME NUMBER. The light pass, the cast
-             shadows, the reflection and the pane's own surface all run
-             whichever glass is in front of them, but they do not want the
-             same values in both: a sheen that sits right on a backdrop-filter
-             pane is wrong over a refracting one. Those groups keep a set per
-             mode. What you see is the ACTIVE set; the other one is folded
-             underneath so it is reachable without switching and, more to the
-             point, so it is obvious it exists.
-        */}
-        {groups.map(([group, knobs]) => {
-          const dead = knobs.every((entry) => entry[1].modes === "raster") && mode !== "raster";
-          const twinned = knobs.some((entry) => isPerMode(entry[1]));
-          const other: TuningMode = mode === "raster" ? "css" : "raster";
-
-          const rows = (
-            <div className="space-y-6">
-              {knobs.map(([key, knob]) => (
-                <KnobRow
-                  key={key}
-                  id={`knob-${key}`}
-                  knob={knob}
-                  value={valueIn(key, mode)}
-                  onChange={(value) => set(key, value, mode)}
-                />
-              ))}
+      <div className="flex min-h-0 flex-1 flex-col-reverse lg:flex-row">
+        {/* ── The controls. */}
+        <aside className="flex min-h-0 flex-1 flex-col border-border/60 lg:w-[23rem] lg:flex-none lg:border-r">
+          <div className="space-y-2 border-b border-border/60 p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Find a control"
+                aria-label="Find a control"
+                className="h-8 w-full rounded-md border border-input bg-transparent pl-8 pr-2 text-sm"
+              />
             </div>
-          );
+            <div className="flex flex-wrap gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  resetTuning(TUNING_DEFAULTS);
+                  setSaveState("idle");
+                  bump();
+                  toast.success("Every control back to the source's value (not saved yet)");
+                }}
+                title="Every control back to the value in the source. Not saved until you save."
+              >
+                <RotateCcw /> Source values
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard
+                    ?.writeText(serializeTuning())
+                    .then(() => toast.success("Copied — paste it over the defaults in tuning.ts"))
+                    .catch(() => toast.error("Could not reach the clipboard"));
+                }}
+              >
+                <ClipboardCopy /> Copy values
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Causes only: the {Object.keys(RESULTS).length} results physics sets from these have no
+              control. Most do nothing until the pointer&rsquo;s light is on the glass.
+            </p>
+          </div>
 
-          if (dead) {
-            return (
-              <details key={group} className="mb-6 rounded-lg border border-border/60 p-4">
-                <summary className="cursor-pointer text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  {group} — {knobs.length} knobs, nothing to see in CSS mode
-                </summary>
-                <p className="mt-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                  These drive the rasterised glass shader, which only runs in liquid mode. In CSS
-                  mode the panes are backdrop-filter and an SVG displacement map and none of this
-                  reaches them, so moving these does nothing to the preview above. Switch the glass
-                  to make them live. Edge width (under Glass shape) has the most leverage on this
-                  glass: across the flat face of a pane the surface normal is (0,&nbsp;0,&nbsp;1),
-                  so refraction, fresnel and every specular are exactly zero there. All of the glass
-                  lives on the edge.
-                </p>
-                <div className="mt-6 opacity-60">{rows}</div>
-              </details>
-            );
-          }
+          <div className="min-h-0 flex-1 overflow-y-auto p-3" data-lab-controls>
+            {groups.map(([group, all]) => {
+              const knobs = all.filter(matches);
+              if (knobs.length === 0) return null;
+              const dead = all.every((entry) => entry[1].modes === "raster") && mode !== "raster";
+              const twinned = all.some((entry) => isPerMode(entry[1]));
+              const other: TuningMode = mode === "raster" ? "css" : "raster";
+              const moved = all.filter(
+                ([key]) => valueIn(key, mode) !== TUNING_DEFAULTS[key],
+              ).length;
 
-          return (
-            <section
-              key={group}
-              className={
-                group === "Liquid glass"
-                  ? "mb-12 rounded-lg border border-[var(--amber)]/30 bg-[var(--amber)]/[0.03] p-6"
-                  : "mb-12"
-              }
-            >
-              <h2 className="mb-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                {group}{" "}
-                {twinned ? (
-                  <span className="ml-2 normal-case tracking-normal text-[var(--amber)]">
-                    {mode === "raster" ? "liquid" : "CSS"} set
-                  </span>
-                ) : null}
-              </h2>
-              {group === "Liquid glass" ? (
-                <p className="mb-5 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                  The rasterised glass shader, live right now. Edge width (under Glass shape) has
-                  the most leverage of anything here: across the flat face of a pane the surface
-                  normal is (0,&nbsp;0,&nbsp;1), so refraction, fresnel and every specular are
-                  exactly zero there. All of the glass lives on the edge.
-                </p>
-              ) : null}
-              {rows}
-              {twinned ? (
-                <details className="mt-6 rounded-lg border border-border/60 p-4">
-                  <summary className="cursor-pointer text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    The {other === "raster" ? "liquid" : "CSS"} set — not in effect right now
+              const rows = (inMode: TuningMode, prefix: string) => (
+                <div className="space-y-4">
+                  {knobs.map(([key, knob]) => (
+                    <KnobRow
+                      key={key}
+                      id={`knob-${prefix}${key}`}
+                      knob={knob}
+                      value={valueIn(key, inMode)}
+                      source={TUNING_DEFAULTS[key] ?? knob.value}
+                      onChange={(value) => set(key, value, inMode)}
+                    />
+                  ))}
+                </div>
+              );
+
+              return (
+                <details
+                  key={group}
+                  open={Boolean(needle) || !dead}
+                  className={cn(
+                    "mb-3 rounded-lg border border-border/60",
+                    group === "Liquid glass" && !dead && "border-[var(--amber)]/30",
+                  )}
+                >
+                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    <span>
+                      {group}
+                      {twinned ? (
+                        <span className="ml-2 normal-case tracking-normal text-[var(--amber)]">
+                          {mode === "raster" ? "liquid" : "CSS"} set
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="normal-case tracking-normal">
+                      {dead ? "liquid glass only" : moved ? `${moved} changed` : ""}
+                    </span>
                   </summary>
-                  <p className="mt-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                    The same knobs, as they stand for the other glass. Editing them here changes
-                    nothing on screen until you switch; they are shown so it is clear the two are
-                    kept apart, and so one can be brought into line with the other without switching
-                    back and forth.
-                  </p>
-                  <div className="mt-4 mb-6">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        for (const [key, knob] of knobs) {
-                          if (isPerMode(knob)) setValueIn(key, other, valueIn(key, mode));
-                        }
-                        redraw((n) => n + 1);
-                        toast.success(
-                          `Copied this set to ${other === "raster" ? "liquid" : "CSS"}`,
-                        );
-                      }}
-                    >
-                      <Copy /> Copy the live set over these
-                    </Button>
-                  </div>
-                  <div className="space-y-6 opacity-70">
-                    {knobs.map(([key, knob]) => (
-                      <KnobRow
-                        key={key}
-                        id={`knob-${other}-${key}`}
-                        knob={knob}
-                        value={valueIn(key, other)}
-                        onChange={(value) => set(key, value, other)}
-                      />
-                    ))}
+                  <div className="px-3 pb-4 pt-1">
+                    {dead ? (
+                      <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+                        These drive the liquid glass shader and do nothing to CSS glass. Switch the
+                        glass (top bar) to see them work.
+                      </p>
+                    ) : group === "Liquid glass" ? (
+                      <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+                        Edge width (under Glass shape) has the most leverage here: across the flat
+                        face the surface normal is straight out, so refraction and every specular
+                        are zero there. All of this glass lives on the edge.
+                      </p>
+                    ) : null}
+                    <div className={dead ? "opacity-60" : undefined}>{rows(mode, "")}</div>
+                    {twinned ? (
+                      <details className="mt-5 rounded-md border border-border/60 p-3">
+                        <summary className="cursor-pointer text-xs text-muted-foreground">
+                          The {other === "raster" ? "liquid" : "CSS"} glass set — not on screen
+                        </summary>
+                        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                          This group keeps separate values for each glass. These apply when the
+                          preview runs the other one.
+                        </p>
+                        <Button
+                          className="mt-2 mb-4"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            for (const [key, knob] of all) {
+                              if (isPerMode(knob)) setValueIn(key, other, valueIn(key, mode));
+                            }
+                            bump();
+                            toast.success(
+                              `Copied this set to ${other === "raster" ? "liquid" : "CSS"}`,
+                            );
+                          }}
+                        >
+                          <Copy /> Copy the live set over these
+                        </Button>
+                        <div className="opacity-70">{rows(other, `${other}-`)}</div>
+                      </details>
+                    ) : null}
                   </div>
                 </details>
-              ) : null}
-            </section>
-          );
-        })}
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* ── The site, live. */}
+        <section
+          aria-label="Preview"
+          className="flex min-h-[55vh] flex-1 items-stretch justify-center overflow-auto bg-muted/30 lg:min-h-0"
+        >
+          <iframe
+            key={reloads}
+            ref={frame}
+            src={src}
+            title="Preview of the site with these settings"
+            data-lab-preview
+            className={cn(
+              "h-full min-h-[55vh] border-0 bg-background lg:min-h-0",
+              width === null ? "w-full" : "my-3 rounded-lg shadow-lg ring-1 ring-border/60",
+            )}
+            style={width === null ? undefined : { width, flex: "none" }}
+          />
+        </section>
       </div>
     </main>
+  );
+}
+
+function IconButton({
+  label,
+  onClick,
+  pressed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  pressed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn("size-8", pressed && "bg-accent text-accent-foreground")}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  );
+}
+
+/** One control, bound to a given mode's copy of its value. */
+function KnobRow({
+  id,
+  knob,
+  value,
+  source,
+  onChange,
+}: {
+  id: string;
+  knob: Knob;
+  value: number;
+  source: number;
+  onChange: (value: number) => void;
+}) {
+  const moved = value !== source;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="flex min-w-0 items-center gap-1.5 text-sm">
+          {moved ? (
+            <span
+              className="size-1.5 flex-none rounded-full bg-[var(--amber)]"
+              aria-label="changed from the source"
+            />
+          ) : null}
+          <span className="truncate">{knob.label}</span>
+        </label>
+        <div className="flex flex-none items-center gap-1">
+          {moved ? (
+            <button
+              type="button"
+              className="rounded p-1 text-muted-foreground hover:text-foreground"
+              aria-label={`${knob.label}: back to the source's value, ${source}`}
+              title={`Back to ${source}`}
+              onClick={() => onChange(source)}
+            >
+              <RotateCcw className="size-3" />
+            </button>
+          ) : null}
+          <input
+            type="number"
+            aria-label={`${knob.label} value`}
+            min={knob.min}
+            max={knob.max}
+            step={knob.step}
+            value={value}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="w-20 rounded border border-input bg-transparent px-1.5 py-0.5 text-right font-mono text-xs"
+          />
+        </div>
+      </div>
+      <input
+        id={id}
+        type="range"
+        min={knob.min}
+        max={knob.max}
+        step={knob.step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 w-full accent-[var(--amber)]"
+      />
+      {knob.hint ? <p className="text-xs leading-snug text-muted-foreground">{knob.hint}</p> : null}
+    </div>
   );
 }

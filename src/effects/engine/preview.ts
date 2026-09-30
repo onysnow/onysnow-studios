@@ -21,6 +21,30 @@ export const PREVIEWS = {
   satin: "The front of the glass etched like the back, so reflected room lights are soft glows",
   dimroom:
     "The room's brightest lights (windows, softboxes) compressed so their reflection doesn't clip to white",
+  flash:
+    "The shutter flash is a light in the scene: the glass, the light through it and the rims answer it",
+  shaderplastic:
+    "The orange buttons lit by the glass light pass from every light in the scene, instead of by CSS gradients that knew only the cursor",
+  blacklight:
+    "The lamp is a black light: it gives off UV and only a violet glow; smudges on the glass, white type and the orange plastic fluoresce",
+  magnifier:
+    "A detective's magnifying glass where the lamp is: the live page enlarged through a real lens, swimming and colour-fringed at the rim",
+  flare:
+    "A burning road flare where the lamp is: deep red, flickering and sputtering, lighting the glass and the photographs",
+  laser:
+    "A laser pointer's beam across the page (?laser=red|green|violet): it enters the panes at their edges, bends, splits, is guided and absorbed as real glass does; press and drag to aim",
+  bounce:
+    "Light bouncing off a lit photograph lights the frosted glass above it from below, in the photograph's colour (light engine step F)",
+  contact:
+    "Two panes resting dry on each other (the Contact stack on Lab samples): the air film between them shows Newton's colours where both faces are polished, black where they touch (light engine step G)",
+  broken:
+    "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
+  solids:
+    "Glass solids on Lab samples -- prism, sphere, cube, cone, pyramid, rod -- ray traced through their glass",
+  tools:
+    "A tray to pick what you hold -- lamp, black light, flare, laser or magnifier -- one at a time",
+  liquidlights:
+    "Liquid glass lit only by the scene's lights: its own fixed gloss, rim glow, white Fresnel and drop shadow are off",
 } as const;
 
 export type PreviewName = keyof typeof PREVIEWS;

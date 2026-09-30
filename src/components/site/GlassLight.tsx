@@ -14,17 +14,30 @@ import {
   glassGeometry,
   geometryStamp,
   MAX_OCCLUDERS,
+  MAX_PLASTIC,
   paneGlowLayer,
   viewState,
 } from "@/effects/scene/scene";
-import { cursorLamp, lampPower, onCharge, pointLights, roomLight } from "@/effects/light/lights";
+import {
+  cursorLamp,
+  flareLight,
+  flashLight,
+  lampPower,
+  onCharge,
+  onFlash,
+  pointLights,
+  roomLight,
+  strongestCharge,
+} from "@/effects/light/lights";
 import { LIGHT_BLEED } from "@/effects/engine/compositor";
 import { castShadow as castByModel } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
+import { SURFACE_MATERIALS } from "@/effects/materials/surfaces";
 import { lightLocations, type PackedLight, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { onTuningApplied, t } from "@/lib/tuning";
-import { frontRoughness } from "@/effects/materials/presets";
+import { FROSTED_FLOAT, frontRoughness } from "@/effects/materials/presets";
+import { faceRoughnessNm, filmLut } from "@/effects/optics/thin-film";
 import { ROOM_KNEE, roomMipChain } from "@/effects/optics/environment";
 import { camera } from "@/effects/camera/camera";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
@@ -151,6 +164,14 @@ export function GlassLight({
     const uOccDir = U("uOccDir");
     const uMarksProportional = U("uMarksProportional");
     const uOccCount = U("uOccCount");
+    const uPlasticRect = U("uPlasticRect");
+    const uPlasticLand = U("uPlasticLand");
+    const uPlasticRadius = U("uPlasticRadius");
+    const uPlasticCount = U("uPlasticCount");
+    const uOilGlow = U("uOilGlow");
+    const uDustGlow = U("uDustGlow");
+    // Item 18b: the plastic lit here, not by CSS (html[data-try~="shaderplastic"] in styles.css).
+    const shaderPlastic = previewing("shaderplastic");
 
     /*
      * Scratch buffers for the occluders, allocated once.
@@ -163,8 +184,36 @@ export function GlassLight({
     const occRect = new Float32Array(MAX_OCCLUDERS * 4);
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
     const occDir = new Float32Array(MAX_OCCLUDERS * 4);
+    const plasticRect = new Float32Array(MAX_PLASTIC * 4);
+    const plasticLand = new Float32Array(MAX_PLASTIC * 4);
+    const plasticRadius = new Float32Array(MAX_PLASTIC);
     const uIor = U("uIor");
     const uFrost = U("uFrost");
+    const uBounce = U("uBounce");
+    const uFloorGain = U("uFloorGain");
+    const uContact = U("uContact");
+    const uFilmRect = U("uFilmRect");
+    const uFilmSigma = U("uFilmSigma");
+    gl.uniform1i(U("uFilmLut"), 7);
+    // The air film's reflectance by gap, a 256 x 1 table (effects/optics/thin-film).
+    const filmTable = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, filmTable);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      256,
+      1,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      filmLut(FROSTED_FLOAT.ior),
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const uFaceLamp = U("uFaceLamp");
 
     // The site's amber and teal in linear light — the shader works in linear
@@ -500,7 +549,8 @@ export function GlassLight({
 
     const step = (now: number) => {
       const charge = chargeRef.current;
-      const lit = charge > 0.002;
+      // The flash lights the glass for its pulse whatever the lamp's charge.
+      const lit = Math.max(charge, strongestCharge()) > 0.002;
 
       if (!lit) {
         // Already settled and nothing has moved: park without redrawing.
@@ -549,6 +599,8 @@ export function GlassLight({
         power: lampPower(l),
         radius: l.radius,
         charge: l === cursorLamp ? charge : l.charge,
+        uv: l.uv,
+        span: l.span,
       }));
       const heights = packed.map((l) => l.height);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
@@ -556,6 +608,13 @@ export function GlassLight({
       gl.uniform1f(uEdgeBloom, camera.lens.edgeBloom);
       gl.uniform1f(uBokehGain, camera.bokeh);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
+      // What the grime gives back under UV: its materials' fluorescence.
+      const glow = (id: "grime-oil" | "grime-dust") => {
+        const f = SURFACE_MATERIALS[id].fluorescence;
+        return [f.colour[0] * f.yield, f.colour[1] * f.yield, f.colour[2] * f.yield] as const;
+      };
+      gl.uniform3fv(uOilGlow, glow("grime-oil"));
+      gl.uniform3fv(uDustGlow, glow("grime-dust"));
       gl.uniform1f(uBurn, previewing("burn") ? 1 : 0);
       gl.uniform1f(uRoomKnee, previewing("dimroom") ? ROOM_KNEE : 0);
       /*
@@ -629,6 +688,31 @@ export function GlassLight({
         const { material, thickness, gap, smudge, scratch } = pane.causes;
         gl.uniform1f(uIor, material.ior);
         gl.uniform1f(uFrost, material.frost);
+        gl.uniform1f(uBounce, previewing("bounce") ? 1 : 0);
+        gl.uniform1f(uFloorGain, t("floorLight"));
+        /*
+         * Resting dry on the pane below (?try=contact): the air film between
+         * this pane's back face and its front, where the two overlap.
+         */
+        const under = pane.stack.belowRect;
+        const onContact =
+          previewing("contact") && pane.stack.below?.kind === "contact" && under !== null;
+        gl.uniform1f(uContact, onContact ? 1 : 0);
+        if (onContact && under) {
+          const x0 = Math.max(pane.x, under.x);
+          const y0 = Math.max(pane.y, under.y);
+          const x1 = Math.min(pane.x + pane.w, under.x + under.w);
+          const y1 = Math.min(pane.y + pane.h, under.y + under.h);
+          // They touch in the middle of their overlap, and the gap opens from there.
+          gl.uniform4f(uFilmRect, x0, y0, Math.max(0, x1 - x0), Math.max(0, y1 - y0));
+          const lower = pane.stack.belowMaterial ?? material;
+          gl.uniform1f(
+            uFilmSigma,
+            Math.hypot(faceRoughnessNm(material, "back"), faceRoughnessNm(lower, "front")),
+          );
+          gl.activeTexture(gl.TEXTURE7);
+          gl.bindTexture(gl.TEXTURE_2D, filmTable);
+        }
         // ?try=satin: the front face etched like the back, so the room it
         // reflects spreads into a soft glow instead of a mirror image.
         gl.uniform1f(
@@ -717,6 +801,29 @@ export function GlassLight({
           occDir[k + 3] = 0;
         }
         gl.uniform1f(uOccCount, count);
+        // The plastic on it (item 18b), in the same pane-local pixels.
+        const plastic = shaderPlastic ? pane.plastic : [];
+        const plasticCount = Math.min(plastic.length, MAX_PLASTIC);
+        for (let i = 0; i < plasticCount; i++) {
+          const q = plastic[i];
+          if (!q) continue;
+          const k = i * 4;
+          plasticRect[k] = q.cx;
+          plasticRect[k + 1] = q.cy;
+          plasticRect[k + 2] = q.hw;
+          plasticRect[k + 3] = q.hh;
+          plasticLand[k] = q.landX;
+          plasticLand[k + 1] = q.landY;
+          plasticLand[k + 2] = q.landScale;
+          plasticLand[k + 3] = q.blur;
+          plasticRadius[i] = q.radius;
+        }
+        gl.uniform1f(uPlasticCount, plasticCount);
+        if (plasticCount > 0) {
+          gl.uniform4fv(uPlasticRect, plasticRect);
+          gl.uniform4fv(uPlasticLand, plasticLand);
+          gl.uniform1fv(uPlasticRadius, plasticRadius);
+        }
         if (count > 0) {
           gl.uniform4fv(uOccRect, occRect);
           gl.uniform4fv(uOccSoft, occSoft);
@@ -864,6 +971,7 @@ export function GlassLight({
      * pointer still, and not one photon on the glass until it moved.
      */
     const stopCharge = onCharge(wake);
+    const stopFlash = onFlash(wake);
     // A changed setting (the room's brightness, the frost) changes the resting
     // frame too, so it has to be redrawn, not just the lit one.
     const stopTuning = onTuningApplied(() => {
@@ -882,6 +990,7 @@ export function GlassLight({
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
+      stopFlash();
       stopTuning();
       stopLoss();
       gl.deleteProgram(program);

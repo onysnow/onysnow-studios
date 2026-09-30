@@ -27,6 +27,12 @@
  *
  * No React here; components register elements and the engine does the rest.
  */
+import { irradianceFalloff } from "@/effects/optics/transmission";
+import {
+  SURFACE_MATERIALS,
+  type SurfaceMaterial,
+  type SurfaceMaterialId,
+} from "@/effects/materials/surfaces";
 import { t } from "@/lib/tuning";
 import { GLOW_LAYER_Z, LIGHT_BLEED, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
@@ -63,6 +69,29 @@ import {
 export const viewState = { eyeX: 0, eyeY: 0, shiftX: 0, shiftY: 0 };
 
 export const MAX_OCCLUDERS = 6;
+
+export const MAX_PLASTIC = 4;
+
+/**
+ * A sheet of plastic resting on a pane (the orange buttons), for the glass
+ * light pass to light (item 18b, ?try=shaderplastic). Pane-local pixels: its
+ * face, and where the light it lets through lands -- its cast by the one
+ * shadow model, from its own standoff, exactly as its CSS glow was placed.
+ */
+export type Plastic = {
+  cx: number;
+  cy: number;
+  hw: number;
+  hh: number;
+  radius: number;
+  /** The cast: where the light through it lands, relative to the face. */
+  landX: number;
+  landY: number;
+  /** How much bigger than the face the landing is (the model's growth). */
+  landScale: number;
+  /** How soft the landing is, CSS px. */
+  blur: number;
+};
 
 /** Something standing on a pane, as the shape of the shadow it throws on it. */
 export type Occluder = {
@@ -140,6 +169,8 @@ export type GlassRect = {
   stack: StackPlacement;
   /** How wide each of its side faces shows, CSS px (edge-side paneFaces). */
   faces: PaneFaces;
+  /** The plastic resting on it (at most MAX_PLASTIC). */
+  plastic: readonly Plastic[];
 };
 
 /* ======================================================================
@@ -156,6 +187,8 @@ const litSurfaces = new Set<HTMLElement>();
 const nonOccluding = new WeakSet<HTMLElement>();
 /** How far each surface stands off the glass, as a share of "Content depth" (1 if unset). */
 const standoffs = new WeakMap<HTMLElement, number>();
+/** What each surface is made of, optically (ink if unset). */
+const surfaceMaterials = new WeakMap<HTMLElement, SurfaceMaterial>();
 
 /** Each pane's side faces, siblings of it (see .glass-side). */
 type SideLayers = {
@@ -356,6 +389,8 @@ type SurfaceReading = {
   pane: HTMLElement | null;
   /** How far it stands off the glass, as a share of "Content depth". */
   standoff: number;
+  /** What it is made of, optically (effects/materials/surfaces). */
+  material: SurfaceMaterial;
 };
 
 type SceneReading = {
@@ -417,6 +452,7 @@ function readSurface(el: HTMLElement): SurfaceReading {
     radius: cornerRadius(el),
     pane: nonOccluding.has(el) ? null : el.closest<HTMLElement>(".glass"),
     standoff: standoffs.get(el) ?? 1,
+    material: surfaceMaterials.get(el) ?? SURFACE_MATERIALS.ink,
   };
 }
 
@@ -453,6 +489,8 @@ const SNAPSHOT_MAX_AGE = 120;
 /** What is standing on each pane, from the last frame's light. */
 let occlusion = new Map<HTMLElement, Occluder[]>();
 const EMPTY_OCCLUDERS: readonly Occluder[] = [];
+let plastics = new Map<HTMLElement, Plastic[]>();
+const EMPTY_PLASTIC: readonly Plastic[] = [];
 
 /**
  * Bumped whenever the geometry is invalidated -- scroll, resize, a pane
@@ -535,11 +573,22 @@ function stacksOf(
     );
     panes.forEach((p, i) => {
       const up = panes[i + 1];
+      const down = i > 0 ? panes[i - 1] : undefined;
       const stack = {
         ...placed[i]!,
         aboveRect: up
           ? { x: up.rect.left, y: up.rect.top, w: up.rect.width, h: up.rect.height, r: up.radius }
           : null,
+        belowRect: down
+          ? {
+              x: down.rect.left,
+              y: down.rect.top,
+              w: down.rect.width,
+              h: down.rect.height,
+              r: down.radius,
+            }
+          : null,
+        belowMaterial: down ? down.causes.material : null,
       };
       let thickness = p.causes.thickness;
       if (link.kind === "bonded" && i === panes.length - 1) {
@@ -581,6 +630,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       causes: stacked.get(p.el)?.causes ?? p.causes,
       stack: stacked.get(p.el)?.stack ?? { ...SINGLE, zBottom: p.causes.gap },
       occ: occlusion.get(p.el) ?? EMPTY_OCCLUDERS,
+      plastic: plastics.get(p.el) ?? EMPTY_PLASTIC,
     });
   }
   // Development only: what each stacked layer was given, for the e2e specs.
@@ -666,7 +716,11 @@ function lightOnSurface(r: DOMRect, standoff = 1): SurfaceLight {
   // Which way the light comes from, as a CSS gradient angle pointing AWAY
   // from it, so a gradient's 0% sits on the side facing the lamp.
   const angle = (Math.atan2(centreX - x, -(centreY - y)) * 180) / Math.PI;
-  return { near, cast, alpha, lit, angle };
+  // The UV's reach is the physical falloff, from the nearest point of the surface.
+  const dx = Math.max(r.left - x, 0, x - r.right);
+  const dy = Math.max(r.top - y, 0, y - r.bottom);
+  const uvReach = irradianceFalloff(Math.hypot(dx, dy), cursorLamp.height);
+  return { near, uvReach, cast, alpha, lit, angle };
 }
 
 /**
@@ -704,6 +758,38 @@ function occludersFor(
       cosTheta: model?.cosTheta ?? 1,
     });
     out.set(s.pane, list);
+  });
+  return out;
+}
+
+/** The plastic on each pane, and where the light through each lands. */
+function plasticFor(
+  reading: SceneReading,
+  lightOn: readonly SurfaceLight[],
+): Map<HTMLElement, Plastic[]> {
+  const paneRects = new Map(reading.panes.map((p) => [p.el, p.rect] as const));
+  const out = new Map<HTMLElement, Plastic[]>();
+  reading.surfaces.forEach((s, i) => {
+    if (!s.el.classList.contains("plastic")) return;
+    const pane = s.el.closest<HTMLElement>(".glass");
+    const paneRect = pane ? paneRects.get(pane) : undefined;
+    if (!pane || !paneRect) return;
+    const list = out.get(pane) ?? [];
+    if (list.length >= MAX_PLASTIC) return;
+    const r = s.rect;
+    const light = lightOn[i];
+    list.push({
+      cx: r.left - paneRect.left + r.width / 2,
+      cy: r.top - paneRect.top + r.height / 2,
+      hw: r.width / 2,
+      hh: r.height / 2,
+      radius: s.radius,
+      landX: light?.cast.x ?? 0,
+      landY: light?.cast.y ?? 0,
+      landScale: light?.cast.model?.scale ?? 1,
+      blur: light?.cast.blur ?? 0,
+    });
+    out.set(pane, list);
   });
   return out;
 }
@@ -836,7 +922,7 @@ function writeSurface(s: SurfaceReading, light: SurfaceLight) {
   const el = s.el;
   const r = s.rect;
   if (r.width === 0 || r.height === 0) return;
-  writeSurfaceLight(el, r, cursorLamp, light);
+  writeSurfaceLight(el, r, cursorLamp, light, s.material);
   // For the room reflection, offset for the surface's height above the glass.
   el.style.setProperty("--surface-x", `${Math.round(r.left)}px`);
   el.style.setProperty("--surface-y", `${Math.round(r.top)}px`);
@@ -874,6 +960,7 @@ function run(now = performance.now()) {
   // 3. compute
   const lightOn = reading.surfaces.map((s) => lightOnSurface(s.rect, s.standoff));
   occlusion = occludersFor(reading, lightOn);
+  plastics = plasticFor(reading, lightOn);
   snapshot = freeze(reading);
   snapshotAt = typeof now === "number" ? now : performance.now();
   snapshotVersion = version;
@@ -962,6 +1049,8 @@ export type LitSurfaceOptions = {
    * shadow is and how soft all follow from it (effects/optics/shadow).
    */
   standoff?: number;
+  /** What it is made of, optically: what it does under UV (effects/materials/surfaces). */
+  material?: SurfaceMaterialId;
 };
 
 /** Add a surface resting on the glass; it is told where the light falls on it. */
@@ -970,6 +1059,8 @@ export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions =
   else nonOccluding.delete(el);
   if (options.standoff !== undefined) standoffs.set(el, options.standoff);
   else standoffs.delete(el);
+  if (options.material) surfaceMaterials.set(el, SURFACE_MATERIALS[options.material]);
+  else surfaceMaterials.delete(el);
   litSurfaces.add(el);
   bind();
   reschedule();

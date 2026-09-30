@@ -13,10 +13,17 @@
  */
 
 import type { Light } from "@/effects/light/lights";
+import type { SurfaceMaterial } from "@/effects/materials/surfaces";
 
 /** How the lamp falls on one surface resting on the glass (worked out by the scene). */
 export type SurfaceLight = {
   near: number;
+  /**
+   * How much of the lamp's UV reaches it, relative to straight under the
+   * lamp: the physical falloff (effects/optics/transmission irradianceFalloff), which
+   * reaches much further than `near`, the lamp's stylised reach.
+   */
+  uvReach: number;
   cast: { x: number; y: number; blur: number; model?: import("@/effects/optics/shadow").Shadow };
   alpha: number;
   lit: number;
@@ -44,7 +51,13 @@ export function writePaneLight(el: HTMLElement, r: Box, lamp: Light, glowOn: num
 }
 
 /** A surface resting on the glass: the light on it and the shadow it throws. */
-export function writeSurfaceLight(el: HTMLElement, r: Box, lamp: Light, light: SurfaceLight) {
+export function writeSurfaceLight(
+  el: HTMLElement,
+  r: Box,
+  lamp: Light,
+  light: SurfaceLight,
+  material?: SurfaceMaterial,
+) {
   el.style.setProperty("--lit-x", `${Math.round(lamp.x - r.left)}px`);
   el.style.setProperty("--lit-y", `${Math.round(lamp.y - r.top)}px`);
   el.style.setProperty("--lit-near", light.near.toFixed(3));
@@ -68,6 +81,32 @@ export function writeSurfaceLight(el: HTMLElement, r: Box, lamp: Light, light: S
   el.style.setProperty("--lamp-core", `${(lamp.radius * 0.35).toFixed(1)}px`);
   el.style.setProperty("--lit-angle", `${light.angle.toFixed(1)}deg`);
   el.style.setProperty("--lit-over", litOver(r, lamp).toFixed(3));
+  /*
+   * What it gives back under UV (items 20, 25a): the UV reaching it times its
+   * material's fluorescence, as a colour the stylesheet adds -- its glow, and
+   * a wash over its face. Transparent unless a light carries UV and the
+   * material fluoresces, so nothing changes otherwise.
+   */
+  const f = material ? fluorescenceOn(light, lamp, material) : 0;
+  if (f > 0.001 || el.style.getPropertyValue("--fluor-glow")) {
+    el.style.setProperty("--fluor-glow", fluorColour(material, Math.min(1, f)));
+    el.style.setProperty("--fluor-face", fluorColour(material, Math.min(1, f) * 0.55));
+  }
+}
+
+/** How strongly a surface fluoresces: the UV reaching it (uvReach x lit x uv) times its yield. */
+export function fluorescenceOn(
+  light: Pick<SurfaceLight, "uvReach" | "lit">,
+  lamp: Pick<Light, "uv">,
+  material: SurfaceMaterial,
+): number {
+  return light.uvReach * light.lit * lamp.uv * material.fluorescence.yield;
+}
+
+function fluorColour(material: SurfaceMaterial | undefined, alpha: number): string {
+  if (!material || alpha <= 0.001) return "transparent";
+  const [r, g, b] = material.fluorescence.colour;
+  return `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)} / ${alpha.toFixed(3)})`;
 }
 
 /**

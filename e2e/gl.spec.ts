@@ -121,8 +121,11 @@ test.describe("the light passes share one WebGL context", () => {
    * raising one pane's gap changes what lands under it.
    */
   test("the light under a pane follows that pane's own gap", async ({ page }) => {
-    // Waits for the picture to settle: slow in a software-rendered browser.
-    test.setTimeout(60_000);
+    // Waits for the picture to settle: slow in a software-rendered browser,
+    // where a frame of every pass is ~5 s and each read waits for one. It
+    // ran at 1.0 min against a 1 min limit by 2026-09-30, so it failed on
+    // time as passes grew, with the behaviour intact.
+    test.setTimeout(150_000);
     await page.goto("/?glass=css");
     await page.waitForLoadState("networkidle");
     const band = page.locator("[data-seam] .glass").first();
@@ -147,13 +150,13 @@ test.describe("the light passes share one WebGL context", () => {
           await page.waitForTimeout(800);
           return a > 0 && a === (await picture());
         },
-        { timeout: 30_000 },
+        { timeout: 75_000 },
       )
       .toBe(true);
     const before = await picture();
 
     await band.evaluate((el) => el.setAttribute("data-gap", "260"));
-    await expect.poll(picture, { timeout: 15_000 }).not.toBe(before);
+    await expect.poll(picture, { timeout: 30_000 }).not.toBe(before);
     await page.mouse.up();
   });
 

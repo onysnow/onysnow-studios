@@ -203,7 +203,7 @@ test.describe("the pane's edge", () => {
     page,
   }) => {
     test.setTimeout(60_000);
-    await page.goto("/lab?glass=css");
+    await page.goto("/lab-samples?glass=css");
     await page.waitForLoadState("networkidle");
     const stack = page.locator("[data-lab-stacks] [data-stack]").first();
     await stack.scrollIntoViewIfNeeded();

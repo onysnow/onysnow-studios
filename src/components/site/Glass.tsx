@@ -222,7 +222,7 @@ export function Glass({
       // A line of type stands off the glass by a fraction of what a mounted
       // print does (the 0.42 its shadow has always been scaled by).
       const letGo = copy.map((node) =>
-        registerLitSurface(node, { occludes: false, standoff: TYPE_STANDOFF }),
+        registerLitSurface(node, { occludes: false, standoff: TYPE_STANDOFF, material: "ink" }),
       );
       /*
        * Plastic resting on the pane (the orange buttons) is lit too: it catches
@@ -230,7 +230,13 @@ export function Glass({
        * it is translucent, so it tints the light rather than blocking it.
        */
       for (const node of el.querySelectorAll<HTMLElement>(".plastic")) {
-        letGo.push(registerLitSurface(node, { occludes: false, standoff: PLASTIC_STANDOFF }));
+        letGo.push(
+          registerLitSurface(node, {
+            occludes: false,
+            standoff: PLASTIC_STANDOFF,
+            material: "dayglo-orange",
+          }),
+        );
       }
 
       release.current = () => {

@@ -48,7 +48,9 @@ describe("what is behind the glass", () => {
   });
 
   it("the light on the photographs and the room in the glass both follow it", () => {
-    expect(FLOOR_FRAGMENT_SHADER).toContain("floorAt(look - uViewShift, lit,");
+    // The point of the photograph seen here is back along the view shift, and it is lit there.
+    expect(FLOOR_FRAGMENT_SHADER).toContain("vec2 at = look - uViewShift;");
+    expect(FLOOR_FRAGMENT_SHADER).toContain("floorAt(at, lit,");
     expect(GLASS_LIGHT_FRAGMENT_SHADER).toMatch(
       /fromCentre = frag - 0\.5 \* uViewport \/ uScale - uEye/,
     );

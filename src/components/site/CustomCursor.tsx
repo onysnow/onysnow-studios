@@ -252,8 +252,15 @@ export function CustomCursor() {
        * 60 fps frame; a frame that took twice as long closes as much as two
        * would have. Per-frame easing made the lag depend on how busy the page
        * was -- on a heavy frame the follower fell far behind and crawled back.
+       *
+       * Capped at a second, not 100 ms. At 100 ms a slow frame closed only a
+       * tenth of the time it had taken, so on a slow device the follower crept
+       * for many seconds -- and since the follower is now the lamp the whole
+       * scene is lit from, the light crept with it. The ease can never
+       * overshoot however long the frame, so the cap only has to stop a
+       * frame's time from being nonsense.
        */
-      const k = ease(t("ringEase"), Math.min(dt, 100));
+      const k = ease(t("ringEase"), Math.min(dt, 1000));
       ringX += (targetX - ringX) * k;
       ringY += (targetY - ringY) * k;
       // Arrived: land exactly on the pointer, and stop asking for frames.

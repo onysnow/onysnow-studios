@@ -1,3 +1,4 @@
+import { labDraftActive } from "@/lib/lab-bridge";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { settingsQuery } from "@/lib/content";
@@ -69,7 +70,11 @@ export function CustomCss() {
   const siteTuning = data?.[SITE_TUNING_KEY];
   useEffect(() => {
     if (data === undefined) return;
-    if (typeof window !== "undefined" && window.location.pathname.startsWith("/lab")) return;
+    // The lab's editor holds a draft, and so does its preview frame once the
+    // editor has sent one (lab-bridge): the published values must not land
+    // over either.
+    if (typeof window !== "undefined" && window.location.pathname === "/lab") return;
+    if (labDraftActive()) return;
     // The panes carry `suppressHydrationWarning` precisely so this does not
     // have to be timed against hydration -- see Glass.tsx.
     applySiteTuning(siteTuning);
