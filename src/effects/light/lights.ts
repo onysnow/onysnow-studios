@@ -20,6 +20,7 @@ import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
 import { t } from "@/lib/tuning";
 import { camera } from "@/effects/camera/camera";
 import { lampMode, onToolChange } from "@/effects/tools/held";
+import { flareFlickerAt } from "./flame";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -227,11 +228,10 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
 /*
  * A road flare (item 22, ?try=flare), held where the lamp is.
  *
- * Burning magnesium and strontium nitrate: a deep red, a small fierce source
- * (sharp shadows), always burning while it is held -- not wound up like the
- * lamp -- and never steady. Its output flickers fast as the flame boils, and
- * every second or so it sputters, dropping sharply for a moment. The flame
- * wanders a couple of pixels. It is in the light list like the flash, so the
+ * Burning strontium nitrate: a deep red, a small fierce source (sharp
+ * shadows), always burning while it is held -- not wound up like the lamp --
+ * and never steady: it puffs, wobbles and sputters (effects/light/flame).
+ * The flame wanders a couple of pixels. It is in the light list like the flash, so the
  * glass, the light through it and the rims answer it by the same physics.
  */
 export const FLARE_COLOUR = [1.0, 0.2, 0.09] as const;
@@ -258,23 +258,8 @@ export const flareLight: Light = {
   uv: 0,
 };
 
-/**
- * How brightly the flare burns at a moment, as a share of its steady level:
- * a boil of fast flicker (incommensurate frequencies, so it never repeats
- * visibly) and a sputter where two slow waves line up. Deterministic, so a
- * test and a screenshot can pin it.
- */
-export function flareFlickerAt(seconds: number): number {
-  const tau = Math.PI * 2;
-  const boil =
-    0.84 +
-    0.08 * Math.sin(tau * 7.3 * seconds) +
-    0.05 * Math.sin(tau * 13.1 * seconds + 1.3) +
-    0.03 * Math.sin(tau * 23.7 * seconds + 0.4);
-  const sputter =
-    Math.sin(tau * 0.9 * seconds) * Math.sin(tau * 1.7 * seconds + 2) > 0.8 ? -0.3 : 0;
-  return Math.min(1.05, Math.max(0.4, boil + sputter));
-}
+// How the flame burns over time is effects/light/flame's.
+export { flareFlickerAt, sputterAt } from "./flame";
 
 let flareFrame = 0;
 /**

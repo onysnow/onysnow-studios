@@ -141,9 +141,61 @@ describe("the road flare", () => {
     }
     expect(low).toBeGreaterThanOrEqual(0.4);
     expect(high).toBeLessThanOrEqual(1.05);
-    // A sputter drops it well below the boil's floor (0.84 - 0.16).
+    // A sputter drops it well below the throb's floor.
     expect(low).toBeLessThan(0.62);
     expect(high - low).toBeGreaterThan(0.3);
+  });
+
+  it("puffs at a buoyant flame's frequency for its size, near 9.5 Hz", async () => {
+    const { flareFlickerAt } = await import("./lights");
+    const { puffingHz, FLARE_END } = await import("./flame");
+    expect(puffingHz(FLARE_END)).toBeCloseTo(1.5 / Math.sqrt(0.025), 6);
+    // The strongest line in its spectrum above 2 Hz is the puffing.
+    const rate = 200;
+    const n = 2000;
+    let best = 0;
+    let bestHz = 0;
+    for (let hz = 2; hz <= 40; hz += 0.1) {
+      let re = 0;
+      let im = 0;
+      for (let i = 0; i < n; i++) {
+        const v = flareFlickerAt(i / rate);
+        re += v * Math.cos((2 * Math.PI * hz * i) / rate);
+        im += v * Math.sin((2 * Math.PI * hz * i) / rate);
+      }
+      const power = re * re + im * im;
+      if (power > best) {
+        best = power;
+        bestHz = hz;
+      }
+    }
+    expect(bestHz).toBeGreaterThan(9);
+    expect(bestHz).toBeLessThan(10);
+  });
+
+  it("sputters now and then, and recovers within a fraction of a second", async () => {
+    const { sputterAt } = await import("./flame");
+    let events = 0;
+    let was = 0;
+    for (let s = 0; s < 60; s += 0.005) {
+      const v = sputterAt(s);
+      if (v > 0.5 && was <= 0.5) events += 1;
+      was = v;
+    }
+    // About 0.75 a second.
+    expect(events).toBeGreaterThan(20);
+    expect(events).toBeLessThan(70);
+    // Recovered to under a fifth within a quarter second of any peak --
+    // unless the next one has broken off by then.
+    for (let s = 0; s < 60; s += 0.01) {
+      if (sputterAt(s) > 0.55 && sputterAt(s - 0.01) < sputterAt(s)) {
+        let another = false;
+        for (let u = s + 0.005; u <= s + 0.25; u += 0.005) {
+          if (sputterAt(u) > sputterAt(u - 0.005) + 0.01) another = true;
+        }
+        if (!another) expect(sputterAt(s + 0.25)).toBeLessThan(0.2);
+      }
+    }
   });
 
   it("is in the light list only while it burns", async () => {
