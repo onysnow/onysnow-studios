@@ -159,7 +159,7 @@ export const flashLight: Light = {
 };
 
 const flashWatchers = new Set<() => void>();
-/** Wake a pass for every frame of the flash's pulse. */
+/** Wake a pass for every frame of the flash's pulse (and of the flare's flicker). */
 export function onFlash(fn: () => void) {
   flashWatchers.add(fn);
   return () => flashWatchers.delete(fn);
@@ -203,16 +203,105 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
   };
 }
 
-/** The lights that stand at a point: the lamp, and the flash while it burns. */
+/*
+ * A road flare (item 22, ?try=flare), held where the lamp is.
+ *
+ * Burning magnesium and strontium nitrate: a deep red, a small fierce source
+ * (sharp shadows), always burning while it is held -- not wound up like the
+ * lamp -- and never steady. Its output flickers fast as the flame boils, and
+ * every second or so it sputters, dropping sharply for a moment. The flame
+ * wanders a couple of pixels. It is in the light list like the flash, so the
+ * glass, the light through it and the rims answer it by the same physics.
+ */
+export const FLARE_COLOUR = [1.0, 0.2, 0.09] as const;
+/** The flame's size, CSS px: small beside the lamp's diffuser, so its shadows are sharp. */
+export const FLARE_RADIUS = 10;
+/** How much stronger than the lamp a flare burns at its steady level. */
+export const FLARE_GAIN = 1.3;
+
+let flareFlicker = 1;
+export const flareLight: Light = {
+  id: "flare",
+  kind: "point",
+  x: -9999,
+  y: -9999,
+  get height() {
+    return t("shadowHeight");
+  },
+  radius: FLARE_RADIUS,
+  colour: FLARE_COLOUR,
+  get gain() {
+    return t("coreGain") * FLARE_GAIN * flareFlicker;
+  },
+  charge: 0,
+  uv: 0,
+};
+
+/**
+ * How brightly the flare burns at a moment, as a share of its steady level:
+ * a boil of fast flicker (incommensurate frequencies, so it never repeats
+ * visibly) and a sputter where two slow waves line up. Deterministic, so a
+ * test and a screenshot can pin it.
+ */
+export function flareFlickerAt(seconds: number): number {
+  const tau = Math.PI * 2;
+  const boil =
+    0.84 +
+    0.08 * Math.sin(tau * 7.3 * seconds) +
+    0.05 * Math.sin(tau * 13.1 * seconds + 1.3) +
+    0.03 * Math.sin(tau * 23.7 * seconds + 0.4);
+  const sputter =
+    Math.sin(tau * 0.9 * seconds) * Math.sin(tau * 1.7 * seconds + 2) > 0.8 ? -0.3 : 0;
+  return Math.min(1.05, Math.max(0.4, boil + sputter));
+}
+
+let flareFrame = 0;
+/**
+ * Light the flare (returns the put-out). It follows the lamp's position and
+ * redraws the passes as it flickers, a frame at a time, while it is held.
+ */
+export function lightFlare(): () => void {
+  if (typeof window === "undefined") return () => {};
+  const start = performance.now();
+  let last = 0;
+  const step = (now: number) => {
+    flareFrame = requestAnimationFrame(step);
+    // The flame's own rate is what matters, not the display's: 30 a second.
+    if (now - last < 33) return;
+    last = now;
+    const s = (now - start) / 1000;
+    const held = pointer.x > -9999;
+    flareFlicker = flareFlickerAt(s);
+    flareLight.charge = held ? 1 : 0;
+    flareLight.x = pointer.x + 1.6 * Math.sin(s * 11.3);
+    flareLight.y = pointer.y + 1.6 * Math.sin(s * 9.1 + 0.7);
+    changed();
+    for (const fn of flashWatchers) fn();
+  };
+  flareFrame = requestAnimationFrame(step);
+  return () => {
+    cancelAnimationFrame(flareFrame);
+    flareLight.charge = 0;
+    changed();
+  };
+}
+
+/** How brightly the flare is burning this moment, for what draws its flame. */
+export function flareBrightness(): number {
+  return flareLight.charge * flareFlicker;
+}
+
+/** The lights that stand at a point: the lamp, and the flash and the flare while they burn. */
 export function pointLights(): Light[] {
   const out = lights.filter((l) => l.kind === "point");
   if (flashLight.charge > 0) out.push(flashLight);
+  if (flareLight.charge > 0) out.push(flareLight);
   return out;
 }
 
 /** How hard the most strongly burning point light is burning: whether to draw at all. */
 export function strongestCharge(): number {
-  return Math.max(cursorLamp.charge, flashLight.charge);
+  return Math.max(cursorLamp.charge, flashLight.charge, flareLight.charge);
 }
 
 /** The lamp's radiant power, for the passes that work in real units. */

@@ -20,6 +20,7 @@ import {
 } from "@/effects/scene/scene";
 import {
   cursorLamp,
+  flareLight,
   flashLight,
   lampPower,
   onCharge,
@@ -519,7 +520,7 @@ export function GlassLight({
     const step = (now: number) => {
       const charge = chargeRef.current;
       // The flash lights the glass for its pulse whatever the lamp's charge.
-      const lit = Math.max(charge, flashLight.charge) > 0.002;
+      const lit = Math.max(charge, flashLight.charge, flareLight.charge) > 0.002;
 
       if (!lit) {
         // Already settled and nothing has moved: park without redrawing.

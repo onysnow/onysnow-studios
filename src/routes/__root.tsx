@@ -26,6 +26,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
 import { listenForLabDraft, reportLabPath } from "@/lib/lab-bridge";
 import { Magnifier } from "@/components/site/Magnifier";
+import { FlareTorch } from "@/components/site/FlareTorch";
 import { previewing } from "@/effects/engine/preview";
 import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
@@ -137,10 +138,15 @@ function RootShell({ children }: { children: ReactNode }) {
     </html>
   );
 }
-function MagnifierIfTried() {
-  const [on, setOn] = useState(false);
-  useEffect(() => setOn(previewing("magnifier")), []);
-  return on ? <Magnifier /> : null;
+function ToolsIfTried() {
+  const [on, setOn] = useState({ magnifier: false, flare: false });
+  useEffect(() => setOn({ magnifier: previewing("magnifier"), flare: previewing("flare") }), []);
+  return (
+    <>
+      {on.magnifier ? <Magnifier /> : null}
+      {on.flare ? <FlareTorch /> : null}
+    </>
+  );
 }
 
 function RootComponent() {
@@ -180,8 +186,8 @@ function RootComponent() {
           <SiteFooter />
           <CustomCursor />
           <ShutterFlash />
-          {/* Item 21, ?try=magnifier: client only (the switch is in the address). */}
-          <MagnifierIfTried />
+          {/* The tools being tried (items 21-22): client only, the switch is in the address. */}
+          <ToolsIfTried />
           {/*
             Last in the tree, first on the screen.
 

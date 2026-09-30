@@ -4,6 +4,7 @@ import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
+import { LAMP_COLOUR } from "@/effects/light/lights";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { BOKEH_GLSL } from "@/effects/optics/bokeh.glsl";
 
@@ -283,6 +284,9 @@ ${BOKEH_GLSL}
  * The edge's shadow (the light the rounded edge bends away) darkens, which
  * this additive layer cannot do: it stays the CSS box-shadow.
  */
+/* The lamp's own colour: what the glass's warm and cool tints are measured against. */
+const vec3 LAMP_WHITE = vec3(${LAMP_COLOUR.join(", ")});
+
 /* The glow of skin oil and dust under UV: blue-white, as in a forensic photograph. */
 const vec3 FLUORESCENT_SMEAR = vec3(0.55, 0.78, 1.0);
 
@@ -966,6 +970,13 @@ void main() {
      */
     float lit = charge * charge * (3.0 - 2.0 * charge);
     vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
+    /*
+     * The warm-to-cool tint is the lamp's; another light shifts it by its own
+     * colour against the lamp's white -- a flare's rim burns red, the flash's
+     * a little cooler. The lamp against itself is exactly 1, so its look is
+     * untouched.
+     */
+    tint *= uLightColour[i] / LAMP_WHITE;
     // A black light's visible glow is its own violet, not the lamp's whites.
     float uvShare = uLightUv[i];
     tint = mix(tint, uLightColour[i], uvShare);

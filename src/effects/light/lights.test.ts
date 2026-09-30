@@ -127,3 +127,32 @@ describe("the passes loop over the lights", () => {
     expect(FLOOR_FRAGMENT_SHADER).not.toMatch(/vec3 warm = uLightColour\[0\];/);
   });
 });
+
+// Item 22: the road flare.
+describe("the road flare", () => {
+  it("flickers inside its bounds and sputters now and then", async () => {
+    const { flareFlickerAt } = await import("./lights");
+    let low = 1;
+    let high = 0;
+    for (let s = 0; s < 20; s += 0.01) {
+      const v = flareFlickerAt(s);
+      low = Math.min(low, v);
+      high = Math.max(high, v);
+    }
+    expect(low).toBeGreaterThanOrEqual(0.4);
+    expect(high).toBeLessThanOrEqual(1.05);
+    // A sputter drops it well below the boil's floor (0.84 - 0.16).
+    expect(low).toBeLessThan(0.62);
+    expect(high - low).toBeGreaterThan(0.3);
+  });
+
+  it("is in the light list only while it burns", async () => {
+    const { flareLight, pointLights, strongestCharge } = await import("./lights");
+    flareLight.charge = 0;
+    expect(pointLights()).not.toContain(flareLight);
+    flareLight.charge = 1;
+    expect(pointLights()).toContain(flareLight);
+    expect(strongestCharge()).toBe(1);
+    flareLight.charge = 0;
+  });
+});
