@@ -1,3 +1,4 @@
+import { passScaleCap } from "@/effects/engine/quality";
 import { coatingRgb } from "@/effects/optics/coating";
 import { scatterDepth } from "@/effects/optics/scatter";
 import { useEffect, useState } from "react";
@@ -589,7 +590,7 @@ export function GlassLight({
       const panes = glassGeometry(now);
       const { x, y } = positionRef.current;
 
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, passScaleCap()));
       const bw = Math.round(viewportWidth() * scale);
       const bh = Math.round(viewportHeight() * scale);
       if (!beginPass(bw, bh, "glass")) return false;

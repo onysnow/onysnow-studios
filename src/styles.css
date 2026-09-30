@@ -3369,3 +3369,12 @@ html.is-winding * {
   z-index: 9000;
   pointer-events: none;
 }
+
+/*
+ * The lighter tier (item 34, effects/engine/quality): the bokeh layer is a
+ * second full-pane backdrop blur, the costliest thing a pane asks of the
+ * compositor after its own frost.
+ */
+:root[data-quality="lite"] .glass__bokeh {
+  display: none;
+}

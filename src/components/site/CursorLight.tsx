@@ -1,3 +1,4 @@
+import { passScaleCap } from "@/effects/engine/quality";
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { LAMP_COLOUR, cursorLamp, onCharge } from "@/effects/light/lights";
@@ -145,7 +146,7 @@ export function CursorLight({
     );
 
     const size = () => {
-      const scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      const scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, passScaleCap()));
       return {
         scale,
         w: Math.round(viewportWidth() * scale),

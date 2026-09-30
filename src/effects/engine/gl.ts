@@ -29,6 +29,7 @@
  * Each one listens here, stops, and rebuilds when it comes back.
  */
 
+import { noteRenderer } from "./quality";
 import { gpuBegin, gpuEnd, gpuTiming, setGpuMode } from "./perf";
 
 /** Texture units a pass may use; `beginPass` unbinds them all. */
@@ -60,6 +61,8 @@ export function sharedGl(): Shared | null {
     failed = true;
     return null;
   }
+  // A software renderer (no GPU) runs the lighter tier (item 34).
+  noteRenderer(gl);
   canvas.addEventListener("webglcontextlost", (event) => {
     // Without this the browser does not even try to give it back.
     event.preventDefault();

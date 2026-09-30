@@ -47,6 +47,8 @@ export const PREVIEWS = {
     "Museum and opal glass on Lab samples: polished glass with an anti-reflection coating on each face (a quarter wave of magnesium fluoride) beside the same glass bare -- the room's reflection falls to a third and turns faintly purple -- and opal glass, which scatters blue in its volume (Rayleigh): lit, it glows faintly blue and what comes through lands warm",
   gapparallax:
     "Item 33: how far a photograph slides under its glass as you scroll comes from how far the glass stands off it and how far away your eye is (gap / (distance + gap)), not from a depth preset",
+  quality:
+    "Item 34: quality tiers -- a device with 4 GB or less, 4 cores or fewer, no GPU, or frames that keep coming slow runs a lighter site (the light drawn at 1 device pixel per CSS pixel, the bokeh layer off); force one with ?quality=full|lite|minimal",
   flashlight:
     "A flashlight where the lamp is (item 25i): a beam -- a bright hotspot and a dim spill. Press and hold to plant it; it stays where you pressed and turns to point where the pointer goes, lighting whatever the beam falls on",
   laser:

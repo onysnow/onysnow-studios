@@ -1,3 +1,4 @@
+import { passScaleCap } from "@/effects/engine/quality";
 import { roughRow } from "@/effects/optics/rough-transmission";
 import { unscattered } from "@/effects/optics/scatter";
 import { previewing } from "@/effects/engine/preview";
@@ -290,7 +291,7 @@ export function FloorLight() {
         n += 1;
       }
 
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, passScaleCap()));
       const bw = Math.round((document.documentElement.clientWidth || window.innerWidth) * scale);
       const bh = Math.round(vh * scale);
       if (!beginPass(bw, bh, "floor")) return false;
