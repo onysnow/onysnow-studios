@@ -3,6 +3,7 @@ import { Magnifier } from "@/components/site/Magnifier";
 import { FlareTorch } from "@/components/site/FlareTorch";
 import { LaserBeam } from "@/components/site/LaserBeam";
 import { Hammer } from "@/components/site/Hammer";
+import { Flashlight } from "@/components/site/Flashlight";
 import {
   heldTool,
   holdTool,
@@ -42,6 +43,12 @@ const ICONS: Record<ToolId, React.ReactNode> = {
     <>
       <circle cx="8.5" cy="8.5" r="5" />
       <path d="m12.2 12.2 5 5" />
+    </>
+  ),
+  flashlight: (
+    <>
+      <path d="M3 12.5 12 6.5l2 3-9 6z" />
+      <path d="M12.5 5.5 15 4l2.5 4-2.5 1.5M17 3l1.5-1M18.5 6.5h1.5M16 1.2v1.6" />
     </>
   ),
   hammer: (
@@ -104,6 +111,7 @@ export function HeldTool() {
       {held === "magnifier" ? <Magnifier /> : null}
       {held === "flare" ? <FlareTorch /> : null}
       {held === "laser" ? <LaserBeam /> : null}
+      {held === "flashlight" ? <Flashlight /> : null}
       {held === "hammer" ? <Hammer /> : null}
       {tray ? <Tray held={held} /> : null}
     </>

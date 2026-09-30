@@ -21,6 +21,7 @@ import { t } from "@/lib/tuning";
 import { camera } from "@/effects/camera/camera";
 import { lampMode, onToolChange } from "@/effects/tools/held";
 import { flareFlickerAt } from "./flame";
+import type { Aim } from "./beam";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -68,6 +69,12 @@ export type Light = {
    * nearest point on the line.
    */
   readonly span?: readonly [number, number] | undefined;
+  /**
+   * For a beam (a flashlight, item 25i), the way it points: a unit vector,
+   * z up out of the page. Lights without one shine all round
+   * (effects/light/beam).
+   */
+  readonly aim?: Aim | undefined;
 };
 
 /** The lamp's colour: a warm white, a little under daylight. */
@@ -380,18 +387,71 @@ export function emitterChanged() {
   for (const fn of flashWatchers) fn();
 }
 
-/** The lights that stand at a point: the lamp, the flash and the flare while they burn, and the emitters. */
+/*
+ * A flashlight (item 25i, the "Flashlight" tool): a white LED behind a
+ * reflector, so a beam (effects/light/beam) -- a bright hotspot and a dim
+ * spill -- rather than a light all round. It stands where the hand holds it,
+ * the lamp's height above the page; pressed and held, it stays where it was
+ * pressed and turns to point where the pointer goes (components/site/
+ * Flashlight moves and aims it). Its centre is far brighter than the bare
+ * lamp, as a reflector's is: the same light, gathered into a few degrees.
+ * A cool white, as a white LED's blue pump makes it -- which also means it
+ * charges glow paint (effects/materials/phosphor), as a real LED torch does.
+ */
+export const TORCH_COLOUR = [0.9, 0.96, 1.0] as const;
+/** The lens's radius, CSS px. */
+export const TORCH_RADIUS = 12;
+/** The hotspot's centre against the lamp's own strength. */
+export const TORCH_GAIN = 3;
+
+let torchAim: Aim = [0, 0, -1];
+export const torchLight: Light = {
+  id: "torch",
+  kind: "point",
+  x: -9999,
+  y: -9999,
+  get height() {
+    return t("shadowHeight");
+  },
+  radius: TORCH_RADIUS,
+  colour: TORCH_COLOUR,
+  get gain() {
+    return t("coreGain") * TORCH_GAIN;
+  },
+  charge: 0,
+  uv: 0,
+  get aim() {
+    return torchAim;
+  },
+};
+
+/** Stand the torch at (x, y), pointing along `aim`, burning at `charge` (0 puts it out). */
+export function setTorch(x: number, y: number, aim: Aim, charge: number) {
+  torchLight.x = x;
+  torchLight.y = y;
+  torchAim = aim;
+  torchLight.charge = charge;
+  emitterChanged();
+}
+
+/** The lights that stand at a point: the lamp, the flash, the flare and the torch while they burn, and the emitters. */
 export function pointLights(): Light[] {
   const out = lights.filter((l) => l.kind === "point");
   if (flashLight.charge > 0) out.push(flashLight);
   if (flareLight.charge > 0) out.push(flareLight);
+  if (torchLight.charge > 0) out.push(torchLight);
   for (const e of emitters) if (e.charge > 0) out.push(e);
   return out;
 }
 
 /** How hard the most strongly burning point light is burning: whether to draw at all. */
 export function strongestCharge(): number {
-  let strongest = Math.max(cursorLamp.charge, flashLight.charge, flareLight.charge);
+  let strongest = Math.max(
+    cursorLamp.charge,
+    flashLight.charge,
+    flareLight.charge,
+    torchLight.charge,
+  );
   for (const e of emitters) strongest = Math.max(strongest, e.charge);
   return strongest;
 }

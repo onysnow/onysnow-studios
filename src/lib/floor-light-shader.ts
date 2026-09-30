@@ -387,7 +387,10 @@ void main() {
     float lit = c * c * (3.0 - 2.0 * c);
     vec2 at = look - uViewShift;
     // A line light (a neon tube) reaches this point from its nearest point.
-    vec4 one = floorAt(at, lit, nearestOnLight(at, uLightPos[i].xy, uLightSpan[i]), uLightPos[i].z, uLightRadius[i]);
+    vec2 from = nearestOnLight(at, uLightPos[i].xy, uLightSpan[i]);
+    // A beam (a flashlight) lights only what it points at (effects/light/beam).
+    lit *= beamFactor(uLightAim[i], vec3(at - from, -uLightPos[i].z));
+    vec4 one = floorAt(at, lit, from, uLightPos[i].z, uLightRadius[i]);
     f += one;
     coloured += one.rgb * uLightColour[i];
   }

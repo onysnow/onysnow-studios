@@ -31,6 +31,8 @@ export const PREVIEWS = {
     "A detective's magnifying glass where the lamp is: the live page enlarged through a real lens, swimming and colour-fringed at the rim",
   flare:
     "A burning road flare where the lamp is: deep red, flickering and sputtering, lighting the glass and the photographs",
+  flashlight:
+    "A flashlight where the lamp is (item 25i): a beam -- a bright hotspot and a dim spill. Press and hold to plant it; it stays where you pressed and turns to point where the pointer goes, lighting whatever the beam falls on",
   laser:
     "A laser pointer's beam across the page (?laser=red|green|violet): it enters the panes at their edges, bends, splits, is guided and absorbed as real glass does; press and drag to aim",
   bounce:

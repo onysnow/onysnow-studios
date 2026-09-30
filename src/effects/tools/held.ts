@@ -13,11 +13,12 @@ import { previewing } from "@/effects/engine/preview";
  * themselves stay in effects/light, the objects in their components.
  *
  * Which tool is held first comes from the address: `?try=blacklight`,
- * `?try=flare`, `?try=laser` or `?try=magnifier` start with it; `?try=tools`
+ * `?try=flare`, `?try=laser`, `?try=magnifier` or `?try=flashlight` start with it; `?try=tools`
  * shows the tray to change it.
  */
 
-export type ToolId = "lamp" | "blacklight" | "flare" | "laser" | "magnifier" | "hammer";
+export type ToolId =
+  "lamp" | "blacklight" | "flare" | "laser" | "magnifier" | "flashlight" | "hammer";
 
 export type Tool = {
   id: ToolId;
@@ -44,6 +45,11 @@ export const TOOLS: readonly Tool[] = [
   { id: "laser", label: "Laser", lamp: null, lampSeen: false },
   { id: "magnifier", label: "Magnifier", lamp: "white", lampSeen: false },
   /*
+   * A flashlight (item 25i): its own light, a beam (effects/light/beam), so
+   * the lamp is put down. Press and hold to plant it and aim it.
+   */
+  { id: "flashlight", label: "Flashlight", lamp: null, lampSeen: false },
+  /*
    * A glazier's hammer, to break a pane (item 10, ?try=broken): a strike
    * is a moment, so the lamp stays in the other hand to see the cracks by.
    */
@@ -57,7 +63,7 @@ const watchers = new Set<(id: ToolId) => void>();
 
 /** The tool the address starts with, the lamp if none. */
 function initialTool(): ToolId {
-  for (const id of ["blacklight", "flare", "laser", "magnifier"] as const) {
+  for (const id of ["blacklight", "flare", "laser", "magnifier", "flashlight"] as const) {
     if (previewing(id)) return id;
   }
   return "lamp";

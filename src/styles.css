@@ -3297,3 +3297,64 @@ html.is-winding * {
   color: rgb(200 215 200 / 0.35);
   pointer-events: none;
 }
+
+/*
+ * The flashlight you hold (item 25i, components/site/Flashlight), seen from
+ * above: a dark anodised body with a knurled grip, a wider head at the end
+ * it points from, and the lit rim of its lens. Pointing straight down, all
+ * that shows is the round tail cap with its rubber switch.
+ */
+.flashlight {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9990;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  transform-origin: 0 0;
+  opacity: 0;
+  filter: drop-shadow(0 6px 8px rgb(0 0 0 / 0.55));
+}
+.flashlight__tail {
+  flex: none;
+  width: 8px;
+  height: 80%;
+  border-radius: 3px 0 0 3px;
+  background: linear-gradient(to bottom, #3a3d42, #16181b 60%, #0b0c0e);
+}
+.flashlight__grip {
+  flex: 1;
+  height: 76%;
+  background:
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.07) 0 1px, transparent 1px 4px),
+    linear-gradient(to bottom, #4a4e55, #1c1e22 55%, #0e0f11);
+}
+.flashlight__head {
+  flex: none;
+  width: 22%;
+  min-width: 10px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, #5a5f67, #23262b 55%, #101114);
+}
+.flashlight__lens {
+  flex: none;
+  width: 3px;
+  height: 92%;
+  border-radius: 0 2px 2px 0;
+  background: #f2f8ff;
+  box-shadow:
+    0 0 6px 2px rgb(220 238 255 / 0.9),
+    0 0 18px 6px rgb(200 225 255 / 0.35);
+}
+/* Straight down: only the tail cap shows, round, with its switch. */
+.flashlight[data-down] {
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #26282c 0 30%, transparent 32%),
+    radial-gradient(circle at 40% 35%, #5a5f67, #16181b 70%);
+}
+.flashlight[data-down] > * {
+  display: none;
+}

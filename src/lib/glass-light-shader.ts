@@ -382,7 +382,8 @@ vec3 plasticFace(vec2 local) {
     for (int i = 0; i < MAX_LIGHTS; i++) {
       if (i >= uLightCount) break;
       vec2 L = nearestOnLight(local + uRect.xy, uLightPos[i].xy, uLightSpan[i]) - uRect.xy;
-      float c = uLightCharge[i];
+      // A beam (a flashlight) lights only what it points at.
+      float c = uLightCharge[i] * beamFactor(uLightAim[i], vec3(local - L, -uLightPos[i].z));
       float lit = c * c * (3.0 - 2.0 * c);
       float over = plasticOver(L, r, uLightRadius[i]);
       // The core's mirror image: sharp, falling off over 1.6 core radii.
@@ -411,7 +412,8 @@ vec3 plasticThrough(vec2 local) {
     float on = 0.0;
     for (int i = 0; i < MAX_LIGHTS; i++) {
       if (i >= uLightCount) break;
-      float c = uLightCharge[i];
+      vec2 Lr = nearestOnLight(r.xy + uRect.xy, uLightPos[i].xy, uLightSpan[i]);
+      float c = uLightCharge[i] * beamFactor(uLightAim[i], vec3(r.xy + uRect.xy - Lr, -uLightPos[i].z));
       on += plasticOver(nearestOnLight(r.xy + uRect.xy, uLightPos[i].xy, uLightSpan[i]) - uRect.xy, r, uLightRadius[i]) * c * c * (3.0 - 2.0 * c);
     }
     if (on <= 0.0) continue;
@@ -881,7 +883,8 @@ void main() {
     vec2 lightXY = nearestOnLight(frag, uLightPos[i].xy, uLightSpan[i]);
     float lightHeight = uLightPos[i].z;
     float lightPower = uLightPower[i];
-    float charge = uLightCharge[i];
+    // A beam (a flashlight) lights only what it points at (effects/light/beam).
+    float charge = uLightCharge[i] * beamFactor(uLightAim[i], vec3(frag - lightXY, -lightHeight));
 
     // ---- The light, and how far it reaches this point ----
     float dl = distance(frag, lightXY);
