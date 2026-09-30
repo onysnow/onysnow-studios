@@ -17,6 +17,7 @@
  * observer fires on any attribute write, and an identical one is pure work.
  */
 
+import { previewing } from "@/effects/engine/preview";
 import { roomLight } from "@/effects/light/lights";
 import { readPaneCauses } from "@/effects/materials/pane-causes";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
@@ -40,6 +41,24 @@ export function liquidConfigFor(pane: HTMLElement): Record<string, number> {
   const roomOn = Math.min(roomLight.gain, 1);
   for (const key of ["specular", "edgeHighlight"]) {
     if (key in config) config[key] = config[key]! * roomOn;
+  }
+  /*
+   * ?try=liquidlights (item 17): the light list lights the liquid glass, and
+   * nothing else does. The library's fixed rig -- four lights at made-up
+   * directions for the gloss, a rim glow, a Fresnel blend toward white and a
+   * drop shadow from a light "directly above" -- is light and shadow from
+   * sources that are not in the scene. The lights that ARE in it already
+   * reach these panes through GlassLight, drawn over the library's canvas in
+   * both glass modes: the lamp (and the flash) on the face and the edges, and
+   * the room, reflected through Fresnel at the glass's IOR. The pane's
+   * shadow is the one shadow model's (the light through the glass). So the
+   * rig is switched off and the library does only what glass does to what is
+   * behind it: bend, blur and tint.
+   */
+  if (previewing("liquidlights")) {
+    for (const key of ["specular", "edgeHighlight", "fresnel", "shadowOpacity"]) {
+      if (key in config) config[key] = 0;
+    }
   }
   return config;
 }

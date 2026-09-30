@@ -23,6 +23,8 @@ export const PREVIEWS = {
     "The room's brightest lights (windows, softboxes) compressed so their reflection doesn't clip to white",
   flash:
     "The shutter flash is a light in the scene: the glass, the light through it and the rims answer it",
+  liquidlights:
+    "Liquid glass lit only by the scene's lights: its own fixed gloss, rim glow, white Fresnel and drop shadow are off",
 } as const;
 
 export type PreviewName = keyof typeof PREVIEWS;
