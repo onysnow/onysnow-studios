@@ -626,6 +626,9 @@ export class HtmlCapture {
 					const tag = (node as Element).tagName;
 					if (tag === 'IMG' || tag === 'VIDEO' || tag === 'CANVAS') return false;
 					if ((node as Element).hasAttribute('data-view-shift')) return false;
+					// LOCAL: and whatever asks to be left out of what the glass sees
+					// (data-glass-ignore): a pane's own side faces and lit edge.
+					if ((node as Element).hasAttribute('data-glass-ignore')) return false;
 					if (!hideNodes || hideNodes.length === 0) return true;
 					let cur: Node | null = node;
 					while (cur) {

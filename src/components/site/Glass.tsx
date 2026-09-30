@@ -346,12 +346,14 @@ export function Glass({
       <span
         ref={sideTop}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--top"
         style={SIDE_STYLE.top}
       />
       <span
         ref={sideBottom}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--bottom"
         style={SIDE_STYLE.bottom}
       />
@@ -359,12 +361,14 @@ export function Glass({
       <span
         ref={sideLeft}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--left"
         style={SIDE_STYLE.left}
       />
       <span
         ref={sideRight}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--right"
         style={SIDE_STYLE.right}
       />
@@ -373,7 +377,13 @@ export function Glass({
         arris throws comes off the front corner and is not absorbed by the
         side behind it. Drawn by the glass light pass (GlassLight).
       */}
-      <canvas ref={glowLayer} aria-hidden="true" className="glass-glow" style={GLOW_STYLE} />
+      <canvas
+        ref={glowLayer}
+        aria-hidden="true"
+        data-glass-ignore=""
+        className="glass-glow"
+        style={GLOW_STYLE}
+      />
     </>
   );
 }

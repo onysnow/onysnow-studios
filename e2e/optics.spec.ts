@@ -31,6 +31,7 @@ import { penumbraOf } from "../src/effects/optics/shadow";
 import {
   edgeBand,
   fresnelRise,
+  refractionOffset,
   roundedRectSDF,
   surfaceHeight,
   toneMapFilm,
@@ -291,6 +292,15 @@ const CASES: Case[] = [
     to: 1.2,
     lo: 0,
     hi: 1,
+  },
+  {
+    name: "refractionOffset",
+    glsl: "refractionOffset(x, 40.0, 18.0, 1.518)",
+    ts: (x) => refractionOffset(x, 40, 18, 1.518),
+    from: -0.1,
+    to: 1.1,
+    lo: 0,
+    hi: 24,
   },
   {
     name: "fresnelRise",

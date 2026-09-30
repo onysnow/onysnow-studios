@@ -47,6 +47,8 @@ export const PREVIEWS = {
     "A tray to pick what you hold -- lamp, black light, flare, laser or magnifier -- one at a time",
   liquidlights:
     "Liquid glass lit only by the scene's lights: its own fixed gloss, rim glow, white Fresnel and drop shadow are off",
+  liquidedge:
+    "Liquid glass edges the way the CSS glass draws them: the bevel bends by Snell through the pane's own edge and thickness (the same numbers as the CSS bend), colours split by the glass's own dispersion, the pane's smoky fill, no drawn rim lines, and none of the library's own fixed lights -- on a band they are the bright streaks across the screen (2j; includes liquidlights)",
 } as const;
 
 export type PreviewName = keyof typeof PREVIEWS;

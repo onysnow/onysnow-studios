@@ -429,5 +429,5 @@ export function FloorLight() {
     };
   }, [generation]);
 
-  return <canvas ref={ref} aria-hidden="true" className="floor-light" />;
+  return <canvas ref={ref} aria-hidden="true" className="floor-light" data-glass-ignore="" />;
 }

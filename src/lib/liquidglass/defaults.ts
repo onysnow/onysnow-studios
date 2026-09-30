@@ -75,6 +75,19 @@ export interface GlassConfig {
 	 * for a perfect half-sphere magnifier effect).
 	 */
 	bevelMode: number;
+	/** LOCAL (?try=liquidedge): 1 bends by Snell through the pane's own edge. */
+	physicalEdge?: number;
+	/** LOCAL: the slab's thickness, CSS px. */
+	thickness?: number;
+	/** LOCAL: the glass's index for the red, green and blue channels. */
+	iorR?: number;
+	iorG?: number;
+	iorB?: number;
+	/** LOCAL: the pane's own fill, display RGBA 0..1. */
+	veilR?: number;
+	veilG?: number;
+	veilB?: number;
+	veilA?: number;
 }
 
 export const DEFAULTS: GlassConfig = {
