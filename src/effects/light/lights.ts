@@ -333,7 +333,7 @@ export type Emitter = Light & { level: number };
 export function makeEmitter(
   id: string,
   colour: readonly [number, number, number],
-  height: number,
+  height: number | (() => number),
   radius: () => number,
   share = 0.8,
   span?: () => readonly [number, number],
@@ -346,7 +346,9 @@ export function makeEmitter(
     kind: "point",
     x: -9999,
     y: -9999,
-    height,
+    get height() {
+      return typeof height === "number" ? height : height();
+    },
     get radius() {
       return radius();
     },

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { decay, excite, glowOf, type PhosphorCell } from "./phosphor";
+import { decay, excitationShare, excite, glowOf, type PhosphorCell } from "./phosphor";
+import {
+  BLACKLIGHT_VISIBLE,
+  FLARE_COLOUR,
+  FLASH_COLOUR,
+  LAMP_COLOUR,
+  LASER_COLOURS,
+} from "@/effects/light/lights";
+import { PHOSPHOR_GLOW } from "./phosphor";
 
 const after = (seconds: number) => {
   const cell: PhosphorCell = { fast: 0, slow: 0 };
@@ -32,5 +40,29 @@ describe("glow-in-the-dark paint", () => {
     expect(cell.fast).toBeLessThanOrEqual(1);
     expect(cell.slow).toBeLessThanOrEqual(1);
     expect(glowOf(cell)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("what charges it (25f)", () => {
+  const share = (colour: readonly [number, number, number], uv = 0) =>
+    excitationShare({ colour, uv });
+
+  it("charges fastest under UV and the violet laser, barely under the lamp", () => {
+    const uv = share(BLACKLIGHT_VISIBLE, 1);
+    const violet = share(LASER_COLOURS.violet);
+    const flash = share(FLASH_COLOUR);
+    const lamp = share(LAMP_COLOUR);
+    expect(uv).toBeCloseTo(1, 6);
+    expect(violet).toBeGreaterThan(0.85);
+    expect(flash).toBeGreaterThan(lamp);
+    expect(lamp).toBeGreaterThan(0.02);
+    expect(lamp).toBeLessThan(0.08);
+  });
+
+  it("is not charged by red or green light, nor by its own glow", () => {
+    expect(share(FLARE_COLOUR)).toBe(0);
+    expect(share(LASER_COLOURS.red)).toBe(0);
+    expect(share(LASER_COLOURS.green)).toBe(0);
+    expect(share(PHOSPHOR_GLOW)).toBe(0);
   });
 });
