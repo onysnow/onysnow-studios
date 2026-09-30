@@ -10,12 +10,22 @@ import {
 import { SOLIDS_GLSL } from "@/effects/optics/solids.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { SOLID_SHAPES, type SolidShape } from "@/effects/optics/solids";
+import { castOf, smoothCast } from "@/effects/optics/solid-cast";
 import { indexAt } from "@/effects/optics/dispersion";
 import { materialById, type MaterialId } from "@/effects/materials/presets";
 import { cursorLamp, onLightChange, roomLight } from "@/effects/light/lights";
 import { viewState } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
 import { registerBeamSolid } from "@/effects/scene/beam-solids";
+
+/**
+ * How much of the page's light the lamp is, where it shines: the share of
+ * the page a shadow takes back, and how much of the gathered light shows
+ * over the page's own brightness. The count itself (the ratio) is physics;
+ * these say how the lamp's part of the page compares to the whole.
+ */
+const SHADE_SHARE = 0.6;
+const CAUSTIC_SHARE = 0.16;
 
 /** The three wavelengths the solid is traced at, nm: a red, a green and a blue primary. */
 const WAVELENGTHS = [610, 550, 465] as const;
@@ -207,6 +217,8 @@ export function GlassSolid({
 }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const view = useRef<HTMLCanvasElement>(null);
+  const shadeLayer = useRef<HTMLCanvasElement>(null);
+  const causticLayer = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const el = box.current;
@@ -307,6 +319,86 @@ export function GlassSolid({
       texture = null;
       textureOf = null;
       return true;
+    };
+
+    /*
+     * What it throws on the page (effects/optics/solid-cast): counted from
+     * the lamp, a few times a second at most -- the count is the costly
+     * part, and a shadow that trails a spinning solid by a tenth of a
+     * second reads as the same shadow.
+     */
+    let castAt = -Infinity;
+    let castKey = "";
+    const CAST_CELLS = 56;
+    const castFrom = (
+      toWorld: readonly number[],
+      cx: number,
+      cy: number,
+      rect: DOMRect,
+      now: number,
+    ) => {
+      const shadeEl = shadeLayer.current;
+      const causticEl = causticLayer.current;
+      if (!shadeEl || !causticEl) return;
+      const lit = cursorLamp.charge;
+      if (lit < 0.02) {
+        shadeEl.style.opacity = "0";
+        causticEl.style.opacity = "0";
+        return;
+      }
+      const key = `${Math.round(cursorLamp.x)},${Math.round(cursorLamp.y)},${Math.round(cx)},${Math.round(cy)}`;
+      if (now - castAt < (spin ? 140 : 60) && key === castKey) return;
+      if (now - castAt < 60) return;
+      castAt = now;
+      castKey = key;
+      const cast = smoothCast(
+        castOf({
+          shape,
+          size,
+          centre: { x: cx, y: cy, z: size * 1.4 },
+          toWorld,
+          light: { x: cursorLamp.x, y: cursorLamp.y, z: cursorLamp.height },
+          n: index[1]!,
+          absorb: absorb[1]!,
+          cells: CAST_CELLS,
+          perCell: 2,
+        }),
+        3,
+      );
+      const place = (el: HTMLCanvasElement) => {
+        el.width = cast.cells;
+        el.height = cast.cells;
+        el.style.left = `${cast.x - rect.left}px`;
+        el.style.top = `${cast.y - rect.top}px`;
+        el.style.width = `${cast.w}px`;
+        el.style.height = `${cast.h}px`;
+        // Drawn up smooth, not in blocks: the lamp's disc softens it by about a cell.
+        el.style.filter = `blur(${((cast.w / cast.cells) * 0.8).toFixed(1)}px)`;
+      };
+      place(shadeEl);
+      place(causticEl);
+      const shade = shadeEl.getContext("2d");
+      const caustic = causticEl.getContext("2d");
+      if (!shade || !caustic) return;
+      const dark = shade.createImageData(cast.cells, cast.cells);
+      const bright = caustic.createImageData(cast.cells, cast.cells);
+      const lc = cursorLamp.colour;
+      for (let k = 0; k < cast.ratio.length; k++) {
+        const r = cast.ratio[k]!;
+        const o = k * 4;
+        // Less light than the page would have had: that much of the lamp's share of it, dark.
+        dark.data[o + 3] = Math.round(255 * Math.min(1, Math.max(0, 1 - r)) * SHADE_SHARE);
+        // More: the extra, in the lamp's colour.
+        const extra = Math.min(1, Math.max(0, r - 1) * CAUSTIC_SHARE);
+        bright.data[o] = Math.round(255 * lc[0]);
+        bright.data[o + 1] = Math.round(255 * lc[1]);
+        bright.data[o + 2] = Math.round(255 * lc[2]);
+        bright.data[o + 3] = Math.round(255 * extra);
+      }
+      shade.putImageData(dark, 0, 0);
+      caustic.putImageData(bright, 0, 0);
+      shadeEl.style.opacity = lit.toFixed(3);
+      causticEl.style.opacity = lit.toFixed(3);
     };
 
     let frame = 0;
@@ -420,6 +512,7 @@ export function GlassSolid({
         gl.uniformMatrix3fv(U("uToWorld"), false, toWorld);
         gl.uniformMatrix3fv(U("uToObject"), false, toObject);
       }
+      castFrom(endOn ? [1, 0, 0, 0, -1, 0, 0, 0, -1] : toWorld, cx, cy, rect, now);
 
       gl.uniform1i(U("uShape"), SOLID_SHAPES.indexOf(shape));
       gl.uniform1f(U("uSize"), size);
@@ -462,6 +555,22 @@ export function GlassSolid({
       className={className}
       style={{ position: "relative", width: size * 3.4, height: size * 3.4 }}
     >
+      {/* What it throws on the page from the lamp: shadow, then the caustic added over it. */}
+      <canvas
+        ref={shadeLayer}
+        aria-hidden="true"
+        style={{ position: "absolute", pointerEvents: "none", opacity: 0 }}
+      />
+      <canvas
+        ref={causticLayer}
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          pointerEvents: "none",
+          opacity: 0,
+          mixBlendMode: "plus-lighter",
+        }}
+      />
       <canvas
         ref={view}
         aria-label={`A glass ${shape}`}

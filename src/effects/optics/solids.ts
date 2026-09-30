@@ -214,6 +214,19 @@ export function traceSolid(
   maxBounces = 6,
 ): SolidRay {
   let d = norm(direction);
+  /*
+   * From far off (a lamp), skip to the sphere every shape fits inside (a
+   * cube's corner is the farthest, sqrt(3) of its half-size out), so the
+   * surface search starts close.
+   */
+  const bound = size * 1.9;
+  if (len(origin) > bound) {
+    const b = dot(origin, d);
+    const disc = b * b - (dot(origin, origin) - bound * bound);
+    if (disc < 0 || -b + Math.sqrt(disc) < 0)
+      return { exit: null, energy: 1, bounces: 0, inside: 0 };
+    origin = add(origin, scale(d, Math.max(0, -b - Math.sqrt(disc))));
+  }
   const tIn = solidCrossing(shape, size, origin, d, false);
   if (!Number.isFinite(tIn)) return { exit: null, energy: 1, bounces: 0, inside: 0 };
   let p = add(origin, scale(d, tIn));
