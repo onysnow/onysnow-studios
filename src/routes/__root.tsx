@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeldTool } from "@/components/site/ToolTray";
 import { PhotoLights } from "@/components/site/PhotoLights";
+import { Vignette } from "@/components/site/Vignette";
 import { useQuery } from "@tanstack/react-query";
 import { roomScript } from "@/lib/rooms";
 import { ROOM_KEYS, ROOM_HDR_KEYS } from "@/lib/site-assets";
@@ -178,6 +179,8 @@ function RootComponent() {
           <HeldTool />
           {/* The photographs' own lights, under the glass (item 31, ?try=photolights). */}
           <PhotoLights />
+          {/* The lens's corners (catalogue item 32, ?try=vignette). */}
+          <Vignette />
           {/*
             Last in the tree, first on the screen.
 

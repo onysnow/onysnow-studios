@@ -41,6 +41,8 @@ export const PREVIEWS = {
     "Light engine step I: a light behind the glass, under the photographs, like a lightbox (Environment > Backlight): the panes glow from beneath and their rims catch it",
   kelvin:
     "The lamp's colour from its temperature, as a camera's white balance speaks of it (Light > Lamp colour temperature): a blackbody's glow, 1900 K candle to 10000 K blue sky",
+  vignette:
+    "The lens's natural vignetting (Camera > Vignetting): the picture's corners darker by cos^4 of their angle off the lens's axis, as in a photograph",
   flashlight:
     "A flashlight where the lamp is (item 25i): a beam -- a bright hotspot and a dim spill. Press and hold to plant it; it stays where you pressed and turns to point where the pointer goes, lighting whatever the beam falls on",
   laser:

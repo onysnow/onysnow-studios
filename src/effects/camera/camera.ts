@@ -35,6 +35,10 @@ export const camera = {
   get apertureGrowth() {
     return t("spread");
   },
+  /** How much of the lens's natural (cos^4) vignetting the picture shows, 0 to 1. */
+  get vignetting() {
+    return t("vignetting");
+  },
   /** A polarising filter on the lens (step H): how perfect, 0 none, and its turn in radians. */
   get polariser() {
     return t("polariser");

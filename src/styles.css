@@ -3358,3 +3358,14 @@ html.is-winding * {
 .flashlight[data-down] > * {
   display: none;
 }
+
+/*
+ * The lens's natural vignetting (?try=vignette, components/site/Vignette):
+ * over the whole picture, under the cursor and its light.
+ */
+.lens-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+}

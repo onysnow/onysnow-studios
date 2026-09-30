@@ -151,6 +151,21 @@ export const tuning: Record<string, Knob> = {
    * dims or keeps the reflection -- most toward the frame's edges, where the
    * glass is seen at the steepest angle. A photographer's own tool.
    */
+  /*
+   * Natural vignetting (catalogue item 32, ?try=vignette): a lens passes less
+   * light to the edges of its picture than to the middle, as cos^4 of the
+   * angle off its axis -- a photograph's darker corners. 1 is the full law
+   * for the camera's distance; 0 none.
+   */
+  vignetting: {
+    label: "Vignetting",
+    group: "Camera",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "The lens's darker corners: 1 is the cos^4 law for how far away the camera is (closer, darker corners), 0 none. Needs ?try=vignette.",
+  },
   polariser: {
     label: "Polarising filter",
     group: "Camera",
