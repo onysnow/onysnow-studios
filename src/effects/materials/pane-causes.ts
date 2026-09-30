@@ -37,6 +37,8 @@ export type PaneDefaults = {
   frost: number;
   /** The "Glass height" setting: the page's gap. */
   gap: number;
+  /** The "Glass thickness" setting, for panes that do not name their own. */
+  thickness?: number;
 };
 
 type Attributes = { getAttribute(name: string): string | null };
@@ -57,7 +59,7 @@ export function readPaneCauses(el: Attributes, defaults: PaneDefaults): PaneCaus
      * it to deepen, and stays polished.
      */
     material: { ...preset, frost: preset.frost > 0 ? defaults.frost : 0 },
-    thickness: number(el, THICKNESS_ATTR, PANE_THICKNESS, 1, 200),
+    thickness: number(el, THICKNESS_ATTR, defaults.thickness ?? PANE_THICKNESS, 1, 200),
     gap: number(el, GAP_ATTR, defaults.gap, 0, 2000),
     smudge: number(el, SMUDGE_ATTR, 1, 0, 1),
     scratch: number(el, SCRATCH_ATTR, 1, 0, 1),

@@ -33,7 +33,7 @@ import {
   type SurfaceMaterial,
   type SurfaceMaterialId,
 } from "@/effects/materials/surfaces";
-import { t } from "@/lib/tuning";
+import { onTuningApplied, t } from "@/lib/tuning";
 import { GLOW_LAYER_Z, LIGHT_BLEED, SIDE_LAYER_Z } from "@/effects/engine/compositor";
 import { castShadow as castByModel, isotropicBlur } from "@/effects/optics/shadow";
 import { previewing } from "@/effects/engine/preview";
@@ -309,7 +309,11 @@ export function paneEdgeWidth(el: HTMLElement): number {
 
 /** A pane's causes, with the page's settings for whatever it does not say. */
 export function paneCauses(el: HTMLElement): PaneCauses {
-  return readPaneCauses(el, { frost: t("glassBlur"), gap: t("floorGap") });
+  return readPaneCauses(el, {
+    frost: t("glassBlur"),
+    gap: t("floorGap"),
+    thickness: t("glassThickness"),
+  });
 }
 
 /**
@@ -1003,6 +1007,12 @@ function bind() {
   );
   window.addEventListener("resize", () => {
     for (const el of panes) radii.delete(el);
+    invalidate();
+    schedule();
+  });
+  // A setting changed in the lab (the glass's thickness, the viewing
+  // distance...): lay the faces and the rest out again.
+  onTuningApplied(() => {
     invalidate();
     schedule();
   });

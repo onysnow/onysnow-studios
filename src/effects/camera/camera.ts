@@ -26,7 +26,7 @@ export const camera = {
   },
   /** The eye's distance from the screen, CSS px, for a viewport this wide. */
   distance(viewportWidth: number) {
-    return CAMERA_DISTANCE * viewportWidth;
+    return (t("viewDistance") || CAMERA_DISTANCE) * viewportWidth;
   },
   /** The aperture's radius ("Aperture radius"), and how much it grows with the charge. */
   get aperture() {

@@ -107,6 +107,20 @@ export const tuning: Record<string, Knob> = {
   // 0 (Ony, 2026-09-30): "I don't want the hero images to pan with mouse
   // movement. Only scrolling will activate the parallax." The eye stays
   // straight in front of the screen; what moves the photographs is scrolling.
+  // How far from the screen the viewer is, in viewport widths (the camera the
+  // whole page is worked out for: side faces, reflections, parallax). Nearer,
+  // the pane's side faces open up; further, they close to a line (2c, Ony
+  // 2026-09-30: "at this angle I should be able to see a lot more of the top
+  // side"). 1.2 is the distance the site was tuned at.
+  viewDistance: {
+    label: "Viewing distance",
+    group: "Camera",
+    value: 1.2,
+    min: 0.25,
+    max: 3,
+    step: 0.05,
+    hint: "How far your eye is from the screen, in screen widths. Closer, you see more of each pane's side faces (and the room reflection and parallax change with it); further, the sides close to a line.",
+  },
   viewFollow: {
     label: "Viewpoint follows pointer",
     group: "Camera",
@@ -564,6 +578,16 @@ export const tuning: Record<string, Knob> = {
     max: 3,
     step: 0.05,
     hint: "How hard the glass bends the light and shadow you see through it, at its top and bottom edges.",
+  },
+  // How thick the site's glass is, CSS px: how deep its side faces are.
+  glassThickness: {
+    label: "Glass thickness",
+    group: "Shadows",
+    value: 18,
+    min: 4,
+    max: 96,
+    step: 1,
+    hint: "How thick the panes are. Thicker glass shows wider side faces at the same angle, bends more at the bevel and throws a deeper green through its sides. 18 is about 5 mm.",
   },
   floorGap: {
     label: "Glass height",

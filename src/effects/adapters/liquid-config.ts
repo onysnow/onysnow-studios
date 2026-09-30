@@ -34,7 +34,11 @@ export function liquidConfigFor(pane: HTMLElement): Record<string, number> {
     config[knob.glassKey] = knob.value;
   }
   // The pane's own matter: its material's frost, and its edge.
-  const causes = readPaneCauses(pane, { frost: t("glassBlur"), gap: t("floorGap") });
+  const causes = readPaneCauses(pane, {
+    frost: t("glassBlur"),
+    gap: t("floorGap"),
+    thickness: t("glassThickness"),
+  });
   if ("blurAmount" in config) config["blurAmount"] = causes.material.frost;
   config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);
   // Its own light stands in for the room's.
