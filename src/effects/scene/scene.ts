@@ -64,6 +64,29 @@ export const viewState = { eyeX: 0, eyeY: 0, shiftX: 0, shiftY: 0 };
 
 export const MAX_OCCLUDERS = 6;
 
+export const MAX_PLASTIC = 4;
+
+/**
+ * A sheet of plastic resting on a pane (the orange buttons), for the glass
+ * light pass to light (item 18b, ?try=shaderplastic). Pane-local pixels: its
+ * face, and where the light it lets through lands -- its cast by the one
+ * shadow model, from its own standoff, exactly as its CSS glow was placed.
+ */
+export type Plastic = {
+  cx: number;
+  cy: number;
+  hw: number;
+  hh: number;
+  radius: number;
+  /** The cast: where the light through it lands, relative to the face. */
+  landX: number;
+  landY: number;
+  /** How much bigger than the face the landing is (the model's growth). */
+  landScale: number;
+  /** How soft the landing is, CSS px. */
+  blur: number;
+};
+
 /** Something standing on a pane, as the shape of the shadow it throws on it. */
 export type Occluder = {
   cx: number;
@@ -140,6 +163,8 @@ export type GlassRect = {
   stack: StackPlacement;
   /** How wide each of its side faces shows, CSS px (edge-side paneFaces). */
   faces: PaneFaces;
+  /** The plastic resting on it (at most MAX_PLASTIC). */
+  plastic: readonly Plastic[];
 };
 
 /* ======================================================================
@@ -453,6 +478,8 @@ const SNAPSHOT_MAX_AGE = 120;
 /** What is standing on each pane, from the last frame's light. */
 let occlusion = new Map<HTMLElement, Occluder[]>();
 const EMPTY_OCCLUDERS: readonly Occluder[] = [];
+let plastics = new Map<HTMLElement, Plastic[]>();
+const EMPTY_PLASTIC: readonly Plastic[] = [];
 
 /**
  * Bumped whenever the geometry is invalidated -- scroll, resize, a pane
@@ -581,6 +608,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       causes: stacked.get(p.el)?.causes ?? p.causes,
       stack: stacked.get(p.el)?.stack ?? { ...SINGLE, zBottom: p.causes.gap },
       occ: occlusion.get(p.el) ?? EMPTY_OCCLUDERS,
+      plastic: plastics.get(p.el) ?? EMPTY_PLASTIC,
     });
   }
   // Development only: what each stacked layer was given, for the e2e specs.
@@ -704,6 +732,38 @@ function occludersFor(
       cosTheta: model?.cosTheta ?? 1,
     });
     out.set(s.pane, list);
+  });
+  return out;
+}
+
+/** The plastic on each pane, and where the light through each lands. */
+function plasticFor(
+  reading: SceneReading,
+  lightOn: readonly SurfaceLight[],
+): Map<HTMLElement, Plastic[]> {
+  const paneRects = new Map(reading.panes.map((p) => [p.el, p.rect] as const));
+  const out = new Map<HTMLElement, Plastic[]>();
+  reading.surfaces.forEach((s, i) => {
+    if (!s.el.classList.contains("plastic")) return;
+    const pane = s.el.closest<HTMLElement>(".glass");
+    const paneRect = pane ? paneRects.get(pane) : undefined;
+    if (!pane || !paneRect) return;
+    const list = out.get(pane) ?? [];
+    if (list.length >= MAX_PLASTIC) return;
+    const r = s.rect;
+    const light = lightOn[i];
+    list.push({
+      cx: r.left - paneRect.left + r.width / 2,
+      cy: r.top - paneRect.top + r.height / 2,
+      hw: r.width / 2,
+      hh: r.height / 2,
+      radius: s.radius,
+      landX: light?.cast.x ?? 0,
+      landY: light?.cast.y ?? 0,
+      landScale: light?.cast.model?.scale ?? 1,
+      blur: light?.cast.blur ?? 0,
+    });
+    out.set(pane, list);
   });
   return out;
 }
@@ -874,6 +934,7 @@ function run(now = performance.now()) {
   // 3. compute
   const lightOn = reading.surfaces.map((s) => lightOnSurface(s.rect, s.standoff));
   occlusion = occludersFor(reading, lightOn);
+  plastics = plasticFor(reading, lightOn);
   snapshot = freeze(reading);
   snapshotAt = typeof now === "number" ? now : performance.now();
   snapshotVersion = version;

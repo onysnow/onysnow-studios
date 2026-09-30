@@ -66,6 +66,20 @@ uniform vec4 uOccSoft[MAX_OCC];
 uniform vec4 uOccDir[MAX_OCC];
 uniform float uOccCount;
 
+/*
+ * The plastic resting on this pane (the orange buttons; item 18b,
+ * ?try=shaderplastic), in the pane's own pixels. Lit here from the light
+ * list instead of by CSS gradients that knew only the cursor's lamp.
+ *
+ * uPlasticRect: centre.xy, half-size.zw of the face
+ * uPlasticLand: where the light through it lands -- cast offset.xy, growth.z, softness.w
+ */
+#define MAX_PLASTIC 4
+uniform vec4 uPlasticRect[MAX_PLASTIC];
+uniform vec4 uPlasticLand[MAX_PLASTIC];
+uniform float uPlasticRadius[MAX_PLASTIC];
+uniform float uPlasticCount;
+
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
 uniform float uRadius;        // corner radius, CSS pixels
 uniform float uEdgeWidth;     // this pane's bevel width, CSS pixels -- the one edge every effect shares
@@ -251,6 +265,133 @@ vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
 
 ${BOKEH_GLSL}
 
+/*
+ * ---- Plastic (item 18b) ----
+ *
+ * A thin sheet of glossy, translucent orange plastic resting on the glass.
+ * Every term follows a light in the list, and shows only with that light
+ * OVER the sheet (Ony, 2026-09-29: "the light would only appear if the
+ * cursor is right on top of it"): a glossy face seen straight on mirrors
+ * what is in front of it, not what is beside it.
+ *
+ *   The face mirrors the light's bright core (two fifths of its size) as a
+ *   small sharp highlight where the light is over it.
+ *   The rounded edge facing the light catches it as a thin line.
+ *   The sheet is a filter: the light through it lands behind it, orange and
+ *   mild, a little wider than the button, where its cast puts it.
+ *
+ * The edge's shadow (the light the rounded edge bends away) darkens, which
+ * this additive layer cannot do: it stays the CSS box-shadow.
+ */
+const vec3 PLASTIC_ORANGE = vec3(1.0, 0.62, 0.225); // oklch(0.8 0.17 58), the buttons' own
+
+/* How squarely a light is over a sheet: 1 on it, 0 half the light's radius off it (css-vars litOver). */
+float plasticOver(vec2 lightLocal, vec4 rect, float lightRadius) {
+  vec2 off = max(abs(lightLocal - rect.xy) - rect.zw, 0.0);
+  float t = min(1.0, length(off) / max(lightRadius * 0.5, 8.0));
+  return 1.0 - t * t * (3.0 - 2.0 * t);
+}
+
+/* Whether any sheet is within reach of this point (the glow layer's early-out must not skip them). */
+float plasticNear(vec2 local) {
+  float near = 0.0;
+  for (int k = 0; k < MAX_PLASTIC; k++) {
+    if (float(k) >= uPlasticCount) continue;
+    vec4 r = uPlasticRect[k];
+    vec2 off = max(abs(local - r.xy) - r.zw, 0.0);
+    near = max(near, step(length(off), 4.0));
+  }
+  return near;
+}
+
+/* The face's highlight and the lit rim: above the sheet (the .glass-glow layer). */
+vec3 plasticFace(vec2 local) {
+  vec3 sum = vec3(0.0);
+  for (int k = 0; k < MAX_PLASTIC; k++) {
+    if (float(k) >= uPlasticCount) continue;
+    vec4 r = uPlasticRect[k];
+    float rad = min(uPlasticRadius[k], min(r.z, r.w));
+    vec2 q = local - r.xy;
+    float sd = roundedBox(q, r.zw, rad);
+    if (sd > 1.0) continue;
+    float onFace = smoothstep(0.5, -0.5, sd);
+    float rimBand = onFace * (1.0 - smoothstep(0.0, 1.2, -sd));
+    vec2 n = normalize(vec2(
+      roundedBox(q + vec2(1.0, 0.0), r.zw, rad) - roundedBox(q - vec2(1.0, 0.0), r.zw, rad),
+      roundedBox(q + vec2(0.0, 1.0), r.zw, rad) - roundedBox(q - vec2(0.0, 1.0), r.zw, rad)
+    ) + 1e-6);
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+      if (i >= uLightCount) break;
+      vec2 L = uLightPos[i].xy - uRect.xy;
+      float c = uLightCharge[i];
+      float lit = c * c * (3.0 - 2.0 * c);
+      float over = plasticOver(L, r, uLightRadius[i]);
+      // The core's mirror image: sharp, falling off over 1.6 core radii.
+      float core = max(uLightRadius[i] * 0.35 * 1.6, 1.0);
+      float u = distance(local, L) / core;
+      float spec = u < 0.28 ? mix(0.85, 0.55, u / 0.28)
+        : u < 0.6 ? mix(0.55, 0.14, (u - 0.28) / 0.32)
+        : u < 1.0 ? mix(0.14, 0.0, (u - 0.6) / 0.4)
+        : 0.0;
+      sum += vec3(spec) * lit * onFace;
+      // The rounded edge on the light's side of the sheet, brightest square on to it.
+      float facing = dot(n, normalize(L - r.xy + 1e-6));
+      sum += vec3(0.55 * smoothstep(0.1, 1.0, facing)) * over * lit * rimBand;
+    }
+  }
+  return sum;
+}
+
+/* The light through the sheets, landed behind them: on the pane, under the sheets (the surface layer). */
+vec3 plasticThrough(vec2 local) {
+  vec3 sum = vec3(0.0);
+  for (int k = 0; k < MAX_PLASTIC; k++) {
+    if (float(k) >= uPlasticCount) continue;
+    vec4 r = uPlasticRect[k];
+    vec4 land = uPlasticLand[k];
+    float on = 0.0;
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+      if (i >= uLightCount) break;
+      float c = uLightCharge[i];
+      on += plasticOver(uLightPos[i].xy - uRect.xy, r, uLightRadius[i]) * c * c * (3.0 - 2.0 * c);
+    }
+    if (on <= 0.0) continue;
+    // A little wider than the button (7 px), grown and moved by its cast, and soft.
+    vec2 halfLand = (r.zw + 7.0) * land.z;
+    float rad = (min(uPlasticRadius[k], min(r.z, r.w)) + 7.0) * land.z;
+    float sd = roundedBox(local - (r.xy + land.xy), halfLand, min(rad, min(halfLand.x, halfLand.y)));
+    float sigma = land.w + 4.0;
+    float cover = 1.0 - smoothstep(-2.0 * sigma, 2.0 * sigma, sd);
+    // 0.18: the strength the CSS glow it replaces measured at on the page
+    // (its 0.28 opacity, less what its blur spread away).
+    sum += PLASTIC_ORANGE * 0.18 * cover * min(on, 1.0);
+  }
+  return sum;
+}
+
+/*
+ * Add the plastic's light to a finished pixel.
+ *
+ * What a pixel here puts on the page is not its colour. It is drawn with
+ * SRC_ALPHA / ONE_MINUS_SRC_ALPHA into a cleared buffer that is not
+ * premultiplied, so the buffer holds (colour * a, a * a), and drawing that
+ * canvas onto the page premultiplies it again: the page gets colour * a^3,
+ * with a the pixel's brightest channel. (It is what gives the glass light its
+ * steep toe; measured -- a flat 0.28 written this way never showed.)
+ *
+ * The plastic's terms are amounts of light ON THE PAGE, the way its CSS
+ * layers were. So they are added to what the pixel already puts there, and
+ * the sum is written back in the same form: a = (brightest)^(1/3), colour =
+ * sum / a^3. A pixel with no plastic comes out exactly as before.
+ */
+vec4 withPlastic(vec3 colour, float alpha, vec3 plastic) {
+  if (max(max(plastic.r, plastic.g), plastic.b) <= 0.0) return vec4(colour, alpha);
+  vec3 shown = max(colour, 0.0) * alpha * alpha * alpha + plastic;
+  float peak = min(max(max(shown.r, shown.g), shown.b), 1.0);
+  float a = pow(peak, 1.0 / 3.0);
+  return vec4(a > 0.0 ? min(shown / (a * a * a), 1.0) : vec3(0.0), a);
+}
+
 void main() {
   // gl_FragCoord counts up from the bottom; the page counts down from the top.
   vec2 frag = vec2(gl_FragCoord.x, uViewport.y - gl_FragCoord.y) / uScale;
@@ -271,7 +412,7 @@ void main() {
    * rest of the pane is skipped rather than computed and thrown away, so
    * the second draw costs a band round the edge, not a second pane.
    */
-  if (uGlowOnly > 0.5 && abs(d) > 160.0) {
+  if (uGlowOnly > 0.5 && abs(d) > 160.0 && (uPlasticCount < 0.5 || plasticNear(frag - uRect.xy) < 0.5)) {
     gl_FragColor = vec4(0.0);
     return;
   }
@@ -486,45 +627,6 @@ void main() {
   vec3 mirrorBot = texture2D(uBackdropBelow, coverUv(seenBot, uImageBelow, uImageBelowFit)).rgb * uHasBelow;
   vec3 sideLight = mirrorTop * fTop * onTop + mirrorBot * fBot * onBot;
 
-  /*
-   * The left and right faces (item 18): the same side, standing upright.
-   * What each mirrors is what faces it -- the photograph to the left of the
-   * left edge, to the right of the right edge -- followed off the side the
-   * same way, leaning with the eye up and down the page instead of across.
-   * A pane is over one photograph, or over the join of two (a seam band,
-   * which runs the full width and so has no left and right faces): the half
-   * of the pane a point is in says which.
-   */
-  float leftShows = step(0.5, uFaces.z);
-  float rightShows = step(0.5, uFaces.w);
-  float leftT = max(uFaces.z, 0.5);
-  float rightT = max(uFaces.w, 0.5);
-  float withinY = step(uRect.y, frag.y) * step(frag.y, uRect.y + uRect.w) * inside;
-  float dLeft = frag.x - uRect.x;
-  float dRight = (uRect.x + uRect.z) - frag.x;
-  float onLeft = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dLeft)
-    * (1.0 - smoothstep(leftT - ARRIS_RADIUS, leftT + ARRIS_RADIUS, dLeft)) * withinY * leftShows;
-  float onRight = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dRight)
-    * (1.0 - smoothstep(rightT - ARRIS_RADIUS, rightT + ARRIS_RADIUS, dRight)) * withinY * rightShows;
-  float yLean = (frag.y - eye.y) / uCameraDistance;
-  float leftX = uRect.x;
-  float rightX = uRect.x + uRect.z;
-  float fLeft = fresnelSchlick(sideCosine(leftT, uThickness), uIor);
-  float fRight = fresnelSchlick(sideCosine(rightT, uThickness), uIor);
-  float zLeft = uThickness * (1.0 - clamp(dLeft / leftT, 0.0, 1.0));
-  float zRight = uThickness * (1.0 - clamp(dRight / rightT, 0.0, 1.0));
-  float lowerHalf = step(uRect.y + 0.5 * uRect.w, frag.y);
-  vec2 seenLeft = vec2(leftX - mirrorReach(dLeft, leftT, uGap, uThickness), frag.y + yLean * (uGap + zLeft));
-  vec2 seenRight = vec2(rightX + mirrorReach(dRight, rightT, uGap, uThickness), frag.y + yLean * (uGap + zRight));
-  vec3 mirrorLeft = mix(
-    texture2D(uBackdrop, coverUv(seenLeft, uImage, uImageFit)).rgb * uHasBackdrop,
-    texture2D(uBackdropBelow, coverUv(seenLeft, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
-    lowerHalf);
-  vec3 mirrorRight = mix(
-    texture2D(uBackdrop, coverUv(seenRight, uImage, uImageFit)).rgb * uHasBackdrop,
-    texture2D(uBackdropBelow, coverUv(seenRight, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
-    lowerHalf);
-  sideLight += mirrorLeft * fLeft * onLeft + mirrorRight * fRight * onRight;
 
   /*
    * What the side RELAYS: looking along the slab, light from under the pane
@@ -540,19 +642,6 @@ void main() {
     texture2D(uBackdrop, coverUv(relayTop, uImage, uImageFit)).rgb * uHasBackdrop * onTop * (1.0 - fTop)
     + texture2D(uBackdropBelow, coverUv(relayBot, uImageBelow, uImageBelowFit)).rgb * uHasBelow * onBot * (1.0 - fBot)
   );
-  // The same relay through the left and right faces, turned inward.
-  vec2 relayLeft = vec2(leftX + mirrorReach(dLeft, leftT, uGap, uThickness), frag.y - yLean * (uGap + zLeft));
-  vec2 relayRight = vec2(rightX - mirrorReach(dRight, rightT, uGap, uThickness), frag.y - yLean * (uGap + zRight));
-  relayed += RELAY_GAIN * (
-    mix(
-      texture2D(uBackdrop, coverUv(relayLeft, uImage, uImageFit)).rgb * uHasBackdrop,
-      texture2D(uBackdropBelow, coverUv(relayLeft, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
-      lowerHalf) * onLeft * (1.0 - fLeft)
-    + mix(
-      texture2D(uBackdrop, coverUv(relayRight, uImage, uImageFit)).rgb * uHasBackdrop,
-      texture2D(uBackdropBelow, coverUv(relayRight, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
-      lowerHalf) * onRight * (1.0 - fRight)
-  );
 
   /*
    * The echo: through the face just inside the edge, the side seen again by
@@ -565,9 +654,68 @@ void main() {
     straight * uHasBackdrop * echoProfile(dTop, topT) * topShows
       + behindBelow * echoProfile(dBot, botT) * botShows
   );
-  sideLight += echoTint * withinY * mix(straight * uHasBackdrop, behindBelow, lowerHalf) * (
-    echoProfile(dLeft, leftT) * leftShows + echoProfile(dRight, rightT) * rightShows
-  );
+  /*
+   * Only where a pane has them: a band across the page has none, and it is
+   * most of the glass on the site, so it skips these twelve texture reads
+   * outright (a branch on a uniform, which every driver takes as one).
+   */
+  if (max(uFaces.z, uFaces.w) >= 0.5) {
+    /*
+     * The left and right faces (item 18): the same side, standing upright.
+     * What each mirrors is what faces it -- the photograph to the left of the
+     * left edge, to the right of the right edge -- followed off the side the
+     * same way, leaning with the eye up and down the page instead of across.
+     * A pane is over one photograph, or over the join of two (a seam band,
+     * which runs the full width and so has no left and right faces): the half
+     * of the pane a point is in says which.
+     */
+    float leftShows = step(0.5, uFaces.z);
+    float rightShows = step(0.5, uFaces.w);
+    float leftT = max(uFaces.z, 0.5);
+    float rightT = max(uFaces.w, 0.5);
+    float withinY = step(uRect.y, frag.y) * step(frag.y, uRect.y + uRect.w) * inside;
+    float dLeft = frag.x - uRect.x;
+    float dRight = (uRect.x + uRect.z) - frag.x;
+    float onLeft = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dLeft)
+      * (1.0 - smoothstep(leftT - ARRIS_RADIUS, leftT + ARRIS_RADIUS, dLeft)) * withinY * leftShows;
+    float onRight = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dRight)
+      * (1.0 - smoothstep(rightT - ARRIS_RADIUS, rightT + ARRIS_RADIUS, dRight)) * withinY * rightShows;
+    float yLean = (frag.y - eye.y) / uCameraDistance;
+    float leftX = uRect.x;
+    float rightX = uRect.x + uRect.z;
+    float fLeft = fresnelSchlick(sideCosine(leftT, uThickness), uIor);
+    float fRight = fresnelSchlick(sideCosine(rightT, uThickness), uIor);
+    float zLeft = uThickness * (1.0 - clamp(dLeft / leftT, 0.0, 1.0));
+    float zRight = uThickness * (1.0 - clamp(dRight / rightT, 0.0, 1.0));
+    float lowerHalf = step(uRect.y + 0.5 * uRect.w, frag.y);
+    vec2 seenLeft = vec2(leftX - mirrorReach(dLeft, leftT, uGap, uThickness), frag.y + yLean * (uGap + zLeft));
+    vec2 seenRight = vec2(rightX + mirrorReach(dRight, rightT, uGap, uThickness), frag.y + yLean * (uGap + zRight));
+    vec3 mirrorLeft = mix(
+      texture2D(uBackdrop, coverUv(seenLeft, uImage, uImageFit)).rgb * uHasBackdrop,
+      texture2D(uBackdropBelow, coverUv(seenLeft, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+      lowerHalf);
+    vec3 mirrorRight = mix(
+      texture2D(uBackdrop, coverUv(seenRight, uImage, uImageFit)).rgb * uHasBackdrop,
+      texture2D(uBackdropBelow, coverUv(seenRight, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+      lowerHalf);
+    sideLight += mirrorLeft * fLeft * onLeft + mirrorRight * fRight * onRight;
+    // The same relay through the left and right faces, turned inward.
+    vec2 relayLeft = vec2(leftX + mirrorReach(dLeft, leftT, uGap, uThickness), frag.y - yLean * (uGap + zLeft));
+    vec2 relayRight = vec2(rightX - mirrorReach(dRight, rightT, uGap, uThickness), frag.y - yLean * (uGap + zRight));
+    relayed += RELAY_GAIN * (
+      mix(
+        texture2D(uBackdrop, coverUv(relayLeft, uImage, uImageFit)).rgb * uHasBackdrop,
+        texture2D(uBackdropBelow, coverUv(relayLeft, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+        lowerHalf) * onLeft * (1.0 - fLeft)
+      + mix(
+        texture2D(uBackdrop, coverUv(relayRight, uImage, uImageFit)).rgb * uHasBackdrop,
+        texture2D(uBackdropBelow, coverUv(relayRight, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+        lowerHalf) * onRight * (1.0 - fRight)
+    );
+    sideLight += echoTint * withinY * mix(straight * uHasBackdrop, behindBelow, lowerHalf) * (
+      echoProfile(dLeft, leftT) * leftShows + echoProfile(dRight, rightT) * rightShows
+    );
+  }
 
 
 
@@ -975,10 +1123,11 @@ void main() {
    */
   if (uGlowOnly > 0.5) {
     vec3 glow = uBurn > 0.5 ? toneMapGlassBurn(lampGlow * lightIn) : toneMapGlass(lampGlow * lightIn);
-    gl_FragColor = vec4(glow, clamp(max(max(glow.r, glow.g), glow.b), 0.0, 1.0));
+    float glowAlpha = clamp(max(max(glow.r, glow.g), glow.b), 0.0, 1.0);
+    gl_FragColor = uPlasticCount < 0.5 ? vec4(glow, glowAlpha) : withPlastic(glow, glowAlpha, plasticFace(frag - uRect.xy));
     return;
   }
   float alpha = clamp(max(max(abs(colour.r), abs(colour.g)), abs(colour.b)), 0.0, 1.0);
-  gl_FragColor = vec4(colour, alpha);
+  gl_FragColor = uPlasticCount < 0.5 ? vec4(colour, alpha) : withPlastic(colour, alpha, plasticThrough(frag - uRect.xy));
 }
 `;

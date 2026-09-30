@@ -14,6 +14,7 @@ import {
   glassGeometry,
   geometryStamp,
   MAX_OCCLUDERS,
+  MAX_PLASTIC,
   paneGlowLayer,
   viewState,
 } from "@/effects/scene/scene";
@@ -159,6 +160,12 @@ export function GlassLight({
     const uOccDir = U("uOccDir");
     const uMarksProportional = U("uMarksProportional");
     const uOccCount = U("uOccCount");
+    const uPlasticRect = U("uPlasticRect");
+    const uPlasticLand = U("uPlasticLand");
+    const uPlasticRadius = U("uPlasticRadius");
+    const uPlasticCount = U("uPlasticCount");
+    // Item 18b: the plastic lit here, not by CSS (html[data-try~="shaderplastic"] in styles.css).
+    const shaderPlastic = previewing("shaderplastic");
 
     /*
      * Scratch buffers for the occluders, allocated once.
@@ -171,6 +178,9 @@ export function GlassLight({
     const occRect = new Float32Array(MAX_OCCLUDERS * 4);
     const occSoft = new Float32Array(MAX_OCCLUDERS * 4);
     const occDir = new Float32Array(MAX_OCCLUDERS * 4);
+    const plasticRect = new Float32Array(MAX_PLASTIC * 4);
+    const plasticLand = new Float32Array(MAX_PLASTIC * 4);
+    const plasticRadius = new Float32Array(MAX_PLASTIC);
     const uIor = U("uIor");
     const uFrost = U("uFrost");
     const uFaceLamp = U("uFaceLamp");
@@ -726,6 +736,29 @@ export function GlassLight({
           occDir[k + 3] = 0;
         }
         gl.uniform1f(uOccCount, count);
+        // The plastic on it (item 18b), in the same pane-local pixels.
+        const plastic = shaderPlastic ? pane.plastic : [];
+        const plasticCount = Math.min(plastic.length, MAX_PLASTIC);
+        for (let i = 0; i < plasticCount; i++) {
+          const q = plastic[i];
+          if (!q) continue;
+          const k = i * 4;
+          plasticRect[k] = q.cx;
+          plasticRect[k + 1] = q.cy;
+          plasticRect[k + 2] = q.hw;
+          plasticRect[k + 3] = q.hh;
+          plasticLand[k] = q.landX;
+          plasticLand[k + 1] = q.landY;
+          plasticLand[k + 2] = q.landScale;
+          plasticLand[k + 3] = q.blur;
+          plasticRadius[i] = q.radius;
+        }
+        gl.uniform1f(uPlasticCount, plasticCount);
+        if (plasticCount > 0) {
+          gl.uniform4fv(uPlasticRect, plasticRect);
+          gl.uniform4fv(uPlasticLand, plasticLand);
+          gl.uniform1fv(uPlasticRadius, plasticRadius);
+        }
         if (count > 0) {
           gl.uniform4fv(uOccRect, occRect);
           gl.uniform4fv(uOccSoft, occSoft);
