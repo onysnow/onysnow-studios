@@ -129,7 +129,13 @@ export function ParallaxScene({
         <div className="image-vignette pointer-events-none absolute inset-0" />
       </div>
       {children ? (
-        <div className="relative flex h-full flex-col justify-end">{children}</div>
+        /* data-scene-content: marks the content wrapper for styles.css, where
+           `[data-scene-content] > .glass` lifts the pane above the NEXT
+           section's photograph so the pane's bottom light bleed isn't painted
+           over. No z-index here -- a z-indexed wrapper becomes a stacking
+           context / backdrop root and cuts the pane's backdrop-filter off
+           (see SeamSection in PhotoSection). */
+        <div data-scene-content className="relative flex h-full flex-col justify-end">{children}</div>
       ) : null}
     </div>
   );
