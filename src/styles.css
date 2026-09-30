@@ -2751,21 +2751,6 @@ html.is-winding * {
   z-index: 1;
 }
 
-
-/*
- * Under liquid glass only, the band itself is lifted too.
- *
- * The library builds each pane's scene from the root's children in paint
- * order and stops at the pane's own section -- so the photograph AFTER a band
- * in the document never made it into the band's scene, and the lower half of
- * the glass refracted nothing. A z-index puts the band after both neighbours
- * in that order. (Not in CSS mode: there a z-indexed band would cut the CSS
- * backdrop off at itself -- see SeamSection.)
- */
-:root[data-glass="raster"] [data-seam] {
-  z-index: 1;
-}
-
 /* The light through the glass, on the photographs. See FloorLight.tsx. */
 .floor-light {
   position: fixed;
