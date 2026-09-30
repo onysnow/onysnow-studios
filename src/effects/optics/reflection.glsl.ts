@@ -22,6 +22,33 @@ float fresnelSchlick(float cosTheta, float ior) {
   return f0 + (1.0 - f0) * pow(1.0 - clamp(cosTheta, 0.0, 1.0), 5.0);
 }
 
+/* The exact Fresnel reflectances, per polarisation (reflection.ts fresnelS, fresnelP). */
+float fresnelS(float cosI, float ior) {
+  float ci = clamp(cosI, 0.0, 1.0);
+  float sinT2 = (1.0 - ci * ci) / (ior * ior);
+  if (sinT2 >= 1.0) return 1.0;
+  float ct = sqrt(1.0 - sinT2);
+  float r = (ci - ior * ct) / (ci + ior * ct);
+  return r * r;
+}
+float fresnelP(float cosI, float ior) {
+  float ci = clamp(cosI, 0.0, 1.0);
+  float sinT2 = (1.0 - ci * ci) / (ior * ior);
+  if (sinT2 >= 1.0) return 1.0;
+  float ct = sqrt(1.0 - sinT2);
+  float r = (ct - ior * ci) / (ct + ior * ci);
+  return r * r;
+}
+/* Through a camera's polarising filter, exposure made up (reflection.ts polarisedReflectance). */
+float polarisedReflectance(float cosI, float ior, float filterToS, float strength) {
+  float rs = fresnelS(cosI, ior);
+  float rp = fresnelP(cosI, ior);
+  float c = cos(filterToS);
+  float filtered = rs * c * c + rp * (1.0 - c * c);
+  float mean = 0.5 * (rs + rp);
+  return mean + (filtered - mean) * clamp(strength, 0.0, 1.0);
+}
+
 /* GGX roughness from frost: polished glass to acid-etched. */
 float frostRoughness(float frost) {
   return POLISHED_ROUGHNESS + (FROSTED_ROUGHNESS - POLISHED_ROUGHNESS) * clamp(frost, 0.0, 1.0);

@@ -130,6 +130,30 @@ export const tuning: Record<string, Knob> = {
     step: 0.05,
     hint: "0 is a fixed eye straight in front of the screen; 1 puts the eye right over the pointer. The photographs behind the glass slide under it by the parallax of the glass's height -- which is how you see the edge bend them.",
   },
+  /*
+   * A polarising filter on the camera (light engine step H, ?try=polariser):
+   * light reflected off the glass is partly polarised, so turning the filter
+   * dims or keeps the reflection -- most toward the frame's edges, where the
+   * glass is seen at the steepest angle. A photographer's own tool.
+   */
+  polariser: {
+    label: "Polarising filter",
+    group: "Camera",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "0 no filter; 1 a perfect polariser on the lens (exposure made up). Turn it with the angle below to cut or keep the glass's reflections. Needs ?try=polariser.",
+  },
+  polariserAngle: {
+    label: "Polarising filter angle",
+    group: "Camera",
+    value: 0,
+    min: 0,
+    max: 180,
+    step: 1,
+    hint: "The filter's turn, degrees: its axis across the screen at 0, up and down at 90. Reflections fade where the axis runs toward the middle of the frame.",
+  },
   // How much light the photograph's blown highlights are taken to have held
   // (effects/optics/bokeh). Their size follows the frost; this is brightness.
   bokeh: {

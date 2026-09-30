@@ -35,6 +35,13 @@ export const camera = {
   get apertureGrowth() {
     return t("spread");
   },
+  /** A polarising filter on the lens (step H): how perfect, 0 none, and its turn in radians. */
+  get polariser() {
+    return t("polariser");
+  },
+  get polariserAngle() {
+    return (t("polariserAngle") * Math.PI) / 180;
+  },
   /** How much light a photograph's blown highlights held: the bokeh's brightness. */
   get bokeh() {
     return t("bokeh");

@@ -144,6 +144,9 @@ uniform sampler2D uRoom;
 uniform float uHasRoom;
 uniform float uRoomWidth;       // texels round the full 360 degrees
 uniform float uCameraDistance;  // CSS pixels from the screen
+uniform float uExactFresnel;    // ?try=polariser: s and p Fresnel, and the camera's filter
+uniform float uPolariser;       // how perfect the camera's polarising filter is, 0 none
+uniform float uPolariserAngle;  // its axis, radians across the screen
 uniform float uFrontRoughness;  // GGX alpha of the face you look at
 uniform float uRoomExposure;    // how brightly lit the room is (1: middle grey)
 uniform vec2  uEye;             // the viewer's eye, from the viewport middle, CSS px
@@ -1165,6 +1168,17 @@ void main() {
   vec2 fromCentre = frag - 0.5 * uViewport / uScale - uEye;
   float cosView = uCameraDistance / length(vec3(fromCentre, uCameraDistance));
   float reflectance = fresnelSchlick(cosView, uIor);
+  /*
+   * ?try=polariser (step H): exactly, s and p apart. The plane of incidence
+   * holds the view ray and the pane's normal, so on the screen it runs
+   * radially from the point straight under the eye, and the s direction
+   * (square to that plane) runs round it. A filter passes Rs cos^2 + Rp sin^2
+   * of its axis against s.
+   */
+  if (uExactFresnel > 0.5) {
+    float sAngle = atan(fromCentre.y, fromCentre.x + 1e-6) + 1.5707963;
+    reflectance = polarisedReflectance(cosView, uIor, uPolariserAngle - sAngle, uPolariser);
+  }
   reflectance += (1.0 - reflectance) * fresnel;
   float roomBias = roomLod(uFrontRoughness, uRoomWidth) - log2(max(texelsPerPx, 1e-4));
   vec3 room = decodeRadiance(

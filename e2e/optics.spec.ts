@@ -26,7 +26,14 @@ import {
   slantSpread,
   transmittance,
 } from "../src/effects/optics/transmission";
-import { fresnelSchlick, ggx, lampReflection } from "../src/effects/optics/reflection";
+import {
+  fresnelP,
+  fresnelS,
+  fresnelSchlick,
+  ggx,
+  lampReflection,
+  polarisedReflectance,
+} from "../src/effects/optics/reflection";
 import { penumbraOf } from "../src/effects/optics/shadow";
 import { beamFactor } from "../src/effects/light/beam";
 import { LIGHTS_GLSL } from "../src/effects/light/light-uniforms";
@@ -294,6 +301,33 @@ const CASES: Case[] = [
     to: 1.2,
     lo: 0,
     hi: 1,
+  },
+  {
+    name: "fresnelS",
+    glsl: "fresnelS(cos(x), 1.518)",
+    ts: (x) => fresnelS(Math.cos(x), 1.518),
+    from: 0,
+    to: 1.55,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "fresnelP",
+    glsl: "fresnelP(cos(x), 1.518)",
+    ts: (x) => fresnelP(Math.cos(x), 1.518),
+    from: 0,
+    to: 1.55,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "polarisedReflectance",
+    glsl: "polarisedReflectance(cos(0.7), 1.518, x, 1.0)",
+    ts: (x) => polarisedReflectance(Math.cos(0.7), 1.518, x, 1),
+    from: 0,
+    to: 3.1,
+    lo: 0,
+    hi: 0.2,
   },
   {
     name: "beamFactor",

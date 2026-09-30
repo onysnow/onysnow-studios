@@ -12,6 +12,8 @@ import { camera } from "./camera";
  */
 const CAMERA_KNOBS = [
   "viewFollow",
+  "polariser",
+  "polariserAngle",
   "aperture",
   "spread",
   "coreFalloff",

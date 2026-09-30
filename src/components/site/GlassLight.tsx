@@ -229,6 +229,9 @@ export function GlassLight({
     const uHasRoom = U("uHasRoom");
     const uRoomWidth = U("uRoomWidth");
     const uCameraDistance = U("uCameraDistance");
+    const uExactFresnel = U("uExactFresnel");
+    const uPolariser = U("uPolariser");
+    const uPolariserAngle = U("uPolariserAngle");
     const uFrontRoughness = U("uFrontRoughness");
     const uRoomExposure = U("uRoomExposure");
     const uEye = U("uEye");
@@ -631,6 +634,9 @@ export function GlassLight({
         camera.distance(document.documentElement.clientWidth || window.innerWidth),
       );
       gl.uniform1f(uRoomExposure, roomLight.gain);
+      gl.uniform1f(uExactFresnel, previewing("polariser") ? 1 : 0);
+      gl.uniform1f(uPolariser, camera.polariser);
+      gl.uniform1f(uPolariserAngle, camera.polariserAngle);
       gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
       if (room) {
         gl.activeTexture(gl.TEXTURE3);
