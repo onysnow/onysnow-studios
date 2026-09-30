@@ -2818,3 +2818,82 @@ html.is-winding * {
     transform: none;
   }
 }
+
+/* ===================== The magnifying glass (item 21, ?try=magnifier) =====================
+ *
+ * components/site/Magnifier: the lens is the live page through a displacement
+ * map (effects/optics/magnifier); these are the glass's reflections and the
+ * brass and wood round it. Under the cursor and the flash, over everything else.
+ */
+.magnifier {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9990;
+  pointer-events: none;
+  will-change: transform;
+  transition: opacity 0.2s ease;
+}
+
+.magnifier__lens {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  backdrop-filter: url("#magnifier-lens");
+  /*
+   * What the glass reflects: the room's brightest window as a soft oval high
+   * on the face, and the rim's own bright line round the inside, where the
+   * lens surface turns steepest toward the room.
+   */
+  background:
+    radial-gradient(ellipse 34% 22% at 34% 26%, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.06) 55%, transparent 100%),
+    radial-gradient(circle closest-side, transparent 88%, rgb(255 250 235 / 0.16) 96%, rgb(255 250 235 / 0.35) 99.5%, transparent 100%);
+  box-shadow:
+    inset 0 0 22px rgb(0 0 0 / 0.28),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22);
+}
+
+.magnifier__shadow {
+  position: absolute;
+  inset: -11px;
+  border-radius: 50%;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 0.5);
+}
+
+/* The brass rim: turned metal, catching the light round its circumference. */
+.magnifier__rim {
+  position: absolute;
+  inset: -11px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle closest-side, transparent 89.5%, rgb(60 40 12 / 0.9) 90%, transparent 92%, transparent 97%, rgb(40 26 8 / 0.8) 100%),
+    conic-gradient(from 200deg, #6e4f1f, #d9b25e 12%, #f6e2a4 18%, #b48633 30%, #6a4a1b 45%, #c79a45 62%, #f1d890 70%, #9a7129 84%, #6e4f1f);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 89.6%, #000 90.2%);
+  mask: radial-gradient(circle closest-side, transparent 89.6%, #000 90.2%);
+}
+
+/* The handle: dark turned wood on a brass ferrule, down and to the right. */
+.magnifier__handle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 118px;
+  margin-left: -12px;
+  transform-origin: 50% 0;
+  transform: rotate(-45deg) translateY(104px);
+  border-radius: 8px 8px 12px 12px;
+  background: linear-gradient(90deg, #1c110a, #4a2c18 30%, #6b4127 48%, #3a2213 70%, #140b06);
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.45);
+}
+
+.magnifier__handle::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: -2px;
+  height: 22px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #6e4f1f, #d9b25e 35%, #f6e2a4 48%, #b48633 65%, #5a3f16);
+}
