@@ -23,6 +23,7 @@ import { camera } from "@/effects/camera/camera";
 import { lampMode, onToolChange } from "@/effects/tools/held";
 import { flareFlickerAt } from "./flame";
 import type { Aim } from "./beam";
+import { blackbodyRgb } from "./blackbody";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -117,7 +118,9 @@ export const cursorLamp: Light = {
     return t("shadowSoftness");
   },
   get colour() {
-    return lampMode() === "uv" ? BLACKLIGHT_VISIBLE : LAMP_COLOUR;
+    if (lampMode() === "uv") return BLACKLIGHT_VISIBLE;
+    // ?try=kelvin (item 32): the lamp glows as a blackbody at its temperature.
+    return previewing("kelvin") ? blackbodyRgb(t("lampKelvin")) : LAMP_COLOUR;
   },
   get gain() {
     return t("coreGain");

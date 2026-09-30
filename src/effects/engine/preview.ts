@@ -39,6 +39,8 @@ export const PREVIEWS = {
     "Light engine step I: the brightest spots of the photographs behind the panes -- neon, windows, lamps they recorded -- are lights under the glass, shining up into it in their own colour and following the photographs as they slide",
   backlight:
     "Light engine step I: a light behind the glass, under the photographs, like a lightbox (Environment > Backlight): the panes glow from beneath and their rims catch it",
+  kelvin:
+    "The lamp's colour from its temperature, as a camera's white balance speaks of it (Light > Lamp colour temperature): a blackbody's glow, 1900 K candle to 10000 K blue sky",
   flashlight:
     "A flashlight where the lamp is (item 25i): a beam -- a bright hotspot and a dim spill. Press and hold to plant it; it stays where you pressed and turns to point where the pointer goes, lighting whatever the beam falls on",
   laser:

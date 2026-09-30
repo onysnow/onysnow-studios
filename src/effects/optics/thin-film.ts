@@ -107,7 +107,7 @@ export function cie1931(lambda: number): [number, number, number] {
 }
 
 /** XYZ to linear sRGB (D65). */
-function xyzToRgb([x, y, z]: readonly number[]): [number, number, number] {
+export function xyzToRgb([x, y, z]: readonly number[]): [number, number, number] {
   return [
     3.2406 * x! - 1.5372 * y! - 0.4986 * z!,
     -0.9689 * x! + 1.8758 * y! + 0.0415 * z!,

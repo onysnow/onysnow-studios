@@ -460,6 +460,20 @@ export const tuning: Record<string, Knob> = {
   },
 
   // ---- The light itself ----
+  /*
+   * The lamp's colour from its temperature (catalogue item 32, ?try=kelvin):
+   * a blackbody's glow at that temperature, seen through the eye's colour
+   * matching. 5900 K is the nearest to the warm white it has had.
+   */
+  lampKelvin: {
+    label: "Lamp colour temperature",
+    group: "Light",
+    value: 5900,
+    min: 1500,
+    max: 10000,
+    step: 50,
+    hint: "In kelvin, as on a camera: 1900 a candle, 2700 a household bulb, 3200 tungsten, 5500 daylight, 6500 the screen's white, higher is bluer. Needs ?try=kelvin.",
+  },
   coreGain: {
     label: "Core gain",
     group: "Light",
