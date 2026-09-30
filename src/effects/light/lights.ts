@@ -24,6 +24,7 @@ import { lampMode, onToolChange } from "@/effects/tools/held";
 import { flareFlickerAt } from "./flame";
 import type { Aim } from "./beam";
 import { blackbodyRgb } from "./blackbody";
+import { SAFELIGHT_COLOUR, onRedRoom, redRoomOn } from "@/effects/secrets/red-room";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -119,6 +120,8 @@ export const cursorLamp: Light = {
   },
   get colour() {
     if (lampMode() === "uv") return BLACKLIGHT_VISIBLE;
+    // In the red room (item 39) the only light is the safelight's red.
+    if (redRoomOn()) return SAFELIGHT_COLOUR;
     // ?try=kelvin (item 32): the lamp glows as a blackbody at its temperature.
     return previewing("kelvin") ? blackbodyRgb(t("lampKelvin")) : LAMP_COLOUR;
   },
@@ -586,6 +589,11 @@ function changed() {
 
 // Picking up another tool changes the lamp: relight everything.
 onToolChange(() => {
+  changed();
+  for (const fn of flashWatchers) fn();
+});
+// So does the red room: the lamp turns to the safelight's red.
+onRedRoom(() => {
   changed();
   for (const fn of flashWatchers) fn();
 });

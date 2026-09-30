@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeldTool } from "@/components/site/ToolTray";
 import { PhotoLights } from "@/components/site/PhotoLights";
 import { Vignette } from "@/components/site/Vignette";
+import { RedRoom } from "@/components/site/RedRoom";
 import { useQuery } from "@tanstack/react-query";
 import { roomScript } from "@/lib/rooms";
 import { ROOM_KEYS, ROOM_HDR_KEYS } from "@/lib/site-assets";
@@ -181,6 +182,8 @@ function RootComponent() {
           <PhotoLights />
           {/* The lens's corners (catalogue item 32, ?try=vignette). */}
           <Vignette />
+          {/* Secret 2, the darkroom (item 39, ?try=redroom). */}
+          <RedRoom />
           {/*
             Last in the tree, first on the screen.
 

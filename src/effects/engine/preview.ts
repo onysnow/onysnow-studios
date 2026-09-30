@@ -49,6 +49,8 @@ export const PREVIEWS = {
     "Item 33: how far a photograph slides under its glass as you scroll comes from how far the glass stands off it and how far away your eye is (gap / (distance + gap)), not from a depth preset",
   quality:
     "Item 34: quality tiers -- a device with 4 GB or less, 4 cores or fewer, no GPU, or frames that keep coming slow runs a lighter site (the light drawn at 1 device pixel per CSS pixel, the bokeh layer off); force one with ?quality=full|lite|minimal",
+  redroom:
+    "Item 39, secret 2: take a picture of a photograph (wind the shutter, click one) and the page goes dark but for the safelight -- everything a negative in red, as a print looks in the developer tray; the cursor is a loupe showing the true frame; Lights on or Escape leaves",
   flashlight:
     "A flashlight where the lamp is (item 25i): a beam -- a bright hotspot and a dim spill. Press and hold to plant it; it stays where you pressed and turns to point where the pointer goes, lighting whatever the beam falls on",
   laser:

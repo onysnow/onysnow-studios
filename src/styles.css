@@ -3378,3 +3378,61 @@ html.is-winding * {
 :root[data-quality="lite"] .glass__bokeh {
   display: none;
 }
+
+/*
+ * Secret 2, the red room (item 39, ?try=redroom; components/site/RedRoom).
+ * The negative under the safelight, with the loupe's hole at --lx/--ly.
+ */
+.red-room {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+  --hole: radial-gradient(
+    circle var(--loupe, 84px) at var(--lx, 50%) var(--ly, 50%),
+    transparent calc(100% - 1px),
+    #000 100%
+  );
+  -webkit-mask-image: var(--hole);
+  mask-image: var(--hole);
+}
+.red-room__negative {
+  -webkit-backdrop-filter: grayscale(1) invert(1) brightness(0.5) contrast(1.25);
+  backdrop-filter: grayscale(1) invert(1) brightness(0.5) contrast(1.25);
+}
+.red-room__safelight {
+  /* The safelight: about 630 nm, nothing the paper can see. */
+  background: rgb(255 36 12);
+  mix-blend-mode: multiply;
+}
+.red-room__loupe {
+  position: fixed;
+  z-index: 9001;
+  pointer-events: none;
+  left: calc(var(--lx, 50%) - var(--loupe, 84px));
+  top: calc(var(--ly, 50%) - var(--loupe, 84px));
+  width: calc(2 * var(--loupe, 84px));
+  height: calc(2 * var(--loupe, 84px));
+  border-radius: 50%;
+  border: 3px solid rgb(40 6 4);
+  box-shadow:
+    0 0 0 1px rgb(255 60 30 / 0.35),
+    inset 0 0 18px rgb(0 0 0 / 0.55);
+}
+.red-room__leave {
+  position: fixed;
+  z-index: 9002;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 60 30 / 0.5);
+  background: rgb(20 2 1 / 0.8);
+  color: rgb(255 90 60);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
