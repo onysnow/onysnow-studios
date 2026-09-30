@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { behindGlassShift, eyeOffset, oversizeFor } from "./viewpoint";
+import { behindGlassShift, eyeOffset, oversizeFor, scrollSlide } from "./viewpoint";
 import { tuning } from "@/lib/tuning";
 import { FLOOR_FRAGMENT_SHADER } from "@/lib/floor-light-shader";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
@@ -54,5 +54,20 @@ describe("what is behind the glass", () => {
     expect(GLASS_LIGHT_FRAGMENT_SHADER).toMatch(
       /fromCentre = frag - 0\.5 \* uViewport \/ uScale - uEye/,
     );
+  });
+});
+
+describe("the photograph lagging the glass as the page scrolls (item 33)", () => {
+  it("lags by gap / (distance + gap) of the scroll", () => {
+    expect(scrollSlide(100, 70, 1600)).toBeCloseTo((100 * 70) / 1670, 12);
+  });
+
+  it("lags more the further the glass stands off it, and not at all on it", () => {
+    expect(scrollSlide(100, 140, 1600)).toBeGreaterThan(scrollSlide(100, 70, 1600));
+    expect(scrollSlide(100, 0, 1600)).toBe(0);
+  });
+
+  it("lags less the further away the eye is", () => {
+    expect(scrollSlide(100, 70, 3200)).toBeLessThan(scrollSlide(100, 70, 1600));
   });
 });
