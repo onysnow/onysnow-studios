@@ -487,6 +487,46 @@ void main() {
   vec3 sideLight = mirrorTop * fTop * onTop + mirrorBot * fBot * onBot;
 
   /*
+   * The left and right faces (item 18): the same side, standing upright.
+   * What each mirrors is what faces it -- the photograph to the left of the
+   * left edge, to the right of the right edge -- followed off the side the
+   * same way, leaning with the eye up and down the page instead of across.
+   * A pane is over one photograph, or over the join of two (a seam band,
+   * which runs the full width and so has no left and right faces): the half
+   * of the pane a point is in says which.
+   */
+  float leftShows = step(0.5, uFaces.z);
+  float rightShows = step(0.5, uFaces.w);
+  float leftT = max(uFaces.z, 0.5);
+  float rightT = max(uFaces.w, 0.5);
+  float withinY = step(uRect.y, frag.y) * step(frag.y, uRect.y + uRect.w) * inside;
+  float dLeft = frag.x - uRect.x;
+  float dRight = (uRect.x + uRect.z) - frag.x;
+  float onLeft = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dLeft)
+    * (1.0 - smoothstep(leftT - ARRIS_RADIUS, leftT + ARRIS_RADIUS, dLeft)) * withinY * leftShows;
+  float onRight = smoothstep(-ARRIS_RADIUS, ARRIS_RADIUS, dRight)
+    * (1.0 - smoothstep(rightT - ARRIS_RADIUS, rightT + ARRIS_RADIUS, dRight)) * withinY * rightShows;
+  float yLean = (frag.y - eye.y) / uCameraDistance;
+  float leftX = uRect.x;
+  float rightX = uRect.x + uRect.z;
+  float fLeft = fresnelSchlick(sideCosine(leftT, uThickness), uIor);
+  float fRight = fresnelSchlick(sideCosine(rightT, uThickness), uIor);
+  float zLeft = uThickness * (1.0 - clamp(dLeft / leftT, 0.0, 1.0));
+  float zRight = uThickness * (1.0 - clamp(dRight / rightT, 0.0, 1.0));
+  float lowerHalf = step(uRect.y + 0.5 * uRect.w, frag.y);
+  vec2 seenLeft = vec2(leftX - mirrorReach(dLeft, leftT, uGap, uThickness), frag.y + yLean * (uGap + zLeft));
+  vec2 seenRight = vec2(rightX + mirrorReach(dRight, rightT, uGap, uThickness), frag.y + yLean * (uGap + zRight));
+  vec3 mirrorLeft = mix(
+    texture2D(uBackdrop, coverUv(seenLeft, uImage, uImageFit)).rgb * uHasBackdrop,
+    texture2D(uBackdropBelow, coverUv(seenLeft, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+    lowerHalf);
+  vec3 mirrorRight = mix(
+    texture2D(uBackdrop, coverUv(seenRight, uImage, uImageFit)).rgb * uHasBackdrop,
+    texture2D(uBackdropBelow, coverUv(seenRight, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+    lowerHalf);
+  sideLight += mirrorLeft * fLeft * onLeft + mirrorRight * fRight * onRight;
+
+  /*
    * What the side RELAYS: looking along the slab, light from under the pane
    * reaches you by total internal reflection -- the photograph there,
    * squeezed and flipped into the side, the light and dark blocks of the
@@ -500,6 +540,19 @@ void main() {
     texture2D(uBackdrop, coverUv(relayTop, uImage, uImageFit)).rgb * uHasBackdrop * onTop * (1.0 - fTop)
     + texture2D(uBackdropBelow, coverUv(relayBot, uImageBelow, uImageBelowFit)).rgb * uHasBelow * onBot * (1.0 - fBot)
   );
+  // The same relay through the left and right faces, turned inward.
+  vec2 relayLeft = vec2(leftX + mirrorReach(dLeft, leftT, uGap, uThickness), frag.y - yLean * (uGap + zLeft));
+  vec2 relayRight = vec2(rightX - mirrorReach(dRight, rightT, uGap, uThickness), frag.y - yLean * (uGap + zRight));
+  relayed += RELAY_GAIN * (
+    mix(
+      texture2D(uBackdrop, coverUv(relayLeft, uImage, uImageFit)).rgb * uHasBackdrop,
+      texture2D(uBackdropBelow, coverUv(relayLeft, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+      lowerHalf) * onLeft * (1.0 - fLeft)
+    + mix(
+      texture2D(uBackdrop, coverUv(relayRight, uImage, uImageFit)).rgb * uHasBackdrop,
+      texture2D(uBackdropBelow, coverUv(relayRight, uImageBelow, uImageBelowFit)).rgb * uHasBelow,
+      lowerHalf) * onRight * (1.0 - fRight)
+  );
 
   /*
    * The echo: through the face just inside the edge, the side seen again by
@@ -511,6 +564,9 @@ void main() {
   sideLight += echoTint * withinX * (
     straight * uHasBackdrop * echoProfile(dTop, topT) * topShows
       + behindBelow * echoProfile(dBot, botT) * botShows
+  );
+  sideLight += echoTint * withinY * mix(straight * uHasBackdrop, behindBelow, lowerHalf) * (
+    echoProfile(dLeft, leftT) * leftShows + echoProfile(dRight, rightT) * rightShows
   );
 
 
