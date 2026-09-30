@@ -19,7 +19,7 @@
 import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
 import { t } from "@/lib/tuning";
 import { camera } from "@/effects/camera/camera";
-import { previewing } from "@/effects/engine/preview";
+import { lampMode, onToolChange } from "@/effects/tools/held";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -81,7 +81,15 @@ export const LAMP_COLOUR = [1.0, 0.94, 0.84] as const;
  */
 export const BLACKLIGHT_VISIBLE = [0.07, 0.07, 0.11] as const;
 
-/** The lamp the cursor carries. First in the list, always there. */
+/** The shutter's charge as reported, before the hand decides whether the lamp is in it. */
+let windCharge = 0;
+
+/**
+ * The lamp the cursor carries. First in the list, always there -- but lit
+ * only while it is in the hand (effects/tools/held): put down for the flare
+ * or the laser, it gives no light however the shutter is wound; held as the
+ * black light, its visible light is the dull leak and the rest is UV.
+ */
 export const cursorLamp: Light = {
   id: "cursor",
   kind: "point",
@@ -94,14 +102,19 @@ export const cursorLamp: Light = {
     return t("shadowSoftness");
   },
   get colour() {
-    return previewing("blacklight") ? BLACKLIGHT_VISIBLE : LAMP_COLOUR;
+    return lampMode() === "uv" ? BLACKLIGHT_VISIBLE : LAMP_COLOUR;
   },
   get gain() {
     return t("coreGain");
   },
-  charge: 0,
+  get charge() {
+    return lampMode() === null ? 0 : windCharge;
+  },
+  set charge(value: number) {
+    windCharge = value;
+  },
   get uv() {
-    return previewing("blacklight") ? 1 : 0;
+    return lampMode() === "uv" ? 1 : 0;
   },
 };
 
@@ -422,6 +435,12 @@ function changed() {
   for (const fn of changeWatchers) fn();
 }
 
+// Picking up another tool changes the lamp: relight everything.
+onToolChange(() => {
+  changed();
+  for (const fn of flashWatchers) fn();
+});
+
 /*
  * Who says where the lamp is.
  *
@@ -473,8 +492,8 @@ function setLamp(x: number, y: number) {
  * the last move left them at.
  */
 export function reportCharge(charge: number) {
-  const moved = Math.abs(charge - cursorLamp.charge) > 0.003;
-  cursorLamp.charge = charge;
+  const moved = Math.abs(charge - windCharge) > 0.003;
+  windCharge = charge;
   if (!moved) return;
   changed();
   for (const fn of chargeWatchers) fn(charge);

@@ -3036,6 +3036,52 @@ html.is-winding * {
   }
 }
 
+/* ===================== The tool tray (item 25e, ?try=tools) =====================
+ * components/site/ToolTray: pick up one tool, putting down the last. A small
+ * dark glass pill in the corner, out of the way of the photographs.
+ */
+.tool-tray {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 9995;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgb(14 14 16 / 0.55);
+  backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 10px 30px rgb(0 0 0 / 0.4);
+}
+
+.tool-tray__tool {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  color: rgb(255 255 255 / 0.6);
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.tool-tray__tool:hover {
+  color: rgb(255 255 255 / 0.9);
+}
+
+.tool-tray__tool[aria-pressed="true"] {
+  color: rgb(20 16 10);
+  background: rgb(232 170 80);
+}
+
+.tool-tray__tool:focus-visible {
+  outline: 2px solid rgb(232 170 80);
+  outline-offset: 2px;
+}
+
 /* ===================== The laser beam (item 25d, ?try=laser) =====================
  * components/site/LaserBeam: a canvas over the page the beam is drawn on,
  * added light (the canvas composites "lighter" within itself, and screens

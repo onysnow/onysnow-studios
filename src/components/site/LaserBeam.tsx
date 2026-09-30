@@ -183,6 +183,8 @@ export function LaserBeam() {
     };
 
     const down = (e: PointerEvent) => {
+      // Picking another tool from the tray is not aiming this one.
+      if (e.target instanceof Element && e.target.closest("[data-tool-tray]")) return;
       aimFrom = { x: e.clientX, y: e.clientY };
       redraw();
     };

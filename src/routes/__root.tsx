@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HeldTool } from "@/components/site/ToolTray";
 import { useQuery } from "@tanstack/react-query";
 import { roomScript } from "@/lib/rooms";
 import { ROOM_KEYS, ROOM_HDR_KEYS } from "@/lib/site-assets";
@@ -11,7 +12,7 @@ import {
   createRootRouteWithContext,
   useRouterState,
 } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { CustomCursor } from "@/components/site/CustomCursor";
@@ -25,10 +26,6 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
 import { listenForLabDraft, reportLabPath } from "@/lib/lab-bridge";
-import { Magnifier } from "@/components/site/Magnifier";
-import { FlareTorch } from "@/components/site/FlareTorch";
-import { LaserBeam } from "@/components/site/LaserBeam";
-import { previewing } from "@/effects/engine/preview";
 import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 function NotFoundComponent() {
@@ -139,26 +136,6 @@ function RootShell({ children }: { children: ReactNode }) {
     </html>
   );
 }
-function ToolsIfTried() {
-  const [on, setOn] = useState({ magnifier: false, flare: false, laser: false });
-  useEffect(
-    () =>
-      setOn({
-        magnifier: previewing("magnifier"),
-        flare: previewing("flare"),
-        laser: previewing("laser"),
-      }),
-    [],
-  );
-  return (
-    <>
-      {on.magnifier ? <Magnifier /> : null}
-      {on.flare ? <FlareTorch /> : null}
-      {on.laser ? <LaserBeam /> : null}
-    </>
-  );
-}
-
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { location } = useRouterState({ select: (s) => ({ location: s.location }) });
@@ -197,7 +174,7 @@ function RootComponent() {
           <CustomCursor />
           <ShutterFlash />
           {/* The tools being tried (items 21-22): client only, the switch is in the address. */}
-          <ToolsIfTried />
+          <HeldTool />
           {/*
             Last in the tree, first on the screen.
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
-import { cursorLamp, onCharge } from "@/effects/light/lights";
+import { LAMP_COLOUR, cursorLamp, onCharge } from "@/effects/light/lights";
+import { onToolChange } from "@/effects/tools/held";
 import { camera } from "@/effects/camera/camera";
 import { sleepingLoop } from "@/lib/gl-loop";
 import {
@@ -120,6 +121,7 @@ export function CursorLight({
      * uniform writes a frame is nothing next to the fill they control.
      */
     const uGain = gl.getUniformLocation(program, "uGain");
+    const uEmit = gl.getUniformLocation(program, "uEmit");
     const uFalloff = gl.getUniformLocation(program, "uFalloff");
     const uAperture = gl.getUniformLocation(program, "uAperture");
     const uSpread = gl.getUniformLocation(program, "uSpread");
@@ -169,7 +171,8 @@ export function CursorLight({
 
     /* Returns whether there is still something to draw; false parks the loop. */
     const step = (now: number) => {
-      const charge = chargeRef.current;
+      // The lamp is drawn only while it is in the hand (effects/tools/held).
+      const charge = cursorLamp.charge > 0 ? chargeRef.current : 0;
       if (charge <= 0.002) {
         if (wasLit) {
           clear2d(canvas);
@@ -202,6 +205,13 @@ export function CursorLight({
       gl.uniform1f(uClosed, closed);
       gl.uniform1f(uTime, (now - start) / 1000);
       gl.uniform1f(uGain, cursorLamp.gain);
+      const emit = cursorLamp.colour;
+      gl.uniform3f(
+        uEmit,
+        emit[0] / LAMP_COLOUR[0],
+        emit[1] / LAMP_COLOUR[1],
+        emit[2] / LAMP_COLOUR[2],
+      );
       gl.uniform1f(uFalloff, camera.lens.coreFalloff);
       gl.uniform1f(uAperture, camera.aperture);
       gl.uniform1f(uSpread, camera.apertureGrowth);
@@ -225,6 +235,8 @@ export function CursorLight({
      * pointer still, and not one photon on the glass until it moved.
      */
     const stopCharge = onCharge(wake);
+    // And on picking up another tool, which lights or puts down the lamp.
+    const stopTool = onToolChange(wake);
     loop.wake();
 
     // Lost with the shared context; rebuilt when it comes back.
@@ -237,6 +249,7 @@ export function CursorLight({
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();
+      stopTool();
       stopLoss();
       gl.deleteProgram(program);
       quad.delete();

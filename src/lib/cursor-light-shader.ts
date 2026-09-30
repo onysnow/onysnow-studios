@@ -39,6 +39,7 @@ uniform vec3  uWarm;       // the amber, linear
 uniform vec3  uCool;       // the teal, linear
 uniform sampler2D uGrit;   // photographed surface, for the ghosts' insides
 uniform float uHasGrit;
+uniform vec3  uEmit;       // the lamp's visible light against the lamp's own white: 1 for the lamp, the dull leak for the black light
 
 #define TAU 6.28318530718
 #define BLADES 6.0
@@ -402,6 +403,12 @@ void main() {
    * where the intensity has fallen off. Authoring a white stop in a gradient
    * imitates the result; this causes it.
    */
+  /*
+   * What the camera sees of the lamp is its visible light. Held as the black
+   * light, that is only the dull violet leak of a 365 nm source -- the UV is
+   * invisible -- so the whole flare is that much fainter, and its colour.
+   */
+  colour *= uEmit;
   colour = colour / (1.0 + colour);
   // Back to display space.
   colour = pow(colour, vec3(1.0 / 2.2));
