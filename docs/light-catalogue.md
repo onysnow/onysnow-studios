@@ -37,14 +37,14 @@ Updated 2026-09-30 with what the light engine steps E–I and item 32 have built
 
 ### 3.3 Inside a material
 
-| Behaviour                             | Equation or model                        | Status                                                                                                                         |
-| ------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Absorption and tint                   | Beer–Lambert: T = exp(−α·L) per colour   | Now (float glass green, side faces)                                                                                            |
-| Dispersion                            | Cauchy from nd and Abbe V                | Now (glass solids, laser, flashlight crack split, liquid edge preview); the pane's three-channel split in CSS mode stays fixed |
-| Lateral displacement, apparent depth  | d = t·sin(θi−θt)/cosθt; depth ≈ t/n      | Now (stacks, crack faces seen at 1/n depth)                                                                                    |
-| Light guiding                         | TIR between faces; escape by scattering  | Now                                                                                                                            |
-| Volume scattering (haze, milky glass) | Rayleigh ∝ λ⁻⁴, Mie for larger particles | Plan (a material option: seeded or opal glass)                                                                                 |
-| Birefringence                         | two indices by polarisation              | No: float glass is isotropic (tempered glass shows stress patterns only in polarised light)                                    |
+| Behaviour                             | Equation or model                       | Status                                                                                                                         |
+| ------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Absorption and tint                   | Beer–Lambert: T = exp(−α·L) per colour  | Now (float glass green, side faces)                                                                                            |
+| Dispersion                            | Cauchy from nd and Abbe V               | Now (glass solids, laser, flashlight crack split, liquid edge preview); the pane's three-channel split in CSS mode stays fixed |
+| Lateral displacement, apparent depth  | d = t·sin(θi−θt)/cosθt; depth ≈ t/n     | Now (stacks, crack faces seen at 1/n depth)                                                                                    |
+| Light guiding                         | TIR between faces; escape by scattering | Now                                                                                                                            |
+| Volume scattering (haze, milky glass) | Rayleigh ∝ λ⁻⁴                          | Preview `?try=coating` (opal glass, `effects/optics/scatter`)                                                                  |
+| Birefringence                         | two indices by polarisation             | No: float glass is isotropic (tempered glass shows stress patterns only in polarised light)                                    |
 
 ### 3.4 Between surfaces (transport)
 
