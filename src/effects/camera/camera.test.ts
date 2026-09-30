@@ -17,6 +17,17 @@ const CAMERA_KNOBS = [
   "coreFalloff",
   "ghostGain",
   "haloGain",
+  "ghostCount",
+  "ghostSpacing",
+  "ghostSize",
+  "ghostShape",
+  "ghostBokeh",
+  "apertureBlades",
+  "catsEye",
+  "flareRainbow",
+  "haloRings",
+  "haloSize",
+  "starSpikes",
   "rimGlare",
   "rimGlareSize",
   "edgeBloom",
@@ -30,6 +41,9 @@ describe("the camera", () => {
     expect(camera.lens.coreFalloff).toBe(t("coreFalloff"));
     expect(camera.lens.ghosts).toBe(t("ghostGain"));
     expect(camera.lens.halo).toBe(t("haloGain"));
+    expect(camera.lens.ghostCount).toBe(t("ghostCount"));
+    expect(camera.lens.blades).toBe(t("apertureBlades"));
+    expect(camera.lens.rainbow).toBe(t("flareRainbow"));
     expect(camera.lens.glare).toBe(t("rimGlare"));
     expect(camera.lens.glareSize).toBe(t("rimGlareSize"));
     expect(camera.distance(1280)).toBe(CAMERA_DISTANCE * 1280);

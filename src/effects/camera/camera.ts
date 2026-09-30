@@ -50,6 +50,40 @@ export const camera = {
     get halo() {
       return t("haloGain");
     },
+    /** The lens's make-up (2k): its elements, blades, barrel and coatings. */
+    get ghostCount() {
+      return t("ghostCount");
+    },
+    get ghostSpacing() {
+      return t("ghostSpacing");
+    },
+    get ghostSize() {
+      return t("ghostSize");
+    },
+    get ghostShape() {
+      return t("ghostShape");
+    },
+    get ghostBokeh() {
+      return t("ghostBokeh");
+    },
+    get blades() {
+      return t("apertureBlades");
+    },
+    get catsEye() {
+      return t("catsEye");
+    },
+    get rainbow() {
+      return t("flareRainbow");
+    },
+    get haloRings() {
+      return t("haloRings");
+    },
+    get haloSize() {
+      return t("haloSize");
+    },
+    get spikes() {
+      return t("starSpikes");
+    },
     /** The glare a bright edge spreads into, and how far. */
     get glare() {
       return t("rimGlare");
