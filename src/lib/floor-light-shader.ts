@@ -364,11 +364,14 @@ void main() {
    * adds. With one light this is that light's floor exactly.
    */
   vec4 f = vec4(0.0);
+  vec3 coloured = vec3(0.0);  // the same sum, each light in its own colour
   for (int i = 0; i < MAX_LIGHTS; i++) {
     if (i >= uLightCount) break;
     float c = uLightCharge[i];
     float lit = c * c * (3.0 - 2.0 * c);
-    f += floorAt(look - uViewShift, lit, uLightPos[i].xy, uLightPos[i].z, uLightRadius[i]);
+    vec4 one = floorAt(look - uViewShift, lit, uLightPos[i].xy, uLightPos[i].z, uLightRadius[i]);
+    f += one;
+    coloured += one.rgb * uLightColour[i];
   }
   // Film, not a calculator: bright light rolls off instead of clipping flat.
   vec3 add = toneMapFilm(f.rgb);
@@ -380,11 +383,18 @@ void main() {
   float shade = 1.0 - exp(-f.a * 1.15);
   float a = clamp(max(add.r, max(add.g, add.b)) + shade, 0.0, 1.0);
   /*
-   * The light's colour, applied after the film curve as it always was. With
-   * one light that is exact; when lights of different colours overlap
-   * (backlight, emitters) the colour moves inside the sum, before the curve.
+   * The light's colour, inside the sum (item 19). Each light's floor is
+   * summed in its own colour, and the colour of the light arriving here is
+   * that sum over the uncoloured one: the lamp's warm white where only the
+   * lamp reaches, the flash's cool white where only it does, the mix of the
+   * two in proportion where both do. It used to be the first light's colour
+   * for everything, so the flash lit the floor lamp-coloured.
+   *
+   * Applied after the film curve, as the colour always was: with one light
+   * the ratio IS that light's colour and this is exactly the old floor.
    */
-  vec3 warm = uLightColour[0];
+  vec3 warm = coloured / max(f.rgb, vec3(1e-5));
+  warm = mix(uLightColour[0], warm, step(1e-5, max(f.r, max(f.g, f.b))));
   /*
    * Worked out premultiplied (the light is at most the coverage, so this is
    * a valid premultiplied colour), written straight: the shared context

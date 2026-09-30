@@ -119,4 +119,11 @@ describe("the passes loop over the lights", () => {
       }
     }
   });
+
+  // Item 19: each light's floor in its own colour, not the first light's for all.
+  it("the floor sums each light in its own colour", async () => {
+    const { FLOOR_FRAGMENT_SHADER } = await import("@/lib/floor-light-shader");
+    expect(FLOOR_FRAGMENT_SHADER).toContain("coloured += one.rgb * uLightColour[i];");
+    expect(FLOOR_FRAGMENT_SHADER).not.toMatch(/vec3 warm = uLightColour\[0\];/);
+  });
 });
