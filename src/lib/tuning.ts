@@ -84,6 +84,21 @@ export const tuning: Record<string, Knob> = {
   // the glass reflects (at ~4%, rising at grazing). 1 is a room lit like the
   // screen -- photographic middle grey. Brighter rooms reflect more; a window
   // at night shows the room because outside is darker than 4% of it.
+  /*
+   * A backlight (light engine step I, item 31b; ?try=backlight): a light
+   * behind the glass, under the photographs, as a lightbox is -- one light
+   * with the glass above it, so the panes glow from beneath and their rims
+   * catch it. 0 is off.
+   */
+  backlight: {
+    label: "Backlight",
+    group: "Environment",
+    value: 0,
+    min: 0,
+    max: 3,
+    step: 0.05,
+    hint: "A light behind the glass, under the photographs, like a lightbox: the panes glow from beneath and their rims catch it. Against the lamp's strength; 0 is off. Needs ?try=backlight.",
+  },
   roomBrightness: {
     label: "Room brightness",
     group: "Environment",
