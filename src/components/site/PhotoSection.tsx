@@ -82,6 +82,10 @@ export function PhotoSection({
  * `[data-seam] > ...`), NOT on this wrapper: a z-indexed wrapper is a stacking
  * context, Chrome cuts the pane's backdrop off at it, and the glass then
  * frosts nothing and the photographs show through it untouched. Measured.
+ * Liquid glass reads the same order off the children (LiquidGlass
+ * _liftedZ), so the wrapper stays unlifted there too: lifted, it was an
+ * isolated group and the bloom, which adds light, had nothing to add to
+ * past the band's edge.
  */
 function SeamSection({
   children,

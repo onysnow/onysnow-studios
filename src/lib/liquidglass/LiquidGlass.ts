@@ -688,7 +688,7 @@ export class LiquidGlass {
 			const hasStackingContext =
 				LiquidGlass._formsStackingContext(style, isFlexOrGridParent);
 			const rawZ = parseInt(style.zIndex, 10);
-			const zIndex = isNaN(rawZ) ? 0 : rawZ;
+			const zIndex = isNaN(rawZ) ? LiquidGlass._liftedZ(el) : rawZ; // LOCAL
 			return { el, domIndex, hasStackingContext, zIndex };
 		});
 
@@ -702,6 +702,34 @@ export class LiquidGlass {
 		});
 
 		return tagged.map(t => t.el);
+	}
+
+	/**
+	 * LOCAL. Where a z-auto child actually paints, when its own children
+	 * carry a z-index.
+	 *
+	 * A z-auto element is not a stacking context, so a z-indexed child of
+	 * it paints in the ROOT's stacking context: a seam band (z auto) whose
+	 * layers are z 1 paints above the photograph after it, though the band
+	 * comes first in the document. Upstream took z auto as 0 and put the
+	 * band before that photograph, so the band's scene stopped short of it
+	 * and the lower half of the glass refracted nothing.
+	 *
+	 * The band used to be given a z-index itself to fix the order -- and that
+	 * made it a stacking context, an isolated group, in which the lit edge's
+	 * bloom (plus-lighter, alpha 0) had nothing to add to past the band's
+	 * edge: the bloom was cut off at every pane but the header. Reading the
+	 * order off the children keeps the band out of a group of its own.
+	 */
+	private static _liftedZ(el: HTMLElement): number {
+		let z = 0;
+		for (const child of Array.from(el.children)) {
+			const cs = window.getComputedStyle(child);
+			if (cs.position === 'static') continue;
+			const cz = parseInt(cs.zIndex, 10);
+			if (!isNaN(cz) && cz > z) z = cz;
+		}
+		return z;
 	}
 
 	/**
