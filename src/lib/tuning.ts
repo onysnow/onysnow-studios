@@ -103,10 +103,14 @@ export const tuning: Record<string, Knob> = {
   // gap (see effects/optics/viewpoint.ts). Behaviour of the cursor, not a
   // result: how far anything moves follows from this, the gap and the
   // camera's distance.
+  //
+  // 0 (Ony, 2026-09-30): "I don't want the hero images to pan with mouse
+  // movement. Only scrolling will activate the parallax." The eye stays
+  // straight in front of the screen; what moves the photographs is scrolling.
   viewFollow: {
     label: "Viewpoint follows pointer",
     group: "Camera",
-    value: 0.6,
+    value: 0,
     min: 0,
     max: 1,
     step: 0.05,
