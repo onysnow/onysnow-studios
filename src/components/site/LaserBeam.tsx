@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { glassGeometry } from "@/effects/scene/scene";
-import { traceBeam, type BeamPane, type Vec } from "@/effects/optics/beam";
-import { indexAt } from "@/effects/optics/dispersion";
+import { traceBeam, type BeamHit, type BeamPane, type Vec } from "@/effects/optics/beam";
+import { indexAt, wavelengthRgb } from "@/effects/optics/dispersion";
+import { beamSolids } from "@/effects/scene/beam-solids";
 import {
   LASER_COLOURS,
   LASER_WAVELENGTH,
@@ -74,12 +75,24 @@ export function LaserBeam() {
     const ctx = view?.getContext("2d");
     if (!view || !ctx) return;
     const colour = laserColourFromUrl();
-    const lambda = LASER_WAVELENGTH[colour];
     const rgb = LASER_COLOURS[colour];
-    const css = (a: number) =>
-      `rgb(${Math.round(rgb[0] * 255)} ${Math.round(rgb[1] * 255)} ${Math.round(rgb[2] * 255)} / ${a.toFixed(3)})`;
-    // How much of the beam's own colour each channel of the absorption takes.
-    const weight = rgb[0] + rgb[1] + rgb[2];
+    /*
+     * The lines the beam carries. A laser is one wavelength. A white
+     * (supercontinuum) laser is all of them: traced as seven across the
+     * spectrum, each bent by the glass's index at its own wavelength, so
+     * where they part -- in a prism -- the spectrum shows.
+     */
+    const lines =
+      colour === "white"
+        ? [410, 450, 490, 530, 570, 610, 650].map((nm) => ({
+            nm,
+            rgb: wavelengthRgb(nm),
+            share: 2.2 / 7,
+          }))
+        : [{ nm: LASER_WAVELENGTH[colour], rgb: [...rgb] as [number, number, number], share: 1 }];
+    const cssOf = (c: readonly number[], a: number) =>
+      `rgb(${Math.round(c[0]! * 255)} ${Math.round(c[1]! * 255)} ${Math.round(c[2]! * 255)} / ${Math.max(0, a).toFixed(3)})`;
+    const css = (a: number) => cssOf(rgb, a);
 
     let aimFrom: Vec | null = null;
     let direction: Vec = { x: 1, y: 0.18 };
@@ -107,43 +120,69 @@ export function LaserBeam() {
         return;
       }
       const origin = aimFrom ?? { x: pointer.x, y: pointer.y };
-      const panes: BeamPane[] = glassGeometry().map((g) => {
-        const m = g.causes.material;
-        const absorb =
-          (m.absorb[0] * rgb[0] + m.absorb[1] * rgb[1] + m.absorb[2] * rgb[2]) / weight;
-        return {
-          x: g.x,
-          y: g.y,
-          w: g.w,
-          h: g.h,
-          r: g.r,
-          n: indexAt(lambda, m.ior, m.abbe),
-          absorb: absorb / PATH_UNIT,
-        };
-      });
-      const frosts = glassGeometry().map((g) => g.causes.material.frost);
-      const { segments, hits } = traceBeam(origin, direction, panes, { maxLength: 3000 });
-
+      const geometry = glassGeometry();
+      const solids = beamSolids();
+      const frosts = [
+        ...geometry.map((g) => g.causes.material.frost),
+        ...solids.map((s) => s.material.frost),
+      ];
+      const hits: BeamHit[] = [];
       ctx.globalCompositeOperation = "lighter";
       ctx.lineCap = "round";
-      for (const s of segments) {
-        const vis =
-          s.inside >= 0 ? GLASS_SCATTER + FROST_SCATTER * (frosts[s.inside] ?? 0) : AIR_SCATTER;
-        const grad = ctx.createLinearGradient(s.a.x, s.a.y, s.b.x, s.b.y);
-        grad.addColorStop(0, css(Math.min(1, s.energy * vis)));
-        grad.addColorStop(1, css(Math.min(1, s.energyEnd * vis)));
-        // The glow the scattered light makes round the beam...
-        ctx.strokeStyle = grad;
-        ctx.globalAlpha = 0.28;
-        ctx.lineWidth = s.inside >= 0 ? 9 : 5;
-        ctx.beginPath();
-        ctx.moveTo(s.a.x, s.a.y);
-        ctx.lineTo(s.b.x, s.b.y);
-        ctx.stroke();
-        // ...and the beam itself, a thread.
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
+      for (const line of lines) {
+        // What absorbs this wavelength: the glass's measured absorption, weighted by its colour.
+        const weight = line.rgb[0] + line.rgb[1] + line.rgb[2] || 1;
+        const absorbOf = (a: readonly [number, number, number]) =>
+          (a[0] * line.rgb[0] + a[1] * line.rgb[1] + a[2] * line.rgb[2]) / weight / PATH_UNIT;
+        const panes: BeamPane[] = [
+          ...geometry.map((g) => ({
+            x: g.x,
+            y: g.y,
+            w: g.w,
+            h: g.h,
+            r: g.r,
+            n: indexAt(line.nm, g.causes.material.ior, g.causes.material.abbe),
+            absorb: absorbOf(g.causes.material.absorb),
+          })),
+          ...solids.map((s) => {
+            const poly = s.outline();
+            const xs = poly.map((p) => p.x);
+            const ys = poly.map((p) => p.y);
+            const x = Math.min(...xs);
+            const y = Math.min(...ys);
+            return {
+              x,
+              y,
+              w: Math.max(...xs) - x,
+              h: Math.max(...ys) - y,
+              r: 0,
+              n: indexAt(line.nm, s.material.ior, s.material.abbe),
+              absorb: absorbOf(s.material.absorb),
+              poly,
+            };
+          }),
+        ];
+        const traced = traceBeam(origin, direction, panes, { maxLength: 3000 });
+        for (const hit of traced.hits) hits.push({ ...hit, energy: hit.energy * line.share });
+        for (const s of traced.segments) {
+          const vis =
+            s.inside >= 0 ? GLASS_SCATTER + FROST_SCATTER * (frosts[s.inside] ?? 0) : AIR_SCATTER;
+          const grad = ctx.createLinearGradient(s.a.x, s.a.y, s.b.x, s.b.y);
+          grad.addColorStop(0, cssOf(line.rgb, Math.min(1, s.energy * vis * line.share)));
+          grad.addColorStop(1, cssOf(line.rgb, Math.min(1, s.energyEnd * vis * line.share)));
+          // The glow the scattered light makes round the beam...
+          ctx.strokeStyle = grad;
+          ctx.globalAlpha = 0.28;
+          ctx.lineWidth = s.inside >= 0 ? 9 : 5;
+          ctx.beginPath();
+          ctx.moveTo(s.a.x, s.a.y);
+          ctx.lineTo(s.b.x, s.b.y);
+          ctx.stroke();
+          // ...and the beam itself, a thread.
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
       }
       // Where it strikes a surface, the surface lights up.
       for (const hit of hits) {

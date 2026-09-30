@@ -37,6 +37,12 @@ export type BeamPane = {
   n: number;
   /** Absorption per px of path at the beam's wavelength (Beer-Lambert). */
   absorb: number;
+  /**
+   * A convex polygon instead of the rounded box, in page px, corners in
+   * order: a glass solid seen end-on in the plane (a prism's triangle, 25g).
+   * x, y, w, h then only bound it.
+   */
+  poly?: readonly Vec[];
 };
 
 export type BeamSegment = {
@@ -98,8 +104,38 @@ function reflect(d: Vec, nrm: Vec): Vec {
   return { x: d.x - k * nrm.x, y: d.y - k * nrm.y };
 }
 
-/** Signed distance to a rounded rectangle (negative inside). */
+/**
+ * Signed distance to a convex polygon (negative inside): the largest of the
+ * distances to its edges' lines -- exact inside and along the faces, a
+ * bound off the corners, which is all the tracer needs.
+ */
+function convexPolygon(p: Vec, poly: readonly Vec[]): number {
+  // Which way round the corners go, so every edge's normal points out.
+  let area = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    area += a.x * b.y - b.x * a.y;
+  }
+  const turn = area > 0 ? 1 : -1;
+  let d = -Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    const l = Math.hypot(ex, ey) || 1;
+    // Outward normal of the edge.
+    const nx = (turn * ey) / l;
+    const ny = (-turn * ex) / l;
+    d = Math.max(d, (p.x - a.x) * nx + (p.y - a.y) * ny);
+  }
+  return d;
+}
+
+/** Signed distance to a pane's outline (negative inside). */
 function roundedBox(p: Vec, pane: BeamPane): number {
+  if (pane.poly) return convexPolygon(p, pane.poly);
   const hw = pane.w / 2;
   const hh = pane.h / 2;
   const r = Math.min(pane.r, hw, hh);

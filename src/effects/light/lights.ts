@@ -304,9 +304,11 @@ export const LASER_COLOURS = {
   red: [1.0, 0.04, 0.03],
   green: [0.18, 1.0, 0.08],
   violet: [0.42, 0.08, 1.0],
+  // A white (supercontinuum) laser: every wavelength at once, so a prism fans it into a spectrum.
+  white: [1.0, 1.0, 1.0],
 } as const;
 /** Each laser's wavelength, nm: a red diode, a frequency-doubled green, a violet diode. */
-export const LASER_WAVELENGTH = { red: 650, green: 532, violet: 405 } as const;
+export const LASER_WAVELENGTH = { red: 650, green: 532, violet: 405, white: 560 } as const;
 export type LaserColour = keyof typeof LASER_COLOURS;
 /** How brightly the flare is burning this moment, for what draws its flame. */
 export function flareBrightness(): number {

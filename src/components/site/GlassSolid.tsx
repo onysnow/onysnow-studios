@@ -15,6 +15,7 @@ import { materialById, type MaterialId } from "@/effects/materials/presets";
 import { cursorLamp, onLightChange, roomLight } from "@/effects/light/lights";
 import { viewState } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
+import { registerBeamSolid } from "@/effects/scene/beam-solids";
 
 /** The three wavelengths the solid is traced at, nm: a red, a green and a blue primary. */
 const WAVELENGTHS = [610, 550, 465] as const;
@@ -172,6 +173,12 @@ type Props = {
   tilt?: number;
   /** Turns per minute about its own axis; 0 holds it still. */
   spin?: number;
+  /**
+   * Stand it end-on in the page's plane -- its axis toward you, still -- so
+   * what travels across the page (the laser's beam) meets its cross-section:
+   * a prism's triangle, a cube's square, a sphere's circle.
+   */
+  endOn?: boolean;
   className?: string;
 };
 
@@ -195,6 +202,7 @@ export function GlassSolid({
   size = 70,
   tilt = 35,
   spin = 2,
+  endOn = false,
   className,
 }: Props) {
   const box = useRef<HTMLDivElement>(null);
@@ -205,6 +213,41 @@ export function GlassSolid({
     const canvas = view.current;
     if (!el || !canvas) return;
     const m = materialById(material);
+    /*
+     * End-on, it stands in the beam's way (effects/scene/beam-solids): its
+     * cross-section, measured where it is on the page when asked.
+     */
+    const removeFromBeam =
+      endOn && (shape === "prism" || shape === "cube" || shape === "sphere")
+        ? registerBeamSolid({
+            material: m,
+            outline: () => {
+              const r = el.getBoundingClientRect();
+              const cx = r.left + r.width / 2;
+              const cy = r.top + r.height / 2;
+              if (shape === "prism") {
+                const k = Math.sqrt(3) / 2;
+                return [
+                  { x: cx, y: cy - size },
+                  { x: cx + size * k, y: cy + size / 2 },
+                  { x: cx - size * k, y: cy + size / 2 },
+                ];
+              }
+              if (shape === "cube") {
+                return [
+                  { x: cx - size, y: cy - size },
+                  { x: cx + size, y: cy - size },
+                  { x: cx + size, y: cy + size },
+                  { x: cx - size, y: cy + size },
+                ];
+              }
+              return Array.from({ length: 36 }, (_, i) => ({
+                x: cx + size * Math.cos((i / 36) * Math.PI * 2),
+                y: cy + size * Math.sin((i / 36) * Math.PI * 2),
+              }));
+            },
+          })
+        : () => {};
     const index = WAVELENGTHS.map((nm) => indexAt(nm, m.ior, m.abbe));
     const absorb = m.absorb.map((a) => a / PATH_UNIT);
     let program: WebGLProgram | null = null;
@@ -351,6 +394,12 @@ export function GlassSolid({
       gl.uniform3f(U("uCentre"), cx, cy, size * 1.4);
 
       // Its axes: up leaning toward the top of the screen by `tilt`, turning about itself.
+      if (endOn) {
+        // Standing end-on in the page's plane: its axis toward you, its "up" up the screen.
+        const toWorld = [1, 0, 0, 0, -1, 0, 0, 0, -1];
+        gl.uniformMatrix3fv(U("uToWorld"), false, toWorld);
+        gl.uniformMatrix3fv(U("uToObject"), false, toWorld);
+      }
       const a = (tilt * Math.PI) / 180;
       const yaw = ((now - start) / 60000) * spin * Math.PI * 2 + 0.6;
       const up: [number, number, number] = [0, -Math.sin(a), Math.cos(a)];
@@ -367,8 +416,10 @@ export function GlassSolid({
       // Columns: object x, y, z in the world.
       const toWorld = [...X, ...up, ...Z];
       const toObject = [X[0]!, up[0], Z[0]!, X[1]!, up[1], Z[1]!, X[2]!, up[2], Z[2]!];
-      gl.uniformMatrix3fv(U("uToWorld"), false, toWorld);
-      gl.uniformMatrix3fv(U("uToObject"), false, toObject);
+      if (!endOn) {
+        gl.uniformMatrix3fv(U("uToWorld"), false, toWorld);
+        gl.uniformMatrix3fv(U("uToObject"), false, toObject);
+      }
 
       gl.uniform1i(U("uShape"), SOLID_SHAPES.indexOf(shape));
       gl.uniform1f(U("uSize"), size);
@@ -398,10 +449,11 @@ export function GlassSolid({
       cancelAnimationFrame(frame);
       stopLights();
       stopLoss();
+      removeFromBeam();
       window.removeEventListener("scroll", wake);
       window.removeEventListener("resize", wake);
     };
-  }, [shape, material, size, tilt, spin]);
+  }, [shape, material, size, tilt, spin, endOn]);
 
   return (
     <div

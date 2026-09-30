@@ -103,3 +103,64 @@ describe("rounded corners", () => {
     );
   });
 });
+
+describe("a prism in the beam's plane (25g)", () => {
+  // An equilateral prism seen end-on: circumradius 100 about (0, 0), apex up (y down the page).
+  const k = Math.sqrt(3) / 2;
+  const tri = [
+    { x: 0, y: -100 },
+    { x: 100 * k, y: 50 },
+    { x: -100 * k, y: 50 },
+  ];
+  const prism = (n: number): BeamPane => ({
+    x: -87,
+    y: -100,
+    w: 174,
+    h: 150,
+    r: 0,
+    n,
+    absorb: 0,
+    poly: tri,
+  });
+
+  it("deviates the beam least by 2 asin(n sin 30) - 60", () => {
+    const n = 1.5;
+    let least = Infinity;
+    // Aimed at the middle of the left face, over a sweep of angles (y down: a negative angle climbs).
+    for (let a = -55; a <= 20; a += 0.25) {
+      const d = { x: Math.cos(deg(a)), y: Math.sin(deg(a)) };
+      const target = { x: -43.3, y: -25 };
+      const { segments } = traceBeam(
+        { x: target.x - d.x * 300, y: target.y - d.y * 300 },
+        d,
+        [prism(n)],
+        {
+          maxDepth: 2,
+        },
+      );
+      // The brightest ray that crossed the prism and left it.
+      const out = segments
+        .filter((s) => s.inside < 0 && s.a.x > 1 && s.energy > 0.5)
+        .sort((p, q) => q.energy - p.energy)[0];
+      if (!out) continue;
+      const dir = { x: out.b.x - out.a.x, y: out.b.y - out.a.y };
+      const dev = Math.abs(angleOf(dir) - angleOf(d));
+      least = Math.min(least, dev);
+    }
+    expect(least).toBeCloseTo(2 * Math.asin(n * Math.sin(deg(30))) - deg(60), 2);
+  });
+
+  it("sends violet further round than red", () => {
+    const d = { x: Math.cos(deg(-45)), y: Math.sin(deg(-45)) };
+    const o = { x: -43.3 - d.x * 300, y: -25 - d.y * 300 };
+    const exitAngle = (nm: number) => {
+      const { segments } = traceBeam(o, d, [prism(indexAt(nm, 1.72825, 28.41))], { maxDepth: 2 });
+      const out = segments
+        .filter((s) => s.inside < 0 && s.a.x > 1 && s.energy > 0.5)
+        .sort((p, q) => q.energy - p.energy)[0]!;
+      return angleOf({ x: out.b.x - out.a.x, y: out.b.y - out.a.y });
+    };
+    // The beam climbs in and is bent back down; violet more.
+    expect(exitAngle(405)).toBeGreaterThan(exitAngle(650));
+  });
+});

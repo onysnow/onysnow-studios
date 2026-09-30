@@ -145,6 +145,10 @@ function LabSamples() {
               <GlassSolid shape="pyramid" />
               <GlassSolid shape="rod" />
             </div>
+            {/* A flint prism standing end-on in the page's plane: shine ?try=laser&laser=white across it. */}
+            <div className="mt-6 flex justify-center" data-lab-prism>
+              <GlassSolid shape="prism" material="dense-flint" size={80} endOn spin={0} />
+            </div>
             <Pane className="mx-auto mt-6 max-w-2xl !p-5">
               <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                 Glass solids
@@ -153,7 +157,9 @@ function LabSamples() {
                 Optical crown glass (the prism is dense flint, which spreads the colours twice as
                 far), traced from your eye: each colour bends by its own index, crosses the solid,
                 is totally reflected where it cannot get out, and lands on the photograph below. The
-                sphere turns the photograph over; the prism fans its edges into colour.
+                sphere turns the photograph over; the prism fans its edges into colour. The prism
+                standing end-on is in the page's plane: add laser to the address (and laser=white)
+                and shine the beam across it -- white light comes out a spectrum.
               </p>
             </Pane>
           </div>
