@@ -2937,3 +2937,52 @@ html.is-winding * {
   opacity: calc(0.6 + 0.4 * var(--flare, 1));
   mix-blend-mode: screen;
 }
+
+/* ===================== Neon (item 23) =====================
+ * components/site/Neon. --lit is how hard the tube is burning (0 dark, 1
+ * full), set as it flickers; --neon-colour is its gas.
+ */
+.neon {
+  --lit: 1;
+  --glow: color-mix(in srgb, var(--neon-colour) calc(var(--lit) * 100%), transparent);
+  position: relative;
+  display: inline-block;
+  font-family: var(--font-display, inherit);
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  /* The tube: white-hot where the discharge is densest; pale glass with a hint of colour when dark. */
+  color: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--neon-colour) 22%, rgb(210 212 222 / 0.45)),
+    color-mix(in oklab, var(--neon-colour), white 62%) calc(var(--lit) * 100%)
+  );
+  -webkit-text-stroke: 0.6px rgb(255 255 255 / calc(0.12 + 0.1 * (1 - var(--lit))));
+  /* The gas's colour round the core, then the glow it throws into the air. */
+  text-shadow:
+    0 0 1px color-mix(in srgb, white calc(var(--lit) * 90%), transparent),
+    0 0 3px var(--glow),
+    0 0 8px var(--glow),
+    0 0 18px color-mix(in srgb, var(--glow) 70%, transparent),
+    0 0 38px color-mix(in srgb, var(--glow) 45%, transparent),
+    0 0 70px color-mix(in srgb, var(--glow) 25%, transparent);
+}
+
+/* The light it throws on what it hangs on: a soft wash of its colour, wider than the lettering. */
+.neon::after {
+  content: "";
+  position: absolute;
+  inset: -45% -12%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--neon-colour), transparent);
+  opacity: calc(var(--lit) * 0.22);
+  filter: blur(18px);
+  mix-blend-mode: screen;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neon {
+    --lit: 1 !important;
+  }
+}

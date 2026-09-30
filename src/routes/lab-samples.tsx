@@ -6,6 +6,7 @@ import { ParallaxScene } from "@/components/site/ParallaxScene";
 import { Img } from "@/components/site/Img";
 import { Pane } from "@/effects/react/Pane";
 import { Stack } from "@/effects/react/Stack";
+import { Neon } from "@/components/site/Neon";
 
 export const Route = createFileRoute("/lab-samples")({
   ssr: false,
@@ -92,6 +93,31 @@ function LabSamples() {
               </Stack>
             ))}
           </div>
+        </div>
+      </ParallaxScene>
+
+      {/*
+       * Neon (item 23): two signs over a photograph, each a real tube and a
+       * light in the scene -- the glass below catches them.
+       */}
+      <ParallaxScene image={photos.data?.[3] ?? photo} scrim="none" height="">
+        <div className="mx-auto max-w-5xl px-6 py-20" data-lab-neon>
+          <div className="flex flex-col items-center gap-10 py-10">
+            <Neon gas="pink" flicker="flicker" className="text-7xl sm:text-8xl">
+              OnySnow
+            </Neon>
+            <Neon gas="blue" flicker="dying" className="text-4xl tracking-[0.3em]">
+              OPEN LATE
+            </Neon>
+          </div>
+          <Pane className="mx-auto mt-6 max-w-2xl !p-5">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Neon</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              A tube with gas in it, not glowing text: white-hot at the core, the gas&rsquo;s colour
+              round it, pale glass when it drops out. Each sign is a light in the scene, so this
+              pane catches them. Top: a loose electrode. Bottom: a dying transformer.
+            </p>
+          </Pane>
         </div>
       </ParallaxScene>
     </div>

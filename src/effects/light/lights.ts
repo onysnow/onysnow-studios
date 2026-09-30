@@ -291,17 +291,79 @@ export function flareBrightness(): number {
   return flareLight.charge * flareFlicker;
 }
 
-/** The lights that stand at a point: the lamp, and the flash and the flare while they burn. */
+/*
+ * Emitters: lights that belong to something ON the page rather than to the
+ * viewer -- a neon sign (item 23) -- and stand where it stands. A component
+ * adds one while it is mounted, moves it with its element and sets its charge
+ * as it burns; the passes take it with the rest of the list.
+ */
+const emitters = new Set<Light>();
+
+/** An emitter: a light with a level, how hard it is burning this moment (0 to 1). */
+export type Emitter = Light & { level: number };
+
+/**
+ * Make an emitter: a light of the given colour, `share` of the lamp's
+ * strength at full, at `height` above what it lights, sized by `radius`.
+ * Its strength follows the lamp's own knob, here, so nothing outside this
+ * module reads a light knob.
+ */
+export function makeEmitter(
+  id: string,
+  colour: readonly [number, number, number],
+  height: number,
+  radius: () => number,
+  share = 0.8,
+): Emitter {
+  return {
+    id,
+    kind: "point",
+    x: -9999,
+    y: -9999,
+    height,
+    get radius() {
+      return radius();
+    },
+    colour,
+    get gain() {
+      return t("coreGain") * share * this.level;
+    },
+    charge: 0,
+    uv: 0,
+    level: 1,
+  };
+}
+
+/** Add an emitter to the scene (returns the removal). */
+export function addEmitter(light: Light): () => void {
+  emitters.add(light);
+  emitterChanged();
+  return () => {
+    emitters.delete(light);
+    emitterChanged();
+  };
+}
+
+/** An emitter moved or changed how hard it burns: relight the passes. */
+export function emitterChanged() {
+  changed();
+  for (const fn of flashWatchers) fn();
+}
+
+/** The lights that stand at a point: the lamp, the flash and the flare while they burn, and the emitters. */
 export function pointLights(): Light[] {
   const out = lights.filter((l) => l.kind === "point");
   if (flashLight.charge > 0) out.push(flashLight);
   if (flareLight.charge > 0) out.push(flareLight);
+  for (const e of emitters) if (e.charge > 0) out.push(e);
   return out;
 }
 
 /** How hard the most strongly burning point light is burning: whether to draw at all. */
 export function strongestCharge(): number {
-  return Math.max(cursorLamp.charge, flashLight.charge, flareLight.charge);
+  let strongest = Math.max(cursorLamp.charge, flashLight.charge, flareLight.charge);
+  for (const e of emitters) strongest = Math.max(strongest, e.charge);
+  return strongest;
 }
 
 /** The lamp's radiant power, for the passes that work in real units. */
