@@ -106,6 +106,8 @@ uniform float uGap;         // this pane's gap to the photographs behind it, CSS
  */
 uniform float uIor;          // this pane's material
 uniform float uFrost;        // this pane's material
+uniform float uBounce;       // 1: light bouncing off the lit photograph lights the glass from below (?try=bounce, effects/light/bounce)
+uniform float uFloorGain;    // the floor pass's light gain ("Floor light"): how lit the print is shown
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
 // The lights: position, height above this pane, colour, power, size, charge.
 ${LIGHTS_GLSL}
@@ -269,6 +271,20 @@ vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
 }
 
 ${BOKEH_GLSL}
+
+/*
+ * The print at a point of the page (?try=bounce): the photograph below the seam
+ * where a band crosses one and the point is past it, else the one behind; nothing
+ * off the edge of either.
+ */
+vec3 printAt(vec2 pt) {
+  bool below = uHasBelow > 0.5 && pt.y >= uImageBelow.y;
+  vec2 uv = below ? coverUv(pt, uImageBelow, uImageBelowFit) : coverUv(pt, uImage, uImageFit);
+  float on = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+  vec3 c = below ? texture2D(uBackdropBelow, uv).rgb : texture2D(uBackdrop, uv).rgb * uHasBackdrop;
+  return c * on;
+}
+
 
 /*
  * ---- Plastic (item 18b) ----
@@ -828,6 +844,7 @@ void main() {
   vec3 lampLight = vec3(0.0);     // (tint * face + mirror) * lit, per light
   vec3 lampGlow = vec3(0.0);      // tint * rim * lit: the lit edge and its bloom, per light
   vec3 lampSpecular = vec3(0.0);  // the Blinn-Phong highlight, per light
+  vec3 bounceUp = vec3(0.0);      // light bounced off the photograph into the glass from below
   vec3 lampEdge = vec3(0.0);      // the bevel's share of each light, in its colour
   for (int i = 0; i < MAX_LIGHTS; i++) {
     if (i >= uLightCount) break;
@@ -1017,11 +1034,43 @@ void main() {
     vec3 mirrored = mix(uLightColour[i] / LAMP_WHITE, uLightColour[i], uvShare);
     lampSpecular += mirrored * specular * inside * lit;
     lampEdge += mirrored * bevel * lit;
+
+    /*
+     * ---- Light bouncing off the photograph (?try=bounce; effects/light/bounce) ----
+     * The pool this light makes on the print, a disc as wide as the light is
+     * high above it, sends back the print's own colour; the frosted back face
+     * of this pane, a gap above, scatters what reaches it and half comes out
+     * toward you. The print's colour there is its reflectance (the backdrop
+     * is sRGB, so it is linearised first).
+     */
+    if (uBounce > 0.5 && uHasBackdrop + uHasBelow > 0.5) {
+      float abovePhoto = lightHeight + uGap;
+      float poolR = max(abovePhoto, 1.0) * 0.6;
+      vec2 o = vec2(poolR * 0.45, 0.0);
+      vec3 print = printAt(lightXY) + printAt(lightXY + o) + printAt(lightXY - o)
+        + printAt(lightXY + o.yx) + printAt(lightXY - o.yx);
+      vec3 albedo = pow(print / 5.0, vec3(2.2));
+      float d2 = dl * dl;
+      float form = (poolR * poolR) / (poolR * poolR + uGap * uGap + d2);
+      /*
+       * The pool's irradiance is the floor pass's (FloorLight): its "Floor light" gain,
+       * through this pane on the way down (two faces' Fresnel, about 0.92), cos^3 across
+       * the disc -- in the units the print is SHOWN lit in, where 1 is a white print at
+       * full white. A matte print's glow in those units is its albedo times that; the
+       * frosted underside a gap above catches the disc's form factor of it, and sends
+       * about half of what it scatters on toward you (effects/light/bounce, bounceGlow).
+       */
+      // 0.8: cos^3 averaged over a disc 0.6 of the height across (bounce.ts, POOL_MEAN).
+      float pool = 0.92 * uFloorGain * 0.8;
+      bounceUp += (uLightColour[i] / LAMP_WHITE) * albedo * pool * form * uFrost * 0.5 * lit * (1.0 - uvShare);
+    }
   }
 
   vec3 colour = sideLight + arrisRoom;
   vec3 lightIn = mix(vec3(1.0), uLightIn, aboveCover(frag - uRect.xy));
   colour += lampLight * lightIn;
+  // From below, not through the stack above: it does not pass the light-in filter.
+  colour += bounceUp;
   /*
    * The specular is the LIGHT, so it is gated on the light. The bevel's edge
    * highlight is GEOMETRY, so it is not.

@@ -188,6 +188,8 @@ export function GlassLight({
     const plasticRadius = new Float32Array(MAX_PLASTIC);
     const uIor = U("uIor");
     const uFrost = U("uFrost");
+    const uBounce = U("uBounce");
+    const uFloorGain = U("uFloorGain");
     const uFaceLamp = U("uFaceLamp");
 
     // The site's amber and teal in linear light — the shader works in linear
@@ -662,6 +664,8 @@ export function GlassLight({
         const { material, thickness, gap, smudge, scratch } = pane.causes;
         gl.uniform1f(uIor, material.ior);
         gl.uniform1f(uFrost, material.frost);
+        gl.uniform1f(uBounce, previewing("bounce") ? 1 : 0);
+        gl.uniform1f(uFloorGain, t("floorLight"));
         // ?try=satin: the front face etched like the back, so the room it
         // reflects spreads into a soft glow instead of a mirror image.
         gl.uniform1f(
