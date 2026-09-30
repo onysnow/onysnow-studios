@@ -230,11 +230,14 @@ export function Glass({
        * it is translucent, so it tints the light rather than blocking it.
        */
       for (const node of el.querySelectorAll<HTMLElement>(".plastic")) {
+        // Dark plastic (the round arrow buttons) is opaque: it blocks the
+        // light as a shape and has no pigment to fluoresce (2i).
+        const dark = node.classList.contains("plastic--dark");
         letGo.push(
           registerLitSurface(node, {
-            occludes: false,
+            occludes: dark,
             standoff: PLASTIC_STANDOFF,
-            material: "dayglo-orange",
+            material: dark ? "ink" : "dayglo-orange",
           }),
         );
       }

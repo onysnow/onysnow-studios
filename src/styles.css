@@ -1161,6 +1161,24 @@ span:has(> .photo-surface) {
     linear-gradient(#000 0 0);
 }
 
+/*
+ * Dark plastic: the round arrow buttons (2i, Ony 2026-09-30: "these
+ * elements have no shadow or plastic sheen"). Glossy black plastic, opaque:
+ * the same face highlight and rim as the orange, no coloured light through
+ * it -- it throws a shadow instead, by the one shadow model, like a card.
+ */
+.plastic--dark {
+  box-shadow:
+    var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px) var(--cast-spread, 0px)
+      rgb(0 0 0 / var(--cast-alpha, 0)),
+    0 0 0 1px rgb(0 0 0 / calc(0.45 * var(--plastic-on))),
+    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on)));
+}
+
+.plastic--dark::before {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .plastic::before {
     display: none;

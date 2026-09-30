@@ -310,8 +310,8 @@ function HomePage() {
                   </Link>
                   {/* Arrows live inside Carousel so they drive the same embla instance. */}
                   <div className="flex gap-2">
-                    <CarouselPrevious className="static size-8 translate-y-0" />
-                    <CarouselNext className="static size-8 translate-y-0" />
+                    <CarouselPrevious className="plastic plastic--dark relative left-auto right-auto top-auto size-8 translate-y-0" />
+                    <CarouselNext className="plastic plastic--dark relative left-auto right-auto top-auto size-8 translate-y-0" />
                   </div>
                 </div>
               </Reveal>
