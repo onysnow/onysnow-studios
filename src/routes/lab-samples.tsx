@@ -8,6 +8,9 @@ import { Pane } from "@/effects/react/Pane";
 import { Stack } from "@/effects/react/Stack";
 import { Neon } from "@/components/site/Neon";
 import { GlowPaint } from "@/components/site/GlowPaint";
+import { GlassSolid } from "@/components/site/GlassSolid";
+import { previewing } from "@/effects/engine/preview";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/lab-samples")({
   ssr: false,
@@ -32,6 +35,9 @@ export const Route = createFileRoute("/lab-samples")({
 function LabSamples() {
   const photos = useQuery(coverPhotosQuery);
   const photo = photos.data?.[0];
+  // The glass solids are a preview (?try=solids) until Ony approves them.
+  const [solids, setSolids] = useState(false);
+  useEffect(() => setSolids(previewing("solids")), []);
 
   return (
     <div className="min-h-screen pb-32">
@@ -123,6 +129,36 @@ function LabSamples() {
           </Pane>
         </div>
       </ParallaxScene>
+
+      {/*
+       * Glass solids (item 25g, ?try=solids): held over a photograph, each
+       * traced through by the physics of its glass (effects/optics/solids).
+       */}
+      {solids ? (
+        <ParallaxScene image={photos.data?.[1] ?? photo} scrim="none" height="">
+          <div className="mx-auto max-w-5xl px-6 py-20" data-lab-solids>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <GlassSolid shape="prism" material="dense-flint" />
+              <GlassSolid shape="sphere" />
+              <GlassSolid shape="cube" />
+              <GlassSolid shape="cone" />
+              <GlassSolid shape="pyramid" />
+              <GlassSolid shape="rod" />
+            </div>
+            <Pane className="mx-auto mt-6 max-w-2xl !p-5">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Glass solids
+              </p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Optical crown glass (the prism is dense flint, which spreads the colours twice as
+                far), traced from your eye: each colour bends by its own index, crosses the solid,
+                is totally reflected where it cannot get out, and lands on the photograph below. The
+                sphere turns the photograph over; the prism fans its edges into colour.
+              </p>
+            </Pane>
+          </div>
+        </ParallaxScene>
+      ) : null}
 
       {/* Glow-in-the-dark paint (item 25): draw on it, shine the lamp on it, fire the flash. */}
       <section className="mx-auto max-w-5xl px-6 py-20">

@@ -45,7 +45,7 @@ export type Material = {
   uvTransmit: number;
 };
 
-export type MaterialId = "frosted-float";
+export type MaterialId = "frosted-float" | "optical-crown" | "dense-flint";
 
 /**
  * Soda-lime float glass, satin-etched on the back: today's panes.
@@ -65,8 +65,43 @@ export const FROSTED_FLOAT: Material = {
   uvTransmit: 0.72,
 };
 
+/**
+ * Optical crown glass, polished all over: what a glass paperweight, a
+ * lens or a demonstration prism is made of (item 25g). The numbers are
+ * Schott N-BK7's catalogue values, n_d = 1.5168 and V_d = 64.17. Clear:
+ * made from iron-free sand, it takes almost nothing out along a path.
+ */
+export const OPTICAL_CROWN: Material = {
+  id: "optical-crown",
+  ior: 1.5168,
+  abbe: 64.17,
+  frost: 0,
+  frostedFace: "back",
+  absorb: [0.06, 0.04, 0.05],
+  uvTransmit: 0.9,
+};
+
+/**
+ * Dense flint glass: heavy with lead or titanium, so it bends light more
+ * and spreads the colours about twice as far as crown -- the glass a
+ * prism is cut from to throw a vivid spectrum. Schott SF10's catalogue
+ * values, n_d = 1.72825 and V_d = 28.41; faintly yellow, so it takes a
+ * little blue.
+ */
+export const DENSE_FLINT: Material = {
+  id: "dense-flint",
+  ior: 1.72825,
+  abbe: 28.41,
+  frost: 0,
+  frostedFace: "back",
+  absorb: [0.05, 0.06, 0.2],
+  uvTransmit: 0.4,
+};
+
 export const MATERIALS: Readonly<Record<MaterialId, Material>> = {
   "frosted-float": FROSTED_FLOAT,
+  "optical-crown": OPTICAL_CROWN,
+  "dense-flint": DENSE_FLINT,
 };
 
 export const DEFAULT_MATERIAL: MaterialId = "frosted-float";
