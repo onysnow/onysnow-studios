@@ -176,6 +176,11 @@ void main() {
 	vec2 half_ = u_size * 0.5;
 	float r = min(u_radius, min(half_.x, half_.y));
 	float sdf = rrSDF(v_localPx, half_, r);
+	// LOCAL: a band as wide as the scene has no sides at all -- not in its
+	// mask, its inner stroke or its glow either, or they draw a thin edge
+	// down the screen's own edge where the band's top face runs on past it
+	// (Ony 2026-09-30, 2d). Measured top and bottom only, like its bevel.
+	if (u_straight > 0.5) sdf = abs(v_localPx.y) - half_.y;
 
 	// ── Shadow (outside panel, offset by shadowOffY) ──
 	if (sdf > 0.0) {
