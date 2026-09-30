@@ -87,9 +87,9 @@ describe("page photos", () => {
 
   it("recognises the table not existing yet, and nothing else, as 'not set up'", () => {
     expect(isMissingTable({ code: "PGRST205", message: "Could not find the table" })).toBe(true);
-    expect(isMissingTable({ code: "42P01", message: 'relation "page_photos" does not exist' })).toBe(
-      true,
-    );
+    expect(
+      isMissingTable({ code: "42P01", message: 'relation "page_photos" does not exist' }),
+    ).toBe(true);
     expect(isMissingTable({ code: "42501", message: "permission denied" })).toBe(false);
     expect(isMissingTable(null)).toBe(false);
   });
