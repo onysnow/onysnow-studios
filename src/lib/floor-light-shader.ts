@@ -5,7 +5,7 @@ import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { WAVINESS_GLSL } from "@/effects/optics/waviness.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
-import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
+import { SCRATCH_SHADOW, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
 /**
  * The light that goes THROUGH the glass and lands on the photographs behind.
@@ -117,7 +117,7 @@ uniform float uGrimeFloor;
 uniform vec2 uViewShift;
 #define SMUDGE_EXTINCTION ${SMUDGE_EXTINCTION.toFixed(3)}
 #define SMUDGE_SCATTER ${SMUDGE_SCATTER.toFixed(3)}
-#define SCRATCH_FOCUS ${SCRATCH_FOCUS.toFixed(3)}
+#define SCRATCH_SHADOW ${SCRATCH_SHADOW.toFixed(3)}
 
 /*
  * The bottom of the pool, worked out rather than drawn.
@@ -298,8 +298,8 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     cover *= smoothstep(0.9, 1.0, x);
     float groove = cover.x;
     float smear = cover.y;
-    through *= 1.0 - SMUDGE_EXTINCTION * smear;
-    through += vec3(pool * passes * (SMUDGE_SCATTER * smear + SCRATCH_FOCUS * groove));
+    through *= (1.0 - SMUDGE_EXTINCTION * smear) * (1.0 - SCRATCH_SHADOW * groove);
+    through += vec3(pool * passes * SMUDGE_SCATTER * smear);
 
     // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {

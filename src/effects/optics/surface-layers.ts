@@ -53,10 +53,17 @@ export function loadSurfaceLayer(
  *   SMUDGE_SCATTER     ...and scatters a part of that back in as a soft glow
  *                      rather than losing it, so under a smudge the light is
  *                      dimmer AND softer -- the halo a greasy window throws.
- *   SCRATCH_FOCUS      A scratch is a tiny groove, a cylinder lens: it gathers
- *                      the light crossing it into a thin line on what is
- *                      behind, brighter than the light around it.
+ *   SCRATCH_SHADOW     A scratch, and the dust and grit that sit in it, turn
+ *                      the light crossing them aside -- scattered out of the
+ *                      beam -- so on what is behind they throw a thin shadow.
+ *                      They make no light of their own: this used to add a
+ *                      "focused" line at 1.8 x the beam, which put a bright
+ *                      copy of every speck on the photograph, as bright as the
+ *                      speck itself (Ony, 2026-09-30, 2b: "not just shadow is
+ *                      being cast ... I can see a light dot"). A real groove
+ *                      only redistributes what crosses it, and seen at this
+ *                      distance, through the frost, that is a darkening.
  */
 export const SMUDGE_EXTINCTION = 0.55;
 export const SMUDGE_SCATTER = 0.25;
-export const SCRATCH_FOCUS = 1.8;
+export const SCRATCH_SHADOW = 0.6;
