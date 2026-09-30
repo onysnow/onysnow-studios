@@ -283,6 +283,9 @@ ${BOKEH_GLSL}
  * The edge's shadow (the light the rounded edge bends away) darkens, which
  * this additive layer cannot do: it stays the CSS box-shadow.
  */
+/* The glow of skin oil and dust under UV: blue-white, as in a forensic photograph. */
+const vec3 FLUORESCENT_SMEAR = vec3(0.55, 0.78, 1.0);
+
 const vec3 PLASTIC_ORANGE = vec3(1.0, 0.62, 0.225); // oklch(0.8 0.17 58), the buttons' own
 
 /* How squarely a light is over a sheet: 1 on it, 0 half the light's radius off it (css-vars litOver). */
@@ -963,10 +966,23 @@ void main() {
      */
     float lit = charge * charge * (3.0 - 2.0 * charge);
     vec3 tint = mix(uWarm, uCool, smoothstep(0.0, 1.0, dl / 460.0));
+    // A black light's visible glow is its own violet, not the lamp's whites.
+    float uvShare = uLightUv[i];
+    tint = mix(tint, uLightColour[i], uvShare);
 
-    lampLight += (tint * face + mirror) * lit;
+    /*
+     * Fluorescence (item 20, ?try=blacklight). What a UV light shows is not
+     * what it lights but what glows under it: skin oil and dust in the
+     * smears and specks turn the invisible light into a blue-white glow,
+     * where the UV reaches them -- the same reach the grime is raked by --
+     * and not where something standing on the glass shades them. Clean
+     * glass barely fluoresces; the marks are all you see.
+     */
+    float fluor = onFace * rake * (smear * 2.4 + glint * 0.9) * unlit * uvShare;
+
+    lampLight += (tint * face + mirror) * lit + FLUORESCENT_SMEAR * fluor * lit;
     lampGlow += tint * rim * lit;
-    lampSpecular += vec3(specular) * inside * lit;
+    lampSpecular += mix(vec3(1.0), uLightColour[i], uvShare) * specular * inside * lit;
     lampEdge += bevel * lit;
   }
 

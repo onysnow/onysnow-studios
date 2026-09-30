@@ -23,6 +23,7 @@ uniform vec3  uLightColour[MAX_LIGHTS];    // linear RGB
 uniform float uLightPower[MAX_LIGHTS];     // radiant power (glass) or gain (lens)
 uniform float uLightRadius[MAX_LIGHTS];    // the source's radius, CSS px
 uniform float uLightCharge[MAX_LIGHTS];    // how hard it is burning, 0 to 1
+uniform float uLightUv[MAX_LIGHTS];        // how much of its output is ultraviolet, 0 to 1
 `;
 
 /** One light, packed for a pass: already resolved to that pass's receiver. */
@@ -35,6 +36,8 @@ export type PackedLight = {
   power: number;
   radius: number;
   charge: number;
+  /** How much of its output is ultraviolet (Light.uv); 0 if left out. */
+  uv?: number;
 };
 
 export type LightLocations = {
@@ -44,6 +47,7 @@ export type LightLocations = {
   power: WebGLUniformLocation | null;
   radius: WebGLUniformLocation | null;
   charge: WebGLUniformLocation | null;
+  uv: WebGLUniformLocation | null;
 };
 
 export function lightLocations(gl: WebGLRenderingContext, program: WebGLProgram): LightLocations {
@@ -55,6 +59,7 @@ export function lightLocations(gl: WebGLRenderingContext, program: WebGLProgram)
     power: U("uLightPower"),
     radius: U("uLightRadius"),
     charge: U("uLightCharge"),
+    uv: U("uLightUv"),
   };
 }
 
@@ -64,6 +69,7 @@ const colour = new Float32Array(MAX_LIGHTS * 3);
 const power = new Float32Array(MAX_LIGHTS);
 const radius = new Float32Array(MAX_LIGHTS);
 const charge = new Float32Array(MAX_LIGHTS);
+const uv = new Float32Array(MAX_LIGHTS);
 
 /** Upload up to MAX_LIGHTS lights; the program must be in use. */
 export function uploadLights(
@@ -83,11 +89,14 @@ export function uploadLights(
     power[i] = l.power;
     radius[i] = l.radius;
     charge[i] = l.charge;
+    uv[i] = l.uv ?? 0;
   }
+  for (let i = n; i < MAX_LIGHTS; i++) uv[i] = 0;
   gl.uniform1i(loc.count, n);
   gl.uniform3fv(loc.pos, pos);
   gl.uniform3fv(loc.colour, colour);
   gl.uniform1fv(loc.power, power);
   gl.uniform1fv(loc.radius, radius);
   gl.uniform1fv(loc.charge, charge);
+  gl.uniform1fv(loc.uv, uv);
 }

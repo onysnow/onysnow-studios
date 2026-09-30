@@ -68,6 +68,8 @@ export function writeSurfaceLight(el: HTMLElement, r: Box, lamp: Light, light: S
   el.style.setProperty("--lamp-core", `${(lamp.radius * 0.35).toFixed(1)}px`);
   el.style.setProperty("--lit-angle", `${light.angle.toFixed(1)}deg`);
   el.style.setProperty("--lit-over", litOver(r, lamp).toFixed(3));
+  // How much ultraviolet reaches it (a black light, ?try=blacklight): what fluoresces glows by this.
+  el.style.setProperty("--uv-on", (light.near * light.lit * lamp.uv).toFixed(3));
 }
 
 /**

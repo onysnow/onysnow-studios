@@ -19,6 +19,7 @@
 import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
 import { t } from "@/lib/tuning";
 import { camera } from "@/effects/camera/camera";
+import { previewing } from "@/effects/engine/preview";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -53,10 +54,24 @@ export type Light = {
   readonly gain: number;
   /** How hard it is burning, 0 to 1. */
   charge: number;
+  /**
+   * How much of what it gives off is ultraviolet, 0 to 1 (item 20). UV is
+   * invisible: it lights nothing you can see directly, but what fluoresces
+   * turns it into visible light -- finger oils and dust on the glass,
+   * optical brighteners in paper, fluorescent orange plastic.
+   */
+  readonly uv: number;
 };
 
 /** The lamp's colour: a warm white, a little under daylight. */
 export const LAMP_COLOUR = [1.0, 0.94, 0.84] as const;
+
+/**
+ * A black light's visible leak (?try=blacklight): the deep violet a UV-A
+ * tube lets through its filter glass, a fraction of a lamp's brightness.
+ * Everything else it gives off is ultraviolet (Light.uv).
+ */
+export const BLACKLIGHT_VISIBLE = [0.3, 0.1, 0.62] as const;
 
 /** The lamp the cursor carries. First in the list, always there. */
 export const cursorLamp: Light = {
@@ -70,11 +85,16 @@ export const cursorLamp: Light = {
   get radius() {
     return t("shadowSoftness");
   },
-  colour: LAMP_COLOUR,
+  get colour() {
+    return previewing("blacklight") ? BLACKLIGHT_VISIBLE : LAMP_COLOUR;
+  },
   get gain() {
     return t("coreGain");
   },
   charge: 0,
+  get uv() {
+    return previewing("blacklight") ? 1 : 0;
+  },
 };
 
 /**
@@ -94,6 +114,7 @@ export const roomLight: Light = {
     return t("roomBrightness");
   },
   charge: 1,
+  uv: 0,
 };
 
 /** Every light in the scene. */
@@ -134,6 +155,7 @@ export const flashLight: Light = {
     return t("coreGain") * FLASH_GAIN;
   },
   charge: 0,
+  uv: 0,
 };
 
 const flashWatchers = new Set<() => void>();

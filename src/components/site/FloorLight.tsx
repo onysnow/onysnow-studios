@@ -229,6 +229,7 @@ export function FloorLight() {
           power: lampPower(l),
           radius: l.radius,
           charge: l.charge,
+          uv: l.uv,
         })),
       );
       gl.uniform1f(uLightGain, t("floorLight"));

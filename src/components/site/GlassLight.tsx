@@ -568,6 +568,7 @@ export function GlassLight({
         power: lampPower(l),
         radius: l.radius,
         charge: l === cursorLamp ? charge : l.charge,
+        uv: l.uv,
       }));
       const heights = packed.map((l) => l.height);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));

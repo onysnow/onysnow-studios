@@ -25,6 +25,8 @@ export const PREVIEWS = {
     "The shutter flash is a light in the scene: the glass, the light through it and the rims answer it",
   shaderplastic:
     "The orange buttons lit by the glass light pass from every light in the scene, instead of by CSS gradients that knew only the cursor",
+  blacklight:
+    "The lamp is a black light: it gives off UV and only a violet glow; smudges on the glass, white type and the orange plastic fluoresce",
   liquidlights:
     "Liquid glass lit only by the scene's lights: its own fixed gloss, rim glow, white Fresnel and drop shadow are off",
 } as const;

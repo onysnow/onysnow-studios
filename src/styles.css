@@ -1145,6 +1145,23 @@ span:has(> .photo-surface) {
  * darkens, and that layer only adds) and the rim's resting sheen from the
  * room.
  */
+/*
+ * ?try=blacklight (item 20): what fluoresces under the lamp's UV (--uv-on,
+ * how much reaches each surface, from the CSS adapter). White type carries
+ * optical brighteners and glows blue; the orange plastic is fluorescent and
+ * glows its own orange, hard. The photographs are ordinary surfaces: they
+ * barely answer. The smears on the glass glow in the glass light pass.
+ */
+html[data-try~="blacklight"] .glass :is(h1, h2, h3, h4, p, blockquote) {
+  color: color-mix(in oklab, currentColor, rgb(185 200 255) calc(var(--uv-on, 0) * 55%));
+  filter: drop-shadow(0 0 3px rgb(140 165 255 / calc(var(--uv-on, 0) * 0.85)));
+}
+
+html[data-try~="blacklight"] .plastic {
+  filter: brightness(calc(1 + var(--uv-on, 0) * 0.45)) saturate(calc(1 + var(--uv-on, 0) * 0.6))
+    drop-shadow(0 0 10px rgb(255 130 30 / calc(var(--uv-on, 0) * 0.75)));
+}
+
 html[data-try~="shaderplastic"] .glass .plastic {
   background-image: none;
 }
