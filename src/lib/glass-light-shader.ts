@@ -144,6 +144,7 @@ uniform sampler2D uRoom;
 uniform float uHasRoom;
 uniform float uRoomWidth;       // texels round the full 360 degrees
 uniform float uCameraDistance;  // CSS pixels from the screen
+uniform vec3  uScatter;         // opal glass: its volume scattering, sigma * thickness per colour (0 for clear)
 uniform vec3  uCoat;            // what an anti-reflection coating leaves of each reflection (1 for none)
 uniform float uExactFresnel;    // ?try=polariser: s and p Fresnel, and the camera's filter
 uniform float uPolariser;       // how perfect the camera's polarising filter is, 0 none
@@ -1060,7 +1061,16 @@ void main() {
     vec3 fluor = onFace * uvCos * uvCos * uvCos * unlit * uvShare * FLUOR_GAIN
       * (smear * uOilGlow + glint * uDustGlow);
 
-    lampLight += (tint * face + mirror) * lit + fluor * lit;
+    /*
+     * Opal glass (catalogue item 32d, ?try=opal): the glass itself scatters,
+     * so the clean glass glows where a light reaches it. Of the light that
+     * crosses the slab, 1 - exp(-sigma t) is scattered -- Rayleigh-like,
+     * blue most (sigma ~ lambda^-4) -- and about half of it comes back out
+     * of the face toward you. Arriving at a slant it falls as cos^3.
+     */
+    vec3 opal = onFace * uvCos * uvCos * uvCos * unlit * (1.0 - exp(-uScatter)) * 0.5
+      * (uLightColour[i] / LAMP_WHITE) * (1.0 - uvShare);
+    lampLight += (tint * face + mirror) * lit + fluor * lit + opal * lit;
     lampMirror += mirror * lit;
     lampGlow += tint * rim * lit;
     /*

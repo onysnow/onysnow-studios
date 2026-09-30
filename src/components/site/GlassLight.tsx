@@ -1,4 +1,5 @@
 import { coatingRgb } from "@/effects/optics/coating";
+import { scatterDepth } from "@/effects/optics/scatter";
 import { useEffect, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
@@ -93,6 +94,8 @@ const BLEED = LIGHT_BLEED;
 
 /** No coating: every reflection whole. */
 const NO_COAT = [1, 1, 1] as const;
+/** Clear glass: nothing scattered in the volume. */
+const NO_SCATTER = [0, 0, 0] as const;
 
 export function GlassLight({
   chargeRef,
@@ -235,6 +238,7 @@ export function GlassLight({
     const uCameraDistance = U("uCameraDistance");
     const uExactFresnel = U("uExactFresnel");
     const uCoat = U("uCoat");
+    const uScatter = U("uScatter");
     const uPolariser = U("uPolariser");
     const uPolariserAngle = U("uPolariserAngle");
     const uFrontRoughness = U("uFrontRoughness");
@@ -703,6 +707,8 @@ export function GlassLight({
         gl.uniform1f(uIor, material.ior);
         const coat = material.coating ? coatingRgb(material.ior, material.coating) : NO_COAT;
         gl.uniform3f(uCoat, coat[0], coat[1], coat[2]);
+        const depth = material.scatter ? scatterDepth(material.scatter, thickness) : NO_SCATTER;
+        gl.uniform3f(uScatter, depth[0], depth[1], depth[2]);
         gl.uniform1f(uFrost, material.frost);
         gl.uniform1f(uBounce, previewing("bounce") ? 1 : 0);
         gl.uniform1f(uFloorGain, t("floorLight"));

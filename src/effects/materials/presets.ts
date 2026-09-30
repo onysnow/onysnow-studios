@@ -46,9 +46,11 @@ export type Material = {
   uvTransmit: number;
   /** An anti-reflection coating on its faces, if it has one (effects/optics/coating). */
   coating?: Coating;
+  /** Volume scattering per px of path at 550 nm, if it scatters (opal glass; effects/optics/scatter). */
+  scatter?: number;
 };
 
-export type MaterialId = "frosted-float" | "optical-crown" | "dense-flint" | "museum";
+export type MaterialId = "frosted-float" | "optical-crown" | "dense-flint" | "museum" | "opal";
 
 /**
  * Soda-lime float glass, satin-etched on the back: today's panes.
@@ -120,11 +122,29 @@ export const MUSEUM_GLASS: Material = {
   coating: MGF2_QUARTER_WAVE,
 };
 
+/**
+ * Opal glass (catalogue item 32d): glass seeded with particles far smaller
+ * than a wavelength, which scatter blue most (Rayleigh). Polished; lit, it
+ * glows a faint blue and what comes through lands warm. About 1.1 of its
+ * green light is scattered across 18 px (a third gets straight through).
+ */
+export const OPAL_GLASS: Material = {
+  id: "opal",
+  ior: 1.52,
+  abbe: 58,
+  frost: 0,
+  frostedFace: "back",
+  absorb: [0.4, 0.3, 0.3],
+  uvTransmit: 0.5,
+  scatter: 0.06,
+};
+
 export const MATERIALS: Readonly<Record<MaterialId, Material>> = {
   "frosted-float": FROSTED_FLOAT,
   "optical-crown": OPTICAL_CROWN,
   "dense-flint": DENSE_FLINT,
   museum: MUSEUM_GLASS,
+  opal: OPAL_GLASS,
 };
 
 export const DEFAULT_MATERIAL: MaterialId = "frosted-float";

@@ -128,20 +128,23 @@ function LabSamples() {
             ))}
           </div>
           {/*
-           * ?try=coating (catalogue item 32c): polished glass bare, beside
-           * museum glass -- the same glass with an anti-reflection coating on
-           * each face. The room's reflection falls to a third and turns a
-           * faint purple.
+           * ?try=coating (catalogue items 32c, 32d): polished glass bare,
+           * beside museum glass -- the same glass with an anti-reflection
+           * coating on each face (the room's reflection falls to a third and
+           * turns a faint purple) -- and opal glass, which scatters blue in
+           * its volume: lit, it glows faintly blue, and what gets through
+           * lands warm.
            */}
           {coating ? (
-            <div className="mt-10 grid gap-10 sm:grid-cols-2" data-lab-coating>
+            <div className="mt-10 grid gap-10 sm:grid-cols-3" data-lab-coating>
               {(
                 [
                   ["Polished, bare", "optical-crown"],
                   ["Museum glass (coated)", "museum"],
+                  ["Opal glass", "opal"],
                 ] as const
               ).map(([label, material]) => (
-                <Pane key={label} className="h-40 !p-4" thickness={6} material={material}>
+                <Pane key={label} className="h-40 !p-4" thickness={18} material={material}>
                   <span className="text-xs">{label}</span>
                 </Pane>
               ))}

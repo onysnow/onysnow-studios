@@ -99,6 +99,8 @@ uniform float uFrost[${MAX_FLOOR_PANES}];
 // BTDF (effects/optics/rough-transmission) -- its transmission against a
 // smooth face's, and its spread, at the cosines 1, 0.7, 0.4, 0.15.
 uniform float uRoughGlass;
+// Opal glass (catalogue item 32d): what crosses each pane unscattered, per colour (1 for clear).
+uniform vec3 uUnscattered[${MAX_FLOOR_PANES}];
 uniform vec4 uRoughRatio[${MAX_FLOOR_PANES}];
 uniform vec4 uRoughSpread[${MAX_FLOOR_PANES}];
 
@@ -265,6 +267,12 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
      */
     float onFace = smoothstep(1.0 - soft, 1.0 + soft, x);
     vec3 through = vec3(pool * passes * faceThrough * onFace);
+    /*
+     * Opal glass scatters blue most (Rayleigh): what comes straight through
+     * lands warm. Of what it scatters, the forward half spreads wide and a
+     * little of it lands here too.
+     */
+    through *= uUnscattered[i] + 0.35 * (1.0 - uUnscattered[i]);
 
     /*
      * The bevel: a clear, polished strip, angled. Every ray through it is

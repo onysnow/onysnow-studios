@@ -1,4 +1,5 @@
 import { roughRow } from "@/effects/optics/rough-transmission";
+import { unscattered } from "@/effects/optics/scatter";
 import { previewing } from "@/effects/engine/preview";
 import { useEffect, useRef, useState } from "react";
 
@@ -74,6 +75,8 @@ export function FloorLight() {
     const uIor = U("uIor");
     const uFrost = U("uFrost");
     const uRoughGlass = U("uRoughGlass");
+    const uUnscattered = U("uUnscattered");
+    const unscatteredAll = new Float32Array(MAX_FLOOR_PANES * 3).fill(1);
     const uRoughRatio = U("uRoughRatio");
     const uRoughSpread = U("uRoughSpread");
     const roughRatios = new Float32Array(MAX_FLOOR_PANES * 4);
@@ -273,6 +276,8 @@ export function FloorLight() {
         gaps[n] = pane.causes.gap;
         iors[n] = pane.causes.material.ior;
         frosts[n] = pane.causes.material.frost;
+        const sigma = pane.causes.material.scatter;
+        unscatteredAll.set(sigma ? unscattered(sigma, pane.causes.thickness) : [1, 1, 1], n * 3);
         if (previewing("roughglass")) {
           const row = roughRow(pane.causes.material.ior, pane.causes.material.frost);
           roughRatios.set(row.ratio, n * 4);
@@ -334,6 +339,7 @@ export function FloorLight() {
       gl.uniform1fv(uIor, iors);
       gl.uniform1fv(uFrost, frosts);
       gl.uniform1f(uRoughGlass, previewing("roughglass") ? 1 : 0);
+      gl.uniform3fv(uUnscattered, unscatteredAll);
       gl.uniform4fv(uRoughRatio, roughRatios);
       gl.uniform4fv(uRoughSpread, roughSpreads);
       gl.uniform3fv(uThrough, throughs);
