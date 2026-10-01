@@ -6,6 +6,7 @@ import {
   isSoftwareRenderer,
   noteFrame,
   passScaleCap,
+  surfaceScaleCap,
   quality,
   resetQuality,
   startingTier,
@@ -52,6 +53,8 @@ describe("the tier while the page runs", () => {
   it("is full, at the passes' usual scale, unless tried", () => {
     expect(quality()).toBe("full");
     expect(passScaleCap()).toBe(1.5);
+    // The light on the glass carries the fine smudge and scratch detail: drawn at a 2x display's own density.
+    expect(surfaceScaleCap()).toBe(2);
     stepDown("lite");
     expect(quality()).toBe("full");
   });
@@ -68,6 +71,7 @@ describe("the tier while the page runs", () => {
     noteFrame(SLOW_FRAME_MS + 10);
     expect(quality()).toBe("lite");
     expect(passScaleCap()).toBe(1);
+    expect(surfaceScaleCap()).toBe(1);
     stepDown("full");
     expect(quality()).toBe("lite");
   });

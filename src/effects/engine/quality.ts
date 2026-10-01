@@ -138,6 +138,16 @@ export function passScaleCap(): number {
   return quality() === "full" ? 1.5 : 1;
 }
 
+/**
+ * The same for the light ON the glass, which carries the smudge and scratch
+ * photographs: fine detail, so on a 2x display it is drawn at 2x (Ony,
+ * 2026-10-01: "increase the resolution of the smudge/scratch layers" -- at
+ * 1.5x the browser stretched the layer and every mark went soft and streaky).
+ */
+export function surfaceScaleCap(): number {
+  return quality() === "full" ? 2 : 1;
+}
+
 /** For tests: forget the tier. */
 export function resetQuality() {
   tier = null;

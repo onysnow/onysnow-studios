@@ -20,7 +20,9 @@ export function loadSurfaceLayer(
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = () => {
-    const side = Math.min(2048, 2 ** Math.round(Math.log2(Math.max(img.width, img.height, 1))));
+    // Up to 4096 (an uploaded high-resolution scan keeps its detail), and never past what the GPU takes.
+    const maxSide = Math.min(4096, (gl.getParameter(gl.MAX_TEXTURE_SIZE) as number) || 2048);
+    const side = Math.min(maxSide, 2 ** Math.round(Math.log2(Math.max(img.width, img.height, 1))));
     let source: TexImageSource = img;
     if (img.width !== side || img.height !== side) {
       const c = document.createElement("canvas");

@@ -1,4 +1,4 @@
-import { passScaleCap } from "@/effects/engine/quality";
+import { surfaceScaleCap } from "@/effects/engine/quality";
 import { coatingRgb } from "@/effects/optics/coating";
 import { onShardMapChange, shardMapOf, shardMapStamp } from "@/effects/optics/shard-map";
 import { scatterDepth } from "@/effects/optics/scatter";
@@ -73,10 +73,11 @@ import { discRadiusForBlur, hiddenLightMap, markLightNear } from "@/effects/opti
  */
 
 /*
- * Bloom is low-frequency and the sharp features are a few pixels wide, so
- * there is nothing here that repays a full buffer on a dense display.
+ * At the display's own density up to 2x: the smudge and scratch marks are
+ * fine detail, and drawn at 1.5x and stretched by the browser to a 2x screen
+ * they went soft and streaky (Ony, 2026-10-01).
  */
-const MAX_SCALE = 1.5;
+const MAX_SCALE = 2;
 
 /*
  * The LAYOUT viewport, not `window.innerWidth`.
@@ -674,7 +675,7 @@ export function GlassLight({
       const panes = glassGeometry(now);
       const { x, y } = positionRef.current;
 
-      scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, passScaleCap()));
+      scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, surfaceScaleCap()));
       const bw = Math.round(viewportWidth() * scale);
       const bh = Math.round(viewportHeight() * scale);
       if (!beginPass(bw, bh, "glass")) return false;
