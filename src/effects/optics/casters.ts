@@ -167,6 +167,19 @@ function lastGlyphAt(el: HTMLElement, at: DOMRect): string {
   return `${Math.round(r.left - at.left)},${Math.round(r.top - at.top)}`;
 }
 
+/** Whether something between `node` and `top` clips it away (a visually hidden span). */
+function hiddenByClip(node: Element, top: Element): boolean {
+  for (let n: Element | null = node; n && n !== top.parentElement; n = n.parentElement) {
+    const cs = getComputedStyle(n);
+    if (cs.clipPath !== "none" && /inset\(50%|polygon\(0/.test(cs.clipPath)) return true;
+    if (cs.clip !== "auto" && /rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(cs.clip))
+      return true;
+    if (cs.position === "absolute" && cs.overflow === "hidden" && parseFloat(cs.width) <= 1)
+      return true;
+  }
+  return false;
+}
+
 /** The words of a block of type, where each one sits (relative to the block), in its own font. */
 function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect; words: Word[] } {
   const at = el.getBoundingClientRect();
@@ -183,6 +196,16 @@ function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect;
     if (!parent) continue;
     const cs = getComputedStyle(parent);
     if (cs.visibility === "hidden" || cs.display === "none") continue;
+    /*
+     * Text that is there for screen readers only, not for the eye: the
+     * animated headings carry their whole line once more in a visually
+     * hidden (.sr-only, clipped to nothing) span. Measured, it lay along the
+     * heading in one unbroken run, a few pixels short of the real letters
+     * (no per-letter cells), so every heading cast a second, fixed shadow
+     * just to the left of its letters, whichever side the lamp was on (Ony,
+     * 2026-10-01: the shadow of "it" sat beside it with the lamp on its left).
+     */
+    if (parent.closest(".sr-only") || hiddenByClip(parent, el)) continue;
     const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
     ctx.font = font;
     const ascent = ctx.measureText("Hg").fontBoundingBoxAscent;
