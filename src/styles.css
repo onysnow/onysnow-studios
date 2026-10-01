@@ -66,6 +66,38 @@
   * {
     border-color: var(--color-border);
   }
+  /*
+   * Scroll bars in the site's colours (Ony, 2026-10-01: "make the scroll bar
+   * on-theme"): a thin amber thumb on the dark ground, the page's and every
+   * scrolling panel's (the lab's side menu, dialogs, the reel strip).
+   */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.72 0.14 68 / 55%) transparent;
+  }
+  html {
+    scrollbar-color: oklch(0.72 0.14 68 / 55%) var(--color-background);
+  }
+  /* Safari, which has no scrollbar-color. */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.72 0.14 68 / 55%);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-primary);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
   html {
     scroll-behavior: smooth;
     background: var(--color-background);
