@@ -76,3 +76,84 @@ export function flareFlickerAt(seconds: number): number {
   const gutter = -0.45 * sputterAt(seconds);
   return Math.min(1.05, Math.max(0.4, 0.88 + puff + turbulence + gutter));
 }
+
+/*
+ * Flames other than the flare (task 82; docs/research/flame.md 6): the same
+ * physics with each flame's own numbers. A torch's burning head is about
+ * 5 cm across, so it puffs at 1.5 / sqrt(0.05) = 6.7 Hz (Cetegen & Ahmed),
+ * drifting +-10%; each puff rises for 80% of its cycle and collapses in
+ * the last 20% (a sawtooth, cpldcpu 2025; the split is an estimate), +-10%
+ * of the light; slower wandering in 1/f octaves (0.3 / 0.7 / 1.5 / 3 Hz),
+ * nothing above 20 Hz (Kim et al.: the energy is below 10-20 Hz); now and
+ * then a gutter; bright most of the time with brief dips (clamped 0.55-1.1).
+ * Amplitudes are estimates (flame.md 6.5: nobody has measured a torch's).
+ */
+export type FlameParams = {
+  /** The burning surface across, metres (sets the puffing). */
+  diameter: number;
+  /** The puff's share of the light (0 for a candle's steady flame). */
+  puff: number;
+  /** The wander octaves' amplitudes, at 0.3, 0.7, 1.5 and 3 Hz. */
+  wander: readonly [number, number, number, number];
+  /** Gutters: chance per 0.4 s slot, and how deep. */
+  gutterChance: number;
+  gutterDepth: number;
+  /** The flame's temperature, kelvin. */
+  kelvin: number;
+};
+
+export const TORCH: FlameParams = {
+  diameter: 0.05,
+  puff: 0.1,
+  wander: [0.08, 0.05, 0.03, 0.02],
+  gutterChance: 0.1,
+  gutterDepth: 0.3,
+  kelvin: 1900,
+};
+export const CANDLE: FlameParams = {
+  diameter: 0.012,
+  puff: 0,
+  wander: [0.015, 0.01, 0.005, 0.0],
+  gutterChance: 0.02,
+  gutterDepth: 0.15,
+  kelvin: 1850,
+};
+export const CAMPFIRE: FlameParams = {
+  diameter: 0.4,
+  puff: 0.12,
+  wander: [0.2, 0.1, 0.05, 0.03],
+  gutterChance: 0.05,
+  gutterDepth: 0.2,
+  kelvin: 1800,
+};
+
+function gutterAt(seconds: number, p: FlameParams): number {
+  const slot = Math.floor(seconds / SPUTTER_SLOT);
+  let strongest = 0;
+  for (const k of [slot - 1, slot]) {
+    if (hash(k + 1000) >= p.gutterChance) continue;
+    const at = (k + hash(k + 1000.5)) * SPUTTER_SLOT;
+    if (seconds < at) continue;
+    strongest = Math.max(strongest, Math.exp(-(seconds - at) / 0.15));
+  }
+  return strongest * p.gutterDepth;
+}
+
+/** How brightly a flame burns at a moment, as a share of its steady level (flame.md 6.2). */
+export function flameFlickerAt(seconds: number, p: FlameParams = TORCH): number {
+  const tau = Math.PI * 2;
+  const f = puffingHz(p.diameter);
+  // The puffing frequency drifts +-10%, slowly: integrate the phase of a wandering rate.
+  const phase = f * seconds + (0.1 * f * Math.sin(tau * 0.13 * seconds)) / (tau * 0.13);
+  const frac = phase - Math.floor(phase);
+  // Rise for 80% of the cycle, collapse in the last 20%: a smoothed sawtooth, mean 0.
+  const saw = frac < 0.8 ? frac / 0.8 : 1 - (frac - 0.8) / 0.2;
+  const puff = p.puff * (2 * saw - 1);
+  const [a, b, c, d] = p.wander;
+  const wander =
+    a * Math.sin(tau * 0.3 * seconds + 0.4) +
+    b * Math.sin(tau * 0.7 * seconds + 1.9) +
+    c * Math.sin(tau * 1.5 * seconds + 2.7) +
+    d * Math.sin(tau * 3 * seconds + 0.2);
+  return Math.min(1.1, Math.max(0.55, 0.92 + puff + wander - gutterAt(seconds, p)));
+}

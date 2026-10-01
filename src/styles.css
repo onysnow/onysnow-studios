@@ -3199,6 +3199,17 @@ html.is-winding * {
  * list's. The first covers (the tube, the smoke's body); the second is light
  * and is screened onto the page.
  */
+.fire-torch {
+  /* The burning torch (FireTorch.tsx, task 82): moved to the hand by a transform. */
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 240px;
+  height: 360px;
+  z-index: 9996;
+  pointer-events: none;
+}
+
 .flare-torch {
   position: fixed;
   top: 0;

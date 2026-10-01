@@ -330,6 +330,50 @@ export const LASER_COLOURS = {
 /** Each laser's wavelength, nm: a red diode, a frequency-doubled green, a violet diode. */
 export const LASER_WAVELENGTH = { red: 650, green: 532, violet: 405, white: 560 } as const;
 export type LaserColour = keyof typeof LASER_COLOURS;
+/*
+ * A burning torch (task 82, ?try=fire; docs/research/flame.md 6): a stick
+ * bundle's flame at 1900 K, as a camera white-balanced to 3000 K records it
+ * (flame.md 6.2: (1, 0.48, 0), here computed from the blackbody). A small
+ * source (sharp, swaying shadows), about as strong as the flare at its
+ * steady level; its flicker and where it stands are the hand's
+ * (components/site/FireTorch, effects/light/flame flameFlickerAt).
+ */
+const FIRE_FLAME = blackbodyRgb(1900);
+const FIRE_WHITE = blackbodyRgb(3000);
+export const FIRE_COLOUR = [
+  1,
+  FIRE_FLAME[1] / FIRE_WHITE[1] / (FIRE_FLAME[0] / FIRE_WHITE[0]),
+  0,
+] as const;
+export const FIRE_RADIUS = 12;
+export const FIRE_GAIN = 1.2;
+let fireLevel = 1;
+export const fireLight: Light = {
+  id: "fire",
+  kind: "point",
+  x: -9999,
+  y: -9999,
+  get height() {
+    return t("shadowHeight");
+  },
+  radius: FIRE_RADIUS,
+  colour: FIRE_COLOUR,
+  get gain() {
+    return t("coreGain") * FIRE_GAIN * fireLevel;
+  },
+  charge: 0,
+  uv: 0,
+};
+
+/** Stand the torch's flame at (x, y), burning at `level` of its steady light (its flicker), lit `charge` (0 puts it out). */
+export function setFire(x: number, y: number, level: number, charge: number) {
+  fireLight.x = x;
+  fireLight.y = y;
+  fireLevel = level;
+  fireLight.charge = charge;
+  emitterChanged();
+}
+
 /** How brightly the flare is burning this moment, for what draws its flame. */
 export function flareBrightness(): number {
   return flareLight.charge * flareFlicker;
@@ -505,6 +549,7 @@ export function pointLights(): Light[] {
   if (flashLight.charge > 0) out.push(flashLight);
   if (flareLight.charge > 0) out.push(flareLight);
   if (torchLight.charge > 0) out.push(torchLight);
+  if (fireLight.charge > 0) out.push(fireLight);
   for (const e of emitters) if (e.charge > 0) out.push(e);
   return out;
 }
@@ -516,6 +561,7 @@ export function strongestCharge(): number {
     flashLight.charge,
     flareLight.charge,
     torchLight.charge,
+    fireLight.charge,
   );
   for (const e of emitters) strongest = Math.max(strongest, e.charge);
   return strongest;

@@ -6,6 +6,7 @@ import { LaserBeam } from "@/components/site/LaserBeam";
 import { Hammer } from "@/components/site/Hammer";
 import { Flashlight } from "@/components/site/Flashlight";
 import { SprayBottle } from "@/components/site/SprayBottle";
+import { FireTorch } from "@/components/site/FireTorch";
 import {
   heldTool,
   holdTool,
@@ -57,6 +58,12 @@ const ICONS: Record<ToolId, React.ReactNode> = {
     <>
       <path d="M4.5 5.5 9 3l2.5 2.5L9 8z" />
       <path d="m8.5 7.5 8 8.5" />
+    </>
+  ),
+  fire: (
+    <>
+      <path d="M9 18.5 10.5 11" />
+      <path d="M10.6 10.5c-2.4-.6-3-3.3-1.2-5.6.2 1.4 1.2 1.6 1.4.4.3-1.4 1.6-2.4 2.2-3.3.4 2.6 2 3.6 1.6 6-.3 1.8-2 2.9-4 2.5Z" />
     </>
   ),
   spray: (
@@ -124,6 +131,7 @@ export function HeldTool() {
       {held === "flashlight" ? <Flashlight /> : null}
       {held === "hammer" ? <Hammer /> : null}
       {held === "spray" ? <SprayBottle /> : null}
+      {held === "fire" ? <FireTorch /> : null}
       {tray ? <Tray held={held} /> : null}
     </>
   );

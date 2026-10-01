@@ -38,7 +38,15 @@ function chosenTool(): ToolId {
  */
 
 export type ToolId =
-  "lamp" | "blacklight" | "flare" | "laser" | "magnifier" | "flashlight" | "hammer" | "spray";
+  | "lamp"
+  | "blacklight"
+  | "flare"
+  | "laser"
+  | "magnifier"
+  | "flashlight"
+  | "hammer"
+  | "spray"
+  | "fire";
 
 export type Tool = {
   id: ToolId;
@@ -80,6 +88,11 @@ export const TOOLS: readonly Tool[] = [
    * hand to see the drops by, as with the hammer.
    */
   { id: "spray", label: "Spray bottle", lamp: "white", lampSeen: true },
+  /*
+   * A burning torch (task 82, ?try=fire): its own flickering firelight,
+   * so the lamp is put down; the room goes dark round it.
+   */
+  { id: "fire", label: "Torch (fire)", lamp: null, lampSeen: false },
 ];
 
 const byId = new Map(TOOLS.map((t) => [t.id, t]));
@@ -89,7 +102,7 @@ const watchers = new Set<(id: ToolId) => void>();
 
 /** The tool the address starts with, the lamp if none. */
 function initialTool(): ToolId {
-  for (const id of ["blacklight", "flare", "laser", "magnifier", "flashlight"] as const) {
+  for (const id of ["blacklight", "flare", "laser", "magnifier", "flashlight", "fire"] as const) {
     if (previewing(id)) return id;
   }
   return chosenTool();
@@ -167,7 +180,10 @@ export function toolTray(): boolean {
 /** The tools on offer: the hammer only while breaking glass is tried (?try=broken), the spray bottle only with the drops (?try=drops). */
 export function toolsOffered(): readonly Tool[] {
   return TOOLS.filter(
-    (t) => (t.id !== "hammer" || previewing("broken")) && (t.id !== "spray" || previewing("drops")),
+    (t) =>
+      (t.id !== "hammer" || previewing("broken")) &&
+      (t.id !== "spray" || previewing("drops")) &&
+      (t.id !== "fire" || previewing("fire") || previewing("tools")),
   );
 }
 
