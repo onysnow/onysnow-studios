@@ -1,3 +1,4 @@
+import { previewing } from "@/effects/engine/preview";
 import { bevelField } from "./bevel-map";
 import { FLOAT_GLASS } from "@/effects/materials/presets";
 import { PANE_THICKNESS } from "@/effects/optics/edge-side";
@@ -102,6 +103,7 @@ function encode(
     ior: GLASS_IOR,
     straight,
     wave: waveShift > 0 ? { shift: waveShift, seed: waveSeed, cssPerMap: 1 / scale } : undefined,
+    cornerSoft: previewing("corners") ? edgeWidth * scale : 0,
   });
 
   const canvas = document.createElement("canvas");

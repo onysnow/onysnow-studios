@@ -1,7 +1,11 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { Img, type ImgSource } from "./Img";
 import { cn } from "@/lib/utils";
+import { camera } from "@/effects/camera/camera";
+import { previewing } from "@/effects/engine/preview";
+import { scrollSlide } from "@/effects/optics/viewpoint";
+import { paneCauses } from "@/effects/scene/scene";
 
 /**
  * Room for a glass band to sit over this photograph's edge.
@@ -74,7 +78,45 @@ export function ParallaxScene({
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end start"] });
 
   const shift = DEPTH[depth] * 100;
-  const y = useTransform(scrollYProgress, [0, 1], [`-${shift}%`, `${shift}%`]);
+  /*
+   * ?try=gapparallax (item 33): how far the photograph lags the glass comes
+   * from the pane standing over it -- its gap and the eye's distance
+   * (effects/optics/viewpoint, scrollSlide) -- rather than a depth preset.
+   * Across the whole time the section is on screen the page scrolls by the
+   * screen's height plus the section's, so the photograph lags by that
+   * times gap / (distance + gap), half each side of the middle.
+   */
+  const [physical, setPhysical] = useState<number | null>(null);
+  useEffect(() => {
+    if (!previewing("gapparallax")) return;
+    const measure = () => {
+      const node = ref.current;
+      if (!node) return setPhysical(null);
+      // The pane over this photograph: inside it, or a band across its edge.
+      const box = node.getBoundingClientRect();
+      const pane =
+        node.querySelector<HTMLElement>(".glass:not(.glass--bar)") ??
+        [...document.querySelectorAll<HTMLElement>(".glass:not(.glass--bar)")].find((g) => {
+          const r = g.getBoundingClientRect();
+          return (
+            r.bottom > box.top && r.top < box.bottom && r.right > box.left && r.left < box.right
+          );
+        });
+      if (!pane) return setPhysical(null);
+      const vw = document.documentElement.clientWidth || window.innerWidth;
+      const vh = document.documentElement.clientHeight || window.innerHeight;
+      const travel = vh + box.height;
+      setPhysical(scrollSlide(travel / 2, paneCauses(pane).gap, camera.distance(vw)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  const y = useTransform(
+    scrollYProgress,
+    [0, 1],
+    physical === null ? [`-${shift}%`, `${shift}%`] : [`${-physical}px`, `${physical}px`],
+  );
 
   return (
     /*

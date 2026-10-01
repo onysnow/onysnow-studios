@@ -18,9 +18,13 @@
 
 import { LAMP_POWER_PER_GAIN } from "@/effects/optics/reflection";
 import { t } from "@/lib/tuning";
+import { previewing } from "@/effects/engine/preview";
 import { camera } from "@/effects/camera/camera";
 import { lampMode, onToolChange } from "@/effects/tools/held";
 import { flareFlickerAt } from "./flame";
+import type { Aim } from "./beam";
+import { blackbodyRgb } from "./blackbody";
+import { SAFELIGHT_COLOUR, onRedRoom, redRoomOn } from "@/effects/secrets/red-room";
 
 export type LightKind =
   /** A lamp at a point: the cursor's. */
@@ -68,6 +72,18 @@ export type Light = {
    * nearest point on the line.
    */
   readonly span?: readonly [number, number] | undefined;
+  /**
+   * For a beam (a flashlight, item 25i), the way it points: a unit vector,
+   * z up out of the page. Lights without one shine all round
+   * (effects/light/beam).
+   */
+  readonly aim?: Aim | undefined;
+  /**
+   * A light UNDER the glass, on the photographs (a photograph's own bright
+   * spot, item 31): it shines up into the pane from `height` below it, and
+   * lights nothing on the photographs' own plane.
+   */
+  readonly below?: boolean;
 };
 
 /** The lamp's colour: a warm white, a little under daylight. */
@@ -103,7 +119,11 @@ export const cursorLamp: Light = {
     return t("shadowSoftness");
   },
   get colour() {
-    return lampMode() === "uv" ? BLACKLIGHT_VISIBLE : LAMP_COLOUR;
+    if (lampMode() === "uv") return BLACKLIGHT_VISIBLE;
+    // In the red room (item 39) the only light is the safelight's red.
+    if (redRoomOn()) return SAFELIGHT_COLOUR;
+    // ?try=kelvin (item 32): the lamp glows as a blackbody at its temperature.
+    return previewing("kelvin") ? blackbodyRgb(t("lampKelvin")) : LAMP_COLOUR;
   },
   get gain() {
     return t("coreGain");
@@ -364,6 +384,50 @@ export function makeEmitter(
   };
 }
 
+/** A light under the glass that can be moved and recoloured: `set` its colour and radius. */
+export type UnderLight = Light & {
+  x: number;
+  y: number;
+  charge: number;
+  set: (colour: readonly [number, number, number], radius: number) => void;
+};
+
+/**
+ * A light under the glass, on the photographs (item 31: a photograph's own
+ * bright spot): it shines up across the gap to the glass ("Glass height"),
+ * `share` of the lamp's strength at full charge. Its colour and size are
+ * whatever spot it stands for at the moment.
+ */
+export function makeUnderLight(id: string, share: number): UnderLight {
+  let colour: readonly [number, number, number] = [1, 1, 1];
+  let radius = 8;
+  return {
+    id,
+    kind: "point",
+    x: -9999,
+    y: -9999,
+    get height() {
+      return t("floorGap");
+    },
+    get radius() {
+      return radius;
+    },
+    get colour() {
+      return colour;
+    },
+    get gain() {
+      return t("coreGain") * share;
+    },
+    charge: 0,
+    uv: 0,
+    below: true,
+    set(c, r) {
+      colour = c;
+      radius = r;
+    },
+  };
+}
+
 /** Add an emitter to the scene (returns the removal). */
 export function addEmitter(light: Light): () => void {
   emitters.add(light);
@@ -380,18 +444,111 @@ export function emitterChanged() {
   for (const fn of flashWatchers) fn();
 }
 
-/** The lights that stand at a point: the lamp, the flash and the flare while they burn, and the emitters. */
+/*
+ * A flashlight (item 25i, the "Flashlight" tool): a white LED behind a
+ * reflector, so a beam (effects/light/beam) -- a bright hotspot and a dim
+ * spill -- rather than a light all round. It stands where the hand holds it,
+ * the lamp's height above the page; pressed and held, it stays where it was
+ * pressed and turns to point where the pointer goes (components/site/
+ * Flashlight moves and aims it). Its centre is far brighter than the bare
+ * lamp, as a reflector's is: the same light, gathered into a few degrees.
+ * A cool white, as a white LED's blue pump makes it -- which also means it
+ * charges glow paint (effects/materials/phosphor), as a real LED torch does.
+ */
+export const TORCH_COLOUR = [0.9, 0.96, 1.0] as const;
+/** The lens's radius, CSS px. */
+export const TORCH_RADIUS = 12;
+/** The hotspot's centre against the lamp's own strength. */
+export const TORCH_GAIN = 3;
+
+let torchAim: Aim = [0, 0, -1];
+export const torchLight: Light = {
+  id: "torch",
+  kind: "point",
+  x: -9999,
+  y: -9999,
+  get height() {
+    return t("shadowHeight");
+  },
+  radius: TORCH_RADIUS,
+  colour: TORCH_COLOUR,
+  get gain() {
+    return t("coreGain") * TORCH_GAIN;
+  },
+  charge: 0,
+  uv: 0,
+  get aim() {
+    return torchAim;
+  },
+};
+
+/** Stand the torch at (x, y), pointing along `aim`, burning at `charge` (0 puts it out). */
+export function setTorch(x: number, y: number, aim: Aim, charge: number) {
+  torchLight.x = x;
+  torchLight.y = y;
+  torchAim = aim;
+  torchLight.charge = charge;
+  emitterChanged();
+}
+
+/*
+ * A backlight (item 31b, ?try=backlight): one light behind the glass, under
+ * the middle of the screen, as big as a lightbox -- half the screen across,
+ * so what it lights it lights softly and evenly -- the gap below the panes.
+ * White, as a lightbox's daylight tubes are. The "Backlight" knob sets how
+ * strong it is against the lamp; 0 puts it out.
+ */
+export const BACKLIGHT_COLOUR = [0.97, 0.99, 1.0] as const;
+let backlightViewport = { w: 1280, h: 800 };
+export const backLight: Light = {
+  id: "backlight",
+  kind: "point",
+  get x() {
+    return backlightViewport.w / 2;
+  },
+  set x(_v: number) {},
+  get y() {
+    return backlightViewport.h / 2;
+  },
+  set y(_v: number) {},
+  get height() {
+    return t("floorGap");
+  },
+  get radius() {
+    return Math.min(backlightViewport.w, backlightViewport.h) / 2;
+  },
+  colour: BACKLIGHT_COLOUR,
+  get gain() {
+    return t("coreGain") * t("backlight");
+  },
+  get charge() {
+    return previewing("backlight") && t("backlight") > 0 ? 1 : 0;
+  },
+  set charge(_v: number) {},
+  uv: 0,
+  below: true,
+};
+
+/** The lights that stand at a point: the lamp, the flash, the flare and the torch while they burn, and the emitters. */
 export function pointLights(): Light[] {
   const out = lights.filter((l) => l.kind === "point");
   if (flashLight.charge > 0) out.push(flashLight);
   if (flareLight.charge > 0) out.push(flareLight);
+  if (torchLight.charge > 0) out.push(torchLight);
+  if (backLight.charge > 0) out.push(backLight);
   for (const e of emitters) if (e.charge > 0) out.push(e);
   return out;
 }
 
 /** How hard the most strongly burning point light is burning: whether to draw at all. */
 export function strongestCharge(): number {
-  let strongest = Math.max(cursorLamp.charge, flashLight.charge, flareLight.charge);
+  let strongest = Math.max(
+    cursorLamp.charge,
+    flashLight.charge,
+    flareLight.charge,
+    torchLight.charge,
+    backLight.charge,
+  );
   for (const e of emitters) strongest = Math.max(strongest, e.charge);
   return strongest;
 }
@@ -406,6 +563,12 @@ export const pointer = { x: -9999, y: -9999 };
 export function commitLights() {
   cursorLamp.x = pointer.x;
   cursorLamp.y = pointer.y;
+  if (typeof document !== "undefined") {
+    backlightViewport = {
+      w: document.documentElement.clientWidth || window.innerWidth,
+      h: document.documentElement.clientHeight || window.innerHeight,
+    };
+  }
 }
 
 const changeWatchers = new Set<() => void>();
@@ -426,6 +589,11 @@ function changed() {
 
 // Picking up another tool changes the lamp: relight everything.
 onToolChange(() => {
+  changed();
+  for (const fn of flashWatchers) fn();
+});
+// So does the red room: the lamp turns to the safelight's red.
+onRedRoom(() => {
   changed();
   for (const fn of flashWatchers) fn();
 });

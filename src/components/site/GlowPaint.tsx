@@ -1,3 +1,4 @@
+import { beamFactor } from "@/effects/light/beam";
 import { useEffect, useRef } from "react";
 import {
   FLASH_DECAY,
@@ -96,7 +97,9 @@ export function GlowPaint({ className }: { className?: string }) {
           const px = rect.left + (i + 0.5) * CELL;
           const py = rect.top + (j + 0.5) * CELL;
           const [lx, ly] = nearestOnLight([px, py], [light.x, light.y], light.span);
-          const reach = irradianceFalloff(Math.hypot(px - lx, py - ly), light.height);
+          const reach =
+            irradianceFalloff(Math.hypot(px - lx, py - ly), light.height) *
+            beamFactor(light.aim, px - lx, py - ly, -light.height);
           if (reach > 0.002) excite(cells[j * cols + i]!, strength * reach);
         }
       }
@@ -136,7 +139,7 @@ export function GlowPaint({ className }: { className?: string }) {
       const rect = host.getBoundingClientRect();
       // Every light charges what it reaches, by how much of it is short enough to.
       charging = false;
-      const lamps = pointLights().filter((l) => l.id !== glowLight.id && l.charge > 0);
+      const lamps = pointLights().filter((l) => l.id !== glowLight.id && l.charge > 0 && !l.below);
       const reference = Math.max(cursorLamp.gain, 1e-6);
       for (const light of lamps) {
         const share = excitationShare(light);

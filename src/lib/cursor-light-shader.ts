@@ -35,6 +35,19 @@ uniform float uAperture;   // tunable: hexagon radius
 uniform float uSpread;     // tunable: size at zero charge relative to full
 uniform float uGhostGain;  // tunable
 uniform float uHaloGain;   // tunable
+// The lens's make-up (2k; effects/camera). At their defaults the flare is
+// exactly what it was before they existed.
+uniform float uGhostCount;   // reflections that reach the sensor (7)
+uniform float uGhostSpacing; // along the axis (0.34)
+uniform float uGhostSize;    // (1)
+uniform float uGhostShape;   // -1 crisp polygon .. 1 disc (0)
+uniform float uGhostBokeh;   // 0 hollow, rim-bright .. 1 soft filled disc (0)
+uniform float uBlades;       // the iris's blade count (6)
+uniform float uCatsEye;      // how hard the barrel clips off-axis ghosts (1)
+uniform float uRainbow;      // how much the coatings disperse (1)
+uniform float uHaloRings;    // rings of the big halo (2)
+uniform float uHaloSize;     // (1)
+uniform float uSpikes;       // the diffraction star (1)
 uniform vec3  uWarm;       // the amber, linear
 uniform vec3  uCool;       // the teal, linear
 uniform sampler2D uGrit;   // photographed surface, for the ghosts' insides
@@ -42,12 +55,17 @@ uniform float uHasGrit;
 uniform vec3  uEmit;       // the lamp's visible light against the lamp's own white: 1 for the lamp, the dull leak for the black light
 
 #define TAU 6.28318530718
-#define BLADES 6.0
-#define GHOSTS 7
+#define MAX_GHOSTS 24
+#define MAX_HALO_RINGS 8
 
 /* A cosine palette: smooth, wrapping, and no lookup texture. */
 vec3 spectrum(float t) {
   return 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.33, 0.67)));
+}
+
+/* The same, as saturated as the coatings' dispersion makes it: 1 is the palette. */
+vec3 dispersed(float t) {
+  return max(mix(vec3(0.5), spectrum(t), uRainbow), 0.0);
 }
 
 /*
@@ -58,7 +76,7 @@ vec3 spectrum(float t) {
 float apertureDistance(vec2 p, float roundness) {
   float phi = atan(p.y, p.x);
   float r = length(p);
-  float anglePerBlade = TAU / BLADES;
+  float anglePerBlade = TAU / uBlades;
   float bladePhi = mod(phi, anglePerBlade) - anglePerBlade * 0.5;
   float d = r * cos(bladePhi);
   return mix(d, r, roundness);
@@ -66,16 +84,16 @@ float apertureDistance(vec2 p, float roundness) {
 
 /*
  * Diffraction spikes. An aperture with an even number of blades throws that
- * many spikes, which is why this shares BLADES with the geometry above rather
+ * many spikes, which is why this shares the blade count (uBlades) with the geometry above rather
  * than being a separate decorative number. They fringe into spectrum along
  * their length because the grating that makes them is dispersive.
  */
 vec3 starburst(vec2 p, float r) {
   float phi = atan(p.y, p.x);
-  float lobes = abs(cos(phi * BLADES * 0.5));
+  float lobes = abs(cos(phi * uBlades * 0.5));
   float spike = pow(lobes, 70.0) * exp(-r * 3.4);
-  vec3 tint = mix(vec3(1.0), spectrum(r * 1.6 + 0.1), 0.65);
-  return tint * spike * 4.6;
+  vec3 tint = mix(vec3(1.0), dispersed(r * 1.6 + 0.1), min(0.65 * uRainbow, 1.0));
+  return tint * spike * 4.6 * uSpikes;
 }
 
 /*
@@ -153,8 +171,8 @@ void main() {
    */
   vec3 dispersion = vec3(
     1.0 / (1.0 + 250.0 * r * r),
-    1.0 / (1.0 + 268.0 * r * r),
-    1.0 / (1.0 + 290.0 * r * r)
+    1.0 / (1.0 + (250.0 + 18.0 * uRainbow) * r * r),
+    1.0 / (1.0 + (250.0 + 40.0 * uRainbow) * r * r)
   ) * gain * 0.34;
 
   // Warm core, cooler in the far falloff — hot sources read warm at the centre
@@ -179,9 +197,10 @@ void main() {
   vec2 centre = res * 0.5;
   vec2 axis = (centre - uLight) / unit;
 
-  for (int i = 0; i < GHOSTS; i++) {
+  for (int i = 0; i < MAX_GHOSTS; i++) {
     float fi = float(i);
-    float t = 0.35 + fi * 0.34;
+    if (fi >= uGhostCount) break;
+    float t = 0.35 + fi * uGhostSpacing;
     vec2 gp = p - axis * t;
 
     /*
@@ -197,10 +216,10 @@ void main() {
     vec2 clipDir = normalize(fromCentre + 1e-6);
     // A bite, not a bisection. Vignetting clips a ghost; it does not halve it
     // except at the extreme corners of a frame.
-    float offAxis = clamp(length(fromCentre) * 0.55, 0.0, 1.0);
+    float offAxis = clamp(length(fromCentre) * 0.55 * uCatsEye, 0.0, 1.0);
     float cut = dot(gp, clipDir);
 
-    float radius = 0.045 + 0.075 * fract(fi * 0.62 + 0.2);
+    float radius = (0.045 + 0.075 * fract(fi * 0.62 + 0.2)) * uGhostSize;
     /*
      * How far THIS pair of surfaces sits from focus.
      *
@@ -210,7 +229,8 @@ void main() {
      * is what turns them into separate reflections.
      */
     float defocus = fract(fi * 0.53 + 0.11);
-    float thickness = radius * (0.16 + 0.14 * fract(fi * 0.37)) * (1.0 + 2.2 * defocus);
+    float thickness = radius * (0.16 + 0.14 * fract(fi * 0.37)) * (1.0 + 2.2 * defocus)
+      * (1.0 + 3.0 * uGhostBokeh);
 
     /*
      * A ghost is an IMAGE OF THE APERTURE, not a disc.
@@ -239,7 +259,7 @@ void main() {
      * show both in the same frame, which is a large part of why they do not
      * read as repeats.
      */
-    float roundness = mix(mix(0.55, 0.18, uClosed), 0.95, defocus * 0.8);
+    float roundness = clamp(mix(mix(0.55, 0.18, uClosed), 0.95, defocus * 0.8) + uGhostShape, 0.0, 1.0);
 
     /*
      * And each arrives at its own ORIENTATION. The aperture is one hexagon,
@@ -269,7 +289,7 @@ void main() {
      * ghost, because the cause is the same — the coating disperses, so each
      * wavelength images the aperture at a fractionally different size.
      */
-    vec3 disp = vec3(0.985, 1.0, 1.018);
+    vec3 disp = vec3(1.0 - 0.015 * uRainbow, 1.0, 1.0 + 0.018 * uRainbow);
     vec3 ring = exp(-pow((vec3(d2) - radius * disp) / thickness, vec3(2.0)));
     /*
      * A ghost has an inside, not just an edge. It is a defocused image of a
@@ -277,10 +297,15 @@ void main() {
      * because the defocus piles light up there, but a ghost drawn as an
      * outline reads as a ring rather than as an aperture.
      */
-    float disc = smoothstep(radius, radius * 0.55, d2) * 0.62;
-    vec3 shape = vec3(disc) + ring * 0.9;
+    // Bokeh: a ghost further from focus fills in evenly and loses its bright rim.
+    float disc = smoothstep(radius, radius * mix(0.55, 0.25, uGhostBokeh), d2) * mix(0.62, 1.0, uGhostBokeh);
+    vec3 shape = vec3(disc) + ring * mix(0.9, 0.25, uGhostBokeh);
     // The barrel takes a bite out of the side nearer the frame edge.
-    shape *= smoothstep(radius * (0.6 + offAxis), radius * (0.6 + offAxis) - radius * 0.9, cut);
+    shape *= mix(
+      1.0,
+      smoothstep(radius * (0.6 + offAxis), radius * (0.6 + offAxis) - radius * 0.9, cut),
+      min(uCatsEye, 1.0)
+    );
 
     /*
      * And the inside is not smooth. A ghost is a defocused image of a real
@@ -308,7 +333,7 @@ void main() {
     );
     vec3 grit = mix(vec3(1.0), 0.72 + 1.1 * gritRGB, uHasGrit);
 
-    vec3 gt = spectrum(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
+    vec3 gt = dispersed(fi * 0.23 + 0.42) * (0.7 + 0.6 * fract(fi * 0.71));
     /*
      * Not all equally bright. A ghost's energy is the product of the
      * reflectances of the two surfaces that made it, and coatings differ
@@ -317,7 +342,7 @@ void main() {
      * having gone through more glass to get there.
      */
     float pairEfficiency =
-      (0.3 + 0.7 * fract(fi * 0.83 + 0.27)) * mix(1.1, 0.45, fi / float(GHOSTS));
+      (0.3 + 0.7 * fract(fi * 0.83 + 0.27)) * mix(1.1, 0.45, fi / max(uGhostCount, 1.0));
     colour += gt * shape * grit * uGhostGain * pairEfficiency * uCharge;
   }
 
@@ -334,10 +359,17 @@ void main() {
    */
   vec2 fromAxis = (frag - centre) / unit;
   float axisR = length(fromAxis);
-  float haloR = 0.30 + 0.22 * length(axis);
-  float halo1 = exp(-pow((axisR - haloR) / 0.045, 2.0)) * 0.9 * uHaloGain
-              + exp(-pow((axisR - haloR * 1.48) / 0.09, 2.0)) * 0.35;
-  colour += spectrum(axisR * 3.4 + 0.12) * halo1 * 0.85 * uCharge;
+  float haloR = (0.30 + 0.22 * length(axis)) * uHaloSize;
+  float halo1 = exp(-pow((axisR - haloR) / 0.045, 2.0)) * 0.9 * uHaloGain;
+  // Its further rings, each wider and fainter (two rings in all was the original).
+  for (int k = 1; k < MAX_HALO_RINGS; k++) {
+    float fk = float(k);
+    if (fk >= uHaloRings) break;
+    float ringR = haloR * pow(1.48, fk);
+    float width = 0.09 * pow(1.35, fk - 1.0);
+    halo1 += exp(-pow((axisR - ringR) / width, 2.0)) * 0.35 * pow(0.7, fk - 1.0);
+  }
+  colour += dispersed(axisR * 3.4 + 0.12) * halo1 * 0.85 * uCharge;
 
   /*
    * And the whole flare fades as the source leaves the middle of the frame.

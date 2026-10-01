@@ -14,6 +14,8 @@
  */
 
 /** What can be tried, and what each one is. */
+import { experimentsAllowed } from "@/lib/admin-gate";
+
 export const PREVIEWS = {
   /** Scratches and smudges block and scatter in proportion to each pixel's opacity. */
   marks: "Scratches and smudges act in proportion to how much of each pixel they cover",
@@ -31,20 +33,50 @@ export const PREVIEWS = {
     "A detective's magnifying glass where the lamp is: the live page enlarged through a real lens, swimming and colour-fringed at the rim",
   flare:
     "A burning road flare where the lamp is: deep red, flickering and sputtering, lighting the glass and the photographs",
+  polariser:
+    "Light engine step H: the glass's reflections by the exact Fresnel equations, s and p apart, and a polarising filter on the camera (Camera > Polarising filter) to cut or keep them",
+  roughglass:
+    "Light engine step H: the light through a frosted face from its microfacets (Walter et al. 2007) -- how much gets through and how widely it scatters -- in place of two rules of thumb",
+  photolights:
+    "Light engine step I: the brightest spots of the photographs behind the panes -- neon, windows, lamps they recorded -- are lights under the glass, shining up into it in their own colour and following the photographs as they slide",
+  backlight:
+    "Light engine step I: a light behind the glass, under the photographs, like a lightbox (Environment > Backlight): the panes glow from beneath and their rims catch it",
+  kelvin:
+    "The lamp's colour from its temperature, as a camera's white balance speaks of it (Light > Lamp colour temperature): a blackbody's glow, 1900 K candle to 10000 K blue sky",
+  vignette:
+    "The lens's natural vignetting (Camera > Vignetting): the picture's corners darker by cos^4 of their angle off the lens's axis, as in a photograph",
+  coating:
+    "Museum and opal glass on Lab samples: polished glass with an anti-reflection coating on each face (a quarter wave of magnesium fluoride) beside the same glass bare -- the room's reflection falls to a third and turns faintly purple -- and opal glass, which scatters blue in its volume (Rayleigh): lit, it glows faintly blue and what comes through lands warm",
+  gapparallax:
+    "Item 33: how far a photograph slides under its glass as you scroll comes from how far the glass stands off it and how far away your eye is (gap / (distance + gap)), not from a depth preset",
+  quality:
+    "Item 34: quality tiers -- a device with 4 GB or less, 4 cores or fewer, no GPU, or frames that keep coming slow runs a lighter site (the light drawn at 1 device pixel per CSS pixel, the bokeh layer off); force one with ?quality=full|lite|minimal",
+  redroom:
+    "Item 39, secret 2: take a picture of a photograph (wind the shutter, click one) and the page goes dark but for the safelight -- everything a negative in red, as a print looks in the developer tray; the cursor is a loupe showing the true frame; the picture you took comes up in the developer and hangs on the line on a cord, swinging as a real one does -- grab it and swing it; Lights on or Escape leaves",
+  flashlight:
+    "A flashlight where the lamp is (item 25i): a beam -- a bright hotspot and a dim spill. Press and hold to plant it; it stays where you pressed and turns to point where the pointer goes, lighting whatever the beam falls on",
   laser:
     "A laser pointer's beam across the page (?laser=red|green|violet): it enters the panes at their edges, bends, splits, is guided and absorbed as real glass does; press and drag to aim",
   bounce:
     "Light bouncing off a lit photograph lights the frosted glass above it from below, in the photograph's colour (light engine step F)",
+  corners:
+    "The bevel's lines round each corner in a curve instead of meeting in a mitre, so no thin line runs in from the corners (item 2a)",
   contact:
     "Two panes resting dry on each other (the Contact stack on Lab samples): the air film between them shows Newton's colours where both faces are polished, black where they touch (light engine step G)",
   broken:
     "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
+  stackedges:
+    "Item 2a follow-up: the upper pane of a stack throws its own edge onto the photograph -- the dark rim under its bevel and the bright seam inside it, and the floor seen through it bends at its bevel -- which went missing with 8ed097c (Ony, 2026-10-01: the shadow at the left corner); the stack's light is still counted once",
+  shardlight:
+    "Item 10 step 3b, with ?try=broken: each piece of a broken pane mirrors the room at its own slope, per pixel in the glass shader -- a mirror turned by t turns the reflection by 2t, so the room's reflection breaks up piece by piece along the cracks; a hole reflects nothing",
   solids:
     "Glass solids on Lab samples -- prism, sphere, cube, cone, pyramid, rod -- ray traced through their glass",
   tools:
     "A tray to pick what you hold -- lamp, black light, flare, laser or magnifier -- one at a time",
   liquidlights:
     "Liquid glass lit only by the scene's lights: its own fixed gloss, rim glow, white Fresnel and drop shadow are off",
+  liquidedge:
+    "Liquid glass edges the way the CSS glass draws them: the bevel bends by Snell through the pane's own edge and thickness (the same numbers as the CSS bend), colours split by the glass's own dispersion, the pane's smoky fill, no drawn rim lines, and none of the library's own fixed lights -- on a band they are the bright streaks across the screen (2j; includes liquidlights)",
 } as const;
 
 export type PreviewName = keyof typeof PREVIEWS;
@@ -55,6 +87,11 @@ function read(): ReadonlySet<string> {
   if (active) return active;
   if (typeof window === "undefined") return new Set();
   let list: string[] = [];
+  // Only for Ony signed in as the admin (item 48; lib/admin-gate).
+  if (!experimentsAllowed()) {
+    active = new Set();
+    return active;
+  }
   try {
     list = (new URLSearchParams(window.location.search).get("try") ?? "")
       .split(",")

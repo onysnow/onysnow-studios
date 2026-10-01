@@ -44,6 +44,7 @@ import { waveSlope } from "@/effects/optics/waviness";
 import {
   refractionOffset,
   roundedRectSDF,
+  roundedRectSDFSmooth,
   type SurfaceProfile,
 } from "@/effects/optics/edge-profile";
 export { refractionOffset, roundedRectSDF, surfaceHeight } from "@/effects/optics/edge-profile";
@@ -86,6 +87,8 @@ export type BevelOptions = {
    * CSS px one map pixel stands for; `seed` which surface the pane wears.
    */
   wave?: { shift: number; seed: number; cssPerMap: number } | undefined;
+  /** ?try=corners: round the bevel's contours through the corners over this depth, map px. */
+  cornerSoft?: number;
 };
 
 /**
@@ -118,7 +121,14 @@ export function bevelField(
       const px = options.straight ? 0 : x + 0.5 - halfW;
       const py = y + 0.5 - halfH;
 
-      const inside = -roundedRectSDF(px, py, halfW, halfH, radius);
+      const inside = -roundedRectSDFSmooth(
+        px,
+        py,
+        halfW,
+        halfH,
+        radius,
+        options.straight ? 0 : (options.cornerSoft ?? 0),
+      );
       if (inside <= 0) continue;
       const i = y * width + x;
       if (wave && wave.shift > 0) {
@@ -145,10 +155,13 @@ export function bevelField(
        * it. The magnitude is Snell. Separating the two is what lets one
        * one-dimensional profile wrap correctly around a two-dimensional pane.
        */
-      const dR = -roundedRectSDF(px + e, py, halfW, halfH, radius);
-      const dL = -roundedRectSDF(px - e, py, halfW, halfH, radius);
-      const dD = -roundedRectSDF(px, py + e, halfW, halfH, radius);
-      const dU = -roundedRectSDF(px, py - e, halfW, halfH, radius);
+      const soft = options.straight ? 0 : (options.cornerSoft ?? 0);
+      const sdf = (qx: number, qy: number) =>
+        roundedRectSDFSmooth(qx, qy, halfW, halfH, radius, soft);
+      const dR = -sdf(px + e, py);
+      const dL = -sdf(px - e, py);
+      const dD = -sdf(px, py + e);
+      const dU = -sdf(px, py - e);
 
       let gx = (dR - dL) / (2 * e);
       let gy = (dD - dU) / (2 * e);

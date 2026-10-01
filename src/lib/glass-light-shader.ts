@@ -3,6 +3,7 @@ import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
+import { SHARD_MAP_GLSL } from "@/effects/optics/shard-map";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { LAMP_COLOUR } from "@/effects/light/lights";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
@@ -112,7 +113,8 @@ uniform float uContact;      // 1: resting dry on the pane below (?try=contact, 
 uniform vec4 uFilmRect;      // where it overlaps that pane, CSS px
 uniform float uFilmSigma;    // rms roughness of the two faces that meet, nm
 uniform sampler2D uFilmLut;  // the air film's reflectance by gap (thin-film filmLut)
-uniform float uFloorGain;    // the floor pass's light gain ("Floor light"): how lit the print is shown
+uniform float uFloorGain;
+uniform float uCornerSoft;   // ?try=corners: how far in the bevel's lines round the corners, px (0: the old mitre)    // the floor pass's light gain ("Floor light"): how lit the print is shown
 uniform float uFaceLamp;    // 1: the face's own image of the lamp is drawn (LAMP_REFLECTION_ENABLED)
 // The lights: position, height above this pane, colour, power, size, charge.
 ${LIGHTS_GLSL}
@@ -140,9 +142,16 @@ uniform vec3 uReflectScale;
  * front face is.
  */
 uniform sampler2D uRoom;
+uniform sampler2D uShardMap;    // a broken pane's pieces (effects/optics/shard-map), pane px
+uniform float uHasShards;       // 1: this pane is broken and ?try=shardlight
 uniform float uHasRoom;
 uniform float uRoomWidth;       // texels round the full 360 degrees
 uniform float uCameraDistance;  // CSS pixels from the screen
+uniform vec3  uScatter;         // opal glass: its volume scattering, sigma * thickness per colour (0 for clear)
+uniform vec3  uCoat;            // what an anti-reflection coating leaves of each reflection (1 for none)
+uniform float uExactFresnel;    // ?try=polariser: s and p Fresnel, and the camera's filter
+uniform float uPolariser;       // how perfect the camera's polarising filter is, 0 none
+uniform float uPolariserAngle;  // its axis, radians across the screen
 uniform float uFrontRoughness;  // GGX alpha of the face you look at
 uniform float uRoomExposure;    // how brightly lit the room is (1: middle grey)
 uniform vec2  uEye;             // the viewer's eye, from the viewport middle, CSS px
@@ -211,6 +220,7 @@ ${REFLECTION_GLSL}
 ${EDGE_SIDE_GLSL}
 ${SURFACE_LAYERS_GLSL}
 ${ENVIRONMENT_GLSL}
+${SHARD_MAP_GLSL}
 ${SHADOW_GLSL}
 
 /*
@@ -277,6 +287,27 @@ vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
 
 ${BOKEH_GLSL}
 ${CONTACT_GAP_GLSL}
+
+/*
+ * The pane's signed distance, with the bevel's lines rounded through the
+ * corners (?try=corners, item 2a). A rounded box's inner contours keep its
+ * corner radius only until they are that deep; past it they meet in a mitre,
+ * and the bevel's normal flips across the diagonal -- a thin line running in
+ * from every corner. Here the depth to the two nearest sides is joined by a
+ * smooth minimum as wide as their mean depth (capped at uCornerSoft), so the
+ * rim is untouched and every contour inside curves round the corner
+ * (edge-profile roundedRectSDFSmooth is the twin).
+ */
+float paneField(vec2 p, vec2 halfSize, float radius) {
+  float d0 = roundedBox(p, halfSize, radius);
+  if (uCornerSoft <= 0.0 || d0 >= 0.0) return d0;
+  vec2 e = halfSize - abs(p);
+  float k = min(0.5 * (e.x + e.y), uCornerSoft);
+  if (k < 1e-3) return d0;
+  float h = max(k - abs(e.x - e.y), 0.0) / k;
+  float m = min(e.x, e.y) - h * h * k * 0.25;
+  return max(d0, -m);
+}
 
 /*
  * The print at a point of the page (?try=bounce): the photograph below the seam
@@ -360,7 +391,8 @@ vec3 plasticFace(vec2 local) {
     for (int i = 0; i < MAX_LIGHTS; i++) {
       if (i >= uLightCount) break;
       vec2 L = nearestOnLight(local + uRect.xy, uLightPos[i].xy, uLightSpan[i]) - uRect.xy;
-      float c = uLightCharge[i];
+      // A beam (a flashlight) lights only what it points at.
+      float c = uLightCharge[i] * beamFactor(uLightAim[i], vec3(local - L, -uLightPos[i].z));
       float lit = c * c * (3.0 - 2.0 * c);
       float over = plasticOver(L, r, uLightRadius[i]);
       // The core's mirror image: sharp, falling off over 1.6 core radii.
@@ -389,7 +421,8 @@ vec3 plasticThrough(vec2 local) {
     float on = 0.0;
     for (int i = 0; i < MAX_LIGHTS; i++) {
       if (i >= uLightCount) break;
-      float c = uLightCharge[i];
+      vec2 Lr = nearestOnLight(r.xy + uRect.xy, uLightPos[i].xy, uLightSpan[i]);
+      float c = uLightCharge[i] * beamFactor(uLightAim[i], vec3(r.xy + uRect.xy - Lr, -uLightPos[i].z));
       on += plasticOver(nearestOnLight(r.xy + uRect.xy, uLightPos[i].xy, uLightSpan[i]) - uRect.xy, r, uLightRadius[i]) * c * c * (3.0 - 2.0 * c);
     }
     if (on <= 0.0) continue;
@@ -441,7 +474,7 @@ void main() {
    * bevel and the bend run straight across and nothing turns a corner.
    */
   vec2 edgeHalf = uStraight > 0.5 ? vec2(1e5, halfSize.y) : halfSize;
-  float d = roundedBox(p, edgeHalf, uRadius);
+  float d = paneField(p, edgeHalf, uRadius);
   float inside = smoothstep(0.5, -0.5, d);
   /*
    * The lit edge's own layer (uGlowOnly) is nothing but the edge and its
@@ -463,10 +496,10 @@ void main() {
    * across the middle, which is exactly how a pane behaves.
    */
   const float EPS = 1.0;
-  float dx = roundedBox(p + vec2(EPS, 0.0), edgeHalf, uRadius)
-           - roundedBox(p - vec2(EPS, 0.0), edgeHalf, uRadius);
-  float dy = roundedBox(p + vec2(0.0, EPS), edgeHalf, uRadius)
-           - roundedBox(p - vec2(0.0, EPS), edgeHalf, uRadius);
+  float dx = paneField(p + vec2(EPS, 0.0), edgeHalf, uRadius)
+           - paneField(p - vec2(EPS, 0.0), edgeHalf, uRadius);
+  float dy = paneField(p + vec2(0.0, EPS), edgeHalf, uRadius)
+           - paneField(p - vec2(0.0, EPS), edgeHalf, uRadius);
   vec2 grad = normalize(vec2(dx, dy) + 1e-6);
 
   float depth = -d;                       // positive inside
@@ -859,7 +892,8 @@ void main() {
     vec2 lightXY = nearestOnLight(frag, uLightPos[i].xy, uLightSpan[i]);
     float lightHeight = uLightPos[i].z;
     float lightPower = uLightPower[i];
-    float charge = uLightCharge[i];
+    // A beam (a flashlight) lights only what it points at (effects/light/beam).
+    float charge = uLightCharge[i] * beamFactor(uLightAim[i], vec3(frag - lightXY, -lightHeight));
 
     // ---- The light, and how far it reaches this point ----
     float dl = distance(frag, lightXY);
@@ -1031,7 +1065,16 @@ void main() {
     vec3 fluor = onFace * uvCos * uvCos * uvCos * unlit * uvShare * FLUOR_GAIN
       * (smear * uOilGlow + glint * uDustGlow);
 
-    lampLight += (tint * face + mirror) * lit + fluor * lit;
+    /*
+     * Opal glass (catalogue item 32d, ?try=opal): the glass itself scatters,
+     * so the clean glass glows where a light reaches it. Of the light that
+     * crosses the slab, 1 - exp(-sigma t) is scattered -- Rayleigh-like,
+     * blue most (sigma ~ lambda^-4) -- and about half of it comes back out
+     * of the face toward you. Arriving at a slant it falls as cos^3.
+     */
+    vec3 opal = onFace * uvCos * uvCos * uvCos * unlit * (1.0 - exp(-uScatter)) * 0.5
+      * (uLightColour[i] / LAMP_WHITE) * (1.0 - uvShare);
+    lampLight += (tint * face + mirror) * lit + fluor * lit + opal * lit;
     lampMirror += mirror * lit;
     lampGlow += tint * rim * lit;
     /*
@@ -1040,7 +1083,7 @@ void main() {
      * white here), a red flare's or a laser spot's reads in its own colour.
      */
     vec3 mirrored = mix(uLightColour[i] / LAMP_WHITE, uLightColour[i], uvShare);
-    lampSpecular += mirrored * specular * inside * lit;
+    lampSpecular += mirrored * specular * inside * lit * uCoat;
     lampEdge += mirrored * bevel * lit;
 
     /*
@@ -1139,14 +1182,41 @@ void main() {
   // across the face as the viewpoint moves.
   vec2 fromCentre = frag - 0.5 * uViewport / uScale - uEye;
   float cosView = uCameraDistance / length(vec3(fromCentre, uCameraDistance));
+  /*
+   * A broken pane (item 10 step 3b, ?try=shardlight): each piece has its own
+   * slope, so it mirrors the room turned by twice its tilt, and its Fresnel
+   * is taken against its own normal. Where a piece has fallen out there is no
+   * glass to reflect anything (effects/optics/shard-map).
+   */
+  vec3 roomDir = vec3(fromCentre, uCameraDistance);
+  float glassHere = 1.0;
+  if (uHasShards > 0.5) {
+    vec4 piece = texture2D(uShardMap, clamp((frag - uRect.xy) / uRect.zw, 0.0, 1.0));
+    vec3 pieceN = shardNormal(piece);
+    vec3 viewRay = normalize(vec3(fromCentre, -uCameraDistance));
+    roomDir = reflect(viewRay, pieceN);
+    cosView = max(-dot(viewRay, pieceN), 0.0);
+    glassHere = piece.a;
+  }
   float reflectance = fresnelSchlick(cosView, uIor);
+  /*
+   * ?try=polariser (step H): exactly, s and p apart. The plane of incidence
+   * holds the view ray and the pane's normal, so on the screen it runs
+   * radially from the point straight under the eye, and the s direction
+   * (square to that plane) runs round it. A filter passes Rs cos^2 + Rp sin^2
+   * of its axis against s.
+   */
+  if (uExactFresnel > 0.5) {
+    float sAngle = atan(fromCentre.y, fromCentre.x + 1e-6) + 1.5707963;
+    reflectance = polarisedReflectance(cosView, uIor, uPolariserAngle - sAngle, uPolariser);
+  }
   reflectance += (1.0 - reflectance) * fresnel;
   float roomBias = roomLod(uFrontRoughness, uRoomWidth) - log2(max(texelsPerPx, 1e-4));
   vec3 room = decodeRadiance(
-    texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
+    texture2D(uRoom, roomUvDir(roomDir), roomBias).rgb
   );
   if (uRoomKnee > 0.0) room = room / (1.0 + room / uRoomKnee);
-  colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale;
+  colour += inside * glassHere * reflectance * room * uRoomExposure * uHasRoom * uReflectScale * uCoat;
 
   /*
    * ---- A dry contact: the air film under this pane (?try=contact) ----

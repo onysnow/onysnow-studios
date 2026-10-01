@@ -1,3 +1,4 @@
+import { passScaleCap } from "@/effects/engine/quality";
 import { useEffect, useRef, useState } from "react";
 import { LIGHT_FRAGMENT_SHADER, LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { LAMP_COLOUR, cursorLamp, onCharge } from "@/effects/light/lights";
@@ -127,9 +128,25 @@ export function CursorLight({
     const uSpread = gl.getUniformLocation(program, "uSpread");
     const uGhostGain = gl.getUniformLocation(program, "uGhostGain");
     const uHaloGain = gl.getUniformLocation(program, "uHaloGain");
+    const lensUniforms = {
+      uGhostCount: () => camera.lens.ghostCount,
+      uGhostSpacing: () => camera.lens.ghostSpacing,
+      uGhostSize: () => camera.lens.ghostSize,
+      uGhostShape: () => camera.lens.ghostShape,
+      uGhostBokeh: () => camera.lens.ghostBokeh,
+      uBlades: () => camera.lens.blades,
+      uCatsEye: () => camera.lens.catsEye,
+      uRainbow: () => camera.lens.rainbow,
+      uHaloRings: () => camera.lens.haloRings,
+      uHaloSize: () => camera.lens.haloSize,
+      uSpikes: () => camera.lens.spikes,
+    };
+    const lensLocations = Object.entries(lensUniforms).map(
+      ([name, read]) => [gl.getUniformLocation(program, name), read] as const,
+    );
 
     const size = () => {
-      const scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      const scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, passScaleCap()));
       return {
         scale,
         w: Math.round(viewportWidth() * scale),
@@ -217,6 +234,7 @@ export function CursorLight({
       gl.uniform1f(uSpread, camera.apertureGrowth);
       gl.uniform1f(uGhostGain, camera.lens.ghosts);
       gl.uniform1f(uHaloGain, camera.lens.halo);
+      for (const [location, read] of lensLocations) gl.uniform1f(location, read());
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // Same step as the draw: the next pass clears the buffer.
       blitAll(pass.canvas, canvas);

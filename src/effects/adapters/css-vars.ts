@@ -75,6 +75,20 @@ export function writeSurfaceLight(
     el.style.setProperty("--cast-scale", model.scale.toFixed(4));
   }
   el.style.setProperty("--cast-alpha", light.alpha.toFixed(3));
+  /*
+   * A card ([data-cast] round a photograph) throws the photograph's shadow
+   * from its own ::before, in the pane's lowest layer, so every card's shadow
+   * lies under every card (2h, Ony 2026-09-30: "the shadow shouldn't be going
+   * on top of the other photos") -- a box-shadow on the photograph painted
+   * with it, over the card before it in the row.
+   */
+  const card = el.parentElement;
+  if (card?.hasAttribute("data-cast")) {
+    for (const name of ["--cast-x", "--cast-y", "--cast-blur", "--cast-spread", "--cast-alpha"]) {
+      const v = el.style.getPropertyValue(name);
+      if (v) card.style.setProperty(name, v);
+    }
+  }
   el.style.setProperty("--lit-on", light.lit.toFixed(3));
   // The lamp's bright core, whose mirror image a glossy surface shows: the
   // emitter's radius less its glow, about two fifths of its size.

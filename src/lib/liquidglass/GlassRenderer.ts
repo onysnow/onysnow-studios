@@ -136,6 +136,7 @@ export class GlassRenderer {
 			'u_sat', 'u_tint', 'u_zRadius', 'u_brightness',
 			'u_shadowAlpha', 'u_shadowSpread', 'u_shadowOffY',
 			'u_bevelMode',
+			'u_physEdge', 'u_thick', 'u_iorRGB', 'u_veil', // LOCAL: ?try=liquidedge
 		]);
 	}
 
@@ -320,6 +321,11 @@ export class GlassRenderer {
 		gl.uniform1f(this.glassU.u_shadowSpread, config.shadowSpread * dpr);
 		gl.uniform1f(this.glassU.u_shadowOffY, config.shadowOffsetY * dpr);
 		gl.uniform1f(this.glassU.u_bevelMode, config.bevelMode);
+		// LOCAL: the physical edge (?try=liquidedge, effects/adapters/liquid-config).
+		gl.uniform1f(this.glassU.u_physEdge, config.physicalEdge ?? 0);
+		gl.uniform1f(this.glassU.u_thick, (config.thickness ?? 18) * dpr);
+		gl.uniform3f(this.glassU.u_iorRGB, config.iorR ?? 1.5, config.iorG ?? 1.5, config.iorB ?? 1.5);
+		gl.uniform4f(this.glassU.u_veil, config.veilR ?? 0, config.veilG ?? 0, config.veilB ?? 0, config.veilA ?? 0);
 
 		this._drawQuad(this.glassP, this.panelBuf);
 		gl.disable(gl.BLEND);

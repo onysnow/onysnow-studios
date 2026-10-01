@@ -230,11 +230,14 @@ export function Glass({
        * it is translucent, so it tints the light rather than blocking it.
        */
       for (const node of el.querySelectorAll<HTMLElement>(".plastic")) {
+        // Dark plastic (the round arrow buttons) is opaque: it blocks the
+        // light as a shape and has no pigment to fluoresce (2i).
+        const dark = node.classList.contains("plastic--dark");
         letGo.push(
           registerLitSurface(node, {
-            occludes: false,
+            occludes: dark,
             standoff: PLASTIC_STANDOFF,
-            material: "dayglo-orange",
+            material: dark ? "ink" : "dayglo-orange",
           }),
         );
       }
@@ -343,12 +346,14 @@ export function Glass({
       <span
         ref={sideTop}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--top"
         style={SIDE_STYLE.top}
       />
       <span
         ref={sideBottom}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--bottom"
         style={SIDE_STYLE.bottom}
       />
@@ -356,12 +361,14 @@ export function Glass({
       <span
         ref={sideLeft}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--left"
         style={SIDE_STYLE.left}
       />
       <span
         ref={sideRight}
         aria-hidden="true"
+        data-glass-ignore=""
         className="glass-side glass-side--right"
         style={SIDE_STYLE.right}
       />
@@ -370,7 +377,13 @@ export function Glass({
         arris throws comes off the front corner and is not absorbed by the
         side behind it. Drawn by the glass light pass (GlassLight).
       */}
-      <canvas ref={glowLayer} aria-hidden="true" className="glass-glow" style={GLOW_STYLE} />
+      <canvas
+        ref={glowLayer}
+        aria-hidden="true"
+        data-glass-ignore=""
+        className="glass-glow"
+        style={GLOW_STYLE}
+      />
     </>
   );
 }

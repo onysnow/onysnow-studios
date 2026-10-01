@@ -1,3 +1,7 @@
+import { passScaleCap } from "@/effects/engine/quality";
+import { coatingRgb } from "@/effects/optics/coating";
+import { onShardMapChange, shardMapOf, shardMapStamp } from "@/effects/optics/shard-map";
+import { scatterDepth } from "@/effects/optics/scatter";
 import { useEffect, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
 import { sleepingLoop } from "@/lib/gl-loop";
@@ -89,6 +93,11 @@ const viewportHeight = () => document.documentElement.clientHeight || window.inn
 
 /** How far outside a pane the bloom still has something to contribute. */
 const BLEED = LIGHT_BLEED;
+
+/** No coating: every reflection whole. */
+const NO_COAT = [1, 1, 1] as const;
+/** Clear glass: nothing scattered in the volume. */
+const NO_SCATTER = [0, 0, 0] as const;
 
 export function GlassLight({
   chargeRef,
@@ -191,10 +200,20 @@ export function GlassLight({
     const uFrost = U("uFrost");
     const uBounce = U("uBounce");
     const uFloorGain = U("uFloorGain");
+    const uCornerSoft = U("uCornerSoft");
     const uContact = U("uContact");
     const uFilmRect = U("uFilmRect");
     const uFilmSigma = U("uFilmSigma");
     gl.uniform1i(U("uFilmLut"), 7);
+    /*
+     * A broken pane's pieces (item 10 step 3b): a unit of their own where the
+     * device has more than eight; otherwise they share the air film's, which
+     * a broken pane resting dry on another would lose.
+     */
+    const shardUnit = (gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) as number) > 8 ? 8 : 7;
+    gl.uniform1i(U("uShardMap"), shardUnit);
+    const uHasShards = U("uHasShards");
+    const shardTextures = new Map<HTMLCanvasElement, { tex: WebGLTexture; version: number }>();
     // The air film's reflectance by gap, a 256 x 1 table (effects/optics/thin-film).
     const filmTable = gl.createTexture();
     gl.activeTexture(gl.TEXTURE7);
@@ -228,6 +247,11 @@ export function GlassLight({
     const uHasRoom = U("uHasRoom");
     const uRoomWidth = U("uRoomWidth");
     const uCameraDistance = U("uCameraDistance");
+    const uExactFresnel = U("uExactFresnel");
+    const uCoat = U("uCoat");
+    const uScatter = U("uScatter");
+    const uPolariser = U("uPolariser");
+    const uPolariserAngle = U("uPolariserAngle");
     const uFrontRoughness = U("uFrontRoughness");
     const uRoomExposure = U("uRoomExposure");
     const uEye = U("uEye");
@@ -546,6 +570,7 @@ export function GlassLight({
     let restingStamp = -1;
     let restingEyeX = Number.NaN;
     let restingEyeY = Number.NaN;
+    let restingShards = -1;
 
     const step = (now: number) => {
       const charge = chargeRef.current;
@@ -559,7 +584,15 @@ export function GlassLight({
          * which moves the photographs under the glass and the room in it.
          */
         const eyeStill = viewState.eyeX === restingEyeX && viewState.eyeY === restingEyeY;
-        if (!wasLit && restingDrawn && eyeStill && geometryStamp() === restingStamp) return false;
+        if (
+          !wasLit &&
+          restingDrawn &&
+          eyeStill &&
+          geometryStamp() === restingStamp &&
+          shardMapStamp() === restingShards
+        )
+          return false;
+        restingShards = shardMapStamp();
         restingEyeX = viewState.eyeX;
         restingEyeY = viewState.eyeY;
         wasLit = false;
@@ -576,7 +609,7 @@ export function GlassLight({
       const panes = glassGeometry(now);
       const { x, y } = positionRef.current;
 
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, passScaleCap()));
       const bw = Math.round(viewportWidth() * scale);
       const bh = Math.round(viewportHeight() * scale);
       if (!beginPass(bw, bh, "glass")) return false;
@@ -601,8 +634,10 @@ export function GlassLight({
         charge: l === cursorLamp ? charge : l.charge,
         uv: l.uv,
         span: l.span,
+        aim: l.aim,
       }));
       const heights = packed.map((l) => l.height);
+      const belows = pointLights().map((l) => l.below === true);
       gl.uniform1f(uGrimeFloor, t("grimeFloor"));
       gl.uniform1f(uRestEdge, t("restEdge"));
       gl.uniform1f(uEdgeBloom, camera.lens.edgeBloom);
@@ -629,6 +664,9 @@ export function GlassLight({
         camera.distance(document.documentElement.clientWidth || window.innerWidth),
       );
       gl.uniform1f(uRoomExposure, roomLight.gain);
+      gl.uniform1f(uExactFresnel, previewing("polariser") ? 1 : 0);
+      gl.uniform1f(uPolariser, camera.polariser);
+      gl.uniform1f(uPolariserAngle, camera.polariserAngle);
       gl.uniform2f(uEye, viewState.eyeX, viewState.eyeY);
       if (room) {
         gl.activeTexture(gl.TEXTURE3);
@@ -687,9 +725,14 @@ export function GlassLight({
          */
         const { material, thickness, gap, smudge, scratch } = pane.causes;
         gl.uniform1f(uIor, material.ior);
+        const coat = material.coating ? coatingRgb(material.ior, material.coating) : NO_COAT;
+        gl.uniform3f(uCoat, coat[0], coat[1], coat[2]);
+        const depth = material.scatter ? scatterDepth(material.scatter, thickness) : NO_SCATTER;
+        gl.uniform3f(uScatter, depth[0], depth[1], depth[2]);
         gl.uniform1f(uFrost, material.frost);
         gl.uniform1f(uBounce, previewing("bounce") ? 1 : 0);
         gl.uniform1f(uFloorGain, t("floorLight"));
+        gl.uniform1f(uCornerSoft, previewing("corners") ? pane.e : 0);
         /*
          * Resting dry on the pane below (?try=contact): the air film between
          * this pane's back face and its front, where the two overlap.
@@ -698,6 +741,28 @@ export function GlassLight({
         const onContact =
           previewing("contact") && pane.stack.below?.kind === "contact" && under !== null;
         gl.uniform1f(uContact, onContact ? 1 : 0);
+        const shards = previewing("shardlight") ? shardMapOf(pane.el) : undefined;
+        gl.uniform1f(uHasShards, shards ? 1 : 0);
+        if (shards) {
+          let entry = shardTextures.get(shards.canvas);
+          if (!entry) {
+            const tex = gl.createTexture()!;
+            entry = { tex, version: -1 };
+            shardTextures.set(shards.canvas, entry);
+          }
+          gl.activeTexture(gl.TEXTURE0 + shardUnit);
+          gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+          if (entry.version !== shards.version) {
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, shards.canvas);
+            // One texel per CSS px, read as it is: a piece's slope is not blended with its neighbour's.
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            entry.version = shards.version;
+          }
+        }
         if (onContact && under) {
           const x0 = Math.max(pane.x, under.x);
           const y0 = Math.max(pane.y, under.y);
@@ -724,7 +789,10 @@ export function GlassLight({
         gl.uniform1f(uThickness, thickness);
         gl.uniform1f(uGap, gap);
         // Each light's height above THIS glass: its height less the pane's gap.
-        for (let k = 0; k < packed.length; k++) packed[k]!.height = Math.max(heights[k]! - gap, 1);
+        // A light under the glass (a photograph's own) is the gap below it instead.
+        for (let k = 0; k < packed.length; k++) {
+          packed[k]!.height = belows[k] ? Math.max(gap, 1) : Math.max(heights[k]! - gap, 1);
+        }
         uploadLights(gl, lightLoc, packed);
         // Its place in a stack: what reaches it from above, and the stack's reflection.
         gl.uniform3fv(uLightIn, pane.stack.lightIn);
@@ -972,6 +1040,7 @@ export function GlassLight({
      */
     const stopCharge = onCharge(wake);
     const stopFlash = onFlash(wake);
+    const stopShards = onShardMapChange(wake);
     // A changed setting (the room's brightness, the frost) changes the resting
     // frame too, so it has to be redrawn, not just the lit one.
     const stopTuning = onTuningApplied(() => {
@@ -991,11 +1060,13 @@ export function GlassLight({
       window.removeEventListener("pointermove", wake);
       stopCharge();
       stopFlash();
+      stopShards();
       stopTuning();
       stopLoss();
       gl.deleteProgram(program);
       quad.delete();
       for (const tex of layers.values()) gl.deleteTexture(tex);
+      for (const { tex } of shardTextures.values()) gl.deleteTexture(tex);
       if (room) gl.deleteTexture(room);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
       for (const tex of hidden.values()) if (tex) gl.deleteTexture(tex);

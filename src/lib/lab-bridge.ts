@@ -1,5 +1,7 @@
+import { heldTool, holdTool, onToolChange, TOOLS, type ToolId } from "@/effects/tools/held";
 import { applySiteTuning } from "@/lib/tuning";
 import { setGlassMode, type GlassMode } from "@/lib/glass-mode";
+import { enterRedRoom } from "@/effects/secrets/red-room";
 
 /**
  * The lab's live preview: the editor at /lab and the real page in its frame.
@@ -19,8 +21,19 @@ import { setGlassMode, type GlassMode } from "@/lib/glass-mode";
 
 export type LabMessage =
   | { type: "onysnow:lab-draft"; tuning: string; glass: GlassMode }
-  | { type: "onysnow:lab-ready"; path: string }
-  | { type: "onysnow:lab-path"; path: string };
+  | { type: "onysnow:lab-ready"; path: string; tool: ToolId }
+  | { type: "onysnow:lab-path"; path: string }
+  /** Editor to frame: pick up this tool (item 25h). */
+  | { type: "onysnow:lab-hold"; tool: ToolId }
+  /** Frame to editor: the hand changed (the page's own tray, say). */
+  | { type: "onysnow:lab-tool"; tool: ToolId }
+  /** Editor to frame: straight into the red room (item 39), as if a photograph were taken. */
+  | { type: "onysnow:lab-redroom" };
+
+/** Whether a value names one of the tools. */
+export function isToolId(value: unknown): value is ToolId {
+  return TOOLS.some((t) => t.id === value);
+}
 
 let draftActive = false;
 
@@ -62,12 +75,43 @@ export function listenForLabDraft() {
   window.addEventListener("message", (event: MessageEvent<LabMessage>) => {
     if (event.origin !== window.location.origin || event.source !== window.parent) return;
     const data = event.data;
-    if (!data || data.type !== "onysnow:lab-draft") return;
+    if (!data) return;
+    if (data.type === "onysnow:lab-hold") {
+      if (isToolId(data.tool)) holdTool(data.tool);
+      return;
+    }
+    if (data.type === "onysnow:lab-redroom") {
+      enterRedRoom(largestPhotoInView());
+      return;
+    }
+    if (data.type !== "onysnow:lab-draft") return;
     draftActive = true;
     applySiteTuning(data.tuning);
     if (data.glass === "css" || data.glass === "raster") setGlassMode(data.glass);
   });
-  toEditor({ type: "onysnow:lab-ready", path: window.location.pathname });
+  onToolChange((tool) => toEditor({ type: "onysnow:lab-tool", tool }));
+  toEditor({ type: "onysnow:lab-ready", path: window.location.pathname, tool: heldTool() });
+}
+
+/**
+ * The photograph most in view, as a picture to hang in the red room: the
+ * one the shutter would most likely have been fired at.
+ */
+function largestPhotoInView(): string | null {
+  let best: string | null = null;
+  let area = 0;
+  for (const img of document.querySelectorAll<HTMLImageElement>("[data-photo] img")) {
+    const src = img.currentSrc || img.src;
+    if (!src || src.startsWith("data:")) continue;
+    const r = img.getBoundingClientRect();
+    const w = Math.min(r.right, window.innerWidth) - Math.max(r.left, 0);
+    const h = Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0);
+    if (w > 0 && h > 0 && w * h > area) {
+      area = w * h;
+      best = src;
+    }
+  }
+  return best;
 }
 
 /** In the frame: say where the page has navigated to, for the editor's address bar. */
@@ -80,6 +124,22 @@ export function sendLabDraft(frame: HTMLIFrameElement | null, tuning: string, gl
   const target = frame?.contentWindow;
   if (!target) return;
   const message: LabMessage = { type: "onysnow:lab-draft", tuning, glass };
+  target.postMessage(message, window.location.origin);
+}
+
+/** In the editor: put a tool in the preview's hand (item 25h). */
+export function sendLabHold(frame: HTMLIFrameElement | null, tool: ToolId) {
+  const target = frame?.contentWindow;
+  if (!target) return;
+  const message: LabMessage = { type: "onysnow:lab-hold", tool };
+  target.postMessage(message, window.location.origin);
+}
+
+/** In the editor: take the preview into the red room. */
+export function sendLabRedRoom(frame: HTMLIFrameElement | null) {
+  const target = frame?.contentWindow;
+  if (!target) return;
+  const message: LabMessage = { type: "onysnow:lab-redroom" };
   target.postMessage(message, window.location.origin);
 }
 

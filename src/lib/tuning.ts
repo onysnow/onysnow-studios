@@ -84,6 +84,21 @@ export const tuning: Record<string, Knob> = {
   // the glass reflects (at ~4%, rising at grazing). 1 is a room lit like the
   // screen -- photographic middle grey. Brighter rooms reflect more; a window
   // at night shows the room because outside is darker than 4% of it.
+  /*
+   * A backlight (light engine step I, item 31b; ?try=backlight): a light
+   * behind the glass, under the photographs, as a lightbox is -- one light
+   * with the glass above it, so the panes glow from beneath and their rims
+   * catch it. 0 is off.
+   */
+  backlight: {
+    label: "Backlight",
+    group: "Environment",
+    value: 0,
+    min: 0,
+    max: 3,
+    step: 0.05,
+    hint: "A light behind the glass, under the photographs, like a lightbox: the panes glow from beneath and their rims catch it. Against the lamp's strength; 0 is off. Needs ?try=backlight.",
+  },
   roomBrightness: {
     label: "Room brightness",
     group: "Environment",
@@ -103,14 +118,71 @@ export const tuning: Record<string, Knob> = {
   // gap (see effects/optics/viewpoint.ts). Behaviour of the cursor, not a
   // result: how far anything moves follows from this, the gap and the
   // camera's distance.
+  //
+  // 0 (Ony, 2026-09-30): "I don't want the hero images to pan with mouse
+  // movement. Only scrolling will activate the parallax." The eye stays
+  // straight in front of the screen; what moves the photographs is scrolling.
+  // How far from the screen the viewer is, in viewport widths (the camera the
+  // whole page is worked out for: side faces, reflections, parallax). Nearer,
+  // the pane's side faces open up; further, they close to a line (2c, Ony
+  // 2026-09-30: "at this angle I should be able to see a lot more of the top
+  // side"). 1.2 is the distance the site was tuned at.
+  viewDistance: {
+    label: "Viewing distance",
+    group: "Camera",
+    value: 1.2,
+    min: 0.25,
+    max: 3,
+    step: 0.05,
+    hint: "How far your eye is from the screen, in screen widths. Closer, you see more of each pane's side faces (and the room reflection and parallax change with it); further, the sides close to a line.",
+  },
   viewFollow: {
     label: "Viewpoint follows pointer",
     group: "Camera",
-    value: 0.6,
+    value: 0,
     min: 0,
     max: 1,
     step: 0.05,
     hint: "0 is a fixed eye straight in front of the screen; 1 puts the eye right over the pointer. The photographs behind the glass slide under it by the parallax of the glass's height -- which is how you see the edge bend them.",
+  },
+  /*
+   * A polarising filter on the camera (light engine step H, ?try=polariser):
+   * light reflected off the glass is partly polarised, so turning the filter
+   * dims or keeps the reflection -- most toward the frame's edges, where the
+   * glass is seen at the steepest angle. A photographer's own tool.
+   */
+  /*
+   * Natural vignetting (catalogue item 32, ?try=vignette): a lens passes less
+   * light to the edges of its picture than to the middle, as cos^4 of the
+   * angle off its axis -- a photograph's darker corners. 1 is the full law
+   * for the camera's distance; 0 none.
+   */
+  vignetting: {
+    label: "Vignetting",
+    group: "Camera",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "The lens's darker corners: 1 is the cos^4 law for how far away the camera is (closer, darker corners), 0 none. Needs ?try=vignette.",
+  },
+  polariser: {
+    label: "Polarising filter",
+    group: "Camera",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "0 no filter; 1 a perfect polariser on the lens (exposure made up). Turn it with the angle below to cut or keep the glass's reflections. Needs ?try=polariser.",
+  },
+  polariserAngle: {
+    label: "Polarising filter angle",
+    group: "Camera",
+    value: 0,
+    min: 0,
+    max: 180,
+    step: 1,
+    hint: "The filter's turn, degrees: its axis across the screen at 0, up and down at 90. Reflections fade where the axis runs toward the middle of the frame.",
   },
   // How much light the photograph's blown highlights are taken to have held
   // (effects/optics/bokeh). Their size follows the frost; this is brightness.
@@ -403,12 +475,27 @@ export const tuning: Record<string, Knob> = {
   },
 
   // ---- The light itself ----
+  /*
+   * The lamp's colour from its temperature (catalogue item 32, ?try=kelvin):
+   * a blackbody's glow at that temperature, seen through the eye's colour
+   * matching. 5900 K is the nearest to the warm white it has had.
+   */
+  lampKelvin: {
+    label: "Lamp colour temperature",
+    group: "Light",
+    value: 5900,
+    min: 1500,
+    max: 10000,
+    step: 50,
+    hint: "In kelvin, as on a camera: 1900 a candle, 2700 a household bulb, 3200 tungsten, 5500 daylight, 6500 the screen's white, higher is bluer. Needs ?try=kelvin.",
+  },
   coreGain: {
     label: "Core gain",
     group: "Light",
     value: 8,
     min: 1,
-    max: 30,
+    // Up from 30 (2k): room to blow the core out much further.
+    max: 80,
     step: 0.5,
     hint: "How far the emission exceeds white. The tonemap clips everything above 1, so this sets how BIG the blown hexagon is — not the aperture.",
   },
@@ -416,7 +503,8 @@ export const tuning: Record<string, Knob> = {
     label: "Core tightness",
     group: "Lens flare",
     value: 1500,
-    min: 300,
+    // Down from 300 (2k): a much wider blown core.
+    min: 50,
     max: 4000,
     step: 50,
     hint: "Higher pulls the blown region in.",
@@ -444,7 +532,8 @@ export const tuning: Record<string, Knob> = {
     group: "Lens flare",
     value: 2.78,
     min: 0,
-    max: 6,
+    // Up from 6 (2k, Ony: "so I can make it even more intense").
+    max: 20,
     step: 0.05,
     hint: "The chain of aperture images thrown back along the optical axis. Up half again from 1.85 — they were reading as an artefact rather than as part of the flare.",
   },
@@ -453,9 +542,116 @@ export const tuning: Record<string, Knob> = {
     group: "Lens flare",
     value: 1.5,
     min: 0,
-    max: 4,
+    // Up from 4 (2k).
+    max: 16,
     step: 0.05,
     hint: "The ring of scatter around the source, from the coating rather than the elements.",
+  },
+  /*
+   * The lens itself (2k, Ony 2026-09-30: "more cat's eye, more rainbow, more
+   * halos, more ghost chain, shape of ghost chain, bokeh"). Each is a
+   * property of the lens -- how many elements, how the barrel clips, how the
+   * coatings disperse, how many blades the iris has -- and the flare follows
+   * from it. At their defaults the flare is exactly what it was.
+   */
+  ghostCount: {
+    label: "Ghosts in the chain",
+    group: "Lens flare",
+    value: 7,
+    min: 0,
+    max: 24,
+    step: 1,
+    hint: "How many reflections between elements reach the sensor: more elements in the lens, a longer chain.",
+  },
+  ghostSpacing: {
+    label: "Ghost spacing",
+    group: "Lens flare",
+    value: 0.34,
+    min: 0.05,
+    max: 1,
+    step: 0.01,
+    hint: "How far apart the ghosts land along the line through the centre of the frame.",
+  },
+  ghostSize: {
+    label: "Ghost size",
+    group: "Lens flare",
+    value: 1,
+    min: 0.2,
+    max: 5,
+    step: 0.05,
+    hint: "How big each ghost is: how far its pair of surfaces sits from focus.",
+  },
+  ghostShape: {
+    label: "Ghost shape",
+    group: "Lens flare",
+    value: 0,
+    min: -1,
+    max: 1,
+    step: 0.05,
+    hint: "-1 sharp-cornered polygons (the iris, crisp), 0 as photographed, 1 round discs (the blades washed out by defocus).",
+  },
+  apertureBlades: {
+    label: "Aperture blades",
+    group: "Lens flare",
+    value: 6,
+    min: 3,
+    max: 16,
+    step: 1,
+    hint: "The iris's blade count. It shapes the core, every ghost (they are images of the iris) and the star: an even count throws that many spikes.",
+  },
+  ghostBokeh: {
+    label: "Ghost bokeh",
+    group: "Lens flare",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "0 ghosts bright at the rim and hollow; 1 soft, evenly filled discs, like out-of-focus highlights.",
+  },
+  catsEye: {
+    label: "Cat's eye",
+    group: "Lens flare",
+    value: 1,
+    min: 0,
+    max: 4,
+    step: 0.05,
+    hint: "How hard the lens barrel clips ghosts away from the centre of the frame, into the cat's-eye shape. 0 none.",
+  },
+  flareRainbow: {
+    label: "Rainbow",
+    group: "Lens flare",
+    value: 1,
+    min: 0,
+    max: 6,
+    step: 0.05,
+    hint: "How much the coatings disperse: the colour split round the core, in each ghost and across the halo. 0 colourless.",
+  },
+  haloRings: {
+    label: "Halo rings",
+    group: "Lens flare",
+    value: 2,
+    min: 1,
+    max: 8,
+    step: 1,
+    hint: "How many rings of the big halo round the centre of the frame, each wider and fainter than the last.",
+  },
+  haloSize: {
+    label: "Halo size",
+    group: "Lens flare",
+    value: 1,
+    min: 0.3,
+    max: 3,
+    step: 0.05,
+    hint: "The big halo's radius.",
+  },
+  starSpikes: {
+    label: "Star spikes",
+    group: "Lens flare",
+    value: 1,
+    min: 0,
+    max: 6,
+    step: 0.05,
+    hint: "The diffraction star off the iris blades.",
   },
 
   // ---- The glass surface ----
@@ -481,7 +677,8 @@ export const tuning: Record<string, Knob> = {
     group: "Lens flare",
     value: 0.8,
     min: 0,
-    max: 1,
+    // Up from 1 (2k).
+    max: 3,
     step: 0.05,
     hint: "The glow of a lit edge spilling past the rim onto the photograph beyond, the way a bright edge glares in a lens. 0 stops the glow at the glass.",
   },
@@ -490,7 +687,8 @@ export const tuning: Record<string, Knob> = {
     group: "Lens flare",
     value: 16,
     min: 2,
-    max: 60,
+    // Up from 60 (2k).
+    max: 200,
     step: 1,
     hint: "How far the glare spreads, in pixels.",
   },
@@ -500,7 +698,8 @@ export const tuning: Record<string, Knob> = {
     // Ony, 2026-09-29: "the bloom is a little strong" (was 1).
     value: 0.65,
     min: 0,
-    max: 2,
+    // Up from 2 (2k).
+    max: 6,
     step: 0.05,
     hint: "How much the camera spreads a lit edge into a glow round it. The bright line itself stays; this is only the soft light around it.",
   },
@@ -560,6 +759,16 @@ export const tuning: Record<string, Knob> = {
     max: 3,
     step: 0.05,
     hint: "How hard the glass bends the light and shadow you see through it, at its top and bottom edges.",
+  },
+  // How thick the site's glass is, CSS px: how deep its side faces are.
+  glassThickness: {
+    label: "Glass thickness",
+    group: "Shadows",
+    value: 18,
+    min: 4,
+    max: 96,
+    step: 1,
+    hint: "How thick the panes are. Thicker glass shows wider side faces at the same angle, bends more at the bevel and throws a deeper green through its sides. 18 is about 5 mm.",
   },
   floorGap: {
     label: "Glass height",

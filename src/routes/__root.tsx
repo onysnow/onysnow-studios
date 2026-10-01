@@ -1,5 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeldTool } from "@/components/site/ToolTray";
+import { PhotoLights } from "@/components/site/PhotoLights";
+import { Vignette } from "@/components/site/Vignette";
+import { RedRoom } from "@/components/site/RedRoom";
 import { useQuery } from "@tanstack/react-query";
 import { roomScript } from "@/lib/rooms";
 import { ROOM_KEYS, ROOM_HDR_KEYS } from "@/lib/site-assets";
@@ -26,6 +29,8 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
 import { listenForLabDraft, reportLabPath } from "@/lib/lab-bridge";
+import { noteAdmin, verifyAdminNote } from "@/lib/admin-gate";
+import { supabase } from "@/integrations/supabase/client";
 import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 function NotFoundComponent() {
@@ -151,6 +156,18 @@ function RootComponent() {
   const raster = useRasterGlass();
   // Inside the lab's preview frame: take the editor's draft tuning (lab-bridge).
   useEffect(() => listenForLabDraft(), []);
+  /*
+   * The previews and test switches are Ony's alone (item 48): check this
+   * browser's note of the admin against the real session, and drop it the
+   * moment he signs out.
+   */
+  useEffect(() => {
+    void verifyAdminNote();
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") noteAdmin(null, false);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
   useEffect(() => reportLabPath(location.pathname), [location.pathname]);
   return (
     <QueryClientProvider client={queryClient}>
@@ -175,6 +192,12 @@ function RootComponent() {
           <ShutterFlash />
           {/* The tools being tried (items 21-22): client only, the switch is in the address. */}
           <HeldTool />
+          {/* The photographs' own lights, under the glass (item 31, ?try=photolights). */}
+          <PhotoLights />
+          {/* The lens's corners (catalogue item 32, ?try=vignette). */}
+          <Vignette />
+          {/* Secret 2, the darkroom (item 39, ?try=redroom). */}
+          <RedRoom />
           {/*
             Last in the tree, first on the screen.
 

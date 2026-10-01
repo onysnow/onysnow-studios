@@ -67,3 +67,16 @@ export function oversizeFor(
   const s = behindGlassShift(corner, gap, cameraDistance);
   return 1 + 2 * Math.max(Math.abs(s.x) / viewportWidth, Math.abs(s.y) / viewportHeight) + 0.005;
 }
+
+/**
+ * How far a photograph `gap` px behind the glass slides against the glass
+ * as the page scrolls by `delta` (item 33, ?try=gapparallax). Scrolling moves
+ * the glass and the photograph together; on the screen the glass moves the
+ * full delta and the photograph, further from the eye, a little less -- it
+ * lags by delta * gap / (distance + gap), the same similar triangles as an
+ * eye moving by delta. So a pane standing further off its photograph slides
+ * further over it, and nothing is a setting but the gap and the eye.
+ */
+export function scrollSlide(delta: number, gap: number, cameraDistance: number): number {
+  return behindGlassShift({ x: 0, y: delta }, gap, cameraDistance).y;
+}

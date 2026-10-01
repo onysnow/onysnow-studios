@@ -9,9 +9,15 @@ import {
 import { photoBreak, placementFor, type Placement } from "@/effects/optics/crack-photo";
 import { loadCrackPhoto, type LoadedCrackPhoto } from "@/effects/optics/crack-photo-loader";
 import { crackPhotoFor } from "@/lib/crack-photos";
-import { cursorLamp, onLightChange } from "@/effects/light/lights";
+import { loadShard, shardOutline, shardsFor } from "@/lib/glass-shards";
+import { cursorLamp, onLightChange, pointLights } from "@/effects/light/lights";
+// Glass's index: a crack face seen through the pane lies at 1/n of its depth.
+import { N_GLASS, crackGlow, type CrackLightSource } from "@/effects/optics/crack-light";
 import { viewState } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
+import { previewing } from "@/effects/engine/preview";
+import { adoptLayer } from "@/effects/engine/compositor";
+import { clearShardMap, paintShardMap, setShardMap } from "@/effects/optics/shard-map";
 
 /** The frost the panes' backdrop is blurred by, px (styles.css .glass: blur(30px)). */
 const FROST_BLUR = 30;
@@ -19,10 +25,6 @@ const FROST_BLUR = 30;
 const MARGIN = 24;
 /** The pane's thickness, px: a crack face is this tall. */
 const THICKNESS = 18;
-/** How far the light piped along the pane reaches before it is spent (glass shader: exp(-d/780)). */
-const PIPED_REACH = 780;
-/** Glass's critical angle, n = 1.518: past this from a crack face's normal, the face is a mirror. */
-const CRITICAL = Math.asin(1 / 1.518);
 
 /** The sharpest image under a point of the page. */
 function photoUnder(el: HTMLElement, x: number, y: number): HTMLImageElement | null {
@@ -37,9 +39,6 @@ function photoUnder(el: HTMLElement, x: number, y: number): HTMLImageElement | n
   }
   return null;
 }
-
-/** Glass's index: a crack face seen through the pane lies at 1/n of its depth. */
-const N_GLASS = 1.518;
 
 /** A repeatable number in [0, 1) for a crack and a use. */
 function hash(k: number, n: number): number {
@@ -59,6 +58,25 @@ function leanAt(k: number, s: number, rough: number): number {
     (0.65 * Math.sin(s / (31 + 20 * hash(k, 1)) + 6.3 * hash(k, 2)) +
       0.35 * Math.sin(s / (9 + 6 * hash(k, 3)) + 6.3 * hash(k, 4)))
   );
+}
+
+/**
+ * One stroke that adds `tint` at `amount` and the lights' `glow` at
+ * `share`, as a colour for the "lighter" blend (which adds colour times
+ * alpha); null if it adds nothing.
+ */
+function additive(
+  tint: readonly [number, number, number],
+  amount: number,
+  glow: readonly [number, number, number],
+  share: number,
+): string | null {
+  const add = [0, 1, 2].map((i) => tint[i]! * amount + glow[i]! * share);
+  const peak = Math.max(add[0]!, add[1]!, add[2]!);
+  if (peak < 0.004) return null;
+  const alpha = Math.min(1, peak);
+  const [r, g, b] = add.map((v) => Math.round(Math.min(255, (v / peak) * 255)));
+  return `rgb(${r} ${g} ${b} / ${alpha.toFixed(3)})`;
 }
 
 /** The glass's own green, seen through the depth of a crack face (sRGB). */
@@ -88,7 +106,9 @@ type Props = {
  *     they are mirrors: a crack flashes silver where the lamp, the face and
  *     your eye line up, and reads as a dark line where they do not;
  *   the lamp's light piped along the pane escapes at the cracks, so they
- *     glow near the lamp;
+ *     glow near the lamp -- and every other light's too, the flash, a
+ *     flare, the flashlight's beam where it points, each in its colour
+ *     (effects/optics/crack-light);
  *   near the impact the fracture face turns from mirror to frosted mist and
  *     rough hackle -- whiter, wider cracks and a crushed star -- and the
  *     chipped edges split light into colour.
@@ -110,8 +130,13 @@ export function BrokenGlass({
      * one (lib/crack-photos) -- its cracks ARE the cracks, and the shards are
      * the pieces they cut -- otherwise generated (effects/optics/fracture).
      */
+    type Piece = Shard & {
+      holes?: Pt[][];
+      /** A knocked-out piece that is one of the photographed pieces: it, turned, this size. */
+      photo?: { img: HTMLImageElement; turn: number; size: number; at: Pt };
+    };
     type Break = {
-      shards: (Shard & { holes?: Pt[][] })[];
+      shards: Piece[];
       cracks: Crack[];
       impact: Pt;
       crush: number;
@@ -121,6 +146,67 @@ export function BrokenGlass({
     let brokeFor = "";
     let photo: LoadedCrackPhoto | null = null;
     let disposed = false;
+    /*
+     * Ony's photographed pieces: every piece of this break wears a different
+     * one, and the pieces knocked out fall as them (lib/glass-shards).
+     */
+    const shardPhotos: HTMLImageElement[] = [];
+    for (const url of shardsFor(seed, 12)) {
+      void loadShard(url).then((img) => {
+        if (disposed || !img) return;
+        shardPhotos.push(img);
+        wake();
+      });
+    }
+    const struckAt = performance.now();
+    /** How long the knocked-out pieces take to fall out of sight, ms. */
+    const FALL_MS = 1100;
+    /** A piece's box, for laying a photograph over it. */
+    const boxOf = (poly: readonly Pt[]) => {
+      let x0 = Infinity;
+      let y0 = Infinity;
+      let x1 = -Infinity;
+      let y1 = -Infinity;
+      for (const p of poly) {
+        x0 = Math.min(x0, p.x);
+        y0 = Math.min(y0, p.y);
+        x1 = Math.max(x1, p.x);
+        y1 = Math.max(y1, p.y);
+      }
+      return { x: x0, y: y0, w: x1 - x0, h: y1 - y0, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
+    };
+    /**
+     * A shard photograph's glass laid over a piece: its middle (its dust,
+     * chips and inner cracks -- not its own outline), turned and scaled to
+     * cover the piece. Drawn "screen", so only its light adds.
+     */
+    const wearGlass = (
+      img: HTMLImageElement,
+      box: ReturnType<typeof boxOf>,
+      k: number,
+      alpha: number,
+    ) => {
+      const side = Math.max(box.w, box.h) * 1.5 + 8;
+      const sw = img.naturalWidth * 0.55;
+      const sh = img.naturalHeight * 0.55;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.globalCompositeOperation = "screen";
+      ctx.translate(box.cx, box.cy);
+      ctx.rotate(hash(seed, 900 + k) * Math.PI * 2);
+      ctx.drawImage(
+        img,
+        (img.naturalWidth - sw) / 2,
+        (img.naturalHeight - sh) / 2,
+        sw,
+        sh,
+        -side / 2,
+        -side / 2,
+        side,
+        side,
+      );
+      ctx.restore();
+    };
     const photoUrl = crackPhotoFor(kind, seed);
     if (photoUrl) {
       void loadCrackPhoto(photoUrl).then((loaded) => {
@@ -131,6 +217,15 @@ export function BrokenGlass({
       });
     }
     let frame = 0;
+    // The pane this break is laid over, and its pieces for the glass shader (step 3b).
+    const pane = canvas.parentElement?.closest<HTMLElement>(".glass") ?? null;
+    /*
+     * With step 3b the break is the glass, so it goes in the pane's own slot
+     * for it, under the light on the glass -- the room it reflects, the lamp,
+     * the grime -- which it used to cover (effects/engine/compositor).
+     */
+    if (pane && previewing("shardlight")) adoptLayer(pane, "pane:broken", canvas);
+    const shardMap = document.createElement("canvas");
     // The frosted photograph, cached: blurring is the costly part.
     const frost = document.createElement("canvas");
     let frostFor = "";
@@ -142,7 +237,7 @@ export function BrokenGlass({
       const h = rect.height;
       if (w < 2 || h < 2) return;
       const key = `${Math.round(w)}x${Math.round(h)}`;
-      const breakKey = `${key}|${photo ? "photo" : "made"}`;
+      const breakKey = `${key}|${photo ? "photo" : "made"}|${shardPhotos.length ? "glass" : ""}`;
       if (breakKey !== brokeFor) {
         const struck = { x: at.x * w, y: at.y * h };
         if (photo) {
@@ -160,8 +255,37 @@ export function BrokenGlass({
             seed,
             kind === "annealed" ? energy : 0,
           );
+          const shards: Piece[] = [...pb.shards];
+          /*
+           * A full swing knocks a piece clean out. The photographed star
+           * breaks have few closed pieces to lose, so the piece that goes is
+           * one of Ony's photographed pieces itself: its outline is the hole,
+           * and it is what falls.
+           */
+          const piece = shardPhotos[0];
+          if (kind === "annealed" && energy > 0.8 && piece) {
+            const outline = shardOutline(piece);
+            if (outline.length >= 3) {
+              const size = Math.min(w, h) * (0.12 + 0.5 * (energy - 0.8));
+              const turn = hash(seed, 55) * Math.PI * 2;
+              const c = Math.cos(turn);
+              const sn = Math.sin(turn);
+              shards.push({
+                poly: outline.map((q) => ({
+                  x: struck.x + (c * q.x - sn * q.y) * size,
+                  y: struck.y + (sn * q.x + c * q.y) * size,
+                })),
+                tiltX: 0,
+                tiltY: 0,
+                slip: { x: 0, y: 0 },
+                reach: 0,
+                missing: true,
+                photo: { img: piece, turn, size, at: struck },
+              });
+            }
+          }
           broken = {
-            shards: pb.shards,
+            shards,
             cracks: pb.cracks,
             impact: struck,
             crush: 0,
@@ -171,6 +295,19 @@ export function BrokenGlass({
           broken = fracture({ w, h, at: struck, energy, kind, seed });
         }
         brokeFor = breakKey;
+        /*
+         * Step 3b (?try=shardlight): the pieces go to the glass shader, which
+         * draws the room each one reflects at its own slope.
+         */
+        if (pane && previewing("shardlight")) {
+          shardMap.width = Math.round(w);
+          shardMap.height = Math.round(h);
+          const mc = shardMap.getContext("2d");
+          if (mc && broken) {
+            paintShardMap(mc, broken.shards, shardMap.width, shardMap.height);
+            setShardMap(pane, shardMap);
+          }
+        }
       }
       if (!broken) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -240,6 +377,11 @@ export function BrokenGlass({
             // The pane's own frosting over it, as the pane has.
             ctx.fillStyle = "rgb(255 255 255 / 0.06)";
             ctx.fillRect(0, 0, w, h);
+            // And its own glass: one of the photographed pieces, a different one each.
+            if (shardPhotos.length) {
+              const k = broken.shards.indexOf(s);
+              wearGlass(shardPhotos[k % shardPhotos.length]!, boxOf(s.poly), k, 0.55);
+            }
           }
           ctx.restore();
         }
@@ -353,14 +495,21 @@ export function BrokenGlass({
       }
 
       // ---- The cracks: each a fracture face seen through the glass. ----
-      const lamp = cursorLamp;
-      const lampOn = lamp.charge;
+      // Every light in the scene, as the crack sees it: in the pane's pixels, against the lamp.
+      const reference = Math.max(cursorLamp.gain, 1e-6);
+      const sources: CrackLightSource[] = pointLights().map((l) => ({
+        at: { x: l.x - rect.left, y: l.y - rect.top, z: l.height },
+        colour: l.colour,
+        strength: l.gain / reference,
+        radiance: l.gain,
+        charge: l.charge,
+        aim: l.aim,
+      }));
       const eye = {
         x: document.documentElement.clientWidth / 2 + viewState.eyeX - rect.left,
         y: document.documentElement.clientHeight / 2 + viewState.eyeY - rect.top,
         z: camera.distance(document.documentElement.clientWidth),
       };
-      const L = { x: lamp.x - rect.left, y: lamp.y - rect.top, z: lamp.height };
       const depth = THICKNESS / N_GLASS;
       const roughReach = broken.crush * 4 + 10;
       const photoCracks = !!broken.photo;
@@ -395,41 +544,8 @@ export function BrokenGlass({
 
           // The face's normal, leaning with it: (n cos lean, sin lean).
           const fn = { x: nx * Math.cos(lean), y: ny * Math.cos(lean), z: Math.sin(lean) };
-          // Light from the lamp into the glass (it steepens, n = 1.518).
-          const tl = { x: mx - L.x, y: my - L.y, z: -L.z };
-          const tll = Math.hypot(tl.x, tl.y, tl.z) || 1;
-          const horiz = Math.hypot(tl.x, tl.y) || 1;
-          const sinIn = horiz / tll / N_GLASS;
-          const inGlass = {
-            x: (tl.x / horiz) * sinIn,
-            y: (tl.y / horiz) * sinIn,
-            z: -Math.sqrt(1 - sinIn * sinIn),
-          };
-          const d = inGlass.x * fn.x + inGlass.y * fn.y + inGlass.z * fn.z;
-          const incidence = Math.acos(Math.min(1, Math.abs(d)));
-          // Past the critical angle the air gap is a perfect mirror; short of it, the Fresnel share.
-          const mirror = incidence > CRITICAL ? 1 : 0.08 + 0.3 * Math.pow(incidence / CRITICAL, 6);
-          const out = {
-            x: inGlass.x - 2 * d * fn.x,
-            y: inGlass.y - 2 * d * fn.y,
-            z: inGlass.z - 2 * d * fn.z,
-          };
-          const te = { x: eye.x - mx, y: eye.y - my, z: eye.z };
-          const tel = Math.hypot(te.x, te.y, te.z) || 1;
-          let flash = 0;
-          if (out.z > 0) {
-            const outH = Math.hypot(out.x, out.y) || 1;
-            const sinOut = Math.min(1, (outH / Math.hypot(out.x, out.y, out.z)) * N_GLASS);
-            const leave = {
-              x: (out.x / outH) * sinOut,
-              y: (out.y / outH) * sinOut,
-              z: Math.sqrt(1 - sinOut * sinOut),
-            };
-            const aligned = Math.max(0, (leave.x * te.x + leave.y * te.y + leave.z * te.z) / tel);
-            flash = mirror * Math.pow(aligned, 60 - 50 * rough) * lampOn;
-          }
-          // Light piped along the pane escapes at the crack, brighter near the lamp.
-          const piped = lampOn * Math.exp(-Math.hypot(mx - L.x, my - L.y) / PIPED_REACH) * 0.12;
+          // What every light sends to the eye from this face: its mirror flash and the piped light.
+          const { rgb: glow, flash } = crackGlow(sources, { x: mx, y: my }, fn, eye, rough);
           /*
            * The room: a fracture face is a new, clean mirror, and seen at a
            * slant it shows the lit room and the light through the pane --
@@ -438,7 +554,6 @@ export function BrokenGlass({
            * scatter it white.
            */
           const room = 0.32 + 0.08 * Math.min(1, Math.abs(wide) / 3) + 0.3 * rough;
-          const lit = Math.min(1, room + flash * 1.4 + piped);
           if (photoCracks) {
             /*
              * Photographed: the photograph already shows the crack as the room
@@ -446,10 +561,10 @@ export function BrokenGlass({
              * flash and its piped light are added -- along the pieces' edges,
              * each crack being two pieces' edge, so at half each time.
              */
-            const extra = Math.min(1, flash * 1.4 + piped) * 0.5;
-            if (extra > 0.01) {
+            const extra = additive([0, 0, 0], 0, glow, 0.5);
+            if (extra) {
               ctx.globalCompositeOperation = "lighter";
-              ctx.strokeStyle = `rgb(245 250 248 / ${extra.toFixed(3)})`;
+              ctx.strokeStyle = extra;
               ctx.lineWidth = 1.1;
               ctx.beginPath();
               ctx.moveTo(a.x, a.y);
@@ -471,9 +586,13 @@ export function BrokenGlass({
           ctx.globalCompositeOperation = "lighter";
           const [fr, fg, fb] = FACE_TINT;
           const white = rough * 0.7;
-          const col = `${Math.round(fr + (255 - fr) * white)} ${Math.round(fg + (255 - fg) * white)} ${Math.round(fb + (255 - fb) * white)}`;
+          const tint = [
+            (fr + (255 - fr) * white) / 255,
+            (fg + (255 - fg) * white) / 255,
+            (fb + (255 - fb) * white) / 255,
+          ] as const;
           if (Math.abs(wide) > 0.6) {
-            ctx.fillStyle = `rgb(${col} / ${(lit * 0.22).toFixed(3)})`;
+            ctx.fillStyle = additive(tint, room * 0.22, glow, 0.22) ?? "transparent";
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
@@ -483,7 +602,7 @@ export function BrokenGlass({
             ctx.fill();
           }
           // Its far edge, where the face meets the pane's surface, catches the most.
-          ctx.strokeStyle = `rgb(${col} / ${lit.toFixed(3)})`;
+          ctx.strokeStyle = additive(tint, room, glow, 1) ?? "transparent";
           ctx.lineWidth = 0.55 + 0.6 * rough;
           ctx.beginPath();
           ctx.moveTo(a.x + ox, a.y + oy);
@@ -517,6 +636,67 @@ export function BrokenGlass({
         ctx.stroke();
       }
       ctx.globalCompositeOperation = "source-over";
+
+      /*
+       * ---- The pieces knocked out, falling ----
+       *
+       * Each drops from where it was, as its own photographed piece of glass:
+       * pushed back and aside by the blow, turning, falling away from you
+       * (a little smaller as it goes) and out of sight.
+       */
+      const t = (performance.now() - struckAt) / 1000;
+      if (t * 1000 < FALL_MS && shardPhotos.length) {
+        let k = 0;
+        for (const s of broken.shards) {
+          if (!s.missing) continue;
+          const box = boxOf(s.poly);
+          const vx = (hash(seed, 1200 + k) - 0.5) * 120;
+          const vy = -30 + hash(seed, 1300 + k) * 50;
+          const spin = (hash(seed, 1400 + k) - 0.5) * 6;
+          const dx = vx * t;
+          const dy = vy * t + 0.5 * 1800 * t * t;
+          const shrink = 1 - 0.15 * Math.min(1, t / 1.1);
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, 1 - (t * 1000) / FALL_MS);
+          ctx.translate(box.cx + dx, box.cy + dy);
+          ctx.rotate(spin * t);
+          ctx.scale(shrink, shrink);
+          ctx.translate(-box.cx, -box.cy);
+          ctx.beginPath();
+          s.poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.closePath();
+          if (s.photo) {
+            // It is a photographed piece: drawn whole, as it was photographed.
+            const { img, turn, size, at: c0 } = s.photo;
+            const k2 = size / Math.max(img.naturalWidth, img.naturalHeight, 1);
+            ctx.save();
+            ctx.translate(c0.x, c0.y);
+            ctx.rotate(turn);
+            ctx.drawImage(
+              img,
+              (-img.naturalWidth * k2) / 2,
+              (-img.naturalHeight * k2) / 2,
+              img.naturalWidth * k2,
+              img.naturalHeight * k2,
+            );
+            ctx.restore();
+          } else {
+            ctx.save();
+            ctx.clip();
+            // The glass of it: frosted as the pane was, and its own photographed glass.
+            ctx.fillStyle = "rgb(214 232 228 / 0.18)";
+            ctx.fillRect(box.x, box.y, box.w, box.h);
+            wearGlass(shardPhotos[(k + 5) % shardPhotos.length]!, box, 1500 + k, 0.9);
+            ctx.restore();
+            ctx.strokeStyle = "rgb(206 236 226 / 0.7)";
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
+          }
+          ctx.restore();
+          k++;
+        }
+        frame = requestAnimationFrame(draw);
+      }
     };
     const wake = () => {
       if (!frame) frame = requestAnimationFrame(draw);
@@ -530,6 +710,7 @@ export function BrokenGlass({
     const late = window.setTimeout(wake, 1500);
     return () => {
       disposed = true;
+      if (pane) clearShardMap(pane);
       cancelAnimationFrame(frame);
       window.clearTimeout(late);
       stop();

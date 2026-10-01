@@ -24,6 +24,7 @@
  */
 
 import { markFrame, perfEnabled, record } from "./perf";
+import { noteFrame } from "./quality";
 
 export const ORDER = {
   /** The cursor follower: where the lamp is. */
@@ -66,9 +67,16 @@ function request() {
   if (!frame && typeof requestAnimationFrame === "function") frame = requestAnimationFrame(tick);
 }
 
+/** When the light passes last ran, for the quality tiers' frame check; -1 if not last frame. */
+let passesLast = -1;
+
 function tick(now: number) {
   frame = 0;
   running = true;
+  // The light passes running frame after frame: how fast they are coming (item 34).
+  const passesAwake = tasks.some((t) => t.awake && t.order === ORDER.passes);
+  if (passesAwake && passesLast >= 0) noteFrame(now - passesLast);
+  passesLast = passesAwake ? now : -1;
   const timing = perfEnabled();
   if (timing) markFrame(now);
   try {

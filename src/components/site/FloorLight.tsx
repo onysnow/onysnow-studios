@@ -1,3 +1,6 @@
+import { passScaleCap } from "@/effects/engine/quality";
+import { roughRow } from "@/effects/optics/rough-transmission";
+import { unscattered } from "@/effects/optics/scatter";
 import { previewing } from "@/effects/engine/preview";
 import { useEffect, useRef, useState } from "react";
 
@@ -72,8 +75,16 @@ export function FloorLight() {
     const uGap = U("uGap");
     const uIor = U("uIor");
     const uFrost = U("uFrost");
+    const uRoughGlass = U("uRoughGlass");
+    const uUnscattered = U("uUnscattered");
+    const unscatteredAll = new Float32Array(MAX_FLOOR_PANES * 3).fill(1);
+    const uRoughRatio = U("uRoughRatio");
+    const uRoughSpread = U("uRoughSpread");
+    const roughRatios = new Float32Array(MAX_FLOOR_PANES * 4);
+    const roughSpreads = new Float32Array(MAX_FLOOR_PANES * 4);
     const uEdge = U("uEdge");
     const uLightGain = U("uLightGain");
+    const uCorners = U("uCorners");
     const uShadowGain = U("uShadowGain");
     const uCaustics = U("uCaustics");
     const uGrimeFloor = U("uGrimeFloor");
@@ -123,6 +134,8 @@ export function FloorLight() {
     const frosts = new Float32Array(MAX_FLOOR_PANES);
     // What a stack lets through relative to its bottom layer (1 for a pane on its own).
     const throughs = new Float32Array(MAX_FLOOR_PANES * 3);
+    const edgeOnly = new Float32Array(MAX_FLOOR_PANES);
+    const uEdgeOnly = U("uEdgeOnly");
     const marks = new Float32Array(MAX_FLOOR_PANES * 2);
     const uMarks = U("uMarks");
     const uMarksProportional = U("uMarksProportional");
@@ -154,12 +167,46 @@ export function FloorLight() {
       }
       return layer;
     };
+    /*
+     * What stands above this canvas but lies on the floor all the same (the
+     * footer's photo strip, [data-floor-receiver]): the floor light is drawn
+     * onto it too, in a layer over it, so the lamp's light and the glass's
+     * shadows reach it as they reach the photographs (2m).
+     */
+    const received = new Map<HTMLElement, HTMLCanvasElement>();
+    const receiverFor = (el: HTMLElement, w: number, h: number) => {
+      let layer = received.get(el);
+      if (!layer || !layer.isConnected) {
+        layer = document.createElement("canvas");
+        layer.className = "floor-received";
+        layer.setAttribute("aria-hidden", "true");
+        el.appendChild(layer);
+        received.set(el, layer);
+      }
+      if (layer.width !== w || layer.height !== h) {
+        layer.width = w;
+        layer.height = h;
+      }
+      return layer;
+    };
     const clearUnder = () => {
       for (const layer of under.values()) {
         layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
       }
+      for (const layer of received.values()) {
+        layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
+      }
     };
-    const drawnPanes: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
+    type Drawn = {
+      el: HTMLElement;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      /** Where the layer above it in a stack lies over it: that part is the upper layer's to show. */
+      over: { x: number; y: number; w: number; h: number } | null;
+    };
+    const drawnPanes: Drawn[] = [];
 
     /*
      * Dynamic only while there is something to show. The liquid glass
@@ -191,26 +238,82 @@ export function FloorLight() {
       const vh = document.documentElement.clientHeight || window.innerHeight;
       let n = 0;
       drawnPanes.length = 0;
-      for (const pane of glassGeometry(now)) {
+      const throwing = glassGeometry(now).filter(
+        (pane) => !(pane.y + pane.h < -200 || pane.y > vh + 200) && !(pane.w < 120 || pane.h < 40),
+      );
+      const stackEdges = previewing("stackedges");
+      /*
+       * Bottom layers take the slots first (each carries its stack's light);
+       * the upper layers' edges, a detail on top, take what is left.
+       */
+      if (stackEdges) {
+        throwing.sort((a, b) => (a.stack.index > 0 ? 1 : 0) - (b.stack.index > 0 ? 1 : 0));
+      }
+      for (const pane of throwing) {
         if (n >= MAX_FLOOR_PANES) break;
-        if (pane.y + pane.h < -200 || pane.y > vh + 200) continue;
-        if (pane.w < 120 || pane.h < 40) continue; // buttons and menus throw nothing worth drawing
-        // A stack throws one shadow: its bottom layer's, carrying the whole stack (uThrough).
-        if (pane.stack.index > 0) continue;
+        /*
+         * A stack's light is counted once: by its bottom layer, carrying the
+         * whole stack (uThrough). The layers above it add only their edges
+         * (below), and each shows the floor under it in its own layer -- the light
+         * that has come through the WHOLE stack -- and the layer below it
+         * leaves the part it covers to it (2a, Ony 2026-09-30: a pane under
+         * another sees only what came through the one above). Left to the
+         * lower layer, the upper pane's frost blurred a layer inside another
+         * pane that redraws every frame, and it came out as a hard rectangle
+         * in the overlap.
+         */
+        const over = pane.stack.aboveRect;
+        const overlap = over
+          ? {
+              x: Math.max(pane.x, over.x),
+              y: Math.max(pane.y, over.y),
+              w: Math.min(pane.x + pane.w, over.x + over.w) - Math.max(pane.x, over.x),
+              h: Math.min(pane.y + pane.h, over.y + over.h) - Math.max(pane.y, over.y),
+            }
+          : null;
+        /*
+         * An upper layer still has edges, and they still bend the light that
+         * crosses them: the dark rim under its bevel and the bright seam
+         * inside it -- the shadow of its edge on the floor -- and the bend
+         * of the floor seen through it. Those it adds (uEdgeOnly); what it
+         * lets through is in the bottom layer's uThrough already. (Ony,
+         * 2026-10-01: the shadow at the upper pane's left corner had gone
+         * with 8ed097c, which left upper layers out of the floor entirely.)
+         */
+        const upper = pane.stack.index > 0;
+        if (upper && !stackEdges) {
+          drawnPanes.push({
+            el: pane.el,
+            x: pane.x,
+            y: pane.y,
+            w: pane.w,
+            h: pane.h,
+            over: overlap,
+          });
+          continue;
+        }
+        edgeOnly[n] = upper ? 1 : 0;
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
         edges[n] = pane.e;
         gaps[n] = pane.causes.gap;
         iors[n] = pane.causes.material.ior;
         frosts[n] = pane.causes.material.frost;
-        throughs.set(pane.stack.throughScale, n * 3);
+        const sigma = pane.causes.material.scatter;
+        unscatteredAll.set(sigma ? unscattered(sigma, pane.causes.thickness) : [1, 1, 1], n * 3);
+        if (previewing("roughglass")) {
+          const row = roughRow(pane.causes.material.ior, pane.causes.material.frost);
+          roughRatios.set(row.ratio, n * 4);
+          roughSpreads.set(row.spread, n * 4);
+        }
+        throughs.set(upper ? [1, 1, 1] : pane.stack.throughScale, n * 3);
         marks[n * 2] = pane.causes.scratch;
         marks[n * 2 + 1] = pane.causes.smudge;
-        drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h });
+        drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h, over: overlap });
         n += 1;
       }
 
-      scale = Math.min(window.devicePixelRatio || 1, MAX_SCALE);
+      scale = Math.min(window.devicePixelRatio || 1, Math.min(MAX_SCALE, passScaleCap()));
       const bw = Math.round((document.documentElement.clientWidth || window.innerWidth) * scale);
       const bh = Math.round(vh * scale);
       if (!beginPass(bw, bh, "floor")) return false;
@@ -221,19 +324,24 @@ export function FloorLight() {
       uploadLights(
         gl,
         lightLoc,
-        pointLights().map((l) => ({
-          x: l.x,
-          y: l.y,
-          height: l.height,
-          colour: l.colour,
-          power: lampPower(l),
-          radius: l.radius,
-          charge: l.charge,
-          uv: l.uv,
-          span: l.span,
-        })),
+        // What lies on the photographs does not light them through the glass.
+        pointLights()
+          .filter((l) => !l.below)
+          .map((l) => ({
+            x: l.x,
+            y: l.y,
+            height: l.height,
+            colour: l.colour,
+            power: lampPower(l),
+            radius: l.radius,
+            charge: l.charge,
+            uv: l.uv,
+            span: l.span,
+            aim: l.aim,
+          })),
       );
       gl.uniform1f(uLightGain, t("floorLight"));
+      gl.uniform1f(uCorners, previewing("corners") ? 1 : 0);
       gl.uniform1f(uShadowGain, t("floorShadow"));
       gl.uniform1f(uCaustics, t("floorCaustics"));
       gl.uniform1f(uView, t("floorView"));
@@ -253,7 +361,12 @@ export function FloorLight() {
       gl.uniform1fv(uGap, gaps);
       gl.uniform1fv(uIor, iors);
       gl.uniform1fv(uFrost, frosts);
+      gl.uniform1f(uRoughGlass, previewing("roughglass") ? 1 : 0);
+      gl.uniform3fv(uUnscattered, unscatteredAll);
+      gl.uniform4fv(uRoughRatio, roughRatios);
+      gl.uniform4fv(uRoughSpread, roughSpreads);
       gl.uniform3fv(uThrough, throughs);
+      gl.uniform1fv(uEdgeOnly, edgeOnly);
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -276,6 +389,34 @@ export function FloorLight() {
         const ch = Math.min(buffer.height, Math.ceil(sy + h)) - cy;
         if (cw <= 0 || ch <= 0) continue;
         ctx.drawImage(buffer, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
+        // The part a layer above covers is that layer's to show.
+        if (pane.over && pane.over.w > 0 && pane.over.h > 0) {
+          ctx.clearRect(
+            (pane.over.x - pane.x) * scale,
+            (pane.over.y - pane.y) * scale,
+            pane.over.w * scale,
+            pane.over.h * scale,
+          );
+        }
+      }
+
+      // The floor that lies above this canvas: the same light, drawn onto it.
+      for (const el of document.querySelectorAll<HTMLElement>("[data-floor-receiver]")) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > vh || r.width < 1 || r.height < 1) continue;
+        const w = Math.max(1, Math.round(r.width * scale));
+        const h = Math.max(1, Math.round(r.height * scale));
+        const layer = receiverFor(el, w, h);
+        const ctx = layer.getContext("2d");
+        if (!ctx) continue;
+        ctx.clearRect(0, 0, w, h);
+        const sx = r.left * scale;
+        const sy = r.top * scale;
+        const cx = Math.max(0, Math.floor(sx));
+        const cy = Math.max(0, Math.floor(sy));
+        const cw = Math.min(buffer.width, Math.ceil(sx + w)) - cx;
+        const ch = Math.min(buffer.height, Math.ceil(sy + h)) - cy;
+        if (cw > 0 && ch > 0) ctx.drawImage(buffer, cx, cy, cw, ch, cx - sx, cy - sy, cw, ch);
       }
 
       /*
@@ -326,6 +467,7 @@ export function FloorLight() {
       stopCharge();
       stopFlash();
       for (const layer of under.values()) layer.remove();
+      for (const layer of received.values()) layer.remove();
       for (const tex of layers.values()) gl.deleteTexture(tex);
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
@@ -335,5 +477,5 @@ export function FloorLight() {
     };
   }, [generation]);
 
-  return <canvas ref={ref} aria-hidden="true" className="floor-light" />;
+  return <canvas ref={ref} aria-hidden="true" className="floor-light" data-glass-ignore="" />;
 }

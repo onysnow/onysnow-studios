@@ -509,7 +509,13 @@
 
   .glass {
     position: relative;
-    background-color: oklch(0.145 0.011 55 / 30%);
+    /*
+     * The pane's smoky fill, as a property so the liquid glass can read the
+     * same number (effects/adapters/liquid-config, ?try=liquidedge) when its
+     * own background is taken away.
+     */
+    --pane-fill: oklch(0.145 0.011 55 / 30%);
+    background-color: var(--pane-fill);
     /*
      * Frost AND bend, in the pane's own backdrop pass.
      *
@@ -559,7 +565,8 @@
   }
 
   .glass--bar {
-    background-color: oklch(0.145 0.011 55 / 26%);
+    --pane-fill: oklch(0.145 0.011 55 / 26%);
+    background-color: var(--pane-fill);
     backdrop-filter: blur(28px) saturate(150%) var(--glass-bevel,);
     box-shadow: none;
   }
@@ -1035,6 +1042,28 @@ span:has(> .photo-surface) {
 }
 
 /*
+ * On a card, the shadow is the card's, in the pane's lowest layer (a
+ * negative z-index in the pane's stacking context, above its own light
+ * layers by document order): under every card, so one card's shadow never
+ * lies across its neighbour's photograph (2h). The photograph's own shadow
+ * is off there.
+ */
+[data-cast] > span:has(> .photo-surface) {
+  box-shadow: none;
+}
+
+[data-cast]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px) var(--cast-spread, 0px)
+    rgba(0, 0, 0, var(--cast-alpha, 0));
+}
+
+/*
  * Type, the same way.
  *
  * Kept well under the photographs': a line of type stands off the glass by a
@@ -1137,6 +1166,24 @@ span:has(> .photo-surface) {
   mask:
     linear-gradient(#000 0 0) content-box exclude,
     linear-gradient(#000 0 0);
+}
+
+/*
+ * Dark plastic: the round arrow buttons (2i, Ony 2026-09-30: "these
+ * elements have no shadow or plastic sheen"). Glossy black plastic, opaque:
+ * the same face highlight and rim as the orange, no coloured light through
+ * it -- it throws a shadow instead, by the one shadow model, like a card.
+ */
+.plastic--dark {
+  box-shadow:
+    var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px) var(--cast-spread, 0px)
+      rgb(0 0 0 / var(--cast-alpha, 0)),
+    0 0 0 1px rgb(0 0 0 / calc(0.45 * var(--plastic-on))),
+    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on)));
+}
+
+.plastic--dark::before {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2224,18 +2271,17 @@ html[data-try~="shaderplastic"] .glass .plastic::after {
  * RasterGlass.tsx for why a cached capture is the wrong shape for an element
  * that has the whole scrolling document behind it.
  */
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle):not(.dev-nav__menu) {
-  /*
-   * The shader samples the capture itself; a blur here would blur it twice.
-   * Unprefixed only -- the same Lightning CSS trap as `.glass[data-liquid]`:
-   * writing both compiled to the -webkit- one alone, which Chrome ignores.
-   */
-  backdrop-filter: none;
-  /* Its own background would sit between the capture and the shader output. */
-  background: transparent;
-}
-
-:root[data-glass="raster"] .glass:not(.glass--bar):not(.glass-toggle) > .glass__refract {
+/*
+ * Per pane, and only once that pane's shader is up (`data-liquid`, set by
+ * RasterGlass after its init succeeds). This used to key off the root's
+ * `data-glass="raster"`, which is set before any pane has started: the panes
+ * start one at a time, each after a full capture, so for the first seconds
+ * every pane still waiting had its frost and its tint taken away with
+ * nothing drawn in their place -- clear, unfrosted glass with the light
+ * painted over the sharp photograph (2j). The frost and the background
+ * themselves come off in the `.glass[data-liquid]` rule above.
+ */
+.glass[data-liquid]:not(.glass--bar):not(.glass-toggle) > .glass__refract {
   display: none;
 }
 
@@ -2751,21 +2797,6 @@ html.is-winding * {
   z-index: 1;
 }
 
-
-/*
- * Under liquid glass only, the band itself is lifted too.
- *
- * The library builds each pane's scene from the root's children in paint
- * order and stops at the pane's own section -- so the photograph AFTER a band
- * in the document never made it into the band's scene, and the lower half of
- * the glass refracted nothing. A z-index puts the band after both neighbours
- * in that order. (Not in CSS mode: there a z-indexed band would cut the CSS
- * backdrop off at itself -- see SeamSection.)
- */
-:root[data-glass="raster"] [data-seam] {
-  z-index: 1;
-}
-
 /* The light through the glass, on the photographs. See FloorLight.tsx. */
 .floor-light {
   position: fixed;
@@ -2780,6 +2811,16 @@ html.is-winding * {
   .floor-light {
     display: none;
   }
+}
+
+/* The floor light drawn onto what stands above the page's floor canvas (FloorLight, 2m). */
+.floor-received {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
 }
 
 /*
@@ -2891,8 +2932,22 @@ html.is-winding * {
   transform: scale(-1, 1);
   mix-blend-mode: screen;
   opacity: var(--lens-room, 1);
-  -webkit-mask: radial-gradient(circle closest-side, rgb(0 0 0 / 0.04) 0%, rgb(0 0 0 / 0.06) 55%, rgb(0 0 0 / 0.22) 88%, rgb(0 0 0 / 0.5) 99%, transparent 100%);
-  mask: radial-gradient(circle closest-side, rgb(0 0 0 / 0.04) 0%, rgb(0 0 0 / 0.06) 55%, rgb(0 0 0 / 0.22) 88%, rgb(0 0 0 / 0.5) 99%, transparent 100%);
+  -webkit-mask: radial-gradient(
+    circle closest-side,
+    rgb(0 0 0 / 0.04) 0%,
+    rgb(0 0 0 / 0.06) 55%,
+    rgb(0 0 0 / 0.22) 88%,
+    rgb(0 0 0 / 0.5) 99%,
+    transparent 100%
+  );
+  mask: radial-gradient(
+    circle closest-side,
+    rgb(0 0 0 / 0.04) 0%,
+    rgb(0 0 0 / 0.06) 55%,
+    rgb(0 0 0 / 0.22) 88%,
+    rgb(0 0 0 / 0.5) 99%,
+    transparent 100%
+  );
 }
 
 /*
@@ -2905,10 +2960,23 @@ html.is-winding * {
   inset: -11px;
   border-radius: 50%;
   background:
-    radial-gradient(circle closest-side, transparent 89.5%, rgb(255 236 190 / calc(0.8 * var(--ring, 0))) 90.4%, transparent 93%),
-    radial-gradient(circle closest-side, transparent 89.5%, rgb(40 26 8 / 0.85) 90%, transparent 91.5%, transparent 97%, rgb(40 26 8 / 0.8) 100%),
+    radial-gradient(
+      circle closest-side,
+      transparent 89.5%,
+      rgb(255 236 190 / calc(0.8 * var(--ring, 0))) 90.4%,
+      transparent 93%
+    ),
+    radial-gradient(
+      circle closest-side,
+      transparent 89.5%,
+      rgb(40 26 8 / 0.85) 90%,
+      transparent 91.5%,
+      transparent 97%,
+      rgb(40 26 8 / 0.8) 100%
+    ),
     linear-gradient(rgb(214 170 88), rgb(214 170 88)),
-    var(--room, url("/rooms/metro.jpg")) var(--lens-rx, 50%) var(--lens-ry, 50%) / auto 100% no-repeat,
+    var(--room, url("/rooms/metro.jpg")) var(--lens-rx, 50%) var(--lens-ry, 50%) / auto 100%
+      no-repeat,
     rgb(74 52 20);
   background-blend-mode: normal, normal, multiply, normal, normal;
   -webkit-mask: radial-gradient(circle closest-side, transparent 89.6%, #000 90.2%);
@@ -3228,4 +3296,212 @@ html.is-winding * {
   letter-spacing: 0.08em;
   color: rgb(200 215 200 / 0.35);
   pointer-events: none;
+}
+
+/*
+ * The flashlight you hold (item 25i, components/site/Flashlight), seen from
+ * above: a dark anodised body with a knurled grip, a wider head at the end
+ * it points from, and the lit rim of its lens. Pointing straight down, all
+ * that shows is the round tail cap with its rubber switch.
+ */
+.flashlight {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9990;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  transform-origin: 0 0;
+  opacity: 0;
+  filter: drop-shadow(0 6px 8px rgb(0 0 0 / 0.55));
+}
+.flashlight__tail {
+  flex: none;
+  width: 8px;
+  height: 80%;
+  border-radius: 3px 0 0 3px;
+  background: linear-gradient(to bottom, #3a3d42, #16181b 60%, #0b0c0e);
+}
+.flashlight__grip {
+  flex: 1;
+  height: 76%;
+  background:
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.07) 0 1px, transparent 1px 4px),
+    linear-gradient(to bottom, #4a4e55, #1c1e22 55%, #0e0f11);
+}
+.flashlight__head {
+  flex: none;
+  width: 22%;
+  min-width: 10px;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(to bottom, #5a5f67, #23262b 55%, #101114);
+}
+.flashlight__lens {
+  flex: none;
+  width: 3px;
+  height: 92%;
+  border-radius: 0 2px 2px 0;
+  background: #f2f8ff;
+  box-shadow:
+    0 0 6px 2px rgb(220 238 255 / 0.9),
+    0 0 18px 6px rgb(200 225 255 / 0.35);
+}
+/* Straight down: only the tail cap shows, round, with its switch. */
+.flashlight[data-down] {
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #26282c 0 30%, transparent 32%),
+    radial-gradient(circle at 40% 35%, #5a5f67, #16181b 70%);
+}
+.flashlight[data-down] > * {
+  display: none;
+}
+
+/*
+ * The lens's natural vignetting (?try=vignette, components/site/Vignette):
+ * over the whole picture, under the cursor and its light.
+ */
+.lens-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+}
+
+/*
+ * The lighter tier (item 34, effects/engine/quality): the bokeh layer is a
+ * second full-pane backdrop blur, the costliest thing a pane asks of the
+ * compositor after its own frost.
+ */
+:root[data-quality="lite"] .glass__bokeh {
+  display: none;
+}
+
+/*
+ * Secret 2, the red room (item 39, ?try=redroom; components/site/RedRoom).
+ * The negative under the safelight, with the loupe's hole at --lx/--ly.
+ */
+.red-room {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+  --hole: radial-gradient(
+    circle var(--loupe, 84px) at var(--lx, 50%) var(--ly, 50%),
+    transparent calc(100% - 1px),
+    #000 100%
+  );
+  -webkit-mask-image: var(--hole);
+  mask-image: var(--hole);
+}
+.red-room__negative {
+  -webkit-backdrop-filter: grayscale(1) invert(1) brightness(0.5) contrast(1.25);
+  backdrop-filter: grayscale(1) invert(1) brightness(0.5) contrast(1.25);
+}
+.red-room__safelight {
+  /* The safelight: about 630 nm, nothing the paper can see. */
+  background: rgb(255 36 12);
+  mix-blend-mode: multiply;
+}
+.red-room__loupe {
+  position: fixed;
+  /* Above the hanging print, which it looks at too. */
+  z-index: 9003;
+  pointer-events: none;
+  left: calc(var(--lx, 50%) - var(--loupe, 84px));
+  top: calc(var(--ly, 50%) - var(--loupe, 84px));
+  width: calc(2 * var(--loupe, 84px));
+  height: calc(2 * var(--loupe, 84px));
+  border-radius: 50%;
+  border: 3px solid rgb(40 6 4);
+  box-shadow:
+    0 0 0 1px rgb(255 60 30 / 0.35),
+    inset 0 0 18px rgb(0 0 0 / 0.55);
+}
+.red-room__leave {
+  position: fixed;
+  z-index: 9002;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 60 30 / 0.5);
+  background: rgb(20 2 1 / 0.8);
+  color: rgb(255 90 60);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+/* The print hanging to dry (item 40): a line, a cord, the sheet on its clip. */
+.red-room__line {
+  position: fixed;
+  inset: 0;
+  z-index: 9001;
+  pointer-events: none;
+  background: linear-gradient(rgb(60 8 4), rgb(60 8 4)) 0 95px / 100% 1.5px no-repeat;
+}
+.red-room__cord {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.5px;
+  margin-left: -0.75px;
+  background: rgb(70 10 5);
+  transform-origin: 50% 0;
+}
+.red-room__print {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 50% 0;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  /* The paper itself: white (the loupe shows it as it is). */
+  background: rgb(244 241 234);
+  padding: 10px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.55);
+}
+.red-room__print[data-held] {
+  cursor: grabbing;
+}
+.red-room__print img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  user-select: none;
+}
+/* The print under the safelight: paper white is the safelight's red. */
+.red-room__safe {
+  position: absolute;
+  inset: 0;
+  padding: 10px;
+  background: rgb(150 22 8);
+  --hole: radial-gradient(
+    circle var(--loupe, 84px) at var(--lx, -999px) var(--ly, -999px),
+    transparent calc(100% - 1px),
+    #000 100%
+  );
+  -webkit-mask-image: var(--hole);
+  mask-image: var(--hole);
+}
+.red-room__safe img {
+  filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-38deg) brightness(0.62);
+}
+.red-room__clip {
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  width: 22px;
+  height: 14px;
+  margin-left: -11px;
+  border-radius: 2px;
+  background: rgb(30 4 2);
 }

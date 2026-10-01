@@ -20,6 +20,7 @@
 import { previewing } from "@/effects/engine/preview";
 import { roomLight } from "@/effects/light/lights";
 import { readPaneCauses } from "@/effects/materials/pane-causes";
+import { indexAt } from "@/effects/optics/dispersion";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { setGlassConfigWriter, t, tuning } from "@/lib/tuning";
 
@@ -34,7 +35,11 @@ export function liquidConfigFor(pane: HTMLElement): Record<string, number> {
     config[knob.glassKey] = knob.value;
   }
   // The pane's own matter: its material's frost, and its edge.
-  const causes = readPaneCauses(pane, { frost: t("glassBlur"), gap: t("floorGap") });
+  const causes = readPaneCauses(pane, {
+    frost: t("glassBlur"),
+    gap: t("floorGap"),
+    thickness: t("glassThickness"),
+  });
   if ("blurAmount" in config) config["blurAmount"] = causes.material.frost;
   config["zRadius"] = readEdgeWidth(pane, tuning["edgeWidth"]!.value);
   // Its own light stands in for the room's.
@@ -55,12 +60,75 @@ export function liquidConfigFor(pane: HTMLElement): Record<string, number> {
    * rig is switched off and the library does only what glass does to what is
    * behind it: bend, blur and tint.
    */
-  if (previewing("liquidlights")) {
+  /*
+   * ?try=liquidedge needs this too: on a band as wide as the page the rig's
+   * lights depend only on the height across the bevel, so each one is a
+   * bright line the whole width of the screen -- the streaks along the liquid
+   * bands, which the CSS glass does not have (2j).
+   */
+  if (previewing("liquidlights") || previewing("liquidedge")) {
     for (const key of ["specular", "edgeHighlight", "fresnel", "shadowOpacity"]) {
       if (key in config) config[key] = 0;
     }
   }
+  /*
+   * ?try=liquidedge (2j): the edge the CSS glass draws. The library bends by
+   * the slope of its own height field times a knob, which at the rim is a
+   * shift of a few hundred pixels -- the streaked, chromed look of its
+   * bands. Here the bend is Snell through the pane's own edge and thickness,
+   * the very numbers the CSS bend is built from (lib/bevel-map), each colour
+   * at its own index (the material's dispersion, not a fringe knob); the fill
+   * is the pane's own; and the lines the library draws round the rim, which
+   * no light in the scene puts there, are gone.
+   */
+  if (previewing("liquidedge")) {
+    const { ior, abbe } = causes.material;
+    config["physicalEdge"] = 1;
+    config["thickness"] = causes.thickness;
+    config["iorR"] = indexAt(LAMBDA_R, ior, abbe);
+    config["iorG"] = indexAt(LAMBDA_G, ior, abbe);
+    config["iorB"] = indexAt(LAMBDA_B, ior, abbe);
+    const [r, g, b, a] = paneFill(pane);
+    config["veilR"] = r;
+    config["veilG"] = g;
+    config["veilB"] = b;
+    config["veilA"] = a;
+  }
   return config;
+}
+
+/** The wavelengths the three channels stand for, nm: roughly where sRGB's primaries peak. */
+const LAMBDA_R = 610;
+const LAMBDA_G = 550;
+const LAMBDA_B = 465;
+
+/** The CSS glass's own fill, as display RGBA 0..1 (styles.css --pane-fill). */
+const FALLBACK_FILL: [number, number, number, number] = [0.07, 0.055, 0.045, 0.3];
+const fills = new Map<string, [number, number, number, number]>();
+function paneFill(pane: HTMLElement): [number, number, number, number] {
+  const css = getComputedStyle(pane).getPropertyValue("--pane-fill").trim();
+  if (!css) return FALLBACK_FILL;
+  const hit = fills.get(css);
+  if (hit) return hit;
+  let rgba = FALLBACK_FILL;
+  try {
+    // The canvas resolves any CSS colour (oklch included) to sRGB for us.
+    const c = document.createElement("canvas");
+    c.width = c.height = 1;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    if (ctx) {
+      ctx.fillStyle = "#000";
+      ctx.fillStyle = css;
+      ctx.fillRect(0, 0, 1, 1);
+      const d = ctx.getImageData(0, 0, 1, 1).data;
+      const a = d[3]! / 255;
+      if (a > 0) rgba = [d[0]! / 255, d[1]! / 255, d[2]! / 255, a];
+    }
+  } catch {
+    /* keep the fallback */
+  }
+  fills.set(css, rgba);
+  return rgba;
 }
 
 /** Write every pane's config. */

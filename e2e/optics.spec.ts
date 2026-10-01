@@ -26,11 +26,21 @@ import {
   slantSpread,
   transmittance,
 } from "../src/effects/optics/transmission";
-import { fresnelSchlick, ggx, lampReflection } from "../src/effects/optics/reflection";
+import {
+  fresnelP,
+  fresnelS,
+  fresnelSchlick,
+  ggx,
+  lampReflection,
+  polarisedReflectance,
+} from "../src/effects/optics/reflection";
 import { penumbraOf } from "../src/effects/optics/shadow";
+import { beamFactor } from "../src/effects/light/beam";
+import { LIGHTS_GLSL } from "../src/effects/light/light-uniforms";
 import {
   edgeBand,
   fresnelRise,
+  refractionOffset,
   roundedRectSDF,
   surfaceHeight,
   toneMapFilm,
@@ -293,6 +303,52 @@ const CASES: Case[] = [
     hi: 1,
   },
   {
+    name: "fresnelS",
+    glsl: "fresnelS(cos(x), 1.518)",
+    ts: (x) => fresnelS(Math.cos(x), 1.518),
+    from: 0,
+    to: 1.55,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "fresnelP",
+    glsl: "fresnelP(cos(x), 1.518)",
+    ts: (x) => fresnelP(Math.cos(x), 1.518),
+    from: 0,
+    to: 1.55,
+    lo: 0,
+    hi: 1,
+  },
+  {
+    name: "polarisedReflectance",
+    glsl: "polarisedReflectance(cos(0.7), 1.518, x, 1.0)",
+    ts: (x) => polarisedReflectance(Math.cos(0.7), 1.518, x, 1),
+    from: 0,
+    to: 3.1,
+    lo: 0,
+    hi: 0.2,
+  },
+  {
+    name: "beamFactor",
+    // Down a torch's axis and out through the hotspot and spill: x is the angle off it.
+    glsl: "beamFactor(vec4(0.0, 0.0, -1.0, 1.0), vec3(tan(x) * 100.0, 0.0, -100.0))",
+    ts: (x) => beamFactor([0, 0, -1], Math.tan(x) * 100, 0, -100),
+    from: 0,
+    to: 0.7,
+    lo: 0,
+    hi: 1.1,
+  },
+  {
+    name: "refractionOffset",
+    glsl: "refractionOffset(x, 40.0, 18.0, 1.518)",
+    ts: (x) => refractionOffset(x, 40, 18, 1.518),
+    from: -0.1,
+    to: 1.1,
+    lo: 0,
+    hi: 24,
+  },
+  {
     name: "fresnelRise",
     glsl: "fresnelRise(x)",
     ts: (x) => fresnelRise(x),
@@ -379,6 +435,7 @@ void main() {
             SHADOW_GLSL +
             TRANSMISSION_GLSL +
             HEX_TILE_GLSL +
+            LIGHTS_GLSL +
             "float hexW(vec2 st) { vec3 w; vec2 a; vec2 b; vec2 c; hexWeights(st, w, a, b, c); vec3 k = hexBlend(w); return max(k.x, max(k.y, k.z)); }",
           c: { ...c, ts: undefined },
           N,

@@ -40,13 +40,19 @@ function greyOf(img: HTMLImageElement, long: number): { grey: Grey; rgba: ImageD
   ctx.drawImage(img, 0, 0, w, h);
   const rgba = ctx.getImageData(0, 0, w, h);
   const v = new Float32Array(w * h);
+  const alpha = new Float32Array(w * h);
+  let cut = false;
   for (let i = 0; i < v.length; i++) {
     const r = rgba.data[i * 4]! / 255;
     const g = rgba.data[i * 4 + 1]! / 255;
     const b = rgba.data[i * 4 + 2]! / 255;
-    v[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const a = rgba.data[i * 4 + 3]! / 255;
+    // A cut-out photograph is read over black: no glass, no light.
+    v[i] = (0.2126 * r + 0.7152 * g + 0.0722 * b) * a;
+    alpha[i] = a;
+    if (a < 0.98) cut = true;
   }
-  return { grey: { w, h, v }, rgba };
+  return { grey: cut ? { w, h, v, alpha } : { w, h, v }, rgba };
 }
 
 /** Load and read a crack photograph; null if it cannot be read. */

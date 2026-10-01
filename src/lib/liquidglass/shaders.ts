@@ -16,6 +16,9 @@
 // own code in it gets checked properly, which is the whole point.
 // @ts-nocheck
 
+// LOCAL: the edge functions every shader on the site shares (?try=liquidedge).
+import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
+
 /**
  * GLSL shader sources for the liquid glass effect.
  *
@@ -138,6 +141,11 @@ uniform float u_shadowOffY;
 uniform float u_specTight;   // scales every exponent; 1.0 is upstream
 uniform vec2  u_lightDir;    // shifts the two TIGHT lights; (0,0) is upstream
 uniform float u_bevelMode;
+// LOCAL: ?try=liquidedge -- the edge the CSS glass draws (see main()).
+uniform float u_physEdge;
+uniform float u_thick;   // device px
+uniform vec3  u_iorRGB;
+uniform vec4  u_veil;
 
 varying vec2 v_localPx;
 varying vec2 v_screenUV;
@@ -168,6 +176,8 @@ float bevelDist(vec2 p, vec2 b, float k) {
 	return mix(c, a, h) - k * h * (1.0 - h);
 }
 
+${EDGE_PROFILE_GLSL}
+
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -176,6 +186,11 @@ void main() {
 	vec2 half_ = u_size * 0.5;
 	float r = min(u_radius, min(half_.x, half_.y));
 	float sdf = rrSDF(v_localPx, half_, r);
+	// LOCAL: a band as wide as the scene has no sides at all -- not in its
+	// mask, its inner stroke or its glow either, or they draw a thin edge
+	// down the screen's own edge where the band's top face runs on past it
+	// (Ony 2026-09-30, 2d). Measured top and bottom only, like its bevel.
+	if (u_straight > 0.5) sdf = abs(v_localPx.y) - half_.y;
 
 	// ── Shadow (outside panel, offset by shadowOffY) ──
 	if (sdf > 0.0) {
@@ -264,15 +279,37 @@ void main() {
 	vec2 caD = N.xy * caS * pxToUV;
 	vec2 base = v_screenUV + refr + micro;
 
+	vec2 baseR = base + caD;
+	vec2 baseG = base;
+	vec2 baseB = base - caD;
+	// LOCAL (?try=liquidedge): the bend is Snell through the pane's own edge
+	// and thickness -- the same function, from the same shared chunk, the CSS
+	// bend's map is built from (lib/bevel-map) -- straight in from the nearest
+	// edge, each colour at its own index. Upstream's bend is its height
+	// field's slope times a knob, which at the rim is hundreds of pixels: the
+	// streaks along its bands. No fringe knob either: the split between the
+	// colours is the glass's dispersion.
+	if (u_physEdge > 0.5) {
+		vec2 inward = vec2(dR - dL, dU - dD);
+		float len = length(inward);
+		inward = len > 1e-4 ? inward / len : vec2(0.0);
+		float x = inside / max(zR, 1.0);
+		vec2 dirUV = inward * pxToUV;
+		baseR = v_screenUV + dirUV * refractionOffset(x, zR, u_thick, u_iorRGB.r);
+		baseG = v_screenUV + dirUV * refractionOffset(x, zR, u_thick, u_iorRGB.g);
+		baseB = v_screenUV + dirUV * refractionOffset(x, zR, u_thick, u_iorRGB.b);
+		base = baseG;
+	}
+
 	vec3 sharp = vec3(
-		texture2D(u_bgTex,  base + caD).r,
-		texture2D(u_bgTex,  base).g,
-		texture2D(u_bgTex,  base - caD).b
+		texture2D(u_bgTex,  baseR).r,
+		texture2D(u_bgTex,  baseG).g,
+		texture2D(u_bgTex,  baseB).b
 	);
 	vec3 blur = vec3(
-		texture2D(u_blurTex, base + caD).r,
-		texture2D(u_blurTex, base).g,
-		texture2D(u_blurTex, base - caD).b
+		texture2D(u_blurTex, baseR).r,
+		texture2D(u_blurTex, baseG).g,
+		texture2D(u_blurTex, baseB).b
 	);
 	// ── Edge-weighted blur mix ──
 	// LOCAL: the rim goes MORE out of focus, not less. Upstream pulled the
@@ -298,6 +335,10 @@ void main() {
 	}
 	// The sharp sample only matters with no frost at all.
 	col = mix(sharp, col, step(0.001, u_blurOn));
+
+	// LOCAL (?try=liquidedge): the pane's own smoky fill, the one the CSS
+	// glass lays over its frost (styles.css --pane-fill).
+	col = mix(col, u_veil.rgb, u_veil.a);
 
 	// ── Brightness ──
 	col *= 1.0 + u_brightness;
@@ -350,8 +391,11 @@ void main() {
 	// ── Composite ──
 	vec3 fin = col;
 	fin += vec3(totalSpec);
-	fin += vec3(rim + innerGlow);
-	fin += vec3(innerStroke * u_edgeHL * 0.55);
+	// LOCAL (?try=liquidedge): no drawn lines round the rim. The CSS glass
+	// has none either -- the arris is what the light pass lights.
+	float drawn = 1.0 - step(0.5, u_physEdge);
+	fin += vec3(rim + innerGlow) * drawn;
+	fin += vec3(innerStroke * u_edgeHL * 0.55) * drawn;
 	fin += vec3(envRefl);
 	fin = mix(fin, vec3(1.0), fres * 0.2);
 

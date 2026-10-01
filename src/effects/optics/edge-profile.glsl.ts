@@ -36,6 +36,30 @@ float surfaceHeight(float x) {
   return sqrt(1.0 - (1.0 - t) * (1.0 - t));
 }
 
+/*
+ * How far the backdrop moves under a point on the bevel, in pixels, inward
+ * (edge-profile.ts refractionOffset): Snell at the bevel's surface, then the
+ * rest of the glass crossed. Circle profile; the slope by the same central
+ * difference as the twin, so the two agree to the last digit.
+ */
+float refractionOffset(float x, float edgeWidth, float thickness, float ior) {
+  float eta = 1.0 / ior;
+  float height = surfaceHeight(x);
+  float a = max(x - 0.001, 0.0);
+  float b = min(x + 0.001, 1.0);
+  float slope = (surfaceHeight(b) - surfaceHeight(a)) / max(b - a, 1e-6);
+  float magnitude = sqrt(slope * slope + 1.0);
+  float nx = -slope / magnitude;
+  float ny = -1.0 / magnitude;
+  float k = 1.0 - eta * eta * (1.0 - ny * ny);
+  if (k < 0.0) return 0.0;
+  float kSqrt = sqrt(k);
+  float rx = -(eta * ny + kSqrt) * nx;
+  float ry = eta - (eta * ny + kSqrt) * ny;
+  if (abs(ry) < 1e-3) return 0.0;
+  return rx * ((height * edgeWidth + thickness) / ry);
+}
+
 /* Schlick's fifth-power rise toward grazing. facing: 1 straight on, 0 grazing. */
 float fresnelRise(float facing) {
   return pow(1.0 - clamp(facing, 0.0, 1.0), 5.0);

@@ -1424,6 +1424,7 @@ export class LiquidGlass {
 	): void {
 		const tag = child.tagName;
 
+		if (child.hasAttribute('data-glass-ignore')) return;
 		if (tag === 'CANVAS' || tag === 'IMG' || tag === 'VIDEO') {
 			this._drawMediaElement(child, this._sceneCtx, sampleRect, rootRect, dpr);
 			return;
@@ -1491,6 +1492,13 @@ export class LiquidGlass {
 				if (gc === el) { isGlassCanvas = true; break; }
 			}
 			if (isGlassCanvas) continue;
+			// LOCAL: a layer that asks to be left out of what the glass sees
+			// (data-glass-ignore). The floor light is one: the part of it under
+			// a pane is that pane's own layer to draw (FloorLight, pane:under),
+			// and the page-wide canvas is cleared there -- so in the capture its
+			// light stopped dead at the rim, and the bevel's bend drew that
+			// step again inside the pane as a second line.
+			if (htmlEl.closest('[data-glass-ignore]')) continue;
 
 			// LOCAL: nothing that sits ON a pane. The pane's own html is
 			// pruned from the scene, but this media walk went round that and

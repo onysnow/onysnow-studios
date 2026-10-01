@@ -1,3 +1,4 @@
+import { experimentsAllowed } from "@/lib/admin-gate";
 import { useEffect, useRef } from "react";
 import { glassGeometry } from "@/effects/scene/scene";
 import { traceBeam, type BeamHit, type BeamPane, type Vec } from "@/effects/optics/beam";
@@ -44,7 +45,7 @@ const FROST_SCATTER = 1.4;
 
 /** The laser's colour from the address (?laser=green), red if none or unknown. */
 function laserColourFromUrl(): LaserColour {
-  if (typeof window === "undefined") return "red";
+  if (typeof window === "undefined" || !experimentsAllowed()) return "red";
   const asked = new URLSearchParams(window.location.search).get("laser");
   return asked && asked in LASER_COLOURS ? (asked as LaserColour) : "red";
 }

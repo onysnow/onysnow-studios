@@ -28,7 +28,57 @@
 import type { Crack, Pt, Shard } from "./fracture";
 
 /** A greyscale image, 0 to 1, row by row. */
-export type Grey = { w: number; h: number; v: Float32Array };
+export type Grey = {
+  w: number;
+  h: number;
+  v: Float32Array;
+  /**
+   * Where there is glass, 0 to 1, for a photograph cut out on a transparent
+   * background (a single broken piece): outside it there is no glass, and
+   * the piece's own outline is its edge, not a crack.
+   */
+  alpha?: Float32Array;
+};
+
+/**
+ * Where the glass is, well inside its outline (the photographed edge is not a
+ * crack). Clear glass cut out is nearly transparent, so anything above a
+ * trace of opacity is glass; its silhouette is closed over pinholes, then
+ * shrunk away from the edge.
+ */
+function glassInside(img: Grey, r: number): Float32Array | null {
+  if (!img.alpha) return null;
+  const { w, h } = img;
+  const any = { w, h, v: Float32Array.from(img.alpha, (a) => (a > 0.03 ? 1 : 0)) };
+  const closed = extreme(extreme(any, r, true), r, false).v;
+  // Its silhouette: everything the empty background cannot reach from the border.
+  const outside = new Uint8Array(w * h);
+  const stack: number[] = [];
+  const seed = (i: number) => {
+    if (!outside[i] && closed[i]! < 0.5) {
+      outside[i] = 1;
+      stack.push(i);
+    }
+  };
+  for (let x = 0; x < w; x++) {
+    seed(x);
+    seed((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y++) {
+    seed(y * w);
+    seed(y * w + w - 1);
+  }
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % w;
+    if (x > 0) seed(i - 1);
+    if (x < w - 1) seed(i + 1);
+    if (i >= w) seed(i - w);
+    if (i < w * (h - 1)) seed(i + w);
+  }
+  const silhouette = { w, h, v: Float32Array.from(outside, (o) => (o ? 0 : 1)) };
+  return extreme(silhouette, r * 2, false).v;
+}
 
 /** Box blur of radius r, separable, with edge clamping. */
 export function boxBlur(src: Grey, r: number): Grey {
@@ -175,7 +225,10 @@ export function crackMap(img: Grey, opts: { neighbourhood?: number } = {}): Crac
     strength[i] = Math.min(1, Math.max(0, (hat[i]! - threshold * 0.6) / (threshold * 0.8)));
     if (hat[i]! > threshold) mask[i] = 1;
   }
-  despeckle(mask, w, h, Math.max(4, Math.round((w * h) / 40000)));
+  const glass = glassInside(img, r * 2);
+  if (glass) for (let i = 0; i < mask.length; i++) if (glass[i]! < 0.5) mask[i] = 0;
+  // Dust and grit on the glass are specks, not cracks: a crack runs on.
+  despeckle(mask, w, h, Math.max(4, Math.round((w * h) / 15000)));
   // The strike: the densest cracks, over a neighbourhood a twentieth across.
   const density = boxBlur(
     { w, h, v: Float32Array.from(mask) },
@@ -280,6 +333,7 @@ export function crackStrength(
   const k = img.w / map.w;
   const r = Math.max(1, Math.round(map.radius * k));
   const hat = topHat(img, r, map.bright);
+  const glass = glassInside(img, r * 2);
   /*
    * The crushed spot is no thin line: pulverised glass photographed as a
    * solid white patch, too wide for the top-hat to see. Against a wide
@@ -304,7 +358,7 @@ export function crackStrength(
     const edge =
       Math.min(x, y, img.w - 1 - x, img.h - 1 - (y | 0)) /
       Math.max(4, 0.04 * Math.min(img.w, img.h));
-    out[i] = a * Math.min(1, Math.max(0, edge));
+    out[i] = a * Math.min(1, Math.max(0, edge)) * (glass ? glass[i]! : 1);
   }
   return out;
 }

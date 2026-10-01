@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SURFACE_LAYERS_GLSL } from "./surface-layers.glsl";
-import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "./surface-layers";
+import { SCRATCH_SHADOW, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "./surface-layers";
 import { FLOOR_FRAGMENT_SHADER } from "@/lib/floor-light-shader";
 import { GLASS_LIGHT_FRAGMENT_SHADER } from "@/lib/glass-light-shader";
 
@@ -30,8 +30,13 @@ describe("what the marks do to light passing through", () => {
     expect(underFullSmudge).toBeLessThan(1);
   });
 
-  it("a scratch gathers light into a line brighter than what is around it", () => {
-    expect(SCRATCH_FOCUS).toBeGreaterThan(1);
+  it("a scratch or speck only takes light away: a shadow, never a bright copy of itself (2b)", () => {
+    expect(SCRATCH_SHADOW).toBeGreaterThan(0);
+    expect(SCRATCH_SHADOW).toBeLessThan(1);
+    expect(FLOOR_FRAGMENT_SHADER).not.toContain("SCRATCH_FOCUS");
+    // Nothing is added back under a scratch: the only light added is the smudge's glow.
+    const added = FLOOR_FRAGMENT_SHADER.match(/through \+= vec3\(pool \* passes \*[^;]*;/g) ?? [];
+    expect(added.join(" ")).not.toContain("groove");
   });
 
   it("has no backtick to end its literal early", () => {

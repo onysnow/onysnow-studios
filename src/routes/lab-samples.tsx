@@ -12,9 +12,12 @@ import { GlassSolid } from "@/components/site/GlassSolid";
 import { BrokenGlass } from "@/components/site/BrokenGlass";
 import { previewing } from "@/effects/engine/preview";
 import { useEffect, useState } from "react";
+import { requireAdmin } from "@/lib/admin-gate";
 
 export const Route = createFileRoute("/lab-samples")({
   ssr: false,
+  // Ony's alone: signed in as the admin (item 48; lib/admin-gate).
+  beforeLoad: requireAdmin,
   head: () => ({
     meta: [
       { title: "Lab samples — OnySnow Studios" },
@@ -40,10 +43,12 @@ function LabSamples() {
   const [solids, setSolids] = useState(false);
   const [broken, setBroken] = useState(false);
   const [contact, setContact] = useState(false);
+  const [coating, setCoating] = useState(false);
   useEffect(() => {
     setSolids(previewing("solids"));
     setBroken(previewing("broken"));
     setContact(previewing("contact"));
+    setCoating(previewing("coating"));
   }, []);
 
   return (
@@ -125,6 +130,29 @@ function LabSamples() {
               </Stack>
             ))}
           </div>
+          {/*
+           * ?try=coating (catalogue items 32c, 32d): polished glass bare,
+           * beside museum glass -- the same glass with an anti-reflection
+           * coating on each face (the room's reflection falls to a third and
+           * turns a faint purple) -- and opal glass, which scatters blue in
+           * its volume: lit, it glows faintly blue, and what gets through
+           * lands warm.
+           */}
+          {coating ? (
+            <div className="mt-10 grid gap-10 sm:grid-cols-3" data-lab-coating>
+              {(
+                [
+                  ["Polished, bare", "optical-crown"],
+                  ["Museum glass (coated)", "museum"],
+                  ["Opal glass", "opal"],
+                ] as const
+              ).map(([label, material]) => (
+                <Pane key={label} className="h-40 !p-4" thickness={18} material={material}>
+                  <span className="text-xs">{label}</span>
+                </Pane>
+              ))}
+            </div>
+          ) : null}
         </div>
       </ParallaxScene>
 

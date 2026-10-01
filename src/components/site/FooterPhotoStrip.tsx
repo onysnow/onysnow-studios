@@ -65,6 +65,13 @@ export function FooterPhotoStrip() {
       // z-10 + shadow: the strip has to sit above the footer for its shadow to
       // land on it rather than behind it.
       className="relative z-10 shadow-[0_22px_45px_-12px_oklch(0_0_0/0.85)]"
+      /*
+       * It stands above the page's floor light (z-10), so the light and the
+       * glass's shadows are drawn onto it as well (FloorLight, 2m: Ony, "the
+       * light/shadow should be able to be cast on the elements below the
+       * glass. Like that black bar and the instagram reel strip").
+       */
+      data-floor-receiver
     >
       <h2
         id="social-strip"

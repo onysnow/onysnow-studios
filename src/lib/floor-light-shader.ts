@@ -5,7 +5,7 @@ import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { WAVINESS_GLSL } from "@/effects/optics/waviness.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
-import { SCRATCH_FOCUS, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
+import { SCRATCH_SHADOW, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
 /**
  * The light that goes THROUGH the glass and lands on the photographs behind.
@@ -64,6 +64,7 @@ uniform vec2 uViewport;
 uniform float uScale;
 
 uniform float uLightGain;
+uniform float uCorners;  // ?try=corners: the bevel's bend turns the corner smoothly
 uniform float uShadowGain;
 uniform float uCaustics;
 /*
@@ -94,12 +95,35 @@ uniform float uEdge[${MAX_FLOOR_PANES}];
 uniform float uGap[${MAX_FLOOR_PANES}];
 uniform float uIor[${MAX_FLOOR_PANES}];
 uniform float uFrost[${MAX_FLOOR_PANES}];
+// ?try=roughglass (step H, 30b): each pane's frosted face from the microfacet
+// BTDF (effects/optics/rough-transmission) -- its transmission against a
+// smooth face's, and its spread, at the cosines 1, 0.7, 0.4, 0.15.
+uniform float uRoughGlass;
+// Opal glass (catalogue item 32d): what crosses each pane unscattered, per colour (1 for clear).
+uniform vec3 uUnscattered[${MAX_FLOOR_PANES}];
+uniform vec4 uRoughRatio[${MAX_FLOOR_PANES}];
+uniform vec4 uRoughSpread[${MAX_FLOOR_PANES}];
+
+/* A pane's row read at an angle's cosine, piecewise linear (rough-transmission.ts roughAt). */
+float roughAt(vec4 v, float cosTheta) {
+  float c = clamp(cosTheta, 0.15, 1.0);
+  if (c >= 0.7) return mix(v.y, v.x, (c - 0.7) / 0.3);
+  if (c >= 0.4) return mix(v.z, v.y, (c - 0.4) / 0.3);
+  return mix(v.w, v.z, (c - 0.15) / 0.25);
+}
 /*
  * For the bottom layer of a stack: what the whole stack lets through,
  * relative to this layer alone (effects/scene/graph). Exactly 1 for a pane
  * on its own.
  */
 uniform vec3 uThrough[${MAX_FLOOR_PANES}];
+/*
+ * 1 for an upper layer of a stack: what the stack lets through is counted
+ * once, by its bottom layer (uThrough), so this layer adds only what its
+ * shape does to the light -- its bevel's dark rim and bright seam, the bend
+ * of the floor seen through it, its marks -- and its flat face passes 1.
+ */
+uniform float uEdgeOnly[${MAX_FLOOR_PANES}];
 /* How much of the scratch (x) and smudge (y) layers each pane wears. */
 uniform vec2 uMarks[${MAX_FLOOR_PANES}];
 uniform float uMarksProportional; // 1 while previewing ?try=marks
@@ -116,7 +140,7 @@ uniform float uGrimeFloor;
 uniform vec2 uViewShift;
 #define SMUDGE_EXTINCTION ${SMUDGE_EXTINCTION.toFixed(3)}
 #define SMUDGE_SCATTER ${SMUDGE_SCATTER.toFixed(3)}
-#define SCRATCH_FOCUS ${SCRATCH_FOCUS.toFixed(3)}
+#define SCRATCH_SHADOW ${SCRATCH_SHADOW.toFixed(3)}
 
 /*
  * The bottom of the pool, worked out rather than drawn.
@@ -206,6 +230,15 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     // lamp and less at a slant, where more of it is reflected away.
     float passes = transmittance(cosT, ior) / transmittance(1.0, ior);
     float frostBlur = frostSpread(frost, ior, gap, cosT);
+    // What of the light the frosted face lets through, against a smooth face.
+    float faceThrough = 1.0 - 0.18 * frost;
+    if (uRoughGlass > 0.5) {
+      // From the facets themselves (Walter et al. 2007): the lobe's spread
+      // carried over the slant path, and the rough face's real loss.
+      float cs = max(cosT, 0.05);
+      frostBlur = roughAt(uRoughSpread[i], cosT) * gap / (cs * cs);
+      faceThrough = roughAt(uRoughRatio[i], cosT);
+    }
     // A distance on the floor, as a distance on the glass plane.
     float toGlass = max(height - gap, 1.0) / max(height, 1.0);
     // Back along the ray to this pane's plane.
@@ -240,7 +273,13 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
      * the beam (see frostBlur above) and sends a little back.
      */
     float onFace = smoothstep(1.0 - soft, 1.0 + soft, x);
-    vec3 through = vec3(pool * passes * (1.0 - 0.18 * frost) * onFace);
+    vec3 through = vec3(pool * passes * faceThrough * onFace);
+    /*
+     * Opal glass scatters blue most (Rayleigh): what comes straight through
+     * lands warm. Of what it scatters, the forward half spreads wide and a
+     * little of it lands here too.
+     */
+    through *= uUnscattered[i] + 0.35 * (1.0 - uUnscattered[i]);
 
     /*
      * The bevel: a clear, polished strip, angled. Every ray through it is
@@ -297,8 +336,8 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     cover *= smoothstep(0.9, 1.0, x);
     float groove = cover.x;
     float smear = cover.y;
-    through *= 1.0 - SMUDGE_EXTINCTION * smear;
-    through += vec3(pool * passes * (SMUDGE_SCATTER * smear + SCRATCH_FOCUS * groove));
+    through *= (1.0 - SMUDGE_EXTINCTION * smear) * (1.0 - SCRATCH_SHADOW * groove);
+    through += vec3(pool * passes * SMUDGE_SCATTER * smear);
 
     // Wavy glass only -- flat glass has no pattern to throw.
     if (uCaustics > 0.0) {
@@ -318,6 +357,11 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
      * and at each pane's edge its fraction eases back to 1 over the lamp's
      * penumbra (inGlass), so nothing starts or stops on a line.
      */
+    if (uEdgeOnly[i] > 0.5) {
+      // Relative to its own flat face, which the bottom layer has counted.
+      vec3 face = pool * passes * faceThrough * (uUnscattered[i] + 0.35 * (1.0 - uUnscattered[i]));
+      through *= pool / max(face, vec3(1e-4));
+    }
     light *= mix(vec3(1.0), through * uThrough[i] / max(pool, 1e-4), inGlass);
   }
 
@@ -336,8 +380,17 @@ void main() {
    * glass are bowed toward the rim instead of sitting flat.
    */
   vec2 look = P;
+  /*
+   * Seen from above, the eye meets an upper layer's bevel before the layer
+   * under it: the upper layers of stacks (uEdgeOnly) are looked through
+   * first, then the rest; the first that bends a point bends it.
+   */
+  bool bent = false;
+  for (int pass = 0; pass < 2; pass++) {
+  if (bent) break;
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
+    if ((uEdgeOnly[i] > 0.5) != (pass == 0)) continue;
     vec4 r = uRect[i];
     vec2 hs = r.zw * 0.5;
     vec2 q = P - (r.xy + hs);
@@ -346,11 +399,30 @@ void main() {
     float dx = straight ? 1e5 : hs.x - abs(q.x);
     float d = min(dx, dy);
     if (d <= 0.0) continue;
+    /*
+     * ?try=corners (item 2a): round the corner. The nearer side decided the
+     * bend's direction outright, so at the diagonal it flipped from sideways
+     * to up-and-down in one pixel and the floor seen through the bevel broke
+     * along a line running in from each corner. Blended across the diagonal
+     * over the bevel's width (and the depth smoothed the same way), it turns.
+     */
+    vec2 outward = dy < dx ? vec2(0.0, sign(q.y)) : vec2(sign(q.x), 0.0);
+    if (uCorners > 0.5 && !straight) {
+      float k = max(min(0.5 * (dx + dy), uEdge[i]), 1e-3);
+      float hk = max(k - abs(dx - dy), 0.0) / k;
+      d = min(dx, dy) - hk * hk * k * 0.25;
+      if (d <= 0.0) continue;
+      float wy = smoothstep(-k, k, dx - dy);
+      outward = normalize(mix(vec2(sign(q.x), 0.0), vec2(0.0, sign(q.y)), wy));
+    }
     float x = edgeBand(d, uEdge[i]);
     float bend = (1.0 - x) * (1.0 - x) * uEdge[i] * 0.9 * uView;
-    vec2 outward = dy < dx ? vec2(0.0, sign(q.y)) : vec2(sign(q.x), 0.0);
+    // An upper layer's flat face bends nothing: look on through it to the layer below.
+    if (uEdgeOnly[i] > 0.5 && bend < 0.01) continue;
     look = P + outward * bend;
+    bent = true;
     break;
+  }
   }
 
   /*
@@ -371,7 +443,10 @@ void main() {
     float lit = c * c * (3.0 - 2.0 * c);
     vec2 at = look - uViewShift;
     // A line light (a neon tube) reaches this point from its nearest point.
-    vec4 one = floorAt(at, lit, nearestOnLight(at, uLightPos[i].xy, uLightSpan[i]), uLightPos[i].z, uLightRadius[i]);
+    vec2 from = nearestOnLight(at, uLightPos[i].xy, uLightSpan[i]);
+    // A beam (a flashlight) lights only what it points at (effects/light/beam).
+    lit *= beamFactor(uLightAim[i], vec3(at - from, -uLightPos[i].z));
+    vec4 one = floorAt(at, lit, from, uLightPos[i].z, uLightRadius[i]);
     f += one;
     coloured += one.rgb * uLightColour[i];
   }

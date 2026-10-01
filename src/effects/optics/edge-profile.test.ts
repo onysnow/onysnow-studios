@@ -7,6 +7,9 @@ import {
   edgeBand,
   fresnelRise,
   readEdgeWidth,
+  refractionOffset,
+  roundedRectSDF,
+  roundedRectSDFSmooth,
   surfaceHeight,
   toneMapFilm,
   toneMapGlass,
@@ -106,6 +109,7 @@ describe("the GLSL chunk", () => {
       roundedBox: true,
       edgeBand,
       surfaceHeight,
+      refractionOffset,
       fresnelRise,
       toneMapGlass,
       toneMapGlassBurn,
@@ -192,5 +196,43 @@ describe("the edge functions", () => {
     expect(toneMapFilm(0)).toBe(0);
     expect(toneMapFilm(10)).toBeLessThan(1);
     expect(toneMapFilm(2)).toBeGreaterThan(toneMapFilm(1));
+  });
+});
+
+describe("the bevel's corners (?try=corners)", () => {
+  const H = 100;
+  const W = 150;
+  it("leaves the rim and the pane's middle where they were", () => {
+    for (const [x, y] of [
+      [W, 0],
+      [0, H],
+      [W - 0.1, 30],
+      [0, 0],
+      [20, -40],
+    ] as const) {
+      const a = roundedRectSDF(x, y, W, H, 12);
+      const b = roundedRectSDFSmooth(x, y, W, H, 12, 40);
+      if (Math.abs(a) < 0.5 || a < -40) expect(b).toBeCloseTo(a, 6);
+    }
+  });
+
+  it("turns a deep contour round the corner without a mitre", () => {
+    // Crossing the diagonal 30 px in from the corner, the normal's direction
+    // (from central differences) turns gradually instead of flipping.
+    const angle = (x: number, y: number, f: (x: number, y: number) => number) =>
+      Math.atan2(f(x, y + 0.5) - f(x, y - 0.5), f(x + 0.5, y) - f(x - 0.5, y));
+    const sharp = (x: number, y: number) => roundedRectSDF(x, y, W, H, 8);
+    const smooth = (x: number, y: number) => roundedRectSDFSmooth(x, y, W, H, 8, 40);
+    const jump = (f: typeof sharp) => {
+      let worst = 0;
+      for (let t = -6; t < 6; t += 0.5) {
+        const a = angle(W - 30 + t, H - 30 - t, f);
+        const b = angle(W - 30 + t + 0.5, H - 30 - t - 0.5, f);
+        worst = Math.max(worst, Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a))));
+      }
+      return worst;
+    };
+    expect(jump(sharp)).toBeGreaterThan(0.7);
+    expect(jump(smooth)).toBeLessThan(0.2);
   });
 });
