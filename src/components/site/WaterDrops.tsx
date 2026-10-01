@@ -12,6 +12,8 @@ import {
 import { paneCanvas } from "@/effects/engine/compositor";
 import { glassGeometry } from "@/effects/scene/scene";
 import { pointLights, roomLight } from "@/effects/light/lights";
+import { surfaceScaleCap } from "@/effects/engine/quality";
+import { rainType } from "@/effects/water/rain-types";
 import { camera } from "@/effects/camera/camera";
 import { t } from "@/lib/tuning";
 import { DropSim, FILM_DRY } from "@/effects/water/sim";
@@ -33,11 +35,27 @@ import {
 
 /**
  * How many CSS px a millimetre of the glass is: the scale the drop physics
- * is measured in. 6, from the reference photographs (water-drops.md 9.1):
- * the largest standing drops on a window (4.4 mm, where water starts to
- * run) are 20-30 px across their 1280 px frames.
+ * is measured in. 4: the largest drop that can still cling (4.4 mm, where
+ * water starts to run) is about 18 px, most drops 4-10 px -- a rainy window
+ * at arm's length, not a macro shot (Ony, 2026-10-01: the drops were "too
+ * big", "like we're super zoomed in"; water-drops.md 9.5).
  */
-export const PX_PER_MM = 6;
+export const PX_PER_MM = 4;
+/**
+ * How far behind the glass the scene a drop images is, CSS px. A drop is a
+ * lens of a few millimetres' focal length; the photograph is the world
+ * outside the window, metres away, so every drop holds it sharp, small and
+ * upside down (Ony's reference photographs: the Golden Gate tower and the
+ * sky inverted in each drop). 900 px puts about half the photograph inside
+ * each drop (estimate, matched to those photographs).
+ */
+const SCENE_DISTANCE = 900;
+/** Below this radius, device px, a drop is drawn at it and faded by its area: a sparkle, not a lens too small to draw. */
+const MIN_DRAWN_PX = 1.2;
+/** How tall a fresh rivulet stands, mm (estimate: a film a drop leaves is a few tenths of a millimetre at its crest). */
+const RIVULET_MM = 0.18;
+/** How long steam takes to fog the glass fully, s (estimate: a bathroom mirror fogs in well under a minute). */
+const FOG_BUILD = 30;
 /** The glass's index (soda-lime, 1.52). */
 const GLASS_IOR = 1.52;
 /** Below this, a landing drop is a droplet: drawn into the droplet map, not tracked (uL; about 0.5 mm across at 50 degrees). */
@@ -59,6 +77,10 @@ type PaneState = {
   dropletFbo: WebGLFramebuffer | null;
   wet: WebGLTexture | null;
   wetFbo: WebGLFramebuffer | null;
+  /** The condensation (steam fog), half size: R how far it has built up, 0-1. */
+  fog: WebGLTexture | null;
+  fogFbo: WebGLFramebuffer | null;
+  fogClock: number;
   pending: Droplet[];
   fresh: boolean;
   prev: Map<number, [number, number]>;
@@ -70,7 +92,8 @@ type PaneState = {
 function shapeOf(a: number, speed: number): [number, number, number] {
   // The Bond number: gravity against surface tension over the drop's size.
   const bond = Math.min(1.2, (RHO * 9.81 * (a / 1000) ** 2) / GAMMA);
-  const irregular = 0.03 + 0.11 * Math.min(1, a / 2.2);
+  // Slightly imperfect: 2% for a droplet, 6% for the largest clinging drop (Ony: "slightly imperfect, not super imperfect").
+  const irregular = 0.02 + 0.04 * Math.min(1, a / 2.2);
   const run = Math.min(1, speed / 20);
   return [irregular, 0.28 * Math.min(1, bond) + 0.2 * run, 0.12 * Math.min(1, bond)];
 }
@@ -91,8 +114,12 @@ const capH = (a: number) => a * Math.tan(((REST_ANGLE / 2) * Math.PI) / 180);
  * raindrop-fx, MIT); thousands of tiny droplets fill the glass between them
  * and the runners sweep clean tracks through them. Wet etched glass is
  * clear, so every drop is a lens onto the photograph -- traced through the
- * water, the glass and the gap, sharp and upside down against the frost --
- * with every light's highlight on it. Drawn at the screen's own pixels.
+ * water and the glass to the scene it shows, sharp, small and upside down
+ * against the frost -- with every light's highlight on it. Merged drops stay
+ * stretched, runners leave wavy rivulets that bend the scene, and steam can
+ * fog the glass on either face (Condensation). The rain's kind comes from
+ * Rain type (effects/water/rain-types). Drawn at twice the pixels where the
+ * machine can afford it.
  */
 export function WaterDrops() {
   useEffect(() => {
@@ -112,6 +139,7 @@ export function WaterDrops() {
       local: A(mapProgram, "aLocal"),
       drop: A(mapProgram, "aDrop"),
       shape: A(mapProgram, "aShape"),
+      extra: A(mapProgram, "aExtra"),
       size: gl.getUniformLocation(mapProgram, "uMapSize"),
       scale: gl.getUniformLocation(mapProgram, "uHeightScale"),
       pxPerMm: gl.getUniformLocation(mapProgram, "uPxPerMm"),
@@ -146,7 +174,12 @@ export function WaterDrops() {
       "uScale",
       "uPxPerMm",
       "uThickness",
-      "uGap",
+      "uScene",
+      "uRivulet",
+      "uWetTexel",
+      "uFog",
+      "uFogAmount",
+      "uFogSide",
       "uClear",
       "uIor",
       "uGlassIor",
@@ -364,7 +397,15 @@ export function WaterDrops() {
     };
     const gauss = () =>
       Math.sqrt(-2 * Math.log(Math.max(random(), 1e-12))) * Math.cos(2 * Math.PI * random());
-    const dpr = () => Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    /*
+     * The maps' and the water layer's scale, device px per CSS px: the
+     * screen's own, and at least 2 on a machine that can afford it -- drawn
+     * at twice the pixels and shown smaller, every drop's rim and every
+     * droplet is antialiased by the browser's downscale (Ony, 2026-10-01:
+     * the drops were "still way too pixelated").
+     */
+    const dpr = () =>
+      Math.max(Math.min(2, Math.max(1, window.devicePixelRatio || 1)), surfaceScaleCap());
 
     /** A rain drop landing: a drop the sim tracks if it is big enough, and its splash of droplets. */
     const land = (sim: DropSim, st: PaneState, x: number, y: number, volume: number) => {
@@ -402,11 +443,19 @@ export function WaterDrops() {
         gl.deleteFramebuffer(st.dropletFbo);
         gl.deleteTexture(st.wet);
         gl.deleteFramebuffer(st.wetFbo);
+        gl.deleteTexture(st.fog);
+        gl.deleteFramebuffer(st.fogFbo);
         st = undefined;
       }
       if (!st) {
         const d = makeTarget(w, h, gl.UNSIGNED_BYTE, gl.LINEAR);
         const wt = makeTarget(
+          Math.max(1, Math.round(w / 2)),
+          Math.max(1, Math.round(h / 2)),
+          gl.UNSIGNED_BYTE,
+          gl.LINEAR,
+        );
+        const fg = makeTarget(
           Math.max(1, Math.round(w / 2)),
           Math.max(1, Math.round(h / 2)),
           gl.UNSIGNED_BYTE,
@@ -419,6 +468,9 @@ export function WaterDrops() {
           dropletFbo: d?.fbo ?? null,
           wet: wt?.tex ?? null,
           wetFbo: wt?.fbo ?? null,
+          fog: fg?.tex ?? null,
+          fogFbo: fg?.fbo ?? null,
+          fogClock: 0,
           pending: [],
           fresh: true,
           prev: new Map(),
@@ -426,13 +478,28 @@ export function WaterDrops() {
           wetClock: 0,
         };
         states.set(pane.el, st);
+        // Steam on the glass when you arrive: already fogged, as the rain has already fallen.
+        if (st.fogFbo && t("fogAmount") > 0) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, st.fogFbo);
+          gl.viewport(0, 0, Math.round(w / 2), Math.round(h / 2));
+          gl.clearColor(1, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.clearColor(0, 0, 0, 0);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
         /*
          * It has been raining a while when you arrive: a minute of drizzle
          * already on the glass, and the sim run on from forty seconds of rain.
          */
-        const rain = t("rainAmount");
+        const type = rainType(t("rainType"));
+        const rain = type.before * t("rainStrength");
         const areaCm2 = (sim.width * sim.height) / 100;
-        drizzle(sim, st, Math.round(rain * areaCm2 * 60 * t("condensation")));
+        drizzle(
+          sim,
+          st,
+          Math.round(rain * areaCm2 * 60 * Math.max(type.droplets, 12) * t("dropletScale")),
+        );
+        sim.wind = type.wind;
         if (sim.count === 0 && rain > 0) {
           for (let s = 0; s < 40 * 30; s++) {
             const expected = (rain * areaCm2) / 30;
@@ -444,7 +511,7 @@ export function WaterDrops() {
                 st,
                 random() * sim.width,
                 random() * sim.height,
-                rainVolume(random(), random()),
+                rainVolume(random(), random(), type.median),
               );
             sim.step(1 / 30);
           }
@@ -456,12 +523,12 @@ export function WaterDrops() {
     const simFor = (pane: ReturnType<typeof glassGeometry>[number]) => {
       let sim = sims.get(pane.el);
       if (!sim) {
-        // Up to 1500 drops a pane: in steady rain a window holds about a fifth of its area in drops (estimate, from the reference photographs); 400 capped it at 9%.
+        // Up to 3000 drops a pane (1500 at 6 px a mm; the same glass is 2.25 times the area at 4): in steady rain a window holds about a fifth of its area in drops (estimate, from the reference photographs); 400 capped it at 9%.
         sim = new DropSim({
           width: pane.w / PX_PER_MM,
           height: pane.h / PX_PER_MM,
           seed: seed++,
-          maxDrops: 1500,
+          maxDrops: 3000,
         });
         sims.set(pane.el, sim);
       }
@@ -472,6 +539,20 @@ export function WaterDrops() {
       Object.assign(window as unknown as Record<string, unknown>, {
         __waterSims: sims,
         __glassGeometry: glassGeometry,
+        // Start the rain over, as on arriving, with the knobs as they are now.
+        __waterReset: () => {
+          sims.clear();
+          for (const st of states.values()) {
+            gl.deleteTexture(st.droplets);
+            gl.deleteFramebuffer(st.dropletFbo);
+            gl.deleteTexture(st.wet);
+            gl.deleteFramebuffer(st.wetFbo);
+            gl.deleteTexture(st.fog);
+            gl.deleteFramebuffer(st.fogFbo);
+          }
+          states.clear();
+          task.wake();
+        },
       });
 
     let verts = new Float32Array(4096);
@@ -503,14 +584,44 @@ export function WaterDrops() {
       sd: number,
       liquid: number,
       shape: readonly [number, number, number],
+      skewX = 0,
+      skewY = 0,
     ) => {
+      /*
+       * Too small to draw as a lens (under MIN_DRAWN_PX): drawn at that size,
+       * faded by how much of it there really is -- a sparkle with a glint,
+       * as a camera records a droplet smaller than a pixel.
+       */
+      let coverScale = 1;
+      if (rPx < MIN_DRAWN_PX) {
+        coverScale = (rPx / MIN_DRAWN_PX) ** 2;
+        a *= MIN_DRAWN_PX / rPx;
+        rPx = MIN_DRAWN_PX;
+      }
       // The pear and the irregularity reach past the circle: x to 1 + taper, y a little.
       const ex = 1.15 + shape[1];
       const ey = 1.15;
       const sx = 1 / Math.sqrt(stretch);
+      /*
+       * What a merge left (DropSim skew): stretched along that axis by 1 + s,
+       * narrowed across it by 1 / sqrt(1 + s), the cap lowered to keep its
+       * volume. An affine map of the drop's own frame, so the shape the map
+       * pass draws in that frame comes out stretched.
+       */
+      const sk = Math.hypot(skewX, skewY);
+      const e = 1 + sk;
+      const ux = sk > 1e-6 ? skewX / sk : 0;
+      const uy = sk > 1e-6 ? skewY / sk : 1;
+      const across = 1 / Math.sqrt(e);
+      const m00 = across + (e - across) * ux * ux;
+      const m01 = (e - across) * ux * uy;
+      const m11 = across + (e - across) * uy * uy;
+      h0 /= Math.sqrt(e);
       for (const [qx, qy] of CORNERS) {
-        verts[k++] = cx + qx * ex * rPx * sx;
-        verts[k++] = cy + qy * ey * rPx * stretch;
+        const lx = qx * ex * rPx * sx;
+        const ly = qy * ey * rPx * stretch;
+        verts[k++] = cx + m00 * lx + m01 * ly;
+        verts[k++] = cy + m01 * lx + m11 * ly;
         verts[k++] = qx * ex;
         verts[k++] = qy * ey;
         verts[k++] = a;
@@ -520,7 +631,7 @@ export function WaterDrops() {
         verts[k++] = shape[0];
         verts[k++] = shape[1];
         verts[k++] = shape[2];
-        verts[k++] = 0;
+        verts[k++] = coverScale;
         verts[k++] = 0;
       }
       return k;
@@ -548,10 +659,13 @@ export function WaterDrops() {
       gl.vertexAttribPointer(map.drop, 4, gl.FLOAT, false, S, 16);
       gl.enableVertexAttribArray(map.shape);
       gl.vertexAttribPointer(map.shape, 3, gl.FLOAT, false, S, 32);
+      gl.enableVertexAttribArray(map.extra);
+      gl.vertexAttribPointer(map.extra, 2, gl.FLOAT, false, S, 44);
       gl.drawArrays(gl.TRIANGLES, 0, count);
       gl.disableVertexAttribArray(map.local);
       gl.disableVertexAttribArray(map.drop);
       gl.disableVertexAttribArray(map.shape);
+      gl.disableVertexAttribArray(map.extra);
     };
 
     /** Capsules from each drop's last place to its place now, into a map (7 floats a vertex... 5 used). */
@@ -617,6 +731,19 @@ export function WaterDrops() {
       gl.vertexAttribPointer(fade.pos, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.blendEquation(gl.FUNC_ADD);
+      gl.disable(gl.BLEND);
+    };
+
+    /** Add a constant to the whole bound map (blend ONE, ONE): the fog building up. */
+    const addBy = (colour: readonly [number, number, number, number]) => {
+      gl.useProgram(fadeProgram);
+      gl.uniform4f(fade.colour, ...colour);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.bindBuffer(gl.ARRAY_BUFFER, triangle);
+      gl.enableVertexAttribArray(fade.pos);
+      gl.vertexAttribPointer(fade.pos, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
       gl.disable(gl.BLEND);
     };
 
@@ -718,6 +845,38 @@ export function WaterDrops() {
             st.wetClock = 0;
           }
         }
+        /*
+         * 4. Condensation: steam fogging the glass, building up over about
+         * FOG_BUILD seconds (a whole 8-bit step at a time). On the rain's own
+         * face every drop's footprint and every runner's path wipes it, and
+         * it builds back over the tracks; on the other face nothing touches it.
+         */
+        if (st.fogFbo) {
+          const fw = Math.round(st.w / 2);
+          const fh = Math.round(st.h / 2);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, st.fogFbo);
+          gl.viewport(0, 0, fw, fh);
+          if (t("fogAmount") > 0) {
+            st.fogClock = Math.max(st.fogClock, 0) + dt;
+            const n = Math.floor((st.fogClock / FOG_BUILD) * 255);
+            if (n > 0) {
+              addBy([n / 255, 0, 0, 0]);
+              st.fogClock -= (n / 255) * FOG_BUILD;
+            }
+            if (Math.round(t("fogSide")) === 0) {
+              const half = caps.map((v) => v / 2);
+              gl.enable(gl.BLEND);
+              gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA);
+              drawWipes(half, fw, fh, [1, 1, 1, 1], 0.35);
+              gl.disable(gl.BLEND);
+            }
+          } else if (st.fogClock !== -1) {
+            // Off: the glass is clear of it, and builds from nothing when it is turned on.
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            st.fogClock = -1;
+          }
+        }
       }
 
       // 4. The drops map, cleared and drawn whole.
@@ -744,6 +903,8 @@ export function WaterDrops() {
             (sim.serial[i]! * 0.618034) % 997,
             sim.liquid[i]!,
             shapeOf(a, speed),
+            sim.skewX[i]!,
+            sim.skewY[i]!,
           );
         }
         gl.enable(gl.BLEND);
@@ -787,7 +948,14 @@ export function WaterDrops() {
       gl.uniform1f(u.uScale!, k);
       gl.uniform1f(u.uPxPerMm!, PX_PER_MM);
       gl.uniform1f(u.uThickness!, pane.causes.thickness);
-      gl.uniform1f(u.uGap!, pane.causes.gap);
+      gl.uniform1f(u.uScene!, SCENE_DISTANCE);
+      gl.uniform1f(u.uRivulet!, RIVULET_MM);
+      gl.uniform2f(u.uWetTexel!, 2 / st.w, 2 / st.h);
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_2D, st.fog);
+      gl.uniform1i(u.uFog!, 6);
+      gl.uniform1f(u.uFogAmount!, st.fog ? t("fogAmount") : 0);
+      gl.uniform1f(u.uFogSide!, Math.round(t("fogSide")));
       const frosted = pane.causes.material.frost > 0;
       // On clear glass the water is a lens whichever face it is on; on frosted glass, only on the etched face.
       gl.uniform1f(u.uClear!, !frosted || Math.round(t("rainFace")) === 0 ? 1 : 0);
@@ -839,20 +1007,22 @@ export function WaterDrops() {
     };
 
     let lastLights = "";
-    let lastClear = -1;
+    let lastClear = "";
     const task = addTask("water", ORDER.passes, (_now, dtMs) => {
       const dt = Math.min(dtMs / 1000, 0.25);
       const vh = document.documentElement.clientHeight || window.innerHeight;
-      // Rain: drops per second per square centimetre of glass ("Rain").
-      const rain = t("rainAmount");
-      let busy = rain > 0;
+      // Rain: drops per second per square centimetre of glass, the rain type's times "Rain".
+      const type = rainType(t("rainType"));
+      const rain = type.rate * t("rainStrength");
+      const fogging = t("fogAmount") > 0;
+      let busy = rain > 0 || fogging;
       const lightsNow = pointLights()
         .filter((l) => !l.below && l.charge > 0.002)
         .map((l) => `${Math.round(l.x)},${Math.round(l.y)},${l.charge.toFixed(2)}`)
         .join(";");
       const lightsMoved = lightsNow !== lastLights;
       lastLights = lightsNow;
-      const clearNow = Math.round(t("rainFace"));
+      const clearNow = `${t("rainFace")},${t("fogAmount")},${t("fogSide")}`;
       const faceChanged = clearNow !== lastClear;
       lastClear = clearNow;
       for (const pane of glassGeometry()) {
@@ -871,15 +1041,16 @@ export function WaterDrops() {
             st,
             random() * sim.width,
             random() * sim.height,
-            rainVolume(random(), random()),
+            rainVolume(random(), random(), type.median),
           );
         }
+        sim.wind = type.wind;
         // Drizzle between the drops.
-        const dz = expected * t("condensation");
+        const dz = expected * type.droplets * t("dropletScale");
         let nz = Math.floor(dz);
         if (random() < dz - nz) nz++;
         if (nz) drizzle(sim, st, nz);
-        const moved = sim.step(dt) || spawn > 0 || st.pending.length > 0;
+        const moved = sim.step(dt) || spawn > 0 || st.pending.length > 0 || fogging;
         if (moved) busy = true;
         if (moved || lightsMoved || faceChanged || st.fresh || !layers.has(pane.el)) {
           st.fresh = false;
@@ -946,6 +1117,8 @@ export function WaterDrops() {
         gl.deleteFramebuffer(st.dropletFbo);
         gl.deleteTexture(st.wet);
         gl.deleteFramebuffer(st.wetFbo);
+        gl.deleteTexture(st.fog);
+        gl.deleteFramebuffer(st.fogFbo);
       }
       if (drops) {
         gl.deleteTexture(drops.tex);

@@ -17,8 +17,12 @@
  * 3. The water layer, per device pixel of the pane: where there is water,
  *    the eye's ray is traced through it -- refracted into the water at the
  *    face's slope, carried through the flat water-glass and glass-air faces
- *    by the tangential n sin(theta), across the glass's thickness and the
- *    gap -- to the photograph (effects/water/lens, its JS twin). Wet etched
+ *    by the tangential n sin(theta), across the glass's thickness and on
+ *    to the scene (effects/water/lens, its JS twin). The photograph is the
+ *    world outside the window, metres away, not a print behind the glass:
+ *    every drop images it from that distance, sharp, small and upside down,
+ *    as Ony's reference photographs show (the Golden Gate's tower inverted
+ *    in each drop). Wet etched
  *    glass is clear (water-drops 9.1: water fills the roughness), so what
  *    it lands on is the photograph itself, sharp, inverted and shrunk where
  *    it lies past the drop's focal length, coloured as the pane colours its
@@ -28,6 +32,7 @@
  */
 
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
+import { CAMERA_MATCH_GLSL } from "@/effects/light/camera-match";
 
 /** The drops map's full scale in RGBA8, mm (an 8-bit step is 11.8 um); a half-float map holds mm as they are. */
 export const HEIGHT_MAX = 3;
@@ -39,14 +44,17 @@ attribute vec2 aPos;      // map px
 attribute vec2 aLocal;    // the drop's own frame: x across, y down the glass, 1 = contact radius
 attribute vec4 aDrop;     // contact radius mm, cap height mm, seed, liquid id
 attribute vec3 aShape;    // irregularity, pear taper, sag
+attribute vec2 aExtra;    // x: how much of the drawn drop is really there (a sparkle smaller than it is drawn); y: unused
 uniform vec2 uMapSize;    // map px
 varying vec2 vLocal;
 varying vec4 vDrop;
 varying vec3 vShape;
+varying float vCoverScale;
 void main() {
   vLocal = aLocal;
   vDrop = aDrop;
   vShape = aShape;
+  vCoverScale = aExtra.x;
   vec2 clip = aPos / uMapSize * 2.0 - 1.0;
   gl_Position = vec4(clip.x, clip.y, 0.0, 1.0);
 }
@@ -73,6 +81,7 @@ precision highp float;
 varying vec2 vLocal;
 varying vec4 vDrop;
 varying vec3 vShape;
+varying float vCoverScale;
 uniform float uHeightScale;  // 1 / full scale, mm
 uniform float uPxPerMm;      // map px per mm
 ${SHAPE_GLSL}
@@ -83,6 +92,8 @@ void main() {
   // The contact line, antialiased over one map pixel.
   float cover = clamp(0.5 + (1.0 - rho) * a * uPxPerMm, 0.0, 1.0);
   if (cover <= 0.0) discard;
+  // A droplet smaller than it is drawn covers only its share of the pixels it is drawn on.
+  cover *= vCoverScale;
   // A spherical cap over the (irregular) contact line: R = (a^2 + h0^2) / 2 h0.
   float R = (a * a + h0 * h0) / max(2.0 * h0, 1e-5);
   float r = min(rho, 1.0) * a;
@@ -147,6 +158,7 @@ export const MAX_WATER_LIGHTS = 4;
 export const COMPOSE_FRAGMENT = /* glsl */ `
 precision highp float;
 ${ENVIRONMENT_GLSL}
+${CAMERA_MATCH_GLSL}
 uniform sampler2D uDrops;     // the drops map
 uniform vec2 uDropsUv;        // how much of the drops texture this pane uses
 uniform vec2 uDropsTexel;     // one texel, in uv
@@ -162,7 +174,12 @@ uniform vec4 uPane;           // the pane's x, y, w, h, page px
 uniform float uScale;         // device px per CSS px
 uniform float uPxPerMm;       // CSS px per mm
 uniform float uThickness;     // the glass, CSS px
-uniform float uGap;           // from the glass's back to the photograph, CSS px
+uniform float uScene;         // how far behind the glass the scene the drops image is, CSS px
+uniform float uRivulet;       // a fresh rivulet's height, mm, where the wet map is 1
+uniform vec2 uWetTexel;       // one wet-map texel, in uv
+uniform sampler2D uFog;       // the condensation map: R how far it has built up
+uniform float uFogAmount;     // its full density, 0-1
+uniform float uFogSide;       // 0: on the rain's face (wiped by it); 1: on the other face (veiling it)
 uniform float uClear;         // 1: the water clears the etch (rain on the etched face); 0: on the polished face, reflections only
 uniform float uIor;
 uniform float uGlassIor;
@@ -214,7 +231,7 @@ vec3 traceTo(vec3 V, vec3 N, float hPx) {
   float sg = k2 / (uGlassIor * uGlassIor);
   vec2 tanG = (k / uGlassIor) / sqrt(max(1.0 - sg, 1e-4));
   vec2 tanA = k / sqrt(max(1.0 - k2, 1e-4));
-  return vec3(hPx * tanW + uThickness * tanG + uGap * tanA, k2 >= 0.999 ? 1.0 : 0.0);
+  return vec3(hPx * tanW + uThickness * tanG + uScene * tanA, k2 >= 0.999 ? 1.0 : 0.0);
 }
 
 float dropsH(vec2 uv) { return texture2D(uDrops, uv).r * uDropsFull; }
@@ -224,27 +241,50 @@ float waterH(vec2 local) {
   return dropsH(uvP * uDropsUv) + dropletsH(uvP);
 }
 
+// A rivulet: the film a runner leaves, standing as a low ridge of water as tall as it is fresh.
+float rivuletH(vec2 uv) { return uRivulet * smoothstep(0.1, 1.0, texture2D(uWet, uv).r); }
+
+// Cheap value noise, for the fog's uneven density and its grain.
+float hash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x),
+             mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
 /*
- * How much of the room's light reaches the photograph at this point (pane
- * px), through the water above it: water-drops 9.3. Each bit of water bends
- * the light passing it by about (n - 1) times its slope, so over the
- * distance D to the photograph the light spreads or gathers as the slope
- * changes: E = 1 / (1 + D (n - 1) laplacian(h)) -- gathered under a drop's
- * crown, starved under its edge, where the slope falls from the contact
- * angle to nothing: a bright centre in a dark ring, as a drop's shadow on a
- * page shows. The room's light comes from a wide cone, which blurs the
- * pattern by about D tan(30 deg) (estimate): the laplacian is taken over
- * that span.
+ * Condensation's colour (water-drops 9.5): droplets far smaller than a
+ * pixel, so dense they scatter most of the light through them sideways.
+ * What shows through is the scene smeared out (the photograph's coarsest
+ * mip levels), its contrast and colour washed toward the milky grey of the
+ * scattered light, with the faint grain of the droplets.
  */
-float lightUnder(vec2 local) {
-  float D = uGap + uThickness / uGlassIor;            // px, the glass's part shortened by its index
-  float span = max(D * 0.55, 2.0);                    // px
-  float hc = waterH(local);
-  float lap = (waterH(local + vec2(span, 0.0)) + waterH(local - vec2(span, 0.0))
-             + waterH(local + vec2(0.0, span)) + waterH(local - vec2(0.0, span)) - 4.0 * hc)
-             / (span * span) * uPxPerMm * uPxPerMm;   // per mm
-  float E = 1.0 / max(1.0 + D / uPxPerMm * (uIor - 1.0) * lap, 0.3);
-  return clamp(E, 0.3, 1.8);
+vec3 fogColour(vec2 page) {
+  vec3 blur;
+  if (uHasPhoto > 0.5) {
+    vec2 uv = clamp(coverUv(page, uImage, uImageFit), 0.0, 1.0);
+    blur = 0.6 * texture2D(uPhoto, uv, 6.0).rgb + 0.4 * texture2D(uPhoto, uv, 8.0).rgb;
+  } else blur = uRoom;
+  float l = dot(blur, vec3(0.2126, 0.7152, 0.0722));
+  vec3 milk = vec3(l * 0.7 + 0.16);
+  /*
+   * And the lamps in front of it: the fog scatters their light toward the
+   * viewer over a wide halo round each (the glow a steamed window has round
+   * every light; its width an estimate).
+   */
+  for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
+    if (i >= uLightCount) break;
+    vec2 dl = (page - uLightPos[i].xy) / 260.0;
+    milk += uLightColour[i] * 0.12 / (1.0 + dot(dl, dl));
+  }
+  vec3 c = mix(blur, milk, 0.65);
+  return c * (0.94 + 0.12 * hash12(floor(gl_FragCoord.xy)));
 }
 
 void main() {
@@ -258,14 +298,32 @@ void main() {
   float coverD = clamp(d.a, 0.0, 1.0);
   // A droplet that has evaporated to nothing leaves its coverage behind: the height decides.
   float coverS = clamp(s.a, 0.0, 1.0) * smoothstep(0.0, 2.0 / 255.0, s.r);
-  float cover = max(coverD, coverS);
+  // A fresh rivulet is water standing on the glass, a lens of its own: it bends the scene as it wanders.
+  float coverW = smoothstep(0.2, 0.55, wet);
+  float cover = max(max(coverD, coverS), coverW);
   // A film clears the etch as far as it is thick: fully only where it is fresh, fading as it dries.
   float film = smoothstep(0.1, 1.0, wet) * 0.85 * uClear;
-  if (cover <= 0.0 && film <= 0.0) { gl_FragColor = vec4(0.0); return; }
+
+  /*
+   * The condensation here: its full density, uneven over the glass (thinner
+   * in patches a few centimetres across, estimate), as far as it has built
+   * up. On the rain's face, none under the water (the wipe clears the map
+   * too; this keeps a drop's own footprint clean before the next frame).
+   */
+  vec2 pageHere = uPane.xy + local;
+  float patchy = 0.75 + 0.25 * vnoise(pageHere / 90.0) + 0.1 * vnoise(pageHere / 23.0);
+  float fogA = uFogAmount * clamp(texture2D(uFog, uvP).r * patchy, 0.0, 1.0) * 0.92;
+  if (uFogSide < 0.5) fogA *= 1.0 - max(coverD, coverW);
+
+  if (cover <= 0.0 && film <= 0.0) {
+    if (fogA <= 0.0) { gl_FragColor = vec4(0.0); return; }
+    gl_FragColor = vec4(fogColour(pageHere), fogA);
+    return;
+  }
 
   // The water's height and slope here, mm and mm per mm: both maps, by central differences over one texel.
   float mmPerTexel = 1.0 / (uScale * uPxPerMm);
-  float h = d.r * uDropsFull + s.r * DROPLET_FULL;
+  float h = d.r * uDropsFull + s.r * DROPLET_FULL + rivuletH(uvP);
   vec2 tx = vec2(uDropsTexel.x, 0.0);
   vec2 ty = vec2(0.0, uDropsTexel.y);
   vec2 sx = vec2(uDropletsTexel.x, 0.0);
@@ -274,6 +332,11 @@ void main() {
     dropsH(uvD + tx) - dropsH(uvD - tx) + dropletsH(uvP + sx) - dropletsH(uvP - sx),
     dropsH(uvD + ty) - dropsH(uvD - ty) + dropletsH(uvP + sy) - dropletsH(uvP - sy)
   ) / (2.0 * mmPerTexel);
+  // The rivulet's slope, over its own (half-size) map's texel.
+  vec2 wx = vec2(uWetTexel.x, 0.0);
+  vec2 wy = vec2(0.0, uWetTexel.y);
+  grad += vec2(rivuletH(uvP + wx) - rivuletH(uvP - wx), rivuletH(uvP + wy) - rivuletH(uvP - wy))
+        / (4.0 * mmPerTexel);
   // Page y runs down, the face's normal toward the viewer (+z).
   vec3 N = normalize(vec3(-grad, 1.0));
 
@@ -338,7 +401,7 @@ void main() {
   float alpha;
   // Until the photograph has loaded, the drop has nothing to show through it but black: draw only its reflections.
   if (uClear > 0.5 && uHasPhoto > 0.5) {
-    vec3 through = tir ? room * 0.3 : photoAt(seenPage) * lightUnder(seenPage - uPane.xy);
+    vec3 through = tir ? room * 0.3 : photoAt(seenPage);
     vec3 wetGlass = photoAt(page);
     // Where there is a drop, its lens; where only the film, the clear glass under it.
     vec3 water = through * T * (1.0 - F) + room * F + spec;
@@ -358,6 +421,25 @@ void main() {
    */
   float pk = max(col.r, max(col.g, col.b));
   if (pk > 1.0) col = mix(col / pk, vec3(1.0), clamp((pk - 1.0) / pk, 0.0, 1.0));
+  // The photographs' shoulder and grain on the lens (effects/light/camera-match): a glint is their cream, not a screen's white.
+  if (uClear > 0.5 && uHasPhoto > 0.5) col = cameraHighlights(col * max(pk, 1.0), gl_FragCoord.xy / uScale);
+  /*
+   * With the condensation: on the other face it lies between the viewer and
+   * the water, so the water is seen through it; on the rain's face what is
+   * left of it lies round the water.
+   */
+  if (fogA > 0.0) {
+    vec3 fc = fogColour(pageHere);
+    if (uFogSide > 0.5) {
+      float a = fogA + alpha * (1.0 - fogA);
+      col = (fc * fogA + col * alpha * (1.0 - fogA)) / max(a, 1e-4);
+      alpha = a;
+    } else {
+      float a = alpha + fogA * (1.0 - alpha);
+      col = (col * alpha + fc * fogA * (1.0 - alpha)) / max(a, 1e-4);
+      alpha = a;
+    }
+  }
   gl_FragColor = vec4(col, alpha);
 }
 `;

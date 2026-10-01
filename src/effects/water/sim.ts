@@ -62,6 +62,10 @@ export const MIST_DRY = 1 / 30;
 export const PIN_CELL = 6;
 /** How strongly a drop is steered sideways by the field's gradient, mm (estimate). */
 export const MEANDER = 8;
+/** How long a merged drop takes to pull round again, s (estimate: pinned contact lines creep; the reference photographs show merged drops still lumpy long after). */
+export const SKEW_RELAX = 40;
+/** The most a merge can stretch a drop, in its radii (estimate: past this the contact line would break into two drops). */
+export const SKEW_MAX = 0.8;
 
 /** A spherical cap's contact radius and height from its volume and contact angle (water-drops 2.1). */
 export function capOf(volume: number, thetaDeg: number): { a: number; h: number } {
@@ -170,6 +174,16 @@ export class DropSim {
   private readonly pinRows: number;
   /** Merges in the last step (volume-weighted, for the renderer's splat). */
   merges = 0;
+  /**
+   * The shape a merge leaves (water-drops 9.5): a drop that swallowed a
+   * neighbour stays stretched toward where it was, its contact line pinned
+   * there, and only slowly pulls round again. A vector in the drop's own
+   * radii: the stretch's direction and how far, relaxing over SKEW_RELAX.
+   */
+  readonly skewX: Float64Array;
+  readonly skewY: Float64Array;
+  /** Wind across the glass: how far a running drop is pushed sideways, as a fraction of its speed (rain type "wind-driven"). */
+  wind = 0;
 
   constructor(o: SimOptions) {
     this.width = o.width;
@@ -190,6 +204,8 @@ export class DropSim {
     this.parent = new Int32Array(n);
     this.run = new Float64Array(n);
     this.shed = new Int32Array(n);
+    this.skewX = new Float64Array(n);
+    this.skewY = new Float64Array(n);
     this.filmCols = Math.max(1, Math.ceil(o.width / FILM_CELL));
     this.filmRows = Math.max(1, Math.ceil(o.height / FILM_CELL));
     this.film = new Float32Array(this.filmCols * this.filmRows);
@@ -218,6 +234,8 @@ export class DropSim {
     this.parent[i] = parent;
     this.run[i] = 0;
     this.shed[i] = 0;
+    this.skewX[i] = 0;
+    this.skewY[i] = 0;
     return i;
   }
 
@@ -351,6 +369,8 @@ export class DropSim {
     this.parent[i] = this.parent[last]!;
     this.run[i] = this.run[last]!;
     this.shed[i] = this.shed[last]!;
+    this.skewX[i] = this.skewX[last]!;
+    this.skewY[i] = this.skewY[last]!;
   }
 
   /** Time not yet stepped, s: the sim always steps exactly SUBSTEP, so any frame rate gives the same drops. */
@@ -394,6 +414,7 @@ export class DropSim {
     }
     // Toward the friction-law speed, the same whatever the step (exact for a first-order lag).
     const ease = 1 - Math.exp(-dt / SPEED_TAU);
+    const relax = Math.exp(-dt / SKEW_RELAX);
     for (let i = 0; i < this.count; i++) {
       const l = this.liquidOf(i);
       // Evaporation, as the contact radius (diffusion-limited).
@@ -407,12 +428,17 @@ export class DropSim {
       // Down, steered sideways toward the cleaner glass (the field's slope).
       const side = Math.max(-0.3, Math.min(0.3, -MEANDER * this.pinSlopeX(x, y)));
       this.vy[i] = this.vy[i]! + (u - this.vy[i]!) * ease;
-      this.vx[i] = this.vx[i]! + (u * side - this.vx[i]!) * ease;
+      this.vx[i] = this.vx[i]! + (u * (side + this.wind) - this.vx[i]!) * ease;
+      this.skewX[i] = this.skewX[i]! * relax;
+      this.skewY[i] = this.skewY[i]! * relax;
       if (this.vy[i]! < 1e-3 && u === 0) {
         this.vy[i] = 0;
         this.vx[i] = 0;
         continue;
       }
+      // A running drop's shape is its run's (stretched along it, the renderer's): what a merge left is gone.
+      this.skewX[i] = this.skewX[i]! * 0.9;
+      this.skewY[i] = this.skewY[i]! * 0.9;
       moving = true;
       const dx = this.vx[i]! * dt;
       const dy = this.vy[i]! * dt;
@@ -564,6 +590,25 @@ export class DropSim {
     const va = this.vol[keep]!;
     const vb = this.vol[gone]!;
     const v = va + vb;
+    // The stretch toward the absorbed drop: its offset over the new radius, weighted by its share (and both drops' own).
+    // An axis, not a direction (a drop stretched left is stretched right): kept pointing down the glass.
+    let ox = this.x[gone]! - this.x[keep]!;
+    let oy = this.y[gone]! - this.y[keep]!;
+    if (oy < 0 || (oy === 0 && ox < 0)) {
+      ox = -ox;
+      oy = -oy;
+    }
+    const aNew = capOf(v, restAngle(this.liquidOf(keep))).a;
+    const share = vb / v;
+    let sx = (this.skewX[keep]! * va + this.skewX[gone]! * vb) / v + (share * ox) / aNew;
+    let sy = (this.skewY[keep]! * va + this.skewY[gone]! * vb) / v + (share * oy) / aNew;
+    const sl = Math.hypot(sx, sy);
+    if (sl > SKEW_MAX) {
+      sx *= SKEW_MAX / sl;
+      sy *= SKEW_MAX / sl;
+    }
+    this.skewX[keep] = sx;
+    this.skewY[keep] = sy;
     this.x[keep] = (this.x[keep]! * va + this.x[gone]! * vb) / v;
     this.y[keep] = (this.y[keep]! * va + this.y[gone]! * vb) / v;
     this.vx[keep] = (this.vx[keep]! * va + this.vx[gone]! * vb) / v;

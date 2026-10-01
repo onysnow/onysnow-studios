@@ -1225,7 +1225,44 @@ was not behind it (scene.ts backdropOf now skips images on the pane);
 highlights clipped per channel turned into violet dots (now clipped to
 white); the 400-drop cap held a pane at 9% coverage (now 1500).
 
-### 9.4 Still to do
+### 9.5 Round 2 (2026-10-01, approved by Ony)
+
+From Ony's notes on round 1 ("too big", "like we're super zoomed in",
+"still way too pixelated", "very misshapen rain drops on windows ... they
+just have to follow certain rules", "many types of rain", condensation
+"separate from the rain but interacts with rain") and his reference
+photographs (the Golden Gate tower and the sky inverted in each drop):
+
+- **Scale**: 4 px a mm (was 6). The largest clinging drop (4.4 mm) is
+  about 18 px; most are 4-10 px.
+- **The scene a drop images is far away.** The photograph is the world
+  outside the window, so each drop's ray is traced to a scene 900 px
+  behind the glass **(estimate, matched to his photographs: about half
+  the photograph inside each drop)**, not to a print a few px behind it.
+  The light-under-the-drop term of 9.2 assumed the photograph was right
+  behind the glass, so it no longer applies and is gone.
+- **Shapes follow the rules**: a merged drop stays stretched along the
+  line between the two it was made from (the sim's skew, relaxing over
+  40 s, kept at most 1.8 x 0.75), with its volume kept; contact lines
+  2% irregular for a droplet, 6% for the largest drop; bigger drops sag
+  into a pear (Bond number).
+- **Sub-pixel droplets** are drawn at 1.2 device px and faded by their
+  true area: a sparkle with a glint, as a camera records them.
+- **2x**: the maps and the water layer are drawn at 2 device px per CSS
+  px wherever the machine runs the full quality tier, and downscaled.
+- **Rivulets**: a runner's wet track stands 0.18 mm proud where fresh
+  **(estimate)** and is its own lens, so the scene wavers through it.
+- **Rain type** (effects/water/rain-types): drizzle (sub-0.5 mm drops:
+  the meteorological definition), light, steady, downpour, wind-driven
+  (runners slant), after the rain (nothing new lands). Rates, medians
+  and droplet counts are estimates matched to the reference photographs.
+- **Condensation** (steam): its own half-size map per pane, building up
+  over 30 s **(estimate)**, uneven in patches, milky with the scene
+  blurred through it and a halo round each lamp. Same side as the rain:
+  every drop's footprint and runner's path wipes it and it builds back;
+  the other side: it veils the drops.
+
+### 9.6 Still to do
 
 - A lamp's own caustic (a sharp bright point under each drop, offset
   away from the lamp) on top of the room's.

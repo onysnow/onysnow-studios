@@ -184,4 +184,20 @@ describe("DropSim (water-drops 7.5 step 1)", () => {
     expect(Math.abs(sim.totalVolume() + sim.mistVolume() - sprayed)).toBeLessThan(1e-6);
     expect(sim.count).toBeGreaterThan(0);
   });
+
+  it("leaves a merged drop stretched along the line between the two (water-drops 9.5), relaxing slowly", () => {
+    const sim = new DropSim({ width: 60, height: 60, seed: 4, pinning: 0, evaporate: false });
+    const v = 2;
+    const a = sim.radius(sim.add(30, 30, v));
+    sim.add(30 + a * 1.9, 30, v);
+    sim.step(1 / 120);
+    expect(sim.count).toBe(1);
+    expect(Math.abs(sim.skewX[0]!)).toBeGreaterThan(0.5);
+    expect(Math.abs(sim.skewY[0]!)).toBeLessThan(1e-6);
+    const s0 = Math.abs(sim.skewX[0]!);
+    sim.step(0.25);
+    sim.step(0.25);
+    expect(Math.abs(sim.skewX[0]!)).toBeLessThan(s0);
+    expect(Math.abs(sim.skewX[0]!)).toBeGreaterThan(s0 * 0.95);
+  });
 });
