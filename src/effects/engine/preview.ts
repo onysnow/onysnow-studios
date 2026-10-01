@@ -79,6 +79,34 @@ export const PREVIEWS = {
 
 export type PreviewName = keyof typeof PREVIEWS;
 
+/**
+ * The ones that are not previews any more: corrections to things the site
+ * already does, so they are on for everyone (Ony, 2026-10-01: "the default
+ * is what I am telling you to do in regards to features that already exist
+ * is a fix so quit making me try them"). Each keeps its name so the code
+ * paths and their tests stay as they were; the lab no longer offers them as
+ * switches.
+ */
+export const ON_BY_DEFAULT: readonly PreviewName[] = [
+  "kelvin",
+  "flash",
+  "photolights",
+  "backlight",
+  "dimroom",
+  "marks",
+  "roughglass",
+  "corners",
+  "shaderplastic",
+  "bounce",
+  "gapparallax",
+  "polariser",
+  "vignette",
+  "burn",
+  "liquidlights",
+  "liquidedge",
+  "redroom",
+];
+
 let active: ReadonlySet<string> | null = null;
 
 function read(): ReadonlySet<string> {
@@ -87,7 +115,8 @@ function read(): ReadonlySet<string> {
   let list: string[] = [];
   // Only for Ony signed in as the admin (item 48; lib/admin-gate).
   if (!experimentsAllowed()) {
-    active = new Set();
+    active = new Set(ON_BY_DEFAULT);
+    document.documentElement.dataset["try"] = ON_BY_DEFAULT.join(" ");
     return active;
   }
   try {
@@ -100,6 +129,7 @@ function read(): ReadonlySet<string> {
   }
   // And the ones switched on in the lab, which stay on in this browser (storedPreviews).
   for (const name of storedPreviews()) if (!list.includes(name)) list.push(name);
+  for (const name of ON_BY_DEFAULT) if (!list.includes(name)) list.push(name);
   active = new Set(list);
   if (list.length > 0) document.documentElement.dataset["try"] = list.join(" ");
   return active;

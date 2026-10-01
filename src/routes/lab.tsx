@@ -54,6 +54,7 @@ import { TOOLS, type ToolId } from "@/effects/tools/held";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  ON_BY_DEFAULT,
   PREVIEWS,
   setStoredPreview,
   storedPreviews,
@@ -1005,7 +1006,7 @@ const CHOSEN_NOT_SWITCHED: ReadonlySet<PreviewName> = new Set([
 
 function previewsIn(group: string): PreviewName[] {
   return (Object.keys(PREVIEW_GROUP) as PreviewName[]).filter(
-    (n) => PREVIEW_GROUP[n] === group && !CHOSEN_NOT_SWITCHED.has(n),
+    (n) => PREVIEW_GROUP[n] === group && !CHOSEN_NOT_SWITCHED.has(n) && !ON_BY_DEFAULT.includes(n),
   );
 }
 
