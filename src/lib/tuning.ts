@@ -812,7 +812,7 @@ export const tuning: Record<string, Knob> = {
   uvReach: {
     label: "Black light reach",
     group: "Light",
-    value: 560,
+    value: 900,
     min: 150,
     max: 1600,
     step: 10,

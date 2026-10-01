@@ -3619,9 +3619,9 @@ html.is-winding * {
   pointer-events: none;
   background: radial-gradient(
     circle var(--uv-reach, 560px) at var(--uv-x, -2000px) var(--uv-y, -2000px),
-    rgb(6 3 26 / calc(var(--uv-dark, 0.92) * 0.12)) 0%,
-    rgb(6 3 26 / calc(var(--uv-dark, 0.92) * 0.4)) 45%,
-    rgb(6 3 26 / calc(var(--uv-dark, 0.92) * 0.85)) 80%,
+    rgb(6 3 26 / 0) 0%,
+    rgb(6 3 26 / calc(var(--uv-dark, 0.92) * 0.12)) 50%,
+    rgb(6 3 26 / calc(var(--uv-dark, 0.92) * 0.6)) 85%,
     rgb(6 3 26 / var(--uv-dark, 0.92)) 100%
   );
 }
@@ -3646,12 +3646,22 @@ html[data-uv] video {
   filter: url(#uv-paper);
 }
 
+/*
+ * The photographs' darkening scrims and vignettes are the design's, not
+ * paint on the print: under UV they stand down most of the way, or the
+ * glowing whites come out grey through them (Ony: whites a very light blue).
+ */
+html[data-uv] [data-photo] :is([data-scrim], .image-vignette) {
+  opacity: 0.3;
+}
+
 /* Light type as white ink with brighteners: blue-white, glowing. Not the type on the buttons. */
 html[data-uv] :is(h1, h2, h3, h4, p, li, blockquote, .rich-text, a, label, span):not(.plastic, .plastic *) {
-  color: color-mix(in srgb, rgb(232 222 255) calc(min(var(--uv-ink, 0.8), 1) * 100%), rgb(40 24 110));
+  /* White ink with brighteners goes a very light blue under UV (Ony's references). */
+  color: color-mix(in srgb, rgb(206 232 255) calc(min(var(--uv-ink, 0.8), 1) * 100%), rgb(30 30 120));
   text-shadow:
-    0 0 calc(4px * var(--uv-ink, 0.8)) rgb(200 170 255 / calc(0.8 * min(var(--uv-ink, 0.8), 1.2))),
-    0 0 calc(14px * var(--uv-ink, 0.8)) rgb(140 110 255 / calc(0.55 * min(var(--uv-ink, 0.8), 1.2)));
+    0 0 calc(4px * var(--uv-ink, 0.8)) rgb(170 215 255 / calc(0.85 * min(var(--uv-ink, 0.8), 1.2))),
+    0 0 calc(14px * var(--uv-ink, 0.8)) rgb(90 150 255 / calc(0.6 * min(var(--uv-ink, 0.8), 1.2)));
 }
 
 /* The day-glo orange buttons blaze: brighter than reflection alone could make them, and glowing out. */

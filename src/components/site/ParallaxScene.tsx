@@ -167,7 +167,9 @@ export function ParallaxScene({
             />
           </div>
         </motion.div>
-        {scrim === "none" ? null : <div className={cn("absolute inset-0", SCRIM[scrim])} />}
+        {scrim === "none" ? null : (
+          <div data-scrim className={cn("absolute inset-0", SCRIM[scrim])} />
+        )}
         <div className="image-vignette pointer-events-none absolute inset-0" />
       </div>
       {children ? (

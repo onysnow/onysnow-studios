@@ -166,7 +166,10 @@ function HomePage() {
             of the picture. The text keeps its contrast from the band of
             darkening it sits in.
           */}
-          <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-background/20 to-background/25" />
+          <div
+            data-scrim
+            className="absolute inset-0 bg-gradient-to-t from-background/60 via-background/20 to-background/25"
+          />
           <div className="image-vignette absolute inset-0" />
         </div>
         <div className="relative flex min-h-[92svh] flex-col justify-end px-5 pb-14 sm:px-8 lg:px-12 lg:pb-20">

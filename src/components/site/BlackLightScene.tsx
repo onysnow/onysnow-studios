@@ -31,7 +31,8 @@ const LEAK = [
 /** What the lamp's light shows of a surface that does not fluoresce: deep indigo (the references' walls and skin). */
 const INDIGO = [0.14, 0.08, 1.0] as const;
 /** Brightener blue-white: what an optical brightener re-emits (peaking near 440 nm). */
-const OBA = [0.62, 0.78, 1.0] as const;
+// Whites go a very light blue (Ony, 2026-10-01, with a paper plane and a smile under UV).
+const OBA = [0.38, 0.8, 1.0] as const;
 /** The neon colours fluorescent pigments blaze in (the references: lips, paint, acrylic). */
 const HOT_PINK = [1.0, 0.16, 0.5] as const;
 const NEON_GREEN = [0.45, 1.0, 0.18] as const;
@@ -117,7 +118,7 @@ export function BlackLightScene() {
   // The lamp's light reflected: deep indigo by luminance, stronger for the 395 nm wash.
   const base = INDIGO.map((c) => c * leak.reflect);
   // Whites: luminance past about two thirds of white, brightener blue-white.
-  const w = OBA.map((c) => c * 2.4 * s.paper);
+  const w = OBA.map((c) => c * 2.1 * s.paper);
   // The neon terms, by "UV: colours in the photographs".
   const pk = HOT_PINK.map((c) => c * 3.2 * s.neon);
   const gr = NEON_GREEN.map((c) => c * 1.8 * s.neon);
@@ -155,7 +156,7 @@ export function BlackLightScene() {
           <feColorMatrix
             in="SourceGraphic"
             type="matrix"
-            values={lumRow(w, -0.58)}
+            values={lumRow(w, -0.48)}
             result="white"
           />
           {/* Warm (red, pink, orange): how much redder than the rest, hot pink-red. */}
