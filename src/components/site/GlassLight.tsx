@@ -554,6 +554,36 @@ export function GlassLight({
     const drawn = new Set<HTMLCanvasElement>();
     const allLayers = new Set<HTMLCanvasElement>();
 
+    /*
+     * The bloom over what stands above the glass's layers (item 51).
+     *
+     * A pane's lit edge and its bloom are drawn into the pane's own layers,
+     * BLEED past its rim. Anything later on the page that sits in a higher
+     * stacking context -- the footer's photo strip and its heading, z-10 so
+     * its shadow lands on the footer -- painted over that bleed, so the last
+     * pane's glow stopped dead at its bottom edge while every other pane's
+     * spilled over the photograph below. The bloom is the camera's, not the
+     * glass's: it lies over everything in frame. So the part of each glow
+     * layer that falls on a [data-floor-receiver] is drawn again onto that
+     * element, in a layer of its own, adding light the same way.
+     */
+    const bloomReceived = new Map<HTMLElement, HTMLCanvasElement>();
+    const bloomLayerFor = (el: HTMLElement, w: number, h: number) => {
+      let layer = bloomReceived.get(el);
+      if (!layer || !layer.isConnected) {
+        layer = document.createElement("canvas");
+        layer.className = "glass-bloom-received";
+        layer.setAttribute("aria-hidden", "true");
+        el.appendChild(layer);
+        bloomReceived.set(el, layer);
+      }
+      if (layer.width !== w || layer.height !== h) {
+        layer.width = w;
+        layer.height = h;
+      }
+      return layer;
+    };
+
     let wasLit = false;
 
     /* Returns whether there is still something to draw; false parks the loop. */
@@ -685,6 +715,25 @@ export function GlassLight({
       for (const [unit, tex] of layers) {
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, tex);
+      }
+
+      // The elements the bloom has to be laid over this frame (see bloomLayerFor).
+      const receivers: { ctx: CanvasRenderingContext2D; r: DOMRect }[] = [];
+      for (const layer of bloomReceived.values()) {
+        layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
+      }
+      if (lit) {
+        for (const el of document.querySelectorAll<HTMLElement>("[data-floor-receiver]")) {
+          const r = el.getBoundingClientRect();
+          if (r.bottom < 0 || r.top > viewportHeight() || r.width < 1 || r.height < 1) continue;
+          const layer = bloomLayerFor(
+            el,
+            Math.max(1, Math.round(r.width * scale)),
+            Math.max(1, Math.round(r.height * scale)),
+          );
+          const ctx = layer.getContext("2d");
+          if (ctx) receivers.push({ ctx, r });
+        }
       }
 
       for (const pane of panes) {
@@ -1019,6 +1068,18 @@ export function GlassLight({
               }
               drawn.add(glowLayer);
               allLayers.add(glowLayer);
+              // And over whatever stands above it, where the bleed reaches.
+              const gx = pane.x - BLEED;
+              const gy = pane.y - BLEED;
+              const gw = glowLayer.width / scale;
+              const gh = glowLayer.height / scale;
+              for (const { ctx: rc, r } of receivers) {
+                if (r.left > gx + gw || r.right < gx || r.top > gy + gh || r.bottom < gy) continue;
+                rc.save();
+                rc.globalCompositeOperation = "lighter";
+                rc.drawImage(glowLayer, (gx - r.left) * scale, (gy - r.top) * scale);
+                rc.restore();
+              }
             }
             // Leave the region as the next pane's draw expects to find it.
             gl.clear(gl.COLOR_BUFFER_BIT);
