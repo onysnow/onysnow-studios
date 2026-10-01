@@ -65,6 +65,8 @@ export const PREVIEWS = {
     "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
   shardlight:
     "Item 10 step 3b, with ?try=broken: each piece of a broken pane mirrors the room at its own slope, per pixel in the glass shader -- a mirror turned by t turns the reflection by 2t, so the room's reflection breaks up piece by piece along the cracks; a hole reflects nothing",
+  fireworks:
+    "Task 81: fireworks over the page -- click to send up a shell (a show goes up on its own too); stars fly out at a 10-go shell's speed, slow by air drag, burn about 2 s in their chemistry's colour (strontium, barium, copper, sodium, calcium, magnesium), shed charcoal sparks, and light the page in their colour, no more than three flashes a second",
   fire: "Task 82: a burning torch in the hand -- firelight at 1900 K that puffs at 6.7 Hz with slower wander and the odd gutter, lighting the glass and throwing swaying shadows; the flame leans as you move it and burns brighter when fanned; the room goes dark around it",
   webs: "Task 75: a garden spider's orb web in the corner of the hero, built from measured webs and solved thread by thread -- it sways in the room's air and the pointer's wake, glints where each light catches its threads, tears when you pull a thread too far, and a flick cuts through it",
   balloons:

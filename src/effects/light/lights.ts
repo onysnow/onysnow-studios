@@ -84,6 +84,13 @@ export type Light = {
    * lights nothing on the photographs' own plane.
    */
   readonly below?: boolean;
+  /**
+   * Whether the floor takes this light's strength and distance as they are
+   * (inverse square against the lamp's defaults, FloorLight floorScale) --
+   * the lamp always does; a firework burst far off does; the other lights'
+   * strengths were set by eye without it.
+   */
+  physicalFloor?: boolean;
 };
 
 /** The lamp's colour: a warm white, a little under daylight. */

@@ -369,7 +369,7 @@ export function FloorLight() {
        */
       floorScales.fill(1);
       floorLights.forEach((l, i) => {
-        if (i >= floorScales.length || l.id !== "cursor") return;
+        if (i >= floorScales.length || (l.id !== "cursor" && !l.physicalFloor)) return;
         floorScales[i] = floorScale(l.gain, l.height);
       });
       gl.uniform1fv(uFloorScale, floorScales);

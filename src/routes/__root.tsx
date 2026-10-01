@@ -4,6 +4,7 @@ import { PhotoLights } from "@/components/site/PhotoLights";
 import { WaterDrops } from "@/components/site/WaterDrops";
 import { Balloons } from "@/components/site/Balloons";
 import { SpiderWebs } from "@/components/site/SpiderWebs";
+import { Fireworks } from "@/components/site/Fireworks";
 import { Vignette } from "@/components/site/Vignette";
 import { RedRoom } from "@/components/site/RedRoom";
 import { FreeSurfaces } from "@/components/site/FreeSurfaces";
@@ -211,6 +212,8 @@ function RootComponent() {
           <Balloons />
           {/* A spider's web (task 75, ?try=webs). */}
           <SpiderWebs />
+          {/* Fireworks (task 81, ?try=fireworks). */}
+          <Fireworks />
           {/* The lens's corners (catalogue item 32, ?try=vignette). */}
           <Vignette />
           {/* Secret 2, the darkroom (item 39, ?try=redroom). */}
