@@ -3,6 +3,7 @@ import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
 import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
+import { SHARD_MAP_GLSL } from "@/effects/optics/shard-map";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { LAMP_COLOUR } from "@/effects/light/lights";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
@@ -141,6 +142,8 @@ uniform vec3 uReflectScale;
  * front face is.
  */
 uniform sampler2D uRoom;
+uniform sampler2D uShardMap;    // a broken pane's pieces (effects/optics/shard-map), pane px
+uniform float uHasShards;       // 1: this pane is broken and ?try=shardlight
 uniform float uHasRoom;
 uniform float uRoomWidth;       // texels round the full 360 degrees
 uniform float uCameraDistance;  // CSS pixels from the screen
@@ -217,6 +220,7 @@ ${REFLECTION_GLSL}
 ${EDGE_SIDE_GLSL}
 ${SURFACE_LAYERS_GLSL}
 ${ENVIRONMENT_GLSL}
+${SHARD_MAP_GLSL}
 ${SHADOW_GLSL}
 
 /*
@@ -1178,6 +1182,22 @@ void main() {
   // across the face as the viewpoint moves.
   vec2 fromCentre = frag - 0.5 * uViewport / uScale - uEye;
   float cosView = uCameraDistance / length(vec3(fromCentre, uCameraDistance));
+  /*
+   * A broken pane (item 10 step 3b, ?try=shardlight): each piece has its own
+   * slope, so it mirrors the room turned by twice its tilt, and its Fresnel
+   * is taken against its own normal. Where a piece has fallen out there is no
+   * glass to reflect anything (effects/optics/shard-map).
+   */
+  vec3 roomDir = vec3(fromCentre, uCameraDistance);
+  float glassHere = 1.0;
+  if (uHasShards > 0.5) {
+    vec4 piece = texture2D(uShardMap, clamp((frag - uRect.xy) / uRect.zw, 0.0, 1.0));
+    vec3 pieceN = shardNormal(piece);
+    vec3 viewRay = normalize(vec3(fromCentre, -uCameraDistance));
+    roomDir = reflect(viewRay, pieceN);
+    cosView = max(-dot(viewRay, pieceN), 0.0);
+    glassHere = piece.a;
+  }
   float reflectance = fresnelSchlick(cosView, uIor);
   /*
    * ?try=polariser (step H): exactly, s and p apart. The plane of incidence
@@ -1193,10 +1213,10 @@ void main() {
   reflectance += (1.0 - reflectance) * fresnel;
   float roomBias = roomLod(uFrontRoughness, uRoomWidth) - log2(max(texelsPerPx, 1e-4));
   vec3 room = decodeRadiance(
-    texture2D(uRoom, roomUv(fromCentre, uCameraDistance), roomBias).rgb
+    texture2D(uRoom, roomUvDir(roomDir), roomBias).rgb
   );
   if (uRoomKnee > 0.0) room = room / (1.0 + room / uRoomKnee);
-  colour += inside * reflectance * room * uRoomExposure * uHasRoom * uReflectScale * uCoat;
+  colour += inside * glassHere * reflectance * room * uRoomExposure * uHasRoom * uReflectScale * uCoat;
 
   /*
    * ---- A dry contact: the air film under this pane (?try=contact) ----

@@ -27,6 +27,11 @@ export const PANE_LAYERS = [
   "pane:refraction",
   /** The liquid glass library's render, when liquid glass is on. */
   "pane:liquid",
+  /**
+   * A broken pane's view through its pieces (BrokenGlass, item 10, with
+   * ?try=shardlight): the glass itself, so under every light on it.
+   */
+  "pane:broken",
   /** The glare the shutter flash sweeps across the face. */
   "pane:glare",
   /** The light arriving UNDER the glass, on the photographs (FloorLight). */
@@ -61,6 +66,7 @@ export const LAYER_CLASS: Readonly<Record<PaneLayer, string>> = {
   "pane:bokeh": "glass__bokeh",
   "pane:refraction": "glass__refract",
   "pane:liquid": "glass__liquid",
+  "pane:broken": "glass__broken",
   "pane:glare": "glass__glare",
   "pane:under": "glass__under",
   "pane:surface": "glass__surface",

@@ -15,6 +15,9 @@ import { cursorLamp, onLightChange, pointLights } from "@/effects/light/lights";
 import { N_GLASS, crackGlow, type CrackLightSource } from "@/effects/optics/crack-light";
 import { viewState } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
+import { previewing } from "@/effects/engine/preview";
+import { adoptLayer } from "@/effects/engine/compositor";
+import { clearShardMap, paintShardMap, setShardMap } from "@/effects/optics/shard-map";
 
 /** The frost the panes' backdrop is blurred by, px (styles.css .glass: blur(30px)). */
 const FROST_BLUR = 30;
@@ -214,6 +217,15 @@ export function BrokenGlass({
       });
     }
     let frame = 0;
+    // The pane this break is laid over, and its pieces for the glass shader (step 3b).
+    const pane = canvas.parentElement?.closest<HTMLElement>(".glass") ?? null;
+    /*
+     * With step 3b the break is the glass, so it goes in the pane's own slot
+     * for it, under the light on the glass -- the room it reflects, the lamp,
+     * the grime -- which it used to cover (effects/engine/compositor).
+     */
+    if (pane && previewing("shardlight")) adoptLayer(pane, "pane:broken", canvas);
+    const shardMap = document.createElement("canvas");
     // The frosted photograph, cached: blurring is the costly part.
     const frost = document.createElement("canvas");
     let frostFor = "";
@@ -283,6 +295,19 @@ export function BrokenGlass({
           broken = fracture({ w, h, at: struck, energy, kind, seed });
         }
         brokeFor = breakKey;
+        /*
+         * Step 3b (?try=shardlight): the pieces go to the glass shader, which
+         * draws the room each one reflects at its own slope.
+         */
+        if (pane && previewing("shardlight")) {
+          shardMap.width = Math.round(w);
+          shardMap.height = Math.round(h);
+          const mc = shardMap.getContext("2d");
+          if (mc && broken) {
+            paintShardMap(mc, broken.shards, shardMap.width, shardMap.height);
+            setShardMap(pane, shardMap);
+          }
+        }
       }
       if (!broken) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -685,6 +710,7 @@ export function BrokenGlass({
     const late = window.setTimeout(wake, 1500);
     return () => {
       disposed = true;
+      if (pane) clearShardMap(pane);
       cancelAnimationFrame(frame);
       window.clearTimeout(late);
       stop();

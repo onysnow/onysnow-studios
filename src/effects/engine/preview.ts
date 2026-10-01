@@ -63,6 +63,10 @@ export const PREVIEWS = {
     "Two panes resting dry on each other (the Contact stack on Lab samples): the air film between them shows Newton's colours where both faces are polished, black where they touch (light engine step G)",
   broken:
     "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
+  stackedges:
+    "Item 2a follow-up: the upper pane of a stack throws its own edge onto the photograph -- the dark rim under its bevel and the bright seam inside it, and the floor seen through it bends at its bevel -- which went missing with 8ed097c (Ony, 2026-10-01: the shadow at the left corner); the stack's light is still counted once",
+  shardlight:
+    "Item 10 step 3b, with ?try=broken: each piece of a broken pane mirrors the room at its own slope, per pixel in the glass shader -- a mirror turned by t turns the reflection by 2t, so the room's reflection breaks up piece by piece along the cracks; a hole reflects nothing",
   solids:
     "Glass solids on Lab samples -- prism, sphere, cube, cone, pyramid, rod -- ray traced through their glass",
   tools:

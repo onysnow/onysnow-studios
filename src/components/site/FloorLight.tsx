@@ -134,6 +134,8 @@ export function FloorLight() {
     const frosts = new Float32Array(MAX_FLOOR_PANES);
     // What a stack lets through relative to its bottom layer (1 for a pane on its own).
     const throughs = new Float32Array(MAX_FLOOR_PANES * 3);
+    const edgeOnly = new Float32Array(MAX_FLOOR_PANES);
+    const uEdgeOnly = U("uEdgeOnly");
     const marks = new Float32Array(MAX_FLOOR_PANES * 2);
     const uMarks = U("uMarks");
     const uMarksProportional = U("uMarksProportional");
@@ -236,14 +238,23 @@ export function FloorLight() {
       const vh = document.documentElement.clientHeight || window.innerHeight;
       let n = 0;
       drawnPanes.length = 0;
-      for (const pane of glassGeometry(now)) {
+      const throwing = glassGeometry(now).filter(
+        (pane) => !(pane.y + pane.h < -200 || pane.y > vh + 200) && !(pane.w < 120 || pane.h < 40),
+      );
+      const stackEdges = previewing("stackedges");
+      /*
+       * Bottom layers take the slots first (each carries its stack's light);
+       * the upper layers' edges, a detail on top, take what is left.
+       */
+      if (stackEdges) {
+        throwing.sort((a, b) => (a.stack.index > 0 ? 1 : 0) - (b.stack.index > 0 ? 1 : 0));
+      }
+      for (const pane of throwing) {
         if (n >= MAX_FLOOR_PANES) break;
-        if (pane.y + pane.h < -200 || pane.y > vh + 200) continue;
-        if (pane.w < 120 || pane.h < 40) continue; // buttons and menus throw nothing worth drawing
         /*
-         * A stack throws one shadow: its bottom layer's, carrying the whole
-         * stack (uThrough). The layers above it throw none of their own, but
-         * each still shows the floor under it in its own layer -- the light
+         * A stack's light is counted once: by its bottom layer, carrying the
+         * whole stack (uThrough). The layers above it add only their edges
+         * (below), and each shows the floor under it in its own layer -- the light
          * that has come through the WHOLE stack -- and the layer below it
          * leaves the part it covers to it (2a, Ony 2026-09-30: a pane under
          * another sees only what came through the one above). Left to the
@@ -260,7 +271,17 @@ export function FloorLight() {
               h: Math.min(pane.y + pane.h, over.y + over.h) - Math.max(pane.y, over.y),
             }
           : null;
-        if (pane.stack.index > 0) {
+        /*
+         * An upper layer still has edges, and they still bend the light that
+         * crosses them: the dark rim under its bevel and the bright seam
+         * inside it -- the shadow of its edge on the floor -- and the bend
+         * of the floor seen through it. Those it adds (uEdgeOnly); what it
+         * lets through is in the bottom layer's uThrough already. (Ony,
+         * 2026-10-01: the shadow at the upper pane's left corner had gone
+         * with 8ed097c, which left upper layers out of the floor entirely.)
+         */
+        const upper = pane.stack.index > 0;
+        if (upper && !stackEdges) {
           drawnPanes.push({
             el: pane.el,
             x: pane.x,
@@ -271,6 +292,7 @@ export function FloorLight() {
           });
           continue;
         }
+        edgeOnly[n] = upper ? 1 : 0;
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
         edges[n] = pane.e;
@@ -284,7 +306,7 @@ export function FloorLight() {
           roughRatios.set(row.ratio, n * 4);
           roughSpreads.set(row.spread, n * 4);
         }
-        throughs.set(pane.stack.throughScale, n * 3);
+        throughs.set(upper ? [1, 1, 1] : pane.stack.throughScale, n * 3);
         marks[n * 2] = pane.causes.scratch;
         marks[n * 2 + 1] = pane.causes.smudge;
         drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h, over: overlap });
@@ -344,6 +366,7 @@ export function FloorLight() {
       gl.uniform4fv(uRoughRatio, roughRatios);
       gl.uniform4fv(uRoughSpread, roughSpreads);
       gl.uniform3fv(uThrough, throughs);
+      gl.uniform1fv(uEdgeOnly, edgeOnly);
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

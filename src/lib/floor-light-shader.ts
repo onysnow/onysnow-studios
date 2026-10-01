@@ -117,6 +117,13 @@ float roughAt(vec4 v, float cosTheta) {
  * on its own.
  */
 uniform vec3 uThrough[${MAX_FLOOR_PANES}];
+/*
+ * 1 for an upper layer of a stack: what the stack lets through is counted
+ * once, by its bottom layer (uThrough), so this layer adds only what its
+ * shape does to the light -- its bevel's dark rim and bright seam, the bend
+ * of the floor seen through it, its marks -- and its flat face passes 1.
+ */
+uniform float uEdgeOnly[${MAX_FLOOR_PANES}];
 /* How much of the scratch (x) and smudge (y) layers each pane wears. */
 uniform vec2 uMarks[${MAX_FLOOR_PANES}];
 uniform float uMarksProportional; // 1 while previewing ?try=marks
@@ -350,6 +357,11 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
      * and at each pane's edge its fraction eases back to 1 over the lamp's
      * penumbra (inGlass), so nothing starts or stops on a line.
      */
+    if (uEdgeOnly[i] > 0.5) {
+      // Relative to its own flat face, which the bottom layer has counted.
+      vec3 face = pool * passes * faceThrough * (uUnscattered[i] + 0.35 * (1.0 - uUnscattered[i]));
+      through *= pool / max(face, vec3(1e-4));
+    }
     light *= mix(vec3(1.0), through * uThrough[i] / max(pool, 1e-4), inGlass);
   }
 
@@ -368,8 +380,17 @@ void main() {
    * glass are bowed toward the rim instead of sitting flat.
    */
   vec2 look = P;
+  /*
+   * Seen from above, the eye meets an upper layer's bevel before the layer
+   * under it: the upper layers of stacks (uEdgeOnly) are looked through
+   * first, then the rest; the first that bends a point bends it.
+   */
+  bool bent = false;
+  for (int pass = 0; pass < 2; pass++) {
+  if (bent) break;
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
+    if ((uEdgeOnly[i] > 0.5) != (pass == 0)) continue;
     vec4 r = uRect[i];
     vec2 hs = r.zw * 0.5;
     vec2 q = P - (r.xy + hs);
@@ -396,8 +417,12 @@ void main() {
     }
     float x = edgeBand(d, uEdge[i]);
     float bend = (1.0 - x) * (1.0 - x) * uEdge[i] * 0.9 * uView;
+    // An upper layer's flat face bends nothing: look on through it to the layer below.
+    if (uEdgeOnly[i] > 0.5 && bend < 0.01) continue;
     look = P + outward * bend;
+    bent = true;
     break;
+  }
   }
 
   /*

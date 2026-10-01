@@ -1,5 +1,6 @@
 import { passScaleCap } from "@/effects/engine/quality";
 import { coatingRgb } from "@/effects/optics/coating";
+import { onShardMapChange, shardMapOf, shardMapStamp } from "@/effects/optics/shard-map";
 import { scatterDepth } from "@/effects/optics/scatter";
 import { useEffect, useState } from "react";
 import { LIGHT_VERTEX_SHADER } from "@/lib/cursor-light-shader";
@@ -204,6 +205,15 @@ export function GlassLight({
     const uFilmRect = U("uFilmRect");
     const uFilmSigma = U("uFilmSigma");
     gl.uniform1i(U("uFilmLut"), 7);
+    /*
+     * A broken pane's pieces (item 10 step 3b): a unit of their own where the
+     * device has more than eight; otherwise they share the air film's, which
+     * a broken pane resting dry on another would lose.
+     */
+    const shardUnit = (gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS) as number) > 8 ? 8 : 7;
+    gl.uniform1i(U("uShardMap"), shardUnit);
+    const uHasShards = U("uHasShards");
+    const shardTextures = new Map<HTMLCanvasElement, { tex: WebGLTexture; version: number }>();
     // The air film's reflectance by gap, a 256 x 1 table (effects/optics/thin-film).
     const filmTable = gl.createTexture();
     gl.activeTexture(gl.TEXTURE7);
@@ -560,6 +570,7 @@ export function GlassLight({
     let restingStamp = -1;
     let restingEyeX = Number.NaN;
     let restingEyeY = Number.NaN;
+    let restingShards = -1;
 
     const step = (now: number) => {
       const charge = chargeRef.current;
@@ -573,7 +584,15 @@ export function GlassLight({
          * which moves the photographs under the glass and the room in it.
          */
         const eyeStill = viewState.eyeX === restingEyeX && viewState.eyeY === restingEyeY;
-        if (!wasLit && restingDrawn && eyeStill && geometryStamp() === restingStamp) return false;
+        if (
+          !wasLit &&
+          restingDrawn &&
+          eyeStill &&
+          geometryStamp() === restingStamp &&
+          shardMapStamp() === restingShards
+        )
+          return false;
+        restingShards = shardMapStamp();
         restingEyeX = viewState.eyeX;
         restingEyeY = viewState.eyeY;
         wasLit = false;
@@ -722,6 +741,28 @@ export function GlassLight({
         const onContact =
           previewing("contact") && pane.stack.below?.kind === "contact" && under !== null;
         gl.uniform1f(uContact, onContact ? 1 : 0);
+        const shards = previewing("shardlight") ? shardMapOf(pane.el) : undefined;
+        gl.uniform1f(uHasShards, shards ? 1 : 0);
+        if (shards) {
+          let entry = shardTextures.get(shards.canvas);
+          if (!entry) {
+            const tex = gl.createTexture()!;
+            entry = { tex, version: -1 };
+            shardTextures.set(shards.canvas, entry);
+          }
+          gl.activeTexture(gl.TEXTURE0 + shardUnit);
+          gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+          if (entry.version !== shards.version) {
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, shards.canvas);
+            // One texel per CSS px, read as it is: a piece's slope is not blended with its neighbour's.
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            entry.version = shards.version;
+          }
+        }
         if (onContact && under) {
           const x0 = Math.max(pane.x, under.x);
           const y0 = Math.max(pane.y, under.y);
@@ -999,6 +1040,7 @@ export function GlassLight({
      */
     const stopCharge = onCharge(wake);
     const stopFlash = onFlash(wake);
+    const stopShards = onShardMapChange(wake);
     // A changed setting (the room's brightness, the frost) changes the resting
     // frame too, so it has to be redrawn, not just the lit one.
     const stopTuning = onTuningApplied(() => {
@@ -1018,11 +1060,13 @@ export function GlassLight({
       window.removeEventListener("pointermove", wake);
       stopCharge();
       stopFlash();
+      stopShards();
       stopTuning();
       stopLoss();
       gl.deleteProgram(program);
       quad.delete();
       for (const tex of layers.values()) gl.deleteTexture(tex);
+      for (const { tex } of shardTextures.values()) gl.deleteTexture(tex);
       if (room) gl.deleteTexture(room);
       for (const tex of backdrops.values()) if (tex) gl.deleteTexture(tex);
       for (const tex of hidden.values()) if (tex) gl.deleteTexture(tex);
