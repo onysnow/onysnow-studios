@@ -13,7 +13,7 @@ export default tseslint.config(
     // reformatting it would destroy the ability to diff the directory against
     // upstream and see only what WE changed -- which is the entire reason it
     // is vendored rather than installed. See src/lib/liquidglass/NOTICE.md.
-    ignores: ["dist", ".output", ".vinxi", "src/lib/liquidglass/**"],
+    ignores: ["dist", ".output", ".vinxi", "src/lib/liquidglass/**", "src/routeTree.gen.ts"],
   },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],

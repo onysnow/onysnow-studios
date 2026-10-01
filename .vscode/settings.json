@@ -1,0 +1,10 @@
+{
+  // src/routeTree.gen.ts is written by TanStack Router from the files in
+  // src/routes on every dev or build run. Nobody edits it, so: read-only,
+  // folded under router.tsx in the file list, out of search and the watcher.
+  "files.readonlyInclude": { "**/routeTree.gen.ts": true },
+  "files.watcherExclude": { "**/routeTree.gen.ts": true },
+  "search.exclude": { "**/routeTree.gen.ts": true },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": { "router.tsx": "routeTree.gen.ts" }
+}

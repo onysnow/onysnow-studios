@@ -32,3 +32,6 @@
 # Generated. Collapsed in diffs and left out of language stats, because a
 # lockfile conflict is resolved by re-running the install, never by hand.
 bun.lock linguist-generated=true -diff
+
+# Written by TanStack Router from src/routes on every run; collapsed in diffs.
+src/routeTree.gen.ts linguist-generated=true -diff
