@@ -198,6 +198,13 @@ uniform vec3 uLightPos[${MAX_WATER_LIGHTS}];
 uniform vec3 uLightColour[${MAX_WATER_LIGHTS}];
 uniform float uLightRadius[${MAX_WATER_LIGHTS}];
 const float DROPLET_FULL = ${DROPLET_HEIGHT_MAX.toFixed(2)};
+/*
+ * A lamp's core against the white of what it lights, for a lamp 16 px
+ * across (estimate: a bulb or LED core is hundreds to thousands of times
+ * brighter than a lit wall; 400 makes a 2% water reflection of it clip, as
+ * it does in every photograph of a lamp over wet glass).
+ */
+const float LAMP_CORE = 400.0;
 
 vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
   vec2 rel = (pt - image.xy) / max(image.zw, vec2(1.0));
@@ -214,24 +221,6 @@ vec3 photoAt(vec2 page) {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = clamp(mix(vec3(l), c, uSaturate), 0.0, 1.0);
   return mix(c, uFill.rgb, uFill.a);
-}
-
-/*
- * Where a ray from the eye (V, into the glass) that meets the water's face
- * with normal N lands on the photograph, as an offset across the page, px;
- * z: 1 if it is totally reflected at the glass's back face. Refracted into
- * the water; the tangential n sin(theta) carries through the flat faces;
- * then across the water's own height hPx, the glass and the gap.
- */
-vec3 traceTo(vec3 V, vec3 N, float hPx) {
-  vec3 t = refract(V, N, 1.0 / uIor);
-  vec2 k = uIor * t.xy;
-  float k2 = dot(k, k);
-  vec2 tanW = t.xy / max(-t.z, 1e-3);
-  float sg = k2 / (uGlassIor * uGlassIor);
-  vec2 tanG = (k / uGlassIor) / sqrt(max(1.0 - sg, 1e-4));
-  vec2 tanA = k / sqrt(max(1.0 - k2, 1e-4));
-  return vec3(hPx * tanW + uThickness * tanG + uScene * tanA, k2 >= 0.999 ? 1.0 : 0.0);
 }
 
 float dropsH(vec2 uv) { return texture2D(uDrops, uv).r * uDropsFull; }
@@ -337,79 +326,148 @@ void main() {
   vec2 wy = vec2(0.0, uWetTexel.y);
   grad += vec2(rivuletH(uvP + wx) - rivuletH(uvP - wx), rivuletH(uvP + wy) - rivuletH(uvP - wy))
         / (4.0 * mmPerTexel);
-  // Page y runs down, the face's normal toward the viewer (+z).
-  vec3 N = normalize(vec3(-grad, 1.0));
-
   vec2 page = uPane.xy + local;
   vec3 eye = vec3(uViewCentre, uCameraDistance);
   vec3 V = normalize(vec3(page, h * uPxPerMm) - eye); // from the eye, into the glass (z down)
-
-  /*
-   * The trace (effects/water/lens trace), less the flat glass's own (the
-   * page draws the photograph without parallax, so only what the water
-   * adds moves it).
-   */
-  vec3 tr = traceTo(V, N, h * uPxPerMm);
-  vec3 flatTr = traceTo(V, vec3(0.0, 0.0, 1.0), 0.0);
-  bool tir = tr.z > 0.5;
-  vec2 seenPage = page + tr.xy - flatTr.xy;
-
-  // Fresnel at the water's face (Schlick) for this slant.
-  float cosV = max(-dot(V, N), 0.0);
   float f0 = pow((uIor - 1.0) / (uIor + 1.0), 2.0);
-  float F = f0 + (1.0 - f0) * pow(1.0 - cosV, 5.0);
-  // What the face reflects: the room behind the viewer, turned by the slope.
-  vec3 roomDir = reflect(V, N);
-  vec3 room = uHasRoom > 0.5
-    ? decodeRadiance(texture2D(uRoomTex, roomUvDir(roomDir)).rgb) * uRoomExposure
-    : uRoom;
 
   // Blood and slime take light out on the way through (Beer-Lambert).
   float bloodFrac = clamp((d.g + s.g) / max(d.a + s.a, 1e-3), 0.0, 1.0);
   float slimeFrac = clamp((d.b + s.b) / max(d.a + s.a, 1e-3), 0.0, 1.0);
   vec3 T = exp(-(uSigmaBlood * bloodFrac + uSigmaSlime * slimeFrac) * h);
 
-  /*
-   * Every light's highlight: the lamp seen mirrored in the curved face,
-   * where the reflected view comes within the lamp's own angular size of it,
-   * at the face's Fresnel reflectance; the lamp is far brighter than what it
-   * lights, so even 2% of it clips to white.
-   */
-  vec3 P = vec3(page, h * uPxPerMm);
-  vec3 spec = vec3(0.0);
-  for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
-    if (i >= uLightCount) break;
-    vec3 toL = vec3(uLightPos[i].xy, uLightPos[i].z) - P;
-    float dist = length(toL);
-    vec3 L = toL / dist;
-    float size = atan(max(uLightRadius[i], 1.0) / dist);
-    float off = acos(clamp(dot(roomDir, L), -1.0, 1.0));
-    /*
-     * Across one pixel of a drop a few millimetres wide its reflected view
-     * turns by about 0.1 rad, so a lamp's image is smaller than a pixel:
-     * widened to that (and dimmed by the same area, so it carries the same
-     * light), it is the steady glint every drop has instead of a pixel that
-     * flickers on and off.
-     */
-    float wide = max(size, 0.1);
-    float disc = 1.0 - smoothstep(wide * 0.7, wide * 1.3, off);
-    float fl = f0 + (1.0 - f0) * pow(1.0 - max(dot(N, L), 0.0), 5.0);
-    spec += uLightColour[i] * disc * fl * (60.0 * (size * size) / (wide * wide) + 4.0);
-  }
+  // The scene's own mean colour (the photograph's smallest level), to balance the room panorama to it.
+  vec3 sceneMean = uHasPhoto > 0.5 ? texture2D(uPhoto, vec2(0.5), 12.0).rgb : uRoom;
 
   vec3 col;
   float alpha;
-  // Until the photograph has loaded, the drop has nothing to show through it but black: draw only its reflections.
   if (uClear > 0.5 && uHasPhoto > 0.5) {
-    vec3 through = tir ? room * 0.3 : photoAt(seenPage);
+    /*
+     * ---- A drop on the far face, seen through the glass ----
+     *
+     * The rain is on the etched face, the far side of the pane: you look at
+     * each drop from inside it. Your sight crosses the glass and the flat
+     * glass-water contact unturned (only n sin(theta) carries over), and
+     * meets the drop's curved water-air surface from the water. There:
+     *
+     *   most of it leaves into the world outside -- refracted by the
+     *     curve, so the drop is a lens and holds the scene small and upside
+     *     down (the scene taken uScene behind the glass);
+     *   some of it is reflected back toward you, by water-to-air Fresnel --
+     *     and past the critical angle (48.8 deg, n 1.333), toward the drop's
+     *     rim where the surface steepens, ALL of it: the rim is a mirror,
+     *     showing the room behind you. That is the dark ring of a drop at
+     *     night, and where a lamp lines up in it, the bright arc on the
+     *     drop's far side -- the second highlight;
+     *   what is reflected back must still leave the glass's front face:
+     *     past ITS critical angle it is trapped and runs along the pane, and
+     *     shows nothing (dark).
+     *
+     * And the lamps: each one's image in that inner mirror, where the
+     * reflected sight points at it (a lamp's core is hundreds of times
+     * brighter than what it lights, so even a few per cent of it clips to
+     * white, as it does in a photograph).
+     */
+    vec3 Nw = normalize(vec3(grad, 1.0));                 // the water-air surface's normal, facing back into the water
+    vec2 kW = V.xy / uIor;                                // sight inside the water: its tangential part carried through
+    vec3 tW = vec3(kW, -sqrt(max(1.0 - dot(kW, kW), 0.0)));
+    float cosI = max(-dot(tW, Nw), 0.0);
+    vec3 out3 = refract(tW, Nw, uIor);
+    bool tir = dot(out3, out3) < 1e-6;
+    // Water to air: Fresnel on the air side's angle (Schlick for the denser side); all past the critical angle.
+    float cosT = tir ? 0.0 : max(-dot(out3, Nw), 0.0);
+    float Fin = tir ? 1.0 : f0 + (1.0 - f0) * pow(1.0 - cosT, 5.0);
+
+    // Through: the scene from SCENE distance, less what the flat glass would do anyway.
+    vec2 tanOut = tir ? vec2(0.0) : out3.xy / max(-out3.z, 0.05);
+    vec2 tanFlat = V.xy / max(-V.z, 0.05);
+    vec2 seenPage = page + uScene * (tanOut - tanFlat);
+    vec3 through = tir ? vec3(0.0) : photoAt(seenPage);
+
+    // Back toward you: out through the front face if it can; trapped in the glass if not.
+    vec3 R = reflect(tW, Nw);
+    vec2 kOut = uIor * R.xy;
+    float k2 = dot(kOut, kOut);
+    vec3 back = vec3(0.0);
+    if (k2 < 1.0) {
+      vec3 dir = vec3(kOut, sqrt(1.0 - k2));              // into the room, toward you
+      vec3 room = uHasRoom > 0.5
+        ? decodeRadiance(texture2D(uRoomTex, roomUvDir(dir)).rgb) * uRoomExposure
+        : uRoom;
+      // The panorama balanced to the scene: its own colours mostly out, the scene's mean hue in.
+      float lr = dot(room, vec3(0.2126, 0.7152, 0.0722));
+      float lm = dot(sceneMean, vec3(0.2126, 0.7152, 0.0722));
+      room = mix(vec3(lr), room, 0.25) * mix(vec3(1.0), clamp(sceneMean / max(lm, 0.03), 0.0, 2.0), 0.5);
+      back = room;
+      vec3 P = vec3(page, 0.0);
+      for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
+        if (i >= uLightCount) break;
+        vec3 toL = uLightPos[i] - P;
+        float dist = length(toL);
+        vec3 L = toL / dist;
+        float size = atan(max(uLightRadius[i], 1.0) / dist);
+        float off = acos(clamp(dot(dir, L), -1.0, 1.0));
+        /*
+         * A lamp's image in a drop is smaller than a pixel; drawn across
+         * the 0.1 rad a pixel of a millimetre drop turns through, at the
+         * share of it the real image fills, times the lamp core's radiance
+         * (LAMP_CORE, scaled by its size so a bigger, softer lamp is not
+         * brighter in total).
+         */
+        float wide = max(size, 0.1);
+        float disc = 1.0 - smoothstep(wide * 0.6, wide * 1.4, off);
+        float core = LAMP_CORE * pow(16.0 / max(uLightRadius[i], 1.0), 2.0);
+        back += uLightColour[i] * disc * core * (size * size) / (wide * wide);
+      }
+    }
+    vec3 water = through * T * (1.0 - Fin) + back * Fin;
+    /*
+     * The glass's own front face, flat, in front of the drop: it reflects the
+     * room at glass's few per cent (Fresnel, n 1.52). The light layer draws
+     * this everywhere else; over a drop this layer lies on top of it, so it
+     * draws it here. (Not the lamps' mirror image: the light layer leaves
+     * that off -- reflection.ts LAMP_REFLECTION_ENABLED -- and so does this.)
+     */
+    vec3 frontDir = reflect(V, vec3(0.0, 0.0, 1.0));
+    float cosF = max(-V.z, 0.0);
+    float fg = pow((uGlassIor - 1.0) / (uGlassIor + 1.0), 2.0);
+    float Ff = fg + (1.0 - fg) * pow(1.0 - cosF, 5.0);
+    vec3 front = uHasRoom > 0.5
+      ? decodeRadiance(texture2D(uRoomTex, roomUvDir(frontDir)).rgb) * uRoomExposure
+      : uRoom;
+    water = water * (1.0 - Ff) + front * Ff;
     vec3 wetGlass = photoAt(page);
-    // Where there is a drop, its lens; where only the film, the clear glass under it.
-    vec3 water = through * T * (1.0 - F) + room * F + spec;
     col = mix(wetGlass, water, cover);
     alpha = max(cover, film);
   } else {
-    // On the polished face: only what the water reflects, over the frost the pane already shows.
-    vec3 add = room * F + spec;
+    /*
+     * ---- A drop on the near (polished) face ----
+     *
+     * Over the frost the pane already shows: only what its outer surface
+     * reflects, the room and each lamp's glint, by air-to-water Fresnel.
+     */
+    vec3 N = normalize(vec3(-grad, 1.0));
+    float cosV = max(-dot(V, N), 0.0);
+    float F = f0 + (1.0 - f0) * pow(1.0 - cosV, 5.0);
+    vec3 roomDir = reflect(V, N);
+    vec3 room = uHasRoom > 0.5
+      ? decodeRadiance(texture2D(uRoomTex, roomUvDir(roomDir)).rgb) * uRoomExposure
+      : uRoom;
+    vec3 P = vec3(page, h * uPxPerMm);
+    vec3 spec = vec3(0.0);
+    for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
+      if (i >= uLightCount) break;
+      vec3 toL = uLightPos[i] - P;
+      float dist = length(toL);
+      vec3 L = toL / dist;
+      float size = atan(max(uLightRadius[i], 1.0) / dist);
+      float off = acos(clamp(dot(roomDir, L), -1.0, 1.0));
+      float wide = max(size, 0.1);
+      float disc = 1.0 - smoothstep(wide * 0.6, wide * 1.4, off);
+      float core = LAMP_CORE * pow(16.0 / max(uLightRadius[i], 1.0), 2.0);
+      spec += uLightColour[i] * disc * core * (size * size) / (wide * wide);
+    }
+    vec3 add = (room + spec) * F;
     float peak = max(add.r, max(add.g, add.b));
     col = peak > 1e-4 ? add / peak : vec3(0.0);
     alpha = min(peak, 1.0) * cover;

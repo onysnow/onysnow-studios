@@ -1262,6 +1262,38 @@ photographs (the Golden Gate tower and the sky inverted in each drop):
   every drop's footprint and runner's path wipes it and it builds back;
   the other side: it veils the drops.
 
+### 9.5b The light on a drop, redone (2026-10-01; Ony: "Are you sure the refraction/shadow/specular highlights/reflections are correct for the drops?")
+
+Checked under the lamp, it was not: glints too weak to see, the drops washed
+out by the lamp's glow on the frost, the room they reflected the stock
+panorama's colours. Now, for rain on the etched (far) face, each drop is seen
+FROM INSIDE, through the glass:
+
+- your sight crosses the flat faces unturned (n sin(theta) carries) and meets
+  the drop's curved water-air surface from the water;
+- most leaves into the world (the lens: the scene 900 px off, small and
+  inverted); the rest is reflected back toward you by water-to-air Fresnel,
+  and ALL of it past the critical angle (48.8 deg) near the rim, where the
+  surface steepens -- the rim is a mirror of the room behind you: the dark
+  ring at night, and where a lamp lines up in it, the bright arc on the far
+  side (the second highlight);
+- that reflection must still leave the front face; past glass's critical
+  angle it is trapped and runs along the pane (dark);
+- a lamp's image is drawn at the lamp core's radiance (LAMP_CORE, 400 x the
+  white it lights, estimate; scaled by size so a bigger lamp is not brighter
+  in total), so even a few per cent of it clips to white, as in a photograph;
+- the room it mirrors is balanced to the scene's mean colour (the photo's
+  smallest mip), its own hues mostly taken out;
+- the water layer now lies OVER the light on the glass: a wet spot of the
+  etched face is clear and no longer scatters the lamp into the frost's milky
+  glow, so it stays a dark clear lens in a lit pane (before, the glow washed
+  the drops out); over a drop, the front face's own room reflection is drawn
+  by the water layer.
+
+No shadow is drawn: with the rain on the far face and the lamp in front,
+there is nothing behind a drop near enough to show one (the scene is metres
+away); the drop shows instead as clear glass in the lit frost.
+
 ### 9.6 Still to do
 
 - A lamp's own caustic (a sharp bright point under each drop, offset

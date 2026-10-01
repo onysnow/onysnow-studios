@@ -32,18 +32,22 @@ export const PANE_LAYERS = [
    * ?try=shardlight): the glass itself, so under every light on it.
    */
   "pane:broken",
-  /**
-   * Water drops on the face (WaterDrops, task 77, ?try=drops): each drop a
-   * lens showing the photograph sharp through the frost, with its own
-   * reflections. Under the glare and the light on the glass.
-   */
-  "pane:water",
   /** The glare the shutter flash sweeps across the face. */
   "pane:glare",
   /** The light arriving UNDER the glass, on the photographs (FloorLight). */
   "pane:under",
   /** The light on the glass and the grime it rakes (GlassLight). */
   "pane:surface",
+  /**
+   * Water drops (WaterDrops, task 77, ?try=drops): each drop a lens showing
+   * the scene sharp through the frost, with its own reflections. OVER the
+   * light on the glass: where the etched face is wet it is clear, so it
+   * no longer scatters a lamp's light into the milky glow the dry frost
+   * shows -- a wet spot stays dark and clear in a lit pane (it washed the
+   * drops out when it lay under that glow). The front face's own
+   * reflection over a drop the water layer draws itself.
+   */
+  "pane:water",
 ] as const;
 
 export type PaneLayer = (typeof PANE_LAYERS)[number];
