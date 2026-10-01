@@ -650,3 +650,7 @@ Code:
 [verlet-js](https://github.com/subprotocol/verlet-js)
 
 Photos: see §2.6.
+
+## Status (2026-10-01)
+
+First cut behind `?try=balloons` (d480ec6): Rapier 2D adopted as decided (ball per balloon, 12 rope links at 0.76 g/m); the air model built and tested (9 g free lift, 2.2 m/s rise, an air balloon falls at about 1.3 m/s); buoyancy at the middle and weight at a centre of mass a quarter radius toward the knot, so balloons right themselves; the latex shader (thickness map, Blinn-Phong, wrapped diffuse, the room by Fresnel, crystal see-through, neon under UV); pop into shreds; each balloon a caster. Note: Rapier's `addForceAtPoint` adds a torque that `resetForces` does not clear -- `resetTorques` is needed too. Still to do: squash on contact, the crack-tree pop and its sound, grabbing the ribbon, the lab controls of 6.

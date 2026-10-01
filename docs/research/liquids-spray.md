@@ -650,3 +650,7 @@ extrapolation above 1 Pa·s, the tested range in water-drops §2.4.
   spray (water-drops §7.3)?
 - **Reference photos** of blood, oil and paint on a vertical window: none
   found (§4).
+
+## Status (2026-10-01)
+
+Spray bottle first cut with `?try=drops` (b00d79d): 1 mL squeezes in a hollow cone (60 degrees for water, narrowing with viscosity), 30% landing from 10 cm as 2000 mist parcels that bead at 0.5 uL a 2 mm cell, slime streaming as gobs (Ohnesorge past 0.2, flow cut by Poiseuille), blood and slime absorbing by Beer-Lambert. Tested: volume conserved into drops plus mist, cone angles, the streaming threshold, the hollow cone. Still to do: flight and drag per parcel, splashes, oblique stains, drying.

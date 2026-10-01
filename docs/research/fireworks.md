@@ -764,3 +764,7 @@ book's (§6 colour chemistry; §8 sparks, glitter and strobe; §9 smoke).
 - Nikon and Canon fireworks guides (404 / empty).
 - The web-search budget for this session ran out partway through, so
   candidate sources after that point were read only by direct URL.
+
+## Status (2026-10-01)
+
+First cut behind `?try=fireworks` (c2b65b9): peony shells at 10-go scale (click to launch, an automatic show), stars by the drag physics of 7 (tested: closed form within 2%, terminal fall 18-28 m/s, every JPA width within 15%), chemistry colours, charcoal sparks, burst light with the measured envelope, at most 3 page flashes a second and 3 burst lights. Still to do: the other shell types, smoke, sound, the camera's shutter and exposure controls.

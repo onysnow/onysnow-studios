@@ -397,3 +397,7 @@ Use these to measure flicker by eye. Check each licence before any use.
 - **The licences** of the Commons footage.
 - **Whether the noise sprite or the CC0 flipbook looks more real** at cursor
   size. That is the A/B test above.
+
+## Status (2026-10-01)
+
+Torch first cut behind `?try=fire` (cb3fc93): `flameFlickerAt(s, params)` with TORCH / CANDLE / CAMPFIRE presets (tested per 6.4: peak within 10% of 6.7 Hz, under 1% of the power above 20 Hz, inside the clamp); `fireLight` at 1900 K white-balanced to 3000 K; the procedural flame (noise teardrop, L ~ B^0.4, Froude tilt, fan boost to +40%), embers, the room dimmed to 0.12 while it burns. Still to do: smoke, sparks, the presets in the lab, the A/B test against the CC0 flipbook.

@@ -29,6 +29,10 @@ anything or it's not help do we start from scratch."
    "Decisions" section: what we adopt/port/build, the numbers to use, the
    lab controls to expose, and what is still unknown.
 
+## Build status (2026-10-01)
+
+First cuts built from the research, all behind `?try=`: shadows parts 1-2 and the puppet stage (R6), water drops steps 1-4 (R2), the spray bottle (R3), balloons (R9), the spider web (R10), the torch (R7), fireworks (R8). Not started: broken glass (R5, parked), slime cube (R12), gems (R11), water surfaces (R4). Each research doc ends with its own status.
+
 ## Priority order
 
 | # | Research | Feeds tasks | Status |
