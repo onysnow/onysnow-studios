@@ -24,6 +24,13 @@ import { indexAt } from "@/effects/optics/dispersion";
 import { readEdgeWidth } from "@/effects/optics/edge-profile";
 import { setGlassConfigWriter, t, tuning } from "@/lib/tuning";
 
+/** A band as wide as the page (its bevel runs top and bottom only). */
+function isBand(pane: HTMLElement): boolean {
+  if (typeof window === "undefined") return false;
+  const vw = document.documentElement.clientWidth || window.innerWidth;
+  return !pane.classList.contains("glass--bar") && pane.getBoundingClientRect().width >= vw - 1;
+}
+
 /** What the library is told for one pane. */
 export function liquidConfigFor(pane: HTMLElement): Record<string, number> {
   const isBar = pane.classList.contains("glass--bar");
@@ -68,6 +75,17 @@ export function liquidConfigFor(pane: HTMLElement): Record<string, number> {
    */
   if (previewing("liquidlights") || previewing("liquidedge")) {
     for (const key of ["specular", "edgeHighlight", "fresnel", "shadowOpacity"]) {
+      if (key in config) config[key] = 0;
+    }
+  } else if (isBand(pane)) {
+    /*
+     * A band the page's width, by default too (Ony, 2026-10-01: "what the
+     * heck are those long white lines? theres 2 on the bottom above the edge
+     * and then one on the top below the top edge"). They are the rig's gloss
+     * and rim, which on a band hang on the height across the bevel alone, so
+     * each is a line the whole width of the screen; the CSS glass has none.
+     */
+    for (const key of ["specular", "edgeHighlight"]) {
       if (key in config) config[key] = 0;
     }
   }
