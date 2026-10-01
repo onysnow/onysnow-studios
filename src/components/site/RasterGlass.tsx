@@ -4,6 +4,7 @@ import { adoptLayer } from "@/effects/engine/compositor";
 import { addTask, ORDER } from "@/effects/engine/scheduler";
 import { applyGlassConfig } from "@/effects/adapters/liquid-config";
 import { onPane } from "@/lib/glass-panes";
+import { holdLoader } from "@/lib/app-ready";
 
 /**
  * The panes, refracting a rasterised copy of the page behind them.
@@ -202,12 +203,19 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
         ? (seam.parentElement ?? document.body)
         : (pane.closest<HTMLElement>("[data-photo]") ?? pane.parentElement ?? document.body);
       started.add(pane);
+      // The loader waits for this pane's first capture (lib/app-ready): it
+      // is the heaviest thing the page does, and done after the loader it
+      // was the lag on arriving at the home page.
+      const release = holdLoader("liquid glass: capture", 20000);
 
       // Serialised. Each init runs a full html-to-image capture of the
       // section behind it; five of those at once competes for the main
       // thread at exactly the moment the page is trying to finish loading.
       chain = chain.then(async () => {
-        if (!live) return;
+        if (!live) {
+          release();
+          return;
+        }
         try {
           const { LiquidGlass } = await import("@/lib/liquidglass");
           if (!live) return;
@@ -280,6 +288,8 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
           console.warn("[RasterGlass] pane failed:", String(err).slice(0, 200));
           delete pane.dataset["liquid"];
           started.delete(pane);
+        } finally {
+          release();
         }
       });
     };

@@ -47,6 +47,7 @@ import { camera } from "@/effects/camera/camera";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { LAMP_REFLECTION_ENABLED, frostRoughness } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
+import { holdLoader } from "@/lib/app-ready";
 import { discRadiusForBlur, hiddenLightMap, markLightNear } from "@/effects/optics/bokeh";
 
 /**
@@ -291,7 +292,10 @@ export function GlassLight({
         gl.useProgram(program);
         gl.uniform1f(tile, side);
         layersLoaded += 1;
-        if (layersLoaded === 2) gl.uniform1f(uHasSurface, 1);
+        if (layersLoaded === 2) {
+          gl.uniform1f(uHasSurface, 1);
+          releaseSurface();
+        }
       });
     /*
      * The photographed surface layers, fetched lazily: the shader falls back
@@ -305,6 +309,16 @@ export function GlassLight({
      * the log-encoded values, and a lamp blurred over a rough face would come
      * out far dimmer than its light really is.
      */
+    /*
+     * The loader waits for these (lib/app-ready; Ony: "the loading page needs
+     * to load the entire application"): the room uploaded, the smudge and
+     * scratch maps uploaded, and one frame drawn -- which is when the
+     * driver really compiles the shader. Each was a hitch on the first
+     * charge of the shutter, after the loader had gone.
+     */
+    const releaseRoom = holdLoader("glass light: room");
+    const releaseSurface = holdLoader("glass light: surface maps");
+    const releaseFrame = holdLoader("glass light: first frame");
     let room: WebGLTexture | null = null;
     let roomRequested = false;
     let roomFor: string | null = null;
@@ -315,9 +329,13 @@ export function GlassLight({
       roomRequested = true;
       roomFor = want;
       const src = want;
-      if (!src) return;
+      if (!src) {
+        releaseRoom();
+        return;
+      }
       const img = new Image();
       img.crossOrigin = "anonymous";
+      img.onerror = () => releaseRoom();
       img.onload = () => {
         const w = 2048;
         const h = 512;
@@ -365,6 +383,7 @@ export function GlassLight({
         gl.uniform1f(uRoomWidth, w);
         gl.uniform1f(uHasRoom, 1);
         restingDrawn = false;
+        releaseRoom();
         wake();
       };
       img.src = src;
@@ -376,6 +395,8 @@ export function GlassLight({
       loadLayer(0, assetUrl(SITE_ASSETS.glassSmudge), uSmudgeTile);
       loadLayer(2, assetUrl(SITE_ASSETS.glassScratch), uScratchTile);
     };
+    // Now, behind the loader, rather than on the first charge of the shutter.
+    requestSurface();
 
     /*
      * Backdrop textures, one per photograph, cached by URL.
@@ -1096,6 +1117,7 @@ export function GlassLight({
       }
       drawn.clear();
       endPass();
+      releaseFrame();
       return true;
     };
 
@@ -1127,6 +1149,10 @@ export function GlassLight({
 
     return () => {
       disposed = true;
+      // Never leave the loader waiting on a pass that is gone.
+      releaseRoom();
+      releaseSurface();
+      releaseFrame();
       loop.stop();
       window.removeEventListener("pointermove", wake);
       stopCharge();

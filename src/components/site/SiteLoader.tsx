@@ -4,6 +4,7 @@ import { ScrambleText } from "./ScrambleText";
 import { useRouter } from "@tanstack/react-router";
 
 import { whenFirstScreenReady } from "@/lib/page-ready";
+import { whenAppReady } from "@/lib/app-ready";
 import { warmSite } from "@/lib/warm-up";
 
 /**
@@ -69,7 +70,7 @@ const WORD_MS = 2400;
  * more -- every page's code and data, every photograph on this one -- but
  * still finite: a loader that can hang is a site that can be unreachable.
  */
-const WARM_DEADLINE_MS = 10000;
+const WARM_DEADLINE_MS = 30000;
 
 /**
  * Never open onto "Click to enter" before the first word has finished
@@ -114,8 +115,12 @@ export function SiteLoader() {
   const router = useRouter();
 
   useEffect(() => {
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (alreadySeen() || reduced) {
+    /*
+     * Reduced motion used to skip the loader altogether -- straight onto a
+     * page still loading, which is the lag the loader exists to take (Ony,
+     * 2026-10-01). It waits like everyone else now; only the word holds still.
+     */
+    if (alreadySeen()) {
       setState("gone");
       return;
     }
@@ -132,7 +137,7 @@ export function SiteLoader() {
      * other: the warm-up is mostly network and the first screen mostly decode,
      * so overlapping them costs nothing and saves the whole of the shorter one.
      */
-    const work = Promise.all([whenFirstScreenReady(), warmSite(router)]);
+    const work = Promise.all([whenFirstScreenReady(), warmSite(router), whenAppReady()]);
 
     void Promise.all([Promise.race([work, deadline]), floor]).then(([outcome]) => {
       if (!live) return;
@@ -159,6 +164,7 @@ export function SiteLoader() {
   // Run the word through the languages again, only while there is still something to wait for.
   useEffect(() => {
     if (state !== "holding") return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const id = window.setInterval(() => setWord((n) => n + 1), WORD_MS);
     return () => window.clearInterval(id);
   }, [state]);
