@@ -51,7 +51,8 @@
  * rests on a pane (gap + thickness + its standoff above the glass).
  */
 
-import type { SurfaceMaterial } from "@/effects/materials/surfaces";
+import { SURFACE_MATERIALS, type SurfaceMaterial } from "@/effects/materials/surfaces";
+import { puppetList, type Puppet } from "./puppets";
 import { glassGeometry, litSurfaceList } from "@/effects/scene/scene";
 import { t } from "@/lib/tuning";
 
@@ -75,6 +76,9 @@ export function casterList(): Caster[] {
     const paneEl = s.el.closest<HTMLElement>(".glass");
     const onGlass = paneEl !== null;
     if (s.el.classList.contains("transmitted")) continue;
+    // Out of view, it casts nothing anyone sees, and must not take a layer (groupCasters).
+    const box = s.el.getBoundingClientRect();
+    if (box.bottom < -200 || box.top > window.innerHeight + 200 || box.width < 1) continue;
     /*
      * A photograph not on a pane is the floor itself. One on a pane -- a
      * card's print -- stands on it like the type and throws its two shadows
@@ -115,7 +119,25 @@ export function casterList(): Caster[] {
       tint: casterTint(s.el, s.material),
     });
   }
-  return out;
+  /*
+   * The shadow puppets (item 83, effects/optics/puppets): not on any pane,
+   * each at the height it is held, passing its own colour. They belong to no
+   * element of their own; the page holds them. First, so each takes a layer
+   * of its own before the page's type fills them (groupCasters).
+   */
+  const held: Caster[] = [];
+  for (const p of puppetList()) {
+    held.push({
+      el: document.documentElement,
+      material: SURFACE_MATERIALS.ink,
+      onGlass: false,
+      height: Math.max(p.height, 0.5),
+      face: 0,
+      tint: p.tint,
+      puppet: p,
+    });
+  }
+  return held.length > 0 ? [...held, ...out] : out;
 }
 
 /** Where the ray from a point of the photograph to the lamp crosses a caster's plane `h` up. */
@@ -308,6 +330,8 @@ export type Caster = {
   face: number;
   /** What light gets through where it fully covers: 0 for ink, its colour for coloured plastic. */
   tint: readonly [number, number, number];
+  /** A shadow puppet: drawn into the mask from its outline, not from an element. */
+  puppet?: Puppet;
 };
 
 /** As many caster layers as the floor pass reads: two RGB masks. */
@@ -413,6 +437,10 @@ function paintMask(
   casters.forEach((c, i) => {
     const k = index[i]!;
     if (Math.floor(k / 3) !== n) return;
+    if (c.puppet) {
+      paintPuppet(ctx, c.puppet, k % 3);
+      return;
+    }
     const r = c.el.getBoundingClientRect();
     if (r.bottom < -200 || r.top > vh + 200 || r.width < 1) return;
     // How much of its area it covers: type and a print, all of it (colour, if any, is the layer's tint).
@@ -445,4 +473,17 @@ function paintMask(
       ctx.fill();
     }
   });
+}
+
+/** A puppet's outline, filled into its layer's channel (fully: its colour, if any, is the layer's tint). */
+function paintPuppet(ctx: CanvasRenderingContext2D, p: Puppet, channel: number) {
+  ctx.save();
+  ctx.fillStyle = channel === 0 ? "rgb(255 0 0)" : channel === 1 ? "rgb(0 255 0)" : "rgb(0 0 255)";
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.angle);
+  const k = p.size / 100;
+  ctx.scale(p.flip ? -k : k, k);
+  ctx.translate(-50, -50);
+  ctx.fill(p.path, "evenodd");
+  ctx.restore();
 }

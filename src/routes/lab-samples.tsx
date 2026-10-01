@@ -10,6 +10,7 @@ import { Neon } from "@/components/site/Neon";
 import { GlowPaint } from "@/components/site/GlowPaint";
 import { GlassSolid } from "@/components/site/GlassSolid";
 import { BrokenGlass } from "@/components/site/BrokenGlass";
+import { PuppetStage } from "@/components/site/PuppetStage";
 import { previewing } from "@/effects/engine/preview";
 import { useEffect, useState } from "react";
 import { requireAdmin } from "@/lib/admin-gate";
@@ -44,7 +45,9 @@ function LabSamples() {
   const [broken, setBroken] = useState(false);
   const [contact, setContact] = useState(false);
   const [coating, setCoating] = useState(false);
+  const [puppets, setPuppets] = useState(false);
   useEffect(() => {
+    setPuppets(previewing("puppets"));
     setSolids(previewing("solids"));
     setBroken(previewing("broken"));
     setContact(previewing("contact"));
@@ -242,6 +245,9 @@ function LabSamples() {
           </div>
         </ParallaxScene>
       ) : null}
+
+      {/* Shadow puppets (item 83, ?try=puppets): the shadows are the show. */}
+      {puppets ? <PuppetStage image={photos.data?.[0] ?? photo} /> : null}
 
       {/* Glow-in-the-dark paint (item 25): draw on it, shine the lamp on it, fire the flash. */}
       <section className="mx-auto max-w-5xl px-6 py-20">
