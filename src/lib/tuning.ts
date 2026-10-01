@@ -940,6 +940,23 @@ export const tuning: Record<string, Knob> = {
     cssVar: "--tune-ring",
     cssUnit: "px",
   },
+  cursorTool: {
+    label: "What the cursor holds",
+    group: "Cursor",
+    value: 0,
+    min: 0,
+    max: 5,
+    step: 1,
+    options: [
+      "Lamp",
+      "Black light (UV)",
+      "Road flare",
+      "Flashlight",
+      "Magnifying glass",
+      "Laser pointer",
+    ],
+    hint: "What every visitor's cursor is: the lamp, a black light (only UV: things fluoresce), a burning road flare, a flashlight (press and hold to plant and aim it), an illuminated magnifying glass, or a laser pointer. Saved for everyone with the rest.",
+  },
   ringWidth: {
     label: "Ring line width",
     group: "Cursor",

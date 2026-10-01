@@ -152,6 +152,8 @@ export function FloorLight() {
     const uCasterNear = U("uCasterNear");
     const uCasterOnGlass = U("uCasterOnGlass");
     const uCasterFace = U("uCasterFace");
+    const uCasterPrint = U("uCasterPrint");
+    const uCasterPrintFace = U("uCasterPrintFace");
     const uCasterStrength = U("uCasterStrength");
     const casterCanvas = document.createElement("canvas");
     const casterTex = gl.createTexture();
@@ -405,6 +407,9 @@ export function FloorLight() {
         gl.uniform1f(uCasterNear, CASTER_NEAR_STANDOFF * t("shadowGap"));
         gl.uniform1f(uCasterFace, CASTER_NEAR_STANDOFF * t("shadowGap"));
         gl.uniform1f(uCasterStrength, t("castShadowStrength"));
+        // A mounted print stands a whole "Content depth" off its glass.
+        gl.uniform1f(uCasterPrintFace, t("shadowGap"));
+        gl.uniform1f(uCasterPrint, t("floorGap") + t("glassThickness") + t("shadowGap"));
         gl.uniform1f(
           uCasterOnGlass,
           t("floorGap") + t("glassThickness") + CASTER_NEAR_STANDOFF * t("shadowGap"),

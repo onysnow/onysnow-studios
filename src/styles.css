@@ -1220,6 +1220,11 @@ html[data-cast-shadows] [data-photo] :is(h1, h2, h3, p, .plastic, a) {
   display: none;
 }
 
+/* A card's shadow too: the floor light throws it, on the glass and through it (item 52). */
+html[data-cast-shadows] [data-cast]::before {
+  display: none;
+}
+
 /* Its shadow is the floor light's, through the glass, where that runs (item 52). */
 html[data-cast-shadows] .plastic--dark {
   box-shadow:

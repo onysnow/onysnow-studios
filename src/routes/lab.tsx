@@ -994,8 +994,19 @@ const PREVIEW_TITLES: Record<PreviewName, string> = {
   redroom: "The red room (secret 2)",
 };
 
+/** Tools now chosen in Cursor > "What the cursor holds": no switch of their own. */
+const CHOSEN_NOT_SWITCHED: ReadonlySet<PreviewName> = new Set([
+  "flashlight",
+  "magnifier",
+  "flare",
+  "laser",
+  "blacklight",
+]);
+
 function previewsIn(group: string): PreviewName[] {
-  return (Object.keys(PREVIEW_GROUP) as PreviewName[]).filter((n) => PREVIEW_GROUP[n] === group);
+  return (Object.keys(PREVIEW_GROUP) as PreviewName[]).filter(
+    (n) => PREVIEW_GROUP[n] === group && !CHOSEN_NOT_SWITCHED.has(n),
+  );
 }
 
 /** One preview's switch. */

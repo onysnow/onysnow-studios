@@ -1,4 +1,24 @@
 import { previewing } from "@/effects/engine/preview";
+import { onTuningApplied, t } from "@/lib/tuning";
+
+/**
+ * What the cursor holds for every visitor, chosen in the lab (Cursor >
+ * "What the cursor holds"; Ony, 2026-10-01: "I want to be able to choose
+ * from flare, UV, flashlight, magnifying glass etc in the lab menu"). The
+ * order of the lab's list.
+ */
+export const CURSOR_TOOL_ORDER: readonly ToolId[] = [
+  "lamp",
+  "blacklight",
+  "flare",
+  "flashlight",
+  "magnifier",
+  "laser",
+];
+
+function chosenTool(): ToolId {
+  return CURSOR_TOOL_ORDER[Math.round(t("cursorTool"))] ?? "lamp";
+}
 
 /**
  * What the visitor is holding (item 25e, claude/tools-research.md §3.2).
@@ -66,7 +86,24 @@ function initialTool(): ToolId {
   for (const id of ["blacklight", "flare", "laser", "magnifier", "flashlight"] as const) {
     if (previewing(id)) return id;
   }
-  return "lamp";
+  return chosenTool();
+}
+
+/*
+ * When the lab's choice changes (or the saved choice arrives with the site's
+ * settings), the hand takes it up. Only on a change: a tool picked from the
+ * tray is not taken away every time any setting is applied.
+ */
+let lastChoice: ToolId | null = null;
+if (typeof window !== "undefined") {
+  // The defaults' choice is the starting one; only a different saved or drafted choice moves the hand.
+  lastChoice = chosenTool();
+  onTuningApplied(() => {
+    const choice = chosenTool();
+    if (choice === lastChoice) return;
+    lastChoice = choice;
+    holdTool(choice);
+  });
 }
 
 /** What is in the hand now. */

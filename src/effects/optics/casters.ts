@@ -72,12 +72,15 @@ export function casterList(): Caster[] {
     const onGlass = s.el.closest(".glass") !== null;
     if (s.el.classList.contains("transmitted")) continue;
     /*
-     * A photograph is the floor itself; a card's print on a pane throws its
-     * shadow from the card ([data-cast], approved 2h), under the other cards.
+     * A photograph not on a pane is the floor itself. One on a pane -- a
+     * card's print -- stands on it like the type and throws its two shadows
+     * the same way (Ony, 2026-10-01: "The cards need to cast 2 shadows as
+     * well"), from its own height: a mounted print stands further off the
+     * glass than a line of type (blue channel, uCasterPrint*).
      */
     const isPhoto = s.el.querySelector("img") !== null || s.el.tagName === "IMG";
-    if (isPhoto) continue;
-    out.push({ el: s.el, material: s.material, onGlass });
+    if (isPhoto && !onGlass) continue;
+    out.push({ el: s.el, material: s.material, onGlass, print: isPhoto });
   }
   return out;
 }
@@ -165,7 +168,13 @@ function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect;
   return { at, words };
 }
 
-export type Caster = { el: HTMLElement; material: SurfaceMaterial; onGlass: boolean };
+export type Caster = {
+  el: HTMLElement;
+  material: SurfaceMaterial;
+  onGlass: boolean;
+  /** A photograph mounted on a pane (a card): its own height, the mask's blue. */
+  print?: boolean;
+};
 
 /**
  * Paint the casters into the mask: red, those just off the photograph;
@@ -194,12 +203,14 @@ export function paintCasters(canvas: HTMLCanvasElement, casters: readonly Caster
     const r = c.el.getBoundingClientRect();
     if (r.bottom < -200 || r.top > vh + 200 || r.width < 1) continue;
     const a = casterOpacity(c.el, c.material);
-    const colour = c.onGlass
-      ? `rgb(0 ${Math.round(255 * a)} 0)`
-      : `rgb(${Math.round(255 * a)} 0 0)`;
+    const v = Math.round(255 * a);
+    const colour = c.print ? `rgb(0 0 ${v})` : c.onGlass ? `rgb(0 ${v} 0)` : `rgb(${v} 0 0)`;
     ctx.fillStyle = colour;
+    // A print's frame is a span too: it is drawn as its box, not as type.
     const isType =
-      /^(H[1-6]|P|BLOCKQUOTE|SPAN|LI)$/.test(c.el.tagName) && !c.el.classList.contains("plastic");
+      !c.print &&
+      /^(H[1-6]|P|BLOCKQUOTE|SPAN|LI)$/.test(c.el.tagName) &&
+      !c.el.classList.contains("plastic");
     if (isType) {
       const { at, words } = wordsOf(c.el, ctx);
       ctx.textBaseline = "alphabetic";

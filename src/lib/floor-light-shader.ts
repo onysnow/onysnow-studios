@@ -133,6 +133,9 @@ uniform float uCasterNear;
 uniform float uCasterOnGlass;
 /* How far what rests on a pane stands off its frosted face, which catches its shadow too. */
 uniform float uCasterFace;
+/* A card's print: how high above the photograph, and above its pane's face (the mask's blue). */
+uniform float uCasterPrint;
+uniform float uCasterPrintFace;
 /* How much of the light a caster blocks ("Cast shadow strength"). */
 uniform float uCasterStrength;
 
@@ -403,7 +406,13 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     float onFace = faceHeight > 0.0
       ? casterCover(uCasters, css, P, lightXY, height - faceHeight, radius, uCasterFace, 0.0, 1)
       : 0.0;
-    light *= (1.0 - near * uCasterStrength) * (1.0 - onGlass * uCasterStrength) * (1.0 - onFace * uCasterStrength);
+    // The cards' prints, the same two shadows from their own, greater height.
+    float printBelow = casterCover(uCasters, css, P, lightXY, height, radius, uCasterPrint, underFrost * 0.5, 2);
+    float printFace = faceHeight > 0.0
+      ? casterCover(uCasters, css, P, lightXY, height - faceHeight, radius, uCasterPrintFace, 0.0, 2)
+      : 0.0;
+    light *= (1.0 - near * uCasterStrength) * (1.0 - onGlass * uCasterStrength) * (1.0 - onFace * uCasterStrength)
+      * (1.0 - printBelow * uCasterStrength) * (1.0 - printFace * uCasterStrength);
   }
 
   vec3 add = light * uLightGain;

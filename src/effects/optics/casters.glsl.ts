@@ -22,7 +22,7 @@ float casterCover(sampler2D mask, vec2 viewportCss, vec2 P, vec2 L, float H, flo
     float ang = k < 5 ? fk * 1.5707963 + 0.785398 : (fk - 5.0) * 0.785398;
     vec2 o = rad * (cos(ang) * ring * b) + tng * (sin(ang) * ring * a);
     vec4 m = texture2D(mask, (c + o) / viewportCss);
-    sum += ch == 0 ? m.r : m.g;
+    sum += ch == 0 ? m.r : (ch == 1 ? m.g : m.b);
   }
   return sum / 13.0;
 }
