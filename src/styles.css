@@ -331,7 +331,7 @@
   /* Measured off bryanminear.com: .circle-outer is 30x30, 1px solid #fff. */
   width: var(--ring-size);
   height: var(--ring-size);
-  border: 1px solid #fff;
+  border: var(--tune-ring-width, 1px) solid rgb(255 255 255 / var(--tune-ring-alpha, 1));
 }
 
 /*
@@ -342,7 +342,7 @@
   /* Measured: .circle-inner is 6x6, solid white. */
   width: var(--tune-dot, 6px);
   height: var(--tune-dot, 6px);
-  background-color: #fff;
+  background-color: rgb(255 255 255 / var(--tune-dot-alpha, 1));
 }
 
 /* Over a link or button: a filled disc big enough to sit behind a nav item. */

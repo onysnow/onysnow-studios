@@ -85,6 +85,8 @@ uniform float uPlasticCount;
 
 /* The grime's fluorescence, colour x yield (effects/materials/surfaces): smears (oil), specks (dust). */
 uniform vec3 uOilGlow;
+uniform float uPipedGain;   // "Light piped through the glass"
+uniform float uPipedReach;  // "How far piped light travels", px
 uniform vec3 uDustGlow;
 
 uniform vec4  uRect;          // x, y, w, h of this pane, CSS pixels
@@ -967,7 +969,7 @@ void main() {
      * to the run it had. What keeps a far edge dark is the coupling above:
      * the lamp has to be over or near THIS pane to put light into it.
      */
-    float piped = couple * exp(-dl / 780.0);
+    float piped = couple * exp(-dl / uPipedReach) * uPipedGain;
     vec3 pipedTint = exp(-SIDE_ABSORB * 0.45);
     rim += pipedTint * arrisProfile(ad) * 1.7 * arrisWear * piped;
 
