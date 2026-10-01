@@ -14,16 +14,25 @@ float casterCover(sampler2D mask, vec2 viewportCss, vec2 P, vec2 L, float H, flo
   float across = R * h / H;
   float a = sqrt(across * across + extra * extra);
   float b = sqrt((across / max(cosT, 0.2)) * (across / max(cosT, 0.2)) + extra * extra);
+  /*
+   * The lamp's disc on the caster's plane, sampled with 12 Vogel-disc taps
+   * (equal area each, so equally weighted), the whole pattern turned per
+   * pixel by interleaved gradient noise (docs/research/shadows.md 5.4 and
+   * 6 Change 4: drei softShadows, MIT; Jimenez 2014). The 13 fixed taps on
+   * two rings stood 10-52 px apart against 2-8 px strokes: banding and
+   * ghost copies of the letters. Turned per pixel, what is left is fine
+   * grain instead.
+   */
+  float spin = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
   float sum = 0.0;
-  for (int k = 0; k < 13; k++) {
-    // A centre and two rings: the lamp's disc on the caster's plane.
+  for (int k = 0; k < 12; k++) {
     float fk = float(k);
-    float ring = k == 0 ? 0.0 : (k < 5 ? 0.45 : 0.9);
-    float ang = k < 5 ? fk * 1.5707963 + 0.785398 : (fk - 5.0) * 0.785398;
-    vec2 o = rad * (cos(ang) * ring * b) + tng * (sin(ang) * ring * a);
+    float r = sqrt((fk + 0.5) / 12.0);
+    float ang = fk * 2.3999632 + spin;
+    vec2 o = rad * (cos(ang) * r * b) + tng * (sin(ang) * r * a);
     vec4 m = texture2D(mask, (c + o) / viewportCss);
     sum += ch == 0 ? m.r : (ch == 1 ? m.g : m.b);
   }
-  return sum / 13.0;
+  return sum / 12.0;
 }
 `;

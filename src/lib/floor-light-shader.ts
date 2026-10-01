@@ -138,6 +138,7 @@ uniform float uCasterPrint;
 uniform float uCasterPrintFace;
 /* How much of the light a caster blocks ("Cast shadow strength"). */
 uniform float uCasterStrength;
+uniform float uFloorScale[MAX_LIGHTS]; // each light's brightness and distance against the defaults (P / H^2)
 
 ${EDGE_PROFILE_GLSL}
 ${WAVINESS_GLSL}
@@ -418,7 +419,8 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
   if (uHasCasters > 0.5) {
     vec2 css = uViewport / uScale;
     float near = casterCover(uCasters, css, P, lightXY, height, radius, uCasterNear, 0.0, 0);
-    float onGlass = casterCover(uCasters, css, P, lightXY, height, radius, uCasterOnGlass, underFrost * 0.5, 1);
+    // The frost's spread, carried to the caster's plane: (H - h) / H of it (docs/research/shadows.md 6 Change 5).
+    float onGlass = casterCover(uCasters, css, P, lightXY, height, radius, uCasterOnGlass, underFrost * max(height - uCasterOnGlass, 0.0) / max(height, 1.0), 1);
     /*
      * Under a pane, its frosted face is lit too, and what rests on it throws
      * a shadow there first -- close, sharp, from the lamp's height above the
@@ -429,7 +431,7 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
       ? casterCover(uCasters, css, P, lightXY, height - faceHeight, radius, uCasterFace, 0.0, 1)
       : 0.0;
     // The cards' prints, the same two shadows from their own, greater height.
-    float printBelow = casterCover(uCasters, css, P, lightXY, height, radius, uCasterPrint, underFrost * 0.5, 2);
+    float printBelow = casterCover(uCasters, css, P, lightXY, height, radius, uCasterPrint, underFrost * max(height - uCasterPrint, 0.0) / max(height, 1.0), 2);
     float printFace = faceHeight > 0.0
       ? casterCover(uCasters, css, P, lightXY, height - faceHeight, radius, uCasterPrintFace, 0.0, 2)
       : 0.0;
@@ -509,6 +511,8 @@ void main() {
     vec2 from = nearestOnLight(at, uLightPos[i].xy, uLightSpan[i]);
     // A beam (a flashlight) lights only what it points at (effects/light/beam).
     lit *= beamFactor(uLightAim[i], vec3(at - from, -uLightPos[i].z));
+    // Its power and its height: inverse square, against the defaults (FloorLight uFloorScale).
+    lit *= uFloorScale[i];
     vec4 one = floorAt(at, lit, from, uLightPos[i].z, uLightRadius[i]);
     f += one;
     coloured += one.rgb * uLightColour[i];

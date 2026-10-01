@@ -920,9 +920,10 @@ export const tuning: Record<string, Knob> = {
     step: 0.02,
   },
   castShadowStrength: {
-    label: "Cast shadow strength",
+    // docs/research/shadows.md 5.2 item 1: at 0.6 solid type let 40% of the lamp through.
+    label: "Caster opacity",
     group: "Shadows",
-    value: 0.6,
+    value: 1,
     min: 0,
     max: 1,
     step: 0.02,

@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
 import { lampPower, onCharge, onFlash, pointLights, strongestCharge } from "@/effects/light/lights";
-import { lightLocations, uploadLights } from "@/effects/light/light-uniforms";
+import { lightLocations, MAX_LIGHTS, uploadLights } from "@/effects/light/light-uniforms";
 import { paneCanvas } from "@/effects/engine/compositor";
 import {
   FLOOR_FRAGMENT_SHADER,
@@ -27,6 +27,7 @@ import {
   sharedGl,
 } from "@/effects/engine/gl";
 import { t } from "@/lib/tuning";
+import { floorScale } from "@/effects/light/floor-scale";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
@@ -150,6 +151,8 @@ export function FloorLight() {
     gl.uniform1i(U("uCasters"), 3);
     const uHasCasters = U("uHasCasters");
     const uCasterNear = U("uCasterNear");
+    const uFloorScale = U("uFloorScale");
+    const floorScales = new Float32Array(MAX_LIGHTS);
     const uCasterOnGlass = U("uCasterOnGlass");
     const uCasterFace = U("uCasterFace");
     const uCasterPrint = U("uCasterPrint");
@@ -347,24 +350,39 @@ export function FloorLight() {
       gl.uniform2f(uViewport, bw, bh);
       gl.uniform1f(uScale, scale);
       // Every point light, at its height above the photographs.
+      // What lies on the photographs does not light them through the glass.
+      const floorLights = pointLights().filter((l) => !l.below);
+      /*
+       * The lamp's brightness and its distance (docs/research/shadows.md 5.2
+       * items 4-5, 6 Change 2; Ony: "distance from the source of light and
+       * brightness of that light"). The floor normalised its pool to 1 under
+       * the lamp at any height and never read the lamp's power, so neither
+       * changed anything. Irradiance at the floor goes as P / H^2 (inverse
+       * square), taken against the defaults (P at Core gain 8, H 300) so the
+       * default look is unchanged. Only the cursor lamp: the other lights'
+       * strengths were set by eye without it.
+       */
+      floorScales.fill(1);
+      floorLights.forEach((l, i) => {
+        if (i >= floorScales.length || l.id !== "cursor") return;
+        floorScales[i] = floorScale(l.gain, l.height);
+      });
+      gl.uniform1fv(uFloorScale, floorScales);
       uploadLights(
         gl,
         lightLoc,
-        // What lies on the photographs does not light them through the glass.
-        pointLights()
-          .filter((l) => !l.below)
-          .map((l) => ({
-            x: l.x,
-            y: l.y,
-            height: l.height,
-            colour: l.colour,
-            power: lampPower(l),
-            radius: l.radius,
-            charge: l.charge,
-            uv: l.uv,
-            span: l.span,
-            aim: l.aim,
-          })),
+        floorLights.map((l) => ({
+          x: l.x,
+          y: l.y,
+          height: l.height,
+          colour: l.colour,
+          power: lampPower(l),
+          radius: l.radius,
+          charge: l.charge,
+          uv: l.uv,
+          span: l.span,
+          aim: l.aim,
+        })),
       );
       gl.uniform1f(uLightGain, t("floorLight"));
       gl.uniform1f(uCorners, previewing("corners") ? 1 : 0);
