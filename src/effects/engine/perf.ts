@@ -20,6 +20,8 @@
  * test.
  */
 
+import { experimentsAllowed } from "@/lib/admin-gate";
+
 const WINDOW = 120; // samples kept per series (about two seconds at 60 fps)
 
 type Series = { values: number[]; next: number };
@@ -31,7 +33,7 @@ let enabled: boolean | null = null;
 export function perfEnabled(): boolean {
   if (enabled !== null) return enabled;
   enabled = false;
-  if (typeof window === "undefined") return enabled;
+  if (typeof window === "undefined" || !experimentsAllowed()) return enabled;
   try {
     const flag = new URLSearchParams(window.location.search).get("perf");
     if (flag === "1") window.localStorage.setItem("onysnow:perf", "1");

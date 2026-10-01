@@ -22,6 +22,7 @@
  */
 
 import { previewing } from "./preview";
+import { experimentsAllowed } from "@/lib/admin-gate";
 
 export type Quality = "full" | "lite" | "minimal";
 
@@ -37,7 +38,7 @@ let slowRun = 0;
 const watchers = new Set<(q: Quality) => void>();
 
 function forcedTier(): Quality | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined" || !experimentsAllowed()) return null;
   try {
     const q = new URLSearchParams(window.location.search).get("quality");
     return q && (TIERS as readonly string[]).includes(q) ? (q as Quality) : null;

@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { CONTENT_KEYS } from "@/lib/admin";
+import { noteAdmin } from "@/lib/admin-gate";
 
 /**
  * Ensures the signed-in person has a profile row, claims the very first admin
@@ -15,7 +16,10 @@ export function useAdminStatus() {
     queryFn: async () => {
       const { data: userData } = await supabase.auth.getUser();
       const user = userData.user;
-      if (!user) return { user: null, isAdmin: false };
+      if (!user) {
+        noteAdmin(null, false);
+        return { user: null, isAdmin: false };
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any).rpc("bootstrap_current_user");
       const isAdmin = Boolean(data?.is_admin);
@@ -32,6 +36,8 @@ export function useAdminStatus() {
        * surfaced as a bug. Removed rather than re-plumbed: there is no
        * first-admin claim left to report.
        */
+      // The browser's note that the admin is signed in here (lib/admin-gate).
+      noteAdmin(user.id, isAdmin);
       return { user, isAdmin };
     },
   });

@@ -29,6 +29,8 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { CustomCss } from "@/components/site/CustomCss";
 import { listenForLabDraft, reportLabPath } from "@/lib/lab-bridge";
+import { noteAdmin, verifyAdminNote } from "@/lib/admin-gate";
+import { supabase } from "@/integrations/supabase/client";
 import { categoriesQuery, coverPhotosQuery, settingsQuery } from "@/lib/content";
 
 function NotFoundComponent() {
@@ -154,6 +156,18 @@ function RootComponent() {
   const raster = useRasterGlass();
   // Inside the lab's preview frame: take the editor's draft tuning (lab-bridge).
   useEffect(() => listenForLabDraft(), []);
+  /*
+   * The previews and test switches are Ony's alone (item 48): check this
+   * browser's note of the admin against the real session, and drop it the
+   * moment he signs out.
+   */
+  useEffect(() => {
+    void verifyAdminNote();
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") noteAdmin(null, false);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
   useEffect(() => reportLabPath(location.pathname), [location.pathname]);
   return (
     <QueryClientProvider client={queryClient}>

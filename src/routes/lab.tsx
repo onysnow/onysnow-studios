@@ -41,11 +41,14 @@ import { isFromFrame, isToolId, sendLabDraft, sendLabHold, sendLabRedRoom } from
 import { TOOLS, type ToolId } from "@/effects/tools/held";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { requireAdmin } from "@/lib/admin-gate";
 
 export const Route = createFileRoute("/lab")({
   // Client only: every control here drives a live effect, and there is nothing
   // to server-render but a form.
   ssr: false,
+  // Ony's alone: signed in as the admin (item 48; lib/admin-gate).
+  beforeLoad: requireAdmin,
   head: () => ({
     meta: [
       { title: "Effect lab — OnySnow Studios" },

@@ -12,9 +12,12 @@ import { GlassSolid } from "@/components/site/GlassSolid";
 import { BrokenGlass } from "@/components/site/BrokenGlass";
 import { previewing } from "@/effects/engine/preview";
 import { useEffect, useState } from "react";
+import { requireAdmin } from "@/lib/admin-gate";
 
 export const Route = createFileRoute("/lab-samples")({
   ssr: false,
+  // Ony's alone: signed in as the admin (item 48; lib/admin-gate).
+  beforeLoad: requireAdmin,
   head: () => ({
     meta: [
       { title: "Lab samples — OnySnow Studios" },

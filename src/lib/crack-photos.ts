@@ -1,4 +1,5 @@
 import type { GlassKind } from "@/effects/optics/fracture";
+import { experimentsAllowed } from "@/lib/admin-gate";
 
 /**
  * Photographs of broken glass, one list per kind of break (item 10; Ony
@@ -39,7 +40,7 @@ export const CRACK_PHOTOS: Readonly<Record<GlassKind, readonly string[]>> = {
  * different one strike by strike.
  */
 export function crackPhotoFor(kind: GlassKind, seed: number): string | null {
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && experimentsAllowed()) {
     const tried = new URLSearchParams(window.location.search).get("crackphoto");
     if (tried && tried.startsWith("/")) return tried;
   }

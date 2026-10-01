@@ -14,6 +14,8 @@
  */
 
 /** What can be tried, and what each one is. */
+import { experimentsAllowed } from "@/lib/admin-gate";
+
 export const PREVIEWS = {
   /** Scratches and smudges block and scatter in proportion to each pixel's opacity. */
   marks: "Scratches and smudges act in proportion to how much of each pixel they cover",
@@ -85,6 +87,11 @@ function read(): ReadonlySet<string> {
   if (active) return active;
   if (typeof window === "undefined") return new Set();
   let list: string[] = [];
+  // Only for Ony signed in as the admin (item 48; lib/admin-gate).
+  if (!experimentsAllowed()) {
+    active = new Set();
+    return active;
+  }
   try {
     list = (new URLSearchParams(window.location.search).get("try") ?? "")
       .split(",")
