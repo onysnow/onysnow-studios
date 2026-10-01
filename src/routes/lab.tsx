@@ -37,7 +37,7 @@ import {
   type TuningMode,
 } from "@/lib/tuning";
 import { getGlassMode, toggleGlassMode, useGlassMode } from "@/lib/glass-mode";
-import { isFromFrame, isToolId, sendLabDraft, sendLabHold } from "@/lib/lab-bridge";
+import { isFromFrame, isToolId, sendLabDraft, sendLabHold, sendLabRedRoom } from "@/lib/lab-bridge";
 import { TOOLS, type ToolId } from "@/effects/tools/held";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -132,6 +132,12 @@ function Lab() {
   const frame = useRef<HTMLIFrameElement>(null);
   const [page, setPage] = useState<string>("/");
   const [framePath, setFramePath] = useState<string>("/");
+  /*
+   * The red room (item 39) in the preview: its switch in the frame's
+   * address, and a request to go straight in once the frame is ready.
+   */
+  const [redRoom, setRedRoom] = useState(false);
+  const enterRedRoomNext = useRef(false);
   const [reloads, setReloads] = useState(0);
   const [device, setDevice] = useState<Device>("desktop");
   const [query, setQuery] = useState("");
@@ -192,6 +198,11 @@ function Lab() {
         if (published.current !== null) push();
         // A reloaded or navigated preview keeps the tool picked here.
         if (data.tool !== toolRef.current) sendLabHold(frame.current, toolRef.current);
+        if (enterRedRoomNext.current) {
+          enterRedRoomNext.current = false;
+          // After its photographs have had a moment to load.
+          window.setTimeout(() => sendLabRedRoom(frame.current), 600);
+        }
       } else if (data.type === "onysnow:lab-path") {
         setFramePath(data.path);
       } else if (data.type === "onysnow:lab-tool" && isToolId(data.tool)) {
@@ -260,10 +271,10 @@ function Lab() {
     } catch {
       // The curtain then plays once in the frame. Harmless.
     }
-    return `${page}?glass=${getGlassMode()}`;
+    return `${page}?glass=${getGlassMode()}${redRoom ? "&try=redroom" : ""}`;
     // The mode is sent by message after this; changing it must not reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, reloads]);
+  }, [page, reloads, redRoom]);
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, [string, Knob][]>();
@@ -375,6 +386,23 @@ function Lab() {
             title="Which glass the preview runs. Some controls are kept separately for each."
           >
             <Layers /> {mode === "raster" ? "Liquid glass" : "CSS glass"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            data-lab-redroom
+            onClick={() => {
+              if (redRoom) {
+                // Already switched on in the frame: straight in.
+                sendLabRedRoom(frame.current);
+              } else {
+                enterRedRoomNext.current = true;
+                setRedRoom(true);
+              }
+            }}
+            title="Secret 2, the red room (?try=redroom): the preview goes dark but for the safelight, with the photograph most in view hanging on the line. Lights on or Escape leaves; winding the shutter and clicking a photograph gets back in."
+          >
+            Red room
           </Button>
           <label htmlFor="lab-tool" className="sr-only">
             What the pointer holds in the preview

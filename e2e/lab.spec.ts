@@ -52,6 +52,23 @@ test.describe("/lab", () => {
     await expect(frame.locator(".magnifier")).toHaveCount(0);
   });
 
+  test("takes the preview into the red room (item 39)", async ({ page }) => {
+    await openLab(page);
+    await previewFrame(page);
+    await page.locator("[data-lab-redroom]").click();
+    // The frame reloads with the red room switched on, then goes straight in.
+    await expect
+      .poll(
+        async () => {
+          const handle = await page.locator("iframe[data-lab-preview]").elementHandle();
+          const frame = await handle?.contentFrame();
+          return frame ? await frame.locator(".red-room__leave").count() : 0;
+        },
+        { timeout: 60_000 },
+      )
+      .toBe(1);
+  });
+
   test("puts every knob on a control", async ({ page }) => {
     await openLab(page);
 
