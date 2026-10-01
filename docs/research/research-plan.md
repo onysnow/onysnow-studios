@@ -37,15 +37,15 @@ anything or it's not help do we start from scratch."
 | R6 | Shadows good enough for a shadow puppet show | 83, 52, every light | done: shadows.md |
 | R2 | Water drops: follow-up (raindrop-fx port, perf) | 77, 76 | first pass + port plan done (water-drops.md §7) |
 | R1 | Black light: calibration against real photos | 73 | first pass + calibration done (uv-blacklight.md R1) |
-| R5 | Broken glass: follow-up (three-pinata fit, physics) | 84 | first pass done |
+| R5 | Broken glass: follow-up (three-pinata fit, physics) | 84 | first pass + build plan done (glass-fracture.md R5) |
 | R7 | Flame and torch light | 82 | done: flame.md |
 | R9 | Balloons | 74 | done: balloons.md |
 | R10 | Spider webs | 75 | done: spider-webs.md |
-| R3 | Other liquids and the spray bottle | 76 | to do |
-| R12 | Jello / slime cube | 80 | to do |
-| R11 | Fire opal, quartz, crystals | 79 | to do |
-| R8 | Fireworks | 81 | to do |
-| R4 | Water surfaces | 78 | to do |
+| R3 | Other liquids and the spray bottle | 76 | done: liquids-spray.md |
+| R12 | Jello / slime cube | 80 | done: slime.md |
+| R11 | Fire opal, quartz, crystals | 79 | done: gems.md |
+| R8 | Fireworks | 81 | done: fireworks.md |
+| R4 | Water surfaces | 78 | done: water-surfaces.md |
 
 ## The items
 
@@ -148,7 +148,7 @@ anything or it's not help do we start from scratch."
 - **Questions:** trigger sprayer droplet sizes and spray pattern,
   slime/blood/other liquids' viscosity, colour and optics, how they bead or
   smear on glass, existing liquid-on-glass demos.
-- **Output:** added to `docs/research/water-drops.md` or its own doc.
+- **Output:** `docs/research/liquids-spray.md` (done 2026-10-01).
 
 ### R12. Jello / slime cube
 

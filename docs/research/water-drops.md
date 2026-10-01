@@ -1024,8 +1024,8 @@ design → `?try` → verify measured → Ony approves).
 2. **Particles.**
    - The CPU pool from the tools survey §4 decision, fired from the nozzle as a
      cone.
-   - Droplet sizes, cone angle and flow per squeeze come from **R3** (still to
-     do). Until then they are marked **(estimate)**.
+   - Droplet sizes, cone angle and flow per squeeze come from **R3**, now
+     done: [liquids-spray.md §5.3](liquids-spray.md).
    - A droplet lands at its screen point after its flight time.
 3. **Landing.** On a pane, call `sim.addVolume(pane, x, y, V, liquid)`:
    - inside an existing drop's contact radius, it merges;
@@ -1072,7 +1072,7 @@ design → `?try` → verify measured → Ony approves).
 - **Still unknown:**
   - the real cost on a mid-range phone (estimates only);
   - whether phones get drops at all (Ony);
-  - R3's spray numbers;
+  - R3's spray numbers (now in [liquids-spray.md](liquids-spray.md));
   - whether 8-bit height bands on small droplets (half-float is the fallback);
   - the CSS-px-to-mm pane scale (how big a pane is in real life), which sets
     every threshold in §2.
