@@ -208,6 +208,8 @@ const float DROPLET_FULL = ${DROPLET_HEIGHT_MAX.toFixed(2)};
 const float LAMP_CORE = 400.0;
 /* How bright the dry frost glows straight under a lamp, against the lamp's colour (estimate, matched to the light layer's glow). */
 const float FROST_GLOW = 1.5;
+/* How much a lamp's pool lifts the photograph straight under it, against the lamp's colour (estimate, matched to the floor light). */
+const float POOL_GAIN = 1.5;
 /* The camera's bloom round a glint: how wide against the glint, and what share of its light (estimate). */
 const float BLOOM_WIDTH = 4.0;
 const float BLOOM_SHARE = 0.04;
@@ -227,6 +229,37 @@ vec3 photoAt(vec2 page) {
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = clamp(mix(vec3(l), c, uSaturate), 0.0, 1.0);
   return mix(c, uFill.rgb, uFill.a);
+}
+
+/*
+ * The photograph as a clear wet spot shows it (Ony, 2026-10-01: "Why do the
+ * drops look like ink?"). Two things the frosted pane round it has that the
+ * view through the water was missing:
+ *
+ *   the lamps' light on it -- the pool each lamp throws through the glass
+ *     onto the photograph (the floor light, drawn under the glass round the
+ *     drop). Seen through the drop unlit, every drop by a lamp was a dark
+ *     hole in the lit picture. Lambert from each lamp's height, as the pool
+ *     falls off (POOL_GAIN, estimate matched to the floor light);
+ *   less of the pane's own dark fill -- that veil stands in for the frost's
+ *     haze; where the water has cleared the frost, most of it goes (a
+ *     third left for the glass's own tint, estimate).
+ */
+vec3 seenThroughWater(vec2 page) {
+  if (uHasPhoto < 0.5) return uRoom;
+  vec3 c = texture2D(uPhoto, clamp(coverUv(page, uImage, uImageFit), 0.0, 1.0)).rgb;
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = clamp(mix(vec3(l), c, uSaturate), 0.0, 1.0);
+  vec3 pool = vec3(0.0);
+  for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
+    if (i >= uLightCount) break;
+    vec2 dl = page - uLightPos[i].xy;
+    float hz = max(uLightPos[i].z, 1.0);
+    float q = hz * hz / (dot(dl, dl) + hz * hz);
+    pool += uLightColour[i] * POOL_GAIN * q * sqrt(q);
+  }
+  c *= 1.0 + pool;
+  return mix(c, uFill.rgb, uFill.a * 0.35);
 }
 
 float dropsH(vec2 uv) { return texture2D(uDrops, uv).r * uDropsFull; }
@@ -389,7 +422,7 @@ vec4 shadeAt(vec2 local) {
     if (tl > 2.0) tanOut *= 2.0 / tl;
     vec2 tanFlat = V.xy / max(-V.z, 0.05);
     vec2 seenPage = page + uScene * (tanOut - tanFlat);
-    vec3 through = tir ? vec3(0.0) : photoAt(seenPage);
+    vec3 through = tir ? vec3(0.0) : seenThroughWater(seenPage);
 
     // Back toward you: out through the front face if it can; trapped in the glass if not.
     vec3 R = reflect(tW, Nw);
@@ -480,7 +513,7 @@ vec4 shadeAt(vec2 local) {
       ? decodeRadiance(texture2D(uRoomTex, roomUvDir(frontDir)).rgb) * uRoomExposure
       : uRoom;
     water = water * (1.0 - Ff) + front * Ff;
-    vec3 wetGlass = photoAt(page);
+    vec3 wetGlass = seenThroughWater(page);
     col = mix(wetGlass, water, cover);
     alpha = max(cover, film);
   } else {

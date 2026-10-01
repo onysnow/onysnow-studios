@@ -1308,6 +1308,14 @@ glint's edge is softened; and near the rim, where the bent sight runs off
 sideways, the scene it samples is held to a slope of 2 so it blurs rather
 than speckles.
 
+Not ink (Ony, 2026-10-01: "Why do the drops look like ink?"): the view
+through a drop and through a wet track now shows the photograph as the frost
+round it shows it lit -- with each lamp's pool of light on it (the floor
+light, Lambert from the lamp's height, POOL_GAIN) -- and with only a third of
+the pane's dark fill, since that fill stands in for the frost's haze, which
+the water clears. Before, the drops showed the photograph unlit and doubly
+darkened, so by a lamp each was a dark hole in a lit pane.
+
 No shadow is drawn: with the rain on the far face and the lamp in front,
 there is nothing behind a drop near enough to show one (the scene is metres
 away); the drop shows instead as clear glass in the lit frost.
