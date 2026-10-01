@@ -98,7 +98,19 @@
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
+  option,
+  optgroup {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+  optgroup {
+    color: var(--color-primary);
+  }
   html {
+    /* Native controls (a <select>'s open list above all) drawn dark, so their
+       light text is not left on a white Windows list (Ony: "all of the nav
+       menu items are hard to read"). */
+    color-scheme: dark;
     scroll-behavior: smooth;
     background: var(--color-background);
   }

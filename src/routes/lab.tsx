@@ -53,6 +53,7 @@ import { isFromFrame, isToolId, sendLabDraft, sendLabHold, sendLabRedRoom } from
 import { TOOLS, type ToolId } from "@/effects/tools/held";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { LabSelect } from "@/components/admin/LabSelect";
 import {
   ON_BY_DEFAULT,
   PREVIEWS,
@@ -78,6 +79,9 @@ export const Route = createFileRoute("/lab")({
 });
 
 /** The pages the preview can show. Any other page is reachable by clicking through. */
+/** The preview's page when it is not one of PAGES (a link followed inside it). */
+const OTHER_PAGE = "__other__";
+
 const PAGES = [
   { path: "/", label: "Home" },
   { path: "/portfolio", label: "Portfolio" },
@@ -379,24 +383,23 @@ function Lab() {
           <label htmlFor="lab-page" className="sr-only">
             Page shown in the preview
           </label>
-          <select
+          <LabSelect
             id="lab-page"
-            value={PAGES.some((p) => p.path === framePath) ? framePath : ""}
-            onChange={(e) => {
-              if (!e.target.value) return;
-              setPage(e.target.value);
-              setFramePath(e.target.value);
+            value={PAGES.some((p) => p.path === framePath) ? framePath : OTHER_PAGE}
+            onChange={(v) => {
+              if (v === OTHER_PAGE) return;
+              setPage(v);
+              setFramePath(v);
               setReloads((n) => n + 1);
             }}
-            className="h-8 max-w-[14rem] rounded-md border border-input bg-transparent px-2 text-sm"
-          >
-            {PAGES.some((p) => p.path === framePath) ? null : <option value="">{framePath}</option>}
-            {PAGES.map((p) => (
-              <option key={p.path} value={p.path}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+            className="w-[14rem] max-w-[14rem]"
+            options={[
+              ...(PAGES.some((p) => p.path === framePath)
+                ? []
+                : [{ value: OTHER_PAGE, label: framePath }]),
+              ...PAGES.map((p) => ({ value: p.path, label: p.label })),
+            ]}
+          />
           <span
             className="hidden min-w-0 truncate rounded-md border border-border/60 px-2 py-1 font-mono text-xs text-muted-foreground md:block"
             data-lab-path
@@ -460,25 +463,20 @@ function Lab() {
           <label htmlFor="lab-tool" className="sr-only">
             What the pointer holds in the preview
           </label>
-          <select
+          <LabSelect
             id="lab-tool"
-            data-lab-tool
+            data={{ "data-lab-tool": true }}
             value={tool}
-            onChange={(e) => {
-              if (!isToolId(e.target.value)) return;
-              toolRef.current = e.target.value;
-              setTool(e.target.value);
-              sendLabHold(frame.current, e.target.value);
+            onChange={(v) => {
+              if (!isToolId(v)) return;
+              toolRef.current = v;
+              setTool(v);
+              sendLabHold(frame.current, v);
             }}
             title="What the pointer holds in the preview (the hammer breaks the pane you strike). Only the preview: visitors keep the lamp."
-            className="h-8 w-[8.5rem] flex-none rounded-md border border-input bg-transparent px-2 text-sm"
-          >
-            {TOOLS.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+            className="w-[8.5rem] flex-none"
+            options={TOOLS.map((t) => ({ value: t.id, label: t.label }))}
+          />
         </div>
 
         <p
@@ -527,23 +525,17 @@ function Lab() {
             >
               Editing
             </label>
-            <select
+            <LabSelect
               id="lab-section"
-              data-lab-section
+              data={{ "data-lab-section": true }}
               value={section}
-              onChange={(e) => setSection(e.target.value as Section)}
-              className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-            >
-              {SECTIONS.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.items.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+              onChange={(v) => setSection(v as Section)}
+              className="h-9 w-full"
+              groups={SECTIONS.map((group) => ({
+                label: group.label,
+                options: group.items.map((item) => ({ value: item.id, label: item.label })),
+              }))}
+            />
           </div>
           {section === "look" ? (
             <>
@@ -864,18 +856,16 @@ function KnobRow({
         </div>
       </div>
       {knob.options ? (
-        <select
+        <LabSelect
           id={id}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-        >
-          {knob.options.map((label, i) => (
-            <option key={label} value={knob.min + i * knob.step}>
-              {label}
-            </option>
-          ))}
-        </select>
+          value={String(value)}
+          onChange={(v) => onChange(Number(v))}
+          className="mt-1 w-full"
+          options={knob.options.map((label, i) => ({
+            value: String(knob.min + i * knob.step),
+            label,
+          }))}
+        />
       ) : (
         <input
           id={id}

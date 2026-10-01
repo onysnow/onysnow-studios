@@ -39,16 +39,22 @@ async function setKnob(page: import("@playwright/test").Page, key: string, value
   );
 }
 
+/** The tool list is the site's themed drop-down (LabSelect): open it, pick by name. */
+async function pickTool(page: import("@playwright/test").Page, name: RegExp) {
+  await page.locator("[data-lab-tool]").click();
+  await page.getByRole("option", { name }).first().click();
+}
+
 test.describe("/lab", () => {
   test("picks what the preview's pointer holds (25h)", async ({ page }) => {
     await openLab(page);
     const frame = await previewFrame(page);
     // The magnifier is drawn only while it is held.
     await expect(frame.locator(".magnifier")).toHaveCount(0);
-    await page.locator("[data-lab-tool]").selectOption("magnifier");
+    await pickTool(page, /^magnifier$/i);
     await expect(frame.locator(".magnifier")).toHaveCount(1, { timeout: 15_000 });
     // And back: put down, it is gone.
-    await page.locator("[data-lab-tool]").selectOption("lamp");
+    await pickTool(page, /^lamp$/i);
     await expect(frame.locator(".magnifier")).toHaveCount(0);
   });
 
