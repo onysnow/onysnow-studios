@@ -25,6 +25,7 @@
  */
 
 import { CrackNet } from "./crack-net";
+import { pieceTilt } from "./shard-tilt";
 
 export type GlassKind = "annealed" | "tempered" | "laminated";
 
@@ -522,11 +523,21 @@ export function fracture(im: Impact): Fracture {
     const reach = Math.hypot(c.x - at.x, c.y - at.y) / diag;
     // Near the impact the pieces are knocked about most.
     const knock = loose * (0.3 + 0.7 * Math.exp(-reach * 4)) * (0.4 + 0.6 * E);
-    const deg = Math.PI / 180;
+    // Left in the dent the blow pushed in, and knocked (effects/optics/shard-tilt).
+    const away = Math.hypot(c.x - at.x, c.y - at.y) || 1;
+    const tilt = pieceTilt(
+      im.kind,
+      E,
+      (c.x - at.x) / away,
+      (c.y - at.y) / away,
+      reach,
+      rand(seed, 500 + k),
+      rand(seed, 600 + k),
+    );
     const shard: Shard = {
       poly,
-      tiltX: (rand(seed, 500 + k) - 0.5) * 0.8 * deg * knock,
-      tiltY: (rand(seed, 600 + k) - 0.5) * 0.8 * deg * knock,
+      tiltX: tilt.tiltX,
+      tiltY: tilt.tiltY,
       slip: {
         x: (rand(seed, 700 + k) - 0.5) * 1.6 * knock,
         y: (rand(seed, 800 + k) - 0.5) * 1.6 * knock,
