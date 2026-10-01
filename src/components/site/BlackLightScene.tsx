@@ -22,29 +22,29 @@ import { onTuningApplied, t } from "@/lib/tuning";
  *     (395 nm LED).
  */
 
-/** The lamp's visible leak, per type: its colour and how much of it there is. */
+/*
+ * Colour tokens and strengths from docs/research/uv-blacklight.md (A, B):
+ * sRGB as a camera records a black-lit scene. 365 nm: a near-black room,
+ * full glow; 395 nm: a violet-washed room, about half the glow.
+ */
+const hex = (h: string) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16) / 255);
 const LEAK = [
-  { rgb: [0.42, 0.2, 1.0], amount: 0.07, reflect: 0.45 }, // 365 nm, filtered: "a dim violet glow"
-  { rgb: [0.36, 0.2, 1.0], amount: 0.22, reflect: 1.35 }, // 395 nm LED: "strong purple glow", the references' look
+  { rgb: hex("#1A0F4A"), wash: 0.1, emit: 1.0 }, // 365 nm (BLB / filtered LED): leak365
+  { rgb: hex("#4B22D9"), wash: 0.3, emit: 0.55 }, // 395 nm LED: leak395, "emission x0.5, leak x3"
 ] as const;
+/** Optical brightener glow (photo whites, paper, cotton): body and halo. */
+const OBA_BODY = hex("#8FB8FF");
+const OBA_HALO = hex("#4C63FF");
+/** The neon-ink option's colours (artistic, off by default: a photo print never does this). */
+const HOT_PINK = hex("#FF3FB4");
+const NEON_GREEN = hex("#C8FF2A");
+const ELECTRIC_BLUE = hex("#4D7BFF");
 
-/** What the lamp's light shows of a surface that does not fluoresce: deep indigo (the references' walls and skin). */
-const INDIGO = [0.14, 0.08, 1.0] as const;
-/** Brightener blue-white: what an optical brightener re-emits (peaking near 440 nm). */
-// Whites go a very light blue (Ony, 2026-10-01, with a paper plane and a smile under UV).
-const OBA = [0.38, 0.8, 1.0] as const;
-/** The neon colours fluorescent pigments blaze in (the references: lips, paint, acrylic). */
-const HOT_PINK = [1.0, 0.16, 0.5] as const;
-const NEON_GREEN = [0.45, 1.0, 0.18] as const;
-const ELECTRIC_BLUE = [0.15, 0.75, 1.0] as const;
+/** exp(k (x - 1)) as a feFuncX table: the share of the paper's glow one ink lets through. */
+const expTable = (k: number) =>
+  Array.from({ length: 17 }, (_, i) => Math.exp(k * (i / 16 - 1)).toFixed(4)).join(" ");
 
 const f = (n: number) => Number(n.toFixed(4));
-const LUM = [0.2126, 0.7152, 0.0722] as const;
-
-/** A colour matrix: `colour` times (luminance + offset), each channel clamped at 0 by the filter. */
-function lumRow(colour: readonly number[], offset: number): string {
-  return termRow(colour, LUM, offset);
-}
 
 /** A colour matrix: `colour` times (the weights' sum of r, g, b, plus offset). */
 function termRow(colour: readonly number[], weights: readonly number[], offset: number): string {
@@ -115,65 +115,108 @@ export function BlackLightScene() {
 
   const leak = LEAK[s.type === 1 ? 1 : 0];
   const violet = `rgb(${leak.rgb.map((c) => Math.round(c * 255)).join(" ")}`;
-  // The lamp's light reflected: deep indigo by luminance, stronger for the 395 nm wash.
-  const base = INDIGO.map((c) => c * leak.reflect);
-  // Whites: luminance past about two thirds of white, brightener blue-white.
-  const w = OBA.map((c) => c * 2.1 * s.paper);
-  // The neon terms, by "UV: colours in the photographs".
-  const pk = HOT_PINK.map((c) => c * 3.2 * s.neon);
-  const gr = NEON_GREEN.map((c) => c * 1.8 * s.neon);
-  const cy = ELECTRIC_BLUE.map((c) => c * 1.6 * s.neon);
-  const halo = (0.9 * s.neon).toFixed(3);
+  // The leak each pixel reflects: in proportion to its blue-band reflectance, with a gloss floor.
+  // The references' skin under 395 nm is #3A2AA8 where a white is near-clipped light blue: the leak is the dimmer by far.
+  const leakGain = 0.75;
+  const L = leak.rgb.map((c) => c * leakGain);
+  // The paper's glow, as the lamp excites it.
+  const F = OBA_BODY.map((c) => c * (0.6 + leak.emit) * s.paper * 1.4);
+  // The neon-ink option.
+  const pk = HOT_PINK.map((c) => c * 2.2 * s.neon);
+  const gr = NEON_GREEN.map((c) => c * 1.5 * s.neon);
+  const cy = ELECTRIC_BLUE.map((c) => c * 1.3 * s.neon);
+  const halo = (0.55 * s.paper * leak.emit).toFixed(3);
+  const neonOn = s.neon > 0;
 
   return (
     <>
       {/*
-        The photographs as OBA prints: luminance, curved so ink-dense areas
-        fall dark, times brightener blue; plus the violet leak they reflect.
-      */}
-      {/*
-        The photographs under the black light, read off Ony's references
-        (2026-10-01): what does not fluoresce is seen only by the lamp's
-        strong blue-violet -- deep indigo, its shading kept; whites glow
-        blue-white; warm saturated colours blaze hot pink and orange,
-        yellows and greens neon green, cyans electric blue; each glow with
-        a halo. Every term is a colour matrix, whose output the filter
-        clamps at 0 -- which is what makes "how much redder than it is
-        anything else" a term at all -- and they add.
+        A photograph under the black light is a print on brightened paper
+        (docs/research/uv-blacklight.md 6.1): the paper glows blue, the inks
+        block it -- magenta and black most, then yellow, cyan least -- so
+        whites glow, skies keep a pale-blue glow, and saturated reds and
+        magentas go dark. Plus the violet leak the print reflects, in
+        proportion to its blue. Then the camera: bright glow clips toward a
+        pale core, and the glow (only the glow) blooms in its halo blue.
+
+        T = exp(-(0.5 C + 2 M + 1 Y)), C = 1 - R, M = 1 - G, Y = 1 - B, is a
+        product of one exponential per channel: three lookup tables, then
+        the channels multiplied (feComposite k1).
       */}
       <svg aria-hidden="true" width="0" height="0" style={{ position: "absolute" }}>
         <filter
           id="uv-paper"
           colorInterpolationFilters="sRGB"
-          x="-5%"
-          y="-5%"
-          width="110%"
-          height="110%"
+          x="-8%"
+          y="-8%"
+          width="116%"
+          height="116%"
         >
-          {/* The lamp's own light, reflected: luminance in deep indigo. */}
-          <feColorMatrix in="SourceGraphic" type="matrix" values={lumRow(base, 0)} result="leak" />
-          {/* Whites and highlights: optical brighteners, blue-white. */}
+          <feComponentTransfer in="SourceGraphic" result="ink">
+            <feFuncR type="table" tableValues={expTable(0.5)} />
+            <feFuncG type="table" tableValues={expTable(2.0)} />
+            <feFuncB type="table" tableValues={expTable(1.0)} />
+          </feComponentTransfer>
           <feColorMatrix
-            in="SourceGraphic"
+            in="ink"
             type="matrix"
-            values={lumRow(w, -0.48)}
-            result="white"
+            values="1 0 0 0 0  1 0 0 0 0  1 0 0 0 0  0 0 0 1 0"
+            result="tc"
           />
-          {/* Warm (red, pink, orange): how much redder than the rest, hot pink-red. */}
+          <feColorMatrix
+            in="ink"
+            type="matrix"
+            values="0 1 0 0 0  0 1 0 0 0  0 1 0 0 0  0 0 0 1 0"
+            result="tm"
+          />
+          <feColorMatrix
+            in="ink"
+            type="matrix"
+            values="0 0 1 0 0  0 0 1 0 0  0 0 1 0 0  0 0 0 1 0"
+            result="ty"
+          />
+          <feComposite
+            in="tc"
+            in2="tm"
+            operator="arithmetic"
+            k1="1"
+            k2="0"
+            k3="0"
+            k4="0"
+            result="tcm"
+          />
+          <feComposite
+            in="tcm"
+            in2="ty"
+            operator="arithmetic"
+            k1="1"
+            k2="0"
+            k3="0"
+            k4="0"
+            result="T"
+          />
+          {/* The paper's glow through the ink. */}
+          <feColorMatrix in="T" type="matrix" values={termRow(F, [1, 0, 0], 0)} result="glow" />
+          {/* The camera clipping it: past about 0.8 it runs to a pale, near-white core. */}
+          <feColorMatrix
+            in="T"
+            type="matrix"
+            values={termRow([1, 1, 1], [1.5 * s.paper * (0.6 + leak.emit), 0, 0], -1.25)}
+            result="core"
+          />
+          {/* The neon-ink option (off by default): high-chroma pixels emitting in their hue family. */}
           <feColorMatrix
             in="SourceGraphic"
             type="matrix"
             values={termRow(pk, [1, -0.7, -0.3], -0.36)}
             result="warm"
           />
-          {/* Yellow and green: greener than blue, neon green. */}
           <feColorMatrix
             in="SourceGraphic"
             type="matrix"
             values={termRow(gr, [0.15, 1, -1.15], -0.05)}
             result="green"
           />
-          {/* Cyan and blue: bluer-greener than red, electric blue. */}
           <feColorMatrix
             in="SourceGraphic"
             type="matrix"
@@ -181,40 +224,74 @@ export function BlackLightScene() {
             result="cyan"
           />
           <feComposite
-            in="white"
-            in2="warm"
-            operator="arithmetic"
-            k1="0"
-            k2="1"
-            k3="1"
-            k4="0"
-            result="g1"
-          />
-          <feComposite
-            in="g1"
+            in="warm"
             in2="green"
             operator="arithmetic"
             k1="0"
-            k2="1"
-            k3="1"
+            k2={neonOn ? 1 : 0}
+            k3={neonOn ? 1 : 0}
             k4="0"
-            result="g2"
+            result="n1"
           />
           <feComposite
-            in="g2"
+            in="n1"
             in2="cyan"
             operator="arithmetic"
             k1="0"
             k2="1"
+            k3={neonOn ? 1 : 0}
+            k4="0"
+            result="neon"
+          />
+          <feComposite
+            in="glow"
+            in2="neon"
+            operator="arithmetic"
+            k1="0"
+            k2="1"
             k3="1"
             k4="0"
-            result="glows"
+            result="emit"
           />
-          {/* The halo round every glow. */}
-          <feGaussianBlur in="glows" stdDeviation="7" result="halo" />
+          {/* Bloom: only the emission, in the halo blue, two radii. */}
+          <feGaussianBlur in="emit" stdDeviation="5" result="b1" />
+          <feGaussianBlur in="emit" stdDeviation="18" result="b2" />
           <feComposite
-            in="glows"
-            in2="halo"
+            in="b1"
+            in2="b2"
+            operator="arithmetic"
+            k1="0"
+            k2="0.6"
+            k3="0.5"
+            k4="0"
+            result="bloom"
+          />
+          <feColorMatrix
+            in="bloom"
+            type="matrix"
+            values={`${f(OBA_HALO[0]! * 0.5)} ${f(OBA_HALO[0]! * 0.5)} ${f(OBA_HALO[0]! * 0.5)} 0 0  ${f(OBA_HALO[1]! * 0.5)} ${f(OBA_HALO[1]! * 0.5)} ${f(OBA_HALO[1]! * 0.5)} 0 0  ${f(OBA_HALO[2]! * 0.5)} ${f(OBA_HALO[2]! * 0.5)} ${f(OBA_HALO[2]! * 0.5)} 0 0  0 0 0 1 0`}
+            result="haloTint"
+          />
+          {/* The leak it reflects: lamp colour x (0.15 + 0.85 blue). */}
+          <feColorMatrix
+            in="SourceGraphic"
+            type="matrix"
+            values={termRow(L, [0, 0, 0.85], 0.15)}
+            result="leak"
+          />
+          <feComposite
+            in="emit"
+            in2="core"
+            operator="arithmetic"
+            k1="0"
+            k2="1"
+            k3="1"
+            k4="0"
+            result="e2"
+          />
+          <feComposite
+            in="e2"
+            in2="haloTint"
             operator="arithmetic"
             k1="0"
             k2="1"
@@ -242,7 +319,7 @@ export function BlackLightScene() {
         className="blacklight-leak"
         style={
           {
-            "--uv-leak": `${violet} / ${(leak.amount * 1.6).toFixed(3)})`,
+            "--uv-leak": `${violet} / ${leak.wash.toFixed(3)})`,
             "--uv-reach": `${s.reach}px`,
           } as React.CSSProperties
         }

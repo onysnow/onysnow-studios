@@ -1,0 +1,639 @@
+# Water drops on glass (and later: water surfaces, a spray bottle)
+
+Research only, 2026-10-01. No code changed. Every claim carries its source;
+numbers marked **(computed)** are worked out here from a formula in the cited
+source, not quoted from it.
+
+The ask: drops on the panes that refract and magnify the photograph behind,
+with the inverted image inside a drop. They reflect lights and cast a caustic
+and a shadow on what is behind. They are generated realistically, they grow,
+and once heavy enough they run down, leave trails and merge with other drops.
+Later come water surfaces and a spray tool for water, slime or blood. It has
+to be cheap enough for the web.
+
+---
+
+## 1. Prior art
+
+### 1.1 Codrops "Rain & Water Effect Experiments" (Lucas Bebber, 2015)
+
+- Article: [tympanus.net/codrops/2015/11/04/rain-water-effect-experiments](https://tympanus.net/codrops/2015/11/04/rain-water-effect-experiments/).
+  Repo: [github.com/codrops/RainEffect](https://github.com/codrops/RainEffect).
+- **How the simulation works** ([src/raindrops.js](https://github.com/codrops/RainEffect/blob/master/src/raindrops.js)):
+  - It is a CPU list of drops. Each drop has `x, y, r`, `spreadX/Y` (squash),
+    `momentum`, `parent` and `killed` / `shrink` flags.
+  - The chance that a drop "creeps down" is proportional to its radius.
+    Momentum decays every frame and is capped.
+  - A moving drop spawns smaller trail drops at intervals (`trailScaleRange`
+    0.2–0.5) and shrinks by 3% at each one.
+  - Drops merge inside `collisionRadius: 0.65`. The new radius keeps area,
+    with 80% of the smaller drop kept: `r = √(r₁² + 0.8 r₂²)`. A merge also
+    gives the drop a momentum boost.
+  - Defaults: `maxDrops: 900, rainChance: 0.3, dropletsRate: 50`.
+- **How it renders** ([article](https://tympanus.net/codrops/2015/11/04/rain-water-effect-experiments/), [water.frag](https://github.com/codrops/RainEffect/blob/master/src/shaders/water.frag)):
+  - Drops are pre-rendered sprites drawn onto a 2D canvas. That canvas is
+    uploaded as the "water map".
+  - **Red and green** encode the refraction lookup offset. **Blue** is the
+    depth/thickness that scales the refraction. **Alpha** is coverage.
+  - The shader samples the in-focus foreground at `texCoord + (rg − 0.5)·2 ·
+    (minRefraction + b·refractionDelta)` over a small blurred background.
+  - The sprite's colour is in effect a lookup into the image, so a drop
+    "turn[s] the image behind them upside down" ([article](https://tympanus.net/codrops/2015/11/04/rain-water-effect-experiments/)).
+  - Small droplets go on a separate canvas and are not tracked one by one.
+    Big drops erase them with `globalCompositeOperation = 'destination-out'`,
+    which gives the cleared path behind a running drop.
+  - Optional shine and shadow layers are blended on top.
+- **Licence:** "Integrate or build upon it for free in your personal or
+  commercial projects. Don't republish, redistribute or sell 'as-is'"
+  ([README](https://github.com/codrops/RainEffect#license)). That is usable
+  for the site but it is not MIT. Borrow the ideas rather than the files if
+  the effect layer is ever to be sold as a component (same concern as
+  open item 4 in `effect-layer`).
+
+### 1.2 raindrop-fx (SardineFish): MIT, WebGL2, the closest fit
+
+- Repo: [github.com/SardineFish/raindrop-fx](https://github.com/SardineFish/raindrop-fx).
+  npm `raindrop-fx`. **MIT** ([LICENSE](https://github.com/SardineFish/raindrop-fx/blob/master/LICENSE)).
+  It says it was inspired by the Codrops project.
+- **Performance it claims** ([README](https://github.com/SardineFish/raindrop-fx)):
+  - about 600 drops in 2–3 ms/frame at 1920×1080;
+  - 2000 drops in about 6 ms on Windows Chrome 88, and about 6.5 ms on
+    Android Chrome 87.
+- **Simulation** (read from the npm 1.0.8 sources, `src/raindrop.ts` and `src/simulator.ts`):
+  - **Mass and size.** A drop has `mass`. Size is `(spread+1)·√mass/density`.
+  - **Evaporation.** Mass is lost every second (`evaporate`, 10–30).
+  - **Gravity against pinning.** The force is `gravity·mass − resistance`.
+    `resistance` is re-rolled at random every 0.1–0.4 s (`motionInterval`),
+    and the upper bound shrinks with `slipRate`. This random resistance is a
+    cheap stand-in for pinning, and it gives stick-slip motion.
+  - **Wander.** `velocity.x = |velocity.y| · shifting`, where `shifting` is a
+    random 0–0.1.
+  - **Shape.** The drop stretches with speed (`velocitySpread`) and relaxes
+    back (`shrinkRate`).
+  - **Trails.** Every 20–30 px of travel, a moving drop with enough mass
+    splits off a trail drop of 0.3–0.5× its size and loses that mass.
+  - **Collisions.** A uniform grid is checked over the 3×3 neighbouring cells.
+    Parent and child (and siblings) are excluded. A merge **keeps momentum**:
+    `v = (m₁v₁ + m₂v₂)/(m₁+m₂)`.
+- **Rendering** (`src/renderer.ts`, `src/shader/*.glsl`):
+  - **Raindrop pass.** Every drop is one instanced quad, textured with a
+    normal-like sprite (`raindrop.png`). It writes (normal.xy, size, alpha)
+    into a render texture.
+  - **Blend modes.** The "smoother" mode uses an exclusion blend, and
+    "harder" uses premultiplied over.
+  - **Droplet pass.** Tiny static droplets are drawn procedurally into a
+    persistent texture. Each frame the raindrop texture is blitted into it
+    with an "erase" material, so running drops wipe droplets and mist.
+  - **Compose pass.** The background is blurred with mipmaps for the misty
+    parts. `uv += −(n.xy − 0.5)·(base + scale·size)`. The normal is
+    `normalize(vec3((n.xy−0.5)·2, 1))`, with Lambert and Blinn-Phong lighting.
+    The edge mask is `smoothstep(0.96, 0.99, alpha)`; that threshold is what
+    makes touching drops read as one blob.
+- **Caveat for us.** It needs WebGL2 and `EXT_color_buffer_float`. Our
+  contexts are WebGL1 (`src/effects/engine/gl.ts`, `getContext("webgl")`).
+  It also owns its own canvas and renderer (zogra-renderer). So: port its
+  simulation logic (MIT) into our engine rather than embedding the library.
+
+### 1.3 "Heartfelt" (BigWings / Martijn Steinrucken, Shadertoy, 2017)
+
+- [shadertoy.com/view/ltffzl](https://www.shadertoy.com/view/ltffzl). Source mirror: [heartfelt.glsl](https://github.com/sanxincao/shadertoy/blob/master/heartfelt.glsl).
+- **Licence: CC BY-NC-SA 3.0** (header of the file). **Non-commercial, so we
+  cannot ship this code** on a business site. Use the ideas only.
+- **How it works** ([source](https://github.com/sanxincao/shadertoy/blob/master/heartfelt.glsl)):
+  - It is purely procedural, with no simulation state.
+  - The screen is split into grid cells, one drop per cell, with hash noise
+    (`N13`, `N14`) for randomness.
+  - A smoothstep-shaped **sawtooth** in time (`Saw`) makes each drop hang,
+    then slide quickly, then reset. A sine wiggle makes it meander.
+  - A trail of small droplets is drawn above the drop (`trail *= trailFront`).
+  - Layers: `StaticDrops` (static drops that fade in and out) plus two
+    `DropLayer2`s at different scales, combined into `Drops()` with a "rain
+    amount".
+  - Normals come from **finite differences** of the drop field
+    (`n = vec2(cx − c.x, cy − c.x)`). The background is sampled at
+    `UV + n`.
+  - Blur is a mip-level lookup: `focus = mix(maxBlur − c.y, minBlur, S(.1,.2,c.x))`.
+    Fogged glass is blurred, and the drops and their cleared trails are sharp.
+- **Lesson for us.** The finite-difference normal and "sharp where wet,
+  blurred where fogged" are both worth reproducing. The cell-and-sawtooth
+  approach cannot do merging, growth or interaction, so it suits only the
+  background "static droplet" layer.
+
+### 1.4 Other web prior art
+
+- **rainyday.js** draws drops on 2D canvas with gravity and trail functions
+  ([demo page](https://mubaidr.github.io/rainyday.js/), [fork with licence](https://github.com/JavaScriptCodes/rainyday.js)).
+  The fork's LICENSE is **GNU GPL v2**
+  ([LICENSE](https://github.com/JavaScriptCodes/rainyday.js/blob/master/LICENSE)).
+  Do not copy it. (The original `maroslaw/rainyday.js` repo now returns 404.)
+- **"Rain drops on screen"** by eliemichel ([Shadertoy ldSBWW](https://www.shadertoy.com/view/ldSBWW)),
+  explained by greentec ([blog](https://greentec.github.io/rain-drops-en/)).
+  It generates drops on a grid and offsets the refraction by the normal, like
+  Heartfelt. Shadertoy code is CC BY-NC-SA unless stated otherwise, so ideas
+  only.
+- **Casey Primozic: rainy window pane in three.js** ([notes](https://cprimozic.net/notes/posts/building-realistic-rainy-window-pane-in-threejs/)).
+  It uses no simulation. Static roughness and normal maps feed a
+  `MeshPhysicalMaterial` with `transmission: 1`, `ior: 1.6` and
+  `thickness: 0.8`; the roughness blurs the backdrop. Textures are stated
+  **public domain**. Static only, but it shows how far a good normal map
+  alone goes.
+- **Codrops "Infinite Liquid Glass Grid" (three.js + WebGPU + TSL, 2026)**
+  ([article](https://tympanus.net/codrops/2026/09/08/building-an-infinite-liquid-glass-grid-with-three-js-webgpu-and-tsl/))
+  is a current TSL refraction reference if we ever move to WebGPU.
+
+### 1.5 Game-engine techniques (Unity / Unreal / consoles)
+
+- **Toadstorm, "VR Conservatory Part 1: Rainy Glass Shader" (Unity)**
+  ([blog](https://www.toadstorm.com/blog/?p=742)). It runs at VR rates from
+  two static textures and no simulation:
+  - **Drop texture.** RG is the normal, B is a per-drop random time offset
+    (voronoi), and A is a height-like gradient.
+  - **Alpha erosion.** `ceil(alpha − time)` makes each drop appear, which
+    animates impacts.
+  - **Refraction.** RG is remapped to −1..1, scaled by about 0.02 and added
+    to the grab-pass screen UV.
+  - **Rivulets.** A flow-map texture is read through **two time-staggered
+    sawtooth phases cross-faded by weight**, so the distortion never visibly
+    resets. B adds a horizontal Perlin zigzag and A varies the speed.
+  - **Tilt mask.** `dot(normal, up)` masks rivulets off horizontal glass.
+- **Sébastien Lagarde, "Water drop 2a: dynamic rain and its effects"**
+  (Remember Me, PS3/360) ([blog](https://seblagarde.wordpress.com/2012/12/27/water-drop-2a-dynamic-rain-and-its-effects/)):
+  - Glass droplets are an animated texture sampled twice with different
+    translation and scale, a distortion, and a low-resolution cubemap for
+    lighting.
+  - Measured costs: raindrop effect 1.69 ms on PS3, camera lens droplets
+    0.32 ms.
+  - The same series covers Fresnel and roughness for wet surfaces
+    ([Water drop 1](https://seblagarde.wordpress.com/2012/12/10/observe-rainy-world/)).
+- Unity and Unreal community practice is the same family: animated normal
+  maps plus flow maps ([Polycount thread](https://polycount.com/discussion/155940/animating-normal-maps-to-achieve-rain-drops-in-3ds-max-or-unity3d),
+  [UE forum](https://forums.unrealengine.com/t/movement-of-rain-drops-on-the-glass/427942)).
+  The good packaged versions are paid (Gumroad and itch), which is out of
+  scope.
+
+### 1.6 Papers
+
+- **Kaneda, Kagawa, Yamashita, "Animation of Water Droplets on a Glass Plate"**
+  (Computer Animation '93) ([project page](https://home.hiroshima-u.ac.jp/kin/publications/CA93/wdroplet.html),
+  [Springer](https://link.springer.com/chapter/10.1007/978-4-431-66911-1_17)):
+  - **The model.** The plate is a **discrete lattice**. A droplet moves only
+    above a **static critical mass**, and stops below a **dynamic critical
+    mass**. "Some amount of water remains behind the flow due to the nature
+    of wetting", so a running drop loses mass. The streams **meander**.
+  - **The rendering.** Fast rendering intersects rays with a projected
+    cuboid instead of tracing them.
+  - **Follow-up:** "Animation of water droplets moving down a surface"
+    ([Wiley 1999](https://onlinelibrary.wiley.com/doi/abs/10.1002/(SICI)1099-1778(199901/03)10:1%3C15::AID-VIS192%3E3.0.CO;2-P)).
+- **Wang, Mucha, Fedkiw et al., "Water Drops on Surfaces"** (SIGGRAPH 2005)
+  ([project](https://wanghmin.github.io/publication/wang-2005-wds/), [ACM](https://dl.acm.org/doi/10.1145/1073204.1073284)).
+  This is a full 3D level-set simulation. A **virtual surface** enforces the
+  contact angle, and a **dynamic contact angle** depends on the material,
+  wetting history and direction of motion. Far too heavy for us, but it is
+  the authority that **advancing and receding angles differ** and drive the
+  look.
+- **Sato, Dobashi, Yamamoto, "A Method for Real-Time Rendering of Water
+  Droplets Taking into Account Interactive Depth of Field Effects"** (2003)
+  ([Springer](https://link.springer.com/chapter/10.1007/978-0-387-35660-0_15)).
+  Drops are approximated as **hemispheres** and rendered with environment
+  mapping on graphics hardware.
+- **Takenaka, Mizukami, Tadamura, "A Fast Rendering Method for Water
+  Droplets on Glass Surfaces"** (ITC-CSCC 2008) ([PDF](https://www.ieice.org/publications/proceedings/bin/pdf_link.php?fname=p13_A1-4.pdf&iconf=ITC-CSCC&year=2008&vol=39&number=A1-4&lang=E)):
+  - Drops are hemispherical polygons sized by volume, moving as particles
+    on a grid-divided glass surface.
+  - Billboards are rendered to an FBO, with sphere-map reflections shared
+    per region. It reached 25 fps.
+  - **Merging is done by detecting contour contact and gradually moving the
+    centres together.** That is a cheap, good-looking merge we should copy.
+- "Real-time simulation: Water droplets on glass windows" (IEEE CiSE 2004)
+  ([ResearchGate](https://www.researchgate.net/publication/3422696_Real-time_simulation_Water_droplets_on_glass_windows)).
+  The page returned HTTP 429 and could not be read, so it is not summarised
+  here.
+
+---
+
+## 2. Physics of a drop on vertical or inclined glass
+
+### 2.1 Shape
+
+- **Below the capillary length, surface tension wins and a drop is a
+  spherical cap.** The capillary length is ℓc = √(γ/ρg), and the Bond number
+  is Bo = R²/ℓc² ([Wikipedia: Capillary length](https://en.wikipedia.org/wiki/Capillary_length)).
+- **For water ℓc ≈ 2.7 mm** ([Quéré, "Drops at rest on a tilted plane"](https://web.mit.edu/nnf/education/wettability/tilted%20plane.pdf)).
+  Lautrup's text rounds it to 3 mm, with γ = 72 mN/m ([Lautrup, ch. 5](https://cns.gatech.edu/~predrag/GTcourses/PHYS-4421-04/lautrup/7.7/surface.pdf)).
+- So window drops (1–5 mm) are spherical caps that gravity flattens a
+  little. Above about ℓc they become puddles.
+- **Contact angle on glass depends on cleanliness.** Clean soda-lime glass is
+  **< 20°**. Hydrophobically contaminated glass is **> 40–90°**
+  ([Infinita Lab](https://infinitalab.com/blog/hydrophobic-contamination-glass-testing/)).
+  Perfectly clean glass is near 0°, which is why water films rather than
+  beads on it ([Lautrup](https://cns.gatech.edu/~predrag/GTcourses/PHYS-4421-04/lautrup/7.7/surface.pdf)).
+- Real windows that bead rain are the dirty case. Quéré's experiments span
+  average angles of 52–110° ([Quéré](https://web.mit.edu/nnf/education/wettability/tilted%20plane.pdf)).
+  **Use θ ≈ 50–70° for "a window"** and lower it for a "clean" preset.
+
+### 2.2 Pinning and contact-angle hysteresis
+
+- A drop sticks to a vertical pane because the **advancing angle θa** (front)
+  is larger than the **receding angle θr** (back). That difference, the
+  hysteresis, comes from chemical and topographic heterogeneity
+  ([Biolin Scientific](https://www.biolinscientific.com/blog/what-is-contact-angle-hysteresis),
+  [Eral et al. review](https://www.utwente.nl/en/tnw/pcf/publications/pcf_2005/pdf-author-versions/Dieter.pdf)).
+- **Typical hysteresis on glass is about 19° ± 5°**
+  ([Quéré](https://web.mit.edu/nnf/education/wettability/tilted%20plane.pdf)).
+- **The retention force (Furmidge)** is `F = k · w · γ · (cos θr − cos θa)`,
+  where w is the contact width and **k ≈ 0.88** (range 0.5–1.5)
+  ([Li et al., "Kinetic drop friction", Nat. Commun. 2023](https://www.nature.com/articles/s41467-023-40289-8)).
+  The same balance appears in [Quéré](https://web.mit.edu/nnf/education/wettability/tilted%20plane.pdf)
+  as `πrγ(cos θr − cos θa) ≥ ρΩg sin α`.
+
+### 2.3 When a drop starts to slide on vertical glass
+
+- **Measured.** For water on vertical glass the critical volume is
+  **~7–19 µL**, depending on contact angle
+  ([Quéré](https://web.mit.edu/nnf/education/wettability/tilted%20plane.pdf)).
+  On a car side window at 90°, drops below **about 17 ± 1 µL do not slide
+  under gravity alone**
+  ([Emergent Scientist 2019, "Motion of rain drops on a car side window"](https://emergent-scientist.edp-open.org/articles/emsci/full_html/2019/01/emsci180004/emsci180004.html)).
+  "Drops of millimetre size … generally stick on windows"
+  ([Quéré](https://web.mit.edu/nnf/education/wettability/tilted%20plane.pdf)).
+- **(computed)** Set Furmidge (k = 1) equal to ρgV for a spherical cap:
+
+  | θa / θr  | contact radius | volume | height   |
+  |----------|----------------|--------|----------|
+  | 60° / 40° | 2.2 mm        | 8.7 µL | 1.0 mm   |
+  | 50° / 30° | 2.3 mm        | 7.7 µL | 0.85 mm  |
+  | 90° / 70° | 1.8 mm        | 8.8 µL | 1.5 mm   |
+
+  This agrees with the measured 7–19 µL. **Rule for the sim: a drop slides
+  when its contact diameter reaches about 4–5 mm (about 10–20 µL).** Smaller
+  drops only grow, by condensation, spray or merging.
+- **On an incline the threshold scales with sin α.** The critical radius goes
+  as `R_c ∝ ℓc · √(Δθ / sin α)` in the small-hysteresis limit (Quéré's
+  formula), and `sin α_s ∝ ℓc² Ω^(−2/3)`
+  ([Emergent Scientist](https://emergent-scientist.edp-open.org/articles/emsci/full_html/2019/01/emsci180004/emsci180004.html)).
+  For our vertical panes, sin α = 1.
+
+### 2.4 Sliding speed
+
+- **Kinetic friction** is `F(U) = F₀ + β·w·η·U`, where F₀ is the Furmidge
+  term and β is a dimensionless 20–200. Viscosity was tested from 10⁻³ to
+  1 Pa·s ([Li et al. 2023](https://www.nature.com/articles/s41467-023-40289-8)).
+  The terminal speed is therefore `U = (ρgV − F₀)/(β w η)`. Speed is
+  **inversely proportional to viscosity**. That one line covers water, blood
+  and slime.
+- **(computed)** Water, w = 4.5 mm, β = 100, a drop 20% over its threshold:
+  U ≈ 4 cm/s. A drop twice the threshold runs proportionally faster. Real
+  window drops move in **stick-slip**: they stop at contamination and jump
+  on (pinning heterogeneity, [Eral review](https://www.utwente.nl/en/tnw/pcf/publications/pcf_2005/pdf-author-versions/Dieter.pdf)).
+- **Shape at speed** ([Le Grand, Daerr, Limat, JFM 2005](https://labo.msc.u-paris.fr/~daerr/reprints/Le-Grand-et-al_Shape-of-drops_JFM2005.pdf)):
+  - The sequence is rounded, then a **corner** at the rear, then a **cusp**,
+    then **pearling**.
+  - The corner appears when the receding angle falls to about 21–26°. The
+    cusp appears at an in-plane opening angle of about 47°.
+  - The speed follows `Ca ≈ Bo_α − Bo_c`, so it is linear in the excess
+    gravity.
+
+### 2.5 Trails
+
+There are two mechanisms, and they should be rendered separately.
+
+1. **A wetting film and residue left behind.** Water remains behind the flow,
+   so a running drop loses mass ([Kaneda 1993](https://home.hiroshima-u.ac.jp/kin/publications/CA93/wdroplet.html)).
+   The trail is a thin wet streak that later beads into tiny droplets and
+   evaporates.
+2. **Pearling.** Past a critical capillary number Ca = ηU/γ, the cusped tail
+   emits a line of small drops ([Podgorski et al. 2001, via Sci. Rep. 2017](https://www.nature.com/articles/s41598-017-14662-9)).
+   For gravity-driven drops on glass, Ca_crit ≈ 0.007 (same source); that
+   experiment used silicone oil, not water.
+   **(computed)** For water, U ≈ Ca·γ/η ≈ 0.5 m/s, so pure pearling is rare
+   for slow window drops. The visible trail of droplets on a real window is
+   mostly mechanism 1 breaking up. Both Codrops and raindrop-fx simply spawn
+   trail drops every N px of travel, and it reads correctly.
+
+### 2.6 Merging and coalescence
+
+- When two contact lines touch, a liquid bridge forms and grows very
+  quickly; there are scaling laws for the bridge growth
+  ([Ryu et al., Micromachines 2023 review](https://www.mdpi.com/2072-666X/14/11/2046)).
+  On screen, it reads as near-instant: the centres pull together over a few
+  frames ([Takenaka et al. 2008](https://www.ieice.org/publications/proceedings/bin/pdf_link.php?fname=p13_A1-4.pdf&iconf=ITC-CSCC&year=2008&vol=39&number=A1-4&lang=E)).
+- **Volume is conserved, and so is momentum.** raindrop-fx merges mass and
+  momentum (`src/raindrop.ts`). Codrops keeps area with a 0.8 factor
+  ([raindrops.js](https://github.com/codrops/RainEffect/blob/master/src/raindrops.js)).
+- **A merge is the main way a stuck drop becomes a sliding one.** A running
+  drop sweeps up the drops in its path, grows and accelerates. That is the
+  avalanche look of a real window.
+
+---
+
+## 3. Optics of a drop
+
+### 3.1 A drop is a plano-convex lens
+
+- Water n = 1.333. A drop on glass is a plano-convex lens with its flat face
+  on the glass.
+- **Focal length.** Lensmaker with R_b = ∞ gives `f = R/(n−1) ≈ 3R`
+  ([AZoOptics](https://www.azooptics.com/Article.aspx?ArticleID=816),
+  [Wikipedia: Thin lens](https://en.wikipedia.org/wiki/Thin_lens)).
+  **(computed)** A cap with radius of curvature 2 mm has f ≈ 6 mm.
+- For comparison, a free sphere (a ball lens) has EFL = nD/(4(n−1)) ≈ 1.0·D
+  for water ([Wikipedia: Ball lens](https://en.wikipedia.org/wiki/Ball_lens)).
+- **Why the image is inverted.** A drop "acts as a simple lens, like a camera
+  lens, so the refracted image is upside-down"
+  ([EPOD, "Water Drops and Inverted Images"](https://epod.usra.edu/blog/2011/12/water-drops-and-inverted-images.html)).
+  Any object farther away than f ends up inverted. For a photograph sitting
+  a gap d behind the pane, the drop inverts it whenever **d > f**, which is
+  nearly always, since f is a few mm.
+- **(computed)** Thin-lens / thin-prism derivation, the single formula to
+  implement:
+  - A ray through the drop at distance r from its axis is deviated by r/f.
+    In general a thin film of slope ∇h deviates a ray by `(n−1)∇h`.
+  - Over the gap d, the point actually seen on the photo moves by
+    **`Δ = −(n−1)·d·∇h`**.
+  - For a cap, ∇h = −r/R, so the sample point is `c + (p−c)·(1 − d/f)`.
+  - The image is **inverted** when d > f, **minified** when 1 < d/f < 2,
+    and **magnified** when d/f > 2.
+  - This uses only causes: the pane's **gap** and the drop's own shape. That
+    fits the optics-engine rule "you set CAUSES, physics sets EFFECTS".
+
+### 3.2 Dark rim
+
+- Near the contact line the surface slope approaches the contact angle.
+  Refraction there is strong, so the rays come from far outside the drop, or
+  from the dim interior of the pane. Fresnel reflectance also climbs.
+- **Inside the drop, rays meeting the water-air surface beyond the critical
+  angle (asin(1/1.333) ≈ 48.6°, computed) are totally internally reflected.**
+  - Schlick's approximation `R = F0 + (1−F0)(1−cosθ)⁵`, with
+    **F0 ≈ 0.02 for water**, does not handle TIR on its own.
+  - The fix is to use cos θ_t when going from dense to less dense
+    ([Lagarde, "Memo on Fresnel equations"](https://seblagarde.wordpress.com/2013/04/29/memo-on-fresnel-equations/)).
+- The rim is darker because of the steep bending at the curved edges
+  ([EPOD](https://epod.usra.edu/blog/2011/12/water-drops-and-inverted-images.html)).
+- **Cheap version:** darken by a smoothstep on |∇h| as it approaches
+  tan(θ_contact), and add Schlick reflection of the HDR room there.
+
+### 3.3 Specular highlight and reflections
+
+- Each light source gives a small sharp highlight on the convex cap. With the
+  drop normal, Blinn-Phong is enough: raindrop-fx uses Lambert plus
+  Blinn-Phong (`compose.glsl`).
+- Reflect the room HDR with the reflected vector, weighted by Fresnel. Water
+  reflection rises steeply at grazing angles
+  ([Lagarde, "Water drop 1"](https://seblagarde.wordpress.com/2012/12/10/observe-rainy-world/)).
+- The cursor lamp should put one bright highlight per drop, offset toward the
+  lamp.
+
+### 3.4 Caustic and shadow on what is behind
+
+- A drop focuses the light that crosses it, so a drop's shadow has a **bright
+  focused core** (the caustic) inside a **dark ring**. The rim bends light
+  outward, out of the ring. This is the "Near-zone transmission caustic of a
+  hanging water drop" ([PubMed 32749276](https://pubmed.ncbi.nlm.nih.gov/32749276/)).
+  That page hit the fetcher's rate limit, so only its title is cited.
+- **The cheap, physically right method is the area ratio** (Evan Wallace):
+  - Project the surface along the refracted rays onto the receiver.
+  - Brightness = original area ÷ projected area: "an increase in the area …
+    must be dimmed … a decrease … focused and should be brighter".
+  - It is computed with `dFdx`/`dFdy` in the fragment shader
+    ([Wallace, "Rendering Realtime Caustics in WebGL"](https://medium.com/@evanwallace/rendering-realtime-caustics-in-webgl-2a99a29a0b2c)).
+- **(computed)** For our map `x → x + Δ(x)`, with Δ = (n−1)·d_L·∇h along the
+  lamp direction, the ratio is `1 / |det(I + (n−1)d_L·Hess(h))|`. To first
+  order that is `≈ 1 / |1 + (n−1)d_L∇²h|`. One Laplacian sample of the drop
+  height map per pixel gives both the caustic core (ratio > 1) and the dark
+  ring (ratio < 1).
+- **Softness** follows our existing shadow rule `penumbra = lightRadius · gap
+  / distance` (`effect-layer` notes).
+- GPU Gems ch. 2 shows that environment-map-style lookups along the normal
+  are visually close to true Snell refraction for caustics, at "very low
+  computational cost" ([GPU Gems, Rendering Water Caustics](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics)).
+
+---
+
+## 4. Other liquids: slime and blood
+
+| Property | Water | Blood | Slime (PVA-borax) |
+|---|---|---|---|
+| Viscosity | 1 mPa·s | **3–4 mPa·s**, shear-thinning (thicker at low shear) ([Wikipedia: Hemorheology](https://en.wikipedia.org/wiki/Hemorheology)) | **~3000–3500 cP** fully gelled, i.e. ~3 Pa·s; *shear-thickening*/rheopectic ([Hurst et al., J. Chem. Educ.](https://pendidikankimia.walisongo.ac.id/wp-content/uploads/2018/10/34-4.pdf)) |
+| Behaviour | Newtonian | Non-Newtonian, thins with flow ([Hemorheology](https://en.wikipedia.org/wiki/Hemorheology)) | Viscoelastic Maxwell fluid: "flows under low stress, but breaks under higher stresses" ([Wikipedia: Slime](https://en.wikipedia.org/wiki/Slime_(homemade_toy))) |
+| Refractive index | 1.333 | plasma 1.351 at 500 nm, whole blood ~1.36 ([Frontiers in Photonics 2025 review](https://www.frontiersin.org/journals/photonics/articles/10.3389/fphot.2025.1636398/full)) | ~water (mostly water); clear, tinted or glitter versions ([Slime](https://en.wikipedia.org/wiki/Slime_(homemade_toy))) |
+| Absorption | none to speak of | enormous in blue and green, small in red (below) | dye: choose σ_a per colour; often turbid |
+
+**Blood colour from Beer–Lambert.** μa = 0.0054·ε(λ) cm⁻¹ for whole blood
+with 150 g/L haemoglobin ([OMLC, Prahl](https://omlc.org/spectra/hemoglobin/)),
+with ε for HbO₂ from the [OMLC table](https://omlc.org/spectra/hemoglobin/summary.html).
+
+**(computed)** μa in mm⁻¹, then transmission through a 0.1 mm film and a
+1 mm drop:
+
+| λ | μa (mm⁻¹) | T at 0.1 mm | T at 1 mm |
+|---|---|---|---|
+| 450 nm | 34 | 3% | 0 |
+| 540 nm | 29 | 6% | 0 |
+| 600 nm | 1.7 | 84% | 18% |
+| 630 nm | 0.33 | 97% | 72% |
+| 650 nm | 0.20 | 98% | 82% |
+
+So a **thin smear is already saturated red**, and a 1 mm drop is **dark
+red-black in the middle** with a lighter red rim, where the path is short.
+This is exactly `exp(−σ_rgb · thickness)` with the drop height map as
+thickness. A starting point is σ ≈ (0.5, 29, 34) mm⁻¹ for RGB.
+
+Blood is also strongly forward-scattering (g close to 1, μs′ ≈ 13 cm⁻¹)
+([Frontiers 2025](https://www.frontiersin.org/journals/photonics/articles/10.3389/fphot.2025.1636398/full)).
+Add a slight blur to the refracted lookup and keep the specular highlight
+crisp.
+
+**Motion follows from the friction law** `U = (ρgV − F₀)/(βwη)`
+([Li et al. 2023](https://www.nature.com/articles/s41467-023-40289-8)):
+
+- **Blood** runs about **3–4× slower** than water for the same excess weight.
+  It leaves **thicker films**, and its trails are more continuous. Pearling
+  (Ca = ηU/γ) still needs about the same Ca, so at lower speed it is still
+  rare.
+- **Slime** is about 3000× more viscous. It **sags and stretches** rather than
+  sliding, and its streaks are continuous ribbons, never pearls.
+  - It is shear-thickening ([Hurst](https://pendidikankimia.walisongo.ac.id/wp-content/uploads/2018/10/34-4.pdf)),
+    so a spray impact makes it stiffen and splat in a blob; it does not
+    splash.
+  - Model it with a high η, a large F₀ (high hysteresis), a low evaporation
+    rate, and a "stretch" spread that keeps it connected to its origin.
+  - Optics: tinted absorption plus a scatter blur (turbid), with n ≈ 1.34.
+
+---
+
+## 5. Water surfaces for the web (later)
+
+- **Evan Wallace, WebGL Water (2011), MIT** ([demo](https://madebyevan.com/webgl-water/),
+  [repo](https://github.com/evanw/webgl-water), licence in the header of
+  [water.js](https://github.com/evanw/webgl-water/blob/master/water.js)).
+  - It is a heightfield wave equation on a **256×256 float texture**, storing
+    (height, velocity, normal.x, normal.z).
+  - Drops are added as cosine bumps. It renders analytic ray-traced
+    refraction and reflection.
+  - **Caustics come from the area-ratio trick** (§3.4).
+  - Ports exist for three.js ([code4fukui/threejs-water](https://github.com/code4fukui/threejs-water)),
+    PlayCanvas and WebGPU ([willeastcott](https://github.com/willeastcott/webgpu-water-playcanvas)),
+    and WebGPU ([jeantimex](https://github.com/jeantimex/webgpu-water)).
+- **Martin Renou, three.js caustics, BSD-3** ([repo](https://github.com/martinRenou/threejs-caustics),
+  [write-up](https://medium.com/@martinRenou/real-time-rendering-of-water-caustics-59cda1d74aa)).
+  It applies Wallace's method with environment mapping in three.js.
+- **Hugo Elias ripples** ([explainer](https://www.ixm-ibrahim.com/explanations/simulating-water-ripples)).
+  The update is `next = (flow + current − previous) · damping`, over
+  ping-ponged buffers, with damping between 0 and 1. It is the cheapest interactive "touch the
+  water" surface. Refract with the height gradient exactly as for drops.
+- **Gerstner and sum-of-sines** ([GPU Gems ch. 1](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models)).
+  It is analytic, so its normals cost nothing, and a steepness Q sharpens the
+  crests. Good for a calm pond or tray with no interaction.
+- **FFT ocean** (Tessendorf, [Simulating Ocean Water](https://jtessen.people.clemson.edu/reports/papers_files/coursenotes2004.pdf)).
+  WebGPU implementation, MIT: [Spiri0/Threejs-WebGPU-IFFT-Ocean](https://github.com/Spiri0/Threejs-WebGPU-IFFT-Ocean)
+  (JONSWAP, cascades). Overkill for a photography site, unless there is a
+  seascape hero.
+- **What to choose.** For "a shallow water layer over a photograph", use
+  Elias or Wallace, i.e. a heightfield with refraction and area-ratio
+  caustics. It shares 90% of the drop code path below.
+
+---
+
+## 6. Recommended architecture for onysnow-vision
+
+It slots in as the **"water" surface layer**, step 10 of the optics-engine
+migration (`claude/optics-engine-design.md`). There, each layer is "read as
+height (bend/caustics), roughness (spread), absorption (dim/colour)". The drop
+system's only output is a dynamic height/absorption texture per pane. The
+glass, shadow and caustic passes read it the same way they will read any
+other layer.
+
+### 6.1 Simulation: CPU, in the engine scheduler
+
+- **Data.** A struct-of-arrays in `Float32Array`s (x, y, volume, vx, vy,
+  spread, liquidId, pinTimer, parent). Panes have small areas, so a cap of
+  about 400 "big" drops per page is plenty. raindrop-fx does 600 drops in
+  2–3 ms including render on desktop ([README](https://github.com/SardineFish/raindrop-fx)).
+- **Units.** Real millimetres. Convert CSS px to mm with one "pane scale"
+  constant, so that the thresholds in §2 apply directly.
+- **Each drop's state comes from volume V and the liquid's (θ, Δθ, γ, η, ρ).**
+  - The spherical-cap contact radius a(V, θ) and cap height follow from the
+    shape (§2.1).
+  - It **slides when** `ρgV > k·2a·γ·(cos θr − cos θa)`, the Furmidge
+    condition (§2.2).
+  - Its speed is `U = (ρgV − F₀)/(β·2a·η)`, relaxed toward over about
+    100 ms (§2.4).
+- **Pinning field.** A coarse noise grid per pane (about 32×32) multiplies θr
+  and θa. It gives stick-slip, meandering, and the reason two drops of the
+  same size behave differently.
+  - The meander is the lateral gradient of that field, as in raindrop-fx's
+    random `shifting` but spatially coherent.
+  - Kaneda's lattice and critical masses ([1993](https://home.hiroshima-u.ac.jp/kin/publications/CA93/wdroplet.html))
+    are a good mental model.
+- **Trails.** A moving drop deposits:
+  - **(a)** wetness into a coarse "film" grid; this is our design choice,
+    after Kaneda's "water remains behind". Later drops are pinned less where
+    the film is wet, so they follow old tracks.
+  - **(b)** a trail droplet every 20–30 px (raindrop-fx defaults), at
+    0.3–0.5× its size, subtracting that volume. The film then evaporates.
+- **Merge.** Use a uniform hash grid with neighbour cells, as raindrop-fx
+  does. When contact circles overlap: volume sum, momentum-weighted velocity,
+  and centres eased together over 3–6 frames (Takenaka et al.). Skip
+  parent/child pairs, as raindrop-fx does.
+- **Sources.**
+  - Condensation: slow growth of everything.
+  - Rain: random spawns with a log-normal size.
+  - **The spray tool:** a cone of N droplets per frame from the cursor, sizes
+    0.1–1.5 mm, the liquid chosen by the tool. On impact it adds volume to an
+    existing drop or spawns a new one. Slime spawns fewer, larger blobs.
+- **Idle.** Once no drop is moving and nothing is spawning, stop the sim
+  task. Only evaporation ticks remain, and these can run at 4 Hz through the
+  one scheduler.
+
+### 6.2 Rendering the drop map (WebGL1-compatible)
+
+- **Size.** One RGBA8 render target per pane region (or per section), at
+  **½ the CSS resolution**. Height is smooth, so ½ is enough. Clear it and
+  redraw it every frame the sim moves.
+- **Channels:**
+  - **R = height.** Each drop is a quad with a spherical-cap profile
+    `h(r) = √(R²−r²) − (R−h₀)`, drawn with **additive blending**. Overlapping
+    drops sum, so a smoothstep threshold in the compose pass makes merging
+    drops neck together like metaballs. raindrop-fx uses
+    `smoothstep(0.96, 0.99, a)` for the same effect.
+  - **G = film/trail wetness**, a thin height.
+  - **B = liquid id** for colour/absorption lookups, written by max blend.
+  - **A = coverage.**
+- **Draw path.** Use `ANGLE_instanced_arrays` where present; otherwise one
+  dynamic vertex buffer of quads. 400 quads are trivial either way.
+  - Scale height so 8 bits are enough (drops are under 1.5 mm tall, §2.3).
+  - Use `OES_texture_half_float` plus a renderable half-float format when
+    available.
+- **Static droplets** (the tiny ones that never move) go to a separate,
+  persistent droplet texture: an accumulate-and-erase pass. Moving drops wipe
+  it, as in raindrop-fx's `erase.glsl` and Codrops' `destination-out`. We
+  write our own procedural version rather than Heartfelt's, because of its
+  licence.
+
+### 6.3 Shading, inside our existing passes
+
+- **Normal and lens.** `∇h` comes from central differences on R, as in
+  Heartfelt. The photo lookup offset is **`Δ = −(n−1)·gap·∇h`** (§3.1). It
+  needs no tuning knob, and it produces the inverted, minified image by
+  itself. For steep slopes, use full `refract()` with the 3D normal.
+- **Blur.** Fogged glass is blurred and drops are sharp, so take the mip/LOD
+  from coverage (Heartfelt's focus mix). This matches our frost layer: wet
+  areas clear the frost.
+- **Fresnel and reflection.** Schlick with F0 = 0.02 and the TIR fix
+  (Lagarde) reflects the HDR room through the reflected vector. Add
+  Blinn-Phong highlights from the light registry (the cursor lamp). Darken
+  the rim with a smoothstep on |∇h| (§3.2).
+- **Liquid colour.** Multiply by `exp(−σ_rgb[liquid] · thickness)`, with
+  thickness ≈ h/cos θ_view, plus a liquid-specific scatter blur (§4).
+- **Caustic and shadow behind.** In the existing **plus-lighter caustic
+  canvas** and the **multiply shadow canvas**, sample the drop map shifted by
+  the lamp's lateral offset (our `gap·lateral/height` rule). Compute
+  `ratio = 1/|1 + (n−1)·gap·∇²h|`:
+  - where ratio > 1, add `(ratio−1)` to the caustics canvas;
+  - where ratio < 1, multiply by `ratio` in the shadow canvas;
+  - blur both by the penumbra.
+
+  This is the area-ratio method of Wallace and Renou, reduced to one
+  Laplacian sample (§3.4). It fits the "plus-lighter can only add" split
+  already documented in `effect-layer`.
+- **CSS/SVG fallback** (Safari/Firefox, no WebGL refraction): draw the drop
+  map's highlights and rim only, so drops still read as drops without moving
+  pixels.
+
+### 6.4 Budgets (proposed, measure with `?perf=1`)
+
+| Item | Desktop | Mobile |
+|---|---|---|
+| Sim (≤400 drops, hash grid) | ≤ 0.5 ms CPU | ≤ 1 ms |
+| Drop-map draw at ½ res | ≤ 0.3 ms GPU | ≤ 0.6 ms |
+| Extra in glass compose (5 taps + 1 env + LOD) | ≤ 0.4 ms | ≤ 0.8 ms |
+| Caustic + shadow taps | ≤ 0.3 ms | ≤ 0.5 ms |
+| **Total, while drops move** | **≤ 1.5 ms** | **≤ 3 ms** |
+| Idle (nothing moving) | ~0 (the cached map is reused) | ~0 |
+
+Reference points: raindrop-fx does 2000 drops in ~6 ms on mobile
+([README](https://github.com/SardineFish/raindrop-fx)); Remember Me's full
+raindrop effect cost 1.69 ms on PS3
+([Lagarde](https://seblagarde.wordpress.com/2012/12/27/water-drop-2a-dynamic-rain-and-its-effects/)).
+
+### 6.5 What to borrow from which source
+
+| From | Take | Licence |
+|---|---|---|
+| raindrop-fx | sim structure (mass, trail split, momentum merge, hash grid); erase-droplets pass; smoothstep metaball edge | MIT: can port code |
+| Codrops RainEffect | trail spawning and 3% shrink; big drops clearing small; separate un-tracked droplet layer | Codrops licence: ideas, or use with attribution; avoid "as-is" |
+| Heartfelt | finite-difference normal; "sharp where wet, blurred where fogged"; static-drop fade cycle | CC BY-NC-SA: **ideas only** |
+| Toadstorm | dual-phase flow-map trick, if we ever want texture-only rivulets | blog technique |
+| Evan Wallace / Renou | area-ratio caustics; heightfield water for §5 | MIT / BSD-3 |
+| Quéré, Furmidge, Li et al. | slide threshold, speed law, viscosity scaling | physics |
+| OMLC | blood σ_a per channel | data |
+
+### 6.6 Suggested order
+
+1. Drop map with static drops, plus the refraction formula. Check the
+   inverted image against a photo of a real drop on one of Ony's panes.
+2. Sim: growth, the Furmidge slide, speed, merge, trails.
+3. Highlights, rim and Fresnel reflection.
+4. Caustic and shadow through the existing two canvases.
+5. Spray tool and the liquids table (water, blood, slime).
+6. Water surface (Elias/Wallace heightfield) reusing steps 1, 3 and 4.

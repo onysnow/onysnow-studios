@@ -65,3 +65,13 @@ Held, the black light turns the room off and lights the page with UV
 5. **The orange buttons** blaze orange, with a wide glow ("UV: orange
    buttons", the existing knob).
 6. **Dust on the glass** glows blue-white as before (glass shader).
+
+## Superseded by the research (2026-10-01)
+
+The neon-colour mapping above was wrong for a print. The full research is in
+docs/research/uv-blacklight.md (48 sources). A photograph under UV is a
+print on brightened paper: the paper glows, the inks block it (magenta and
+black most, then yellow, cyan least), so whites glow pale blue, skies keep a
+pale-blue glow, saturated reds and magentas go dark; plus the lamp's violet
+it reflects in proportion to its blue; the glow clips to a pale core and
+blooms in its halo blue. Neon inks are now an artistic option, off by default.
