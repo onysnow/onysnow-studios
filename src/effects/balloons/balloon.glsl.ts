@@ -66,6 +66,9 @@ uniform int uLightCount;
 uniform vec3 uLightPos[${MAX_BALLOON_LIGHTS}];
 uniform vec3 uLightColour[${MAX_BALLOON_LIGHTS}];
 uniform float uLightUv[${MAX_BALLOON_LIGHTS}];
+uniform vec4 uLightVia[${MAX_BALLOON_LIGHTS}];   // a mirrored light: the pane it shines through, page px
+uniform float uLightViaZ[${MAX_BALLOON_LIGHTS}]; // and its face's height (-1: a direct light)
+uniform float uR0;                               // glass's reflectance straight on
 uniform sampler2D uRoomTex;
 uniform float uHasRoom;
 uniform float uRoomExposure;
@@ -123,18 +126,33 @@ void main() {
     vec3 toL = uLightPos[i] - P;
     float dist = length(toL);
     vec3 L = toL / max(dist, 1.0);
+    /*
+     * A light's image in the glass (effects/light/image-sources): it reaches
+     * this point only through its pane -- where the ray to it crosses the
+     * face inside the pane -- and only at the face's reflectance there.
+     */
+    float mirror = 1.0;
+    if (uLightViaZ[i] > -0.5) {
+      float s = (uLightViaZ[i] - uLightPos[i].z) / (P.z - uLightPos[i].z);
+      vec2 hit = uLightPos[i].xy + (P.xy - uLightPos[i].xy) * s;
+      vec4 via = uLightVia[i];
+      float inPane = step(via.x, hit.x) * step(hit.x, via.x + via.z) * step(via.y, hit.y) * step(hit.y, via.y + via.w);
+      float cosI = clamp(-L.z, 0.0, 1.0);
+      mirror = inPane * (uR0 + (1.0 - uR0) * pow(1.0 - cosI, 5.0));
+      if (mirror <= 0.0) continue;
+    }
     // Falls off with distance against the lamp's height (the floor's own normalisation).
     float fall = clamp(300.0 * 300.0 / max(dist * dist, 1.0), 0.0, 4.0);
     float nl = dot(N, L);
     vec3 H = normalize(L + V);
     float nh = max(dot(N, H), 0.0);
     float fl = F0 + (1.0 - F0) * pow(1.0 - max(dot(H, V), 0.0), 5.0);
-    spec += uLightColour[i] * pow(nh, 180.0) * fl * 30.0 * fall;
+    spec += uLightColour[i] * pow(nh, 180.0) * fl * 30.0 * fall * mirror;
     // Wrapped diffuse for opaque latex.
     float wrap = max((nl + 0.3) / 1.3, 0.0);
-    colour += uLightColour[i] * wrap * fall * (1.0 - uLightUv[i]);
+    colour += uLightColour[i] * wrap * fall * (1.0 - uLightUv[i]) * mirror;
     // Neon dye under UV: more where the wall is thicker.
-    glow += uLightColour[i] * uLightUv[i] * fall * clamp(thick / 3.0, 0.5, 2.0);
+    glow += uLightColour[i] * uLightUv[i] * fall * clamp(thick / 3.0, 0.5, 2.0) * mirror;
   }
 
   // The room the latex reflects.

@@ -2,7 +2,9 @@ import { useEffect } from "react";
 import { previewing } from "@/effects/engine/preview";
 import { addTask, ORDER } from "@/effects/engine/scheduler";
 import { beginPass, buildProgram, endPass, sharedGl } from "@/effects/engine/gl";
-import { pointLights, pointer, roomLight } from "@/effects/light/lights";
+import { pointLights, pointer, roomLight, type Light } from "@/effects/light/lights";
+import { imageLights, R0 } from "@/effects/light/image-sources";
+import { glassGeometry } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
 import { t } from "@/lib/tuning";
 import { balloonPhysics, drag, type BalloonPhysics } from "@/effects/balloons/air";
@@ -108,6 +110,9 @@ export function Balloons() {
         lightPos: U("uLightPos"),
         lightColour: U("uLightColour"),
         lightUv: U("uLightUv"),
+        lightVia: U("uLightVia"),
+        lightViaZ: U("uLightViaZ"),
+        r0: U("uR0"),
         roomTex: U("uRoomTex"),
         hasRoom: U("uHasRoom"),
         roomExposure: U("uRoomExposure"),
@@ -360,6 +365,9 @@ export function Balloons() {
       const lightPos = new Float32Array(MAX_BALLOON_LIGHTS * 3);
       const lightColour = new Float32Array(MAX_BALLOON_LIGHTS * 3);
       const lightUv = new Float32Array(MAX_BALLOON_LIGHTS);
+      // A mirrored light shines only through its pane: the pane, page px, and its face's height (-1: a direct light).
+      const lightVia = new Float32Array(MAX_BALLOON_LIGHTS * 4);
+      const lightViaZ = new Float32Array(MAX_BALLOON_LIGHTS);
       const DT = 1 / 60;
 
       const task = addTask("balloons", ORDER.scene, (now, dtMs) => {
@@ -534,18 +542,49 @@ export function Balloons() {
           gl.uniform2f(u.viewport, W, H);
           gl.uniform1f(u.pixel, k);
           let n = 0;
+          const direct: Light[] = [];
           for (const l of pointLights()) {
             if (n >= MAX_BALLOON_LIGHTS || l.below || l.charge <= 0.002) continue;
+            direct.push(l);
             lightPos.set([l.x, l.y, Math.max(l.height, FLOAT_HEIGHT + 60)], n * 3);
             const k = l.charge * Math.min(l.gain / 8, 2);
             lightColour.set([l.colour[0] * k, l.colour[1] * k, l.colour[2] * k], n * 3);
             lightUv[n] = l.uv;
+            lightVia.set([0, 0, 0, 0], n * 4);
+            lightViaZ[n] = -1;
+            n++;
+          }
+          /*
+           * And their reflections in the glass behind (effects/light/image-sources,
+           * the light catalogue's specular bounce): each pane's face mirrors the
+           * lamp onto the balloons in front of it, from below and behind -- the
+           * faint second highlight and the lift on the underside a balloon gets
+           * in front of a window. Strongest first, while there are slots.
+           */
+          const mirrors = glassGeometry()
+            .filter((g) => g.w > 40 && g.h > 40 && g.y < H && g.y + g.h > 0)
+            .map((g) => ({ x: g.x, y: g.y, w: g.w, h: g.h, z: g.causes.gap + g.causes.thickness }));
+          const images = imageLights(direct, mirrors).sort(
+            (a, b) => b.via.w * b.via.h - a.via.w * a.via.h,
+          );
+          for (const im of images) {
+            if (n >= MAX_BALLOON_LIGHTS) break;
+            const l = im.source;
+            lightPos.set([im.x, im.y, im.z], n * 3);
+            const k = l.charge * Math.min(l.gain / 8, 2);
+            lightColour.set([l.colour[0] * k, l.colour[1] * k, l.colour[2] * k], n * 3);
+            lightUv[n] = l.uv;
+            lightVia.set([im.via.x, im.via.y, im.via.w, im.via.h], n * 4);
+            lightViaZ[n] = im.via.z;
             n++;
           }
           gl.uniform1i(u.lightCount, n);
           gl.uniform3fv(u.lightPos, lightPos);
           gl.uniform3fv(u.lightColour, lightColour);
           gl.uniform1fv(u.lightUv, lightUv);
+          gl.uniform4fv(u.lightVia, lightVia);
+          gl.uniform1fv(u.lightViaZ, lightViaZ);
+          gl.uniform1f(u.r0, R0);
           gl.activeTexture(gl.TEXTURE3);
           gl.bindTexture(gl.TEXTURE_2D, room);
           gl.uniform1i(u.roomTex, 3);

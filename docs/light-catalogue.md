@@ -54,7 +54,7 @@ Updated 2026-09-30 with what the light engine steps E–I and item 32 have built
 | Caustics (focused light)           | Jacobian of the ray map; photon splatting for solids | Now (edge band, waviness, glass solids)                  |
 | Multiple reflections between panes | adding equations, 1/(1−RR)                           | Now (stacks)                                             |
 | Ghost and double images            | offsets 2g·tanθ, 2t·tanθt                            | Now (stacks)                                             |
-| Specular bounce                    | image-source lights                                  | Plan (nothing above the panes to light on this page yet) |
+| Specular bounce                    | image-source lights                                  | Now: balloons (`effects/light/image-sources`; Fresnel R0 4.3%, through its pane only) |
 | Diffuse bounce                     | one bounce patch per light                           | Preview `?try=bounce`                                    |
 
 ### 3.5 Wave effects
