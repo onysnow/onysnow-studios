@@ -43,10 +43,15 @@ export function useAdminStatus() {
   });
 }
 
+/** Fired when an edit has been saved (the lab reloads its preview). */
+export const CONTENT_CHANGED = "onysnow:content-changed";
+
 /** Refresh every admin table and the matching public-site query. */
 export function useContentRefresh() {
   const qc = useQueryClient();
   return useCallback(() => {
     for (const key of CONTENT_KEYS) void qc.invalidateQueries({ queryKey: key });
+    // The effect lab's preview shows the site live: tell it the content changed.
+    if (typeof window !== "undefined") window.dispatchEvent(new Event(CONTENT_CHANGED));
   }, [qc]);
 }

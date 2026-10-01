@@ -178,6 +178,8 @@ export function GlassLight({
     const uPlasticRadius = U("uPlasticRadius");
     const uPlasticCount = U("uPlasticCount");
     const uOilGlow = U("uOilGlow");
+    const uPipedGain = U("uPipedGain");
+    const uPipedReach = U("uPipedReach");
     const uDustGlow = U("uDustGlow");
     // Item 18b: the plastic lit here, not by CSS (html[data-try~="shaderplastic"] in styles.css).
     const shaderPlastic = previewing("shaderplastic");
@@ -305,10 +307,14 @@ export function GlassLight({
      */
     let room: WebGLTexture | null = null;
     let roomRequested = false;
+    let roomFor: string | null = null;
     const requestRoom = () => {
-      if (roomRequested) return;
+      // Another room chosen in the lab ("Room reflected"): load it in place of this one.
+      const want = document.documentElement.getAttribute("data-room-hdr");
+      if (roomRequested && want === roomFor) return;
       roomRequested = true;
-      const src = document.documentElement.getAttribute("data-room-hdr");
+      roomFor = want;
+      const src = want;
       if (!src) return;
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -328,8 +334,10 @@ export function GlassLight({
           rgb[j + 1] = rgba[i + 1]!;
           rgb[j + 2] = rgba[i + 2]!;
         }
+        if (roomFor !== src) return; // a newer choice is on its way
         const tex = gl.createTexture();
         if (!tex) return;
+        if (room) gl.deleteTexture(room);
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -649,6 +657,8 @@ export function GlassLight({
         return [f.colour[0] * f.yield, f.colour[1] * f.yield, f.colour[2] * f.yield] as const;
       };
       gl.uniform3fv(uOilGlow, glow("grime-oil"));
+      gl.uniform1f(uPipedGain, t("pipedLight"));
+      gl.uniform1f(uPipedReach, Math.max(t("pipedReach"), 1));
       gl.uniform3fv(uDustGlow, glow("grime-dust"));
       gl.uniform1f(uBurn, previewing("burn") ? 1 : 0);
       gl.uniform1f(uRoomKnee, previewing("dimroom") ? ROOM_KNEE : 0);
@@ -657,7 +667,7 @@ export function GlassLight({
        * the switch turns off only the face's own image of the lamp, which is
        * off by request (it reads as a flashlight; see LAMP_REFLECTION_ENABLED).
        */
-      gl.uniform1f(uFaceLamp, LAMP_REFLECTION_ENABLED ? 1 : 0);
+      gl.uniform1f(uFaceLamp, LAMP_REFLECTION_ENABLED || t("lampMirror") >= 1 ? 1 : 0);
       requestRoom();
       gl.uniform1f(
         uCameraDistance,

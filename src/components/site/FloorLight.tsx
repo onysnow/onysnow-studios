@@ -1,7 +1,9 @@
 import { passScaleCap } from "@/effects/engine/quality";
 import { roughRow } from "@/effects/optics/rough-transmission";
 import { unscattered } from "@/effects/optics/scatter";
+import { slab } from "@/effects/optics/stack";
 import { previewing } from "@/effects/engine/preview";
+import { CASTER_NEAR_STANDOFF, casterList, paintCasters } from "@/effects/optics/casters";
 import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
@@ -67,6 +69,12 @@ export function FloorLight() {
     if (!program) return;
     gl.useProgram(program);
     const quad = fullScreenTriangle(gl, program);
+    /*
+     * The shadows of what stands on the glass are worked out here (item 52):
+     * the stylesheet's own drop-shadows stand down while this runs, and come
+     * back wherever it does not (phones, reduced motion, no WebGL).
+     */
+    document.documentElement.setAttribute("data-cast-shadows", "");
 
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
@@ -134,8 +142,21 @@ export function FloorLight() {
     const frosts = new Float32Array(MAX_FLOOR_PANES);
     // What a stack lets through relative to its bottom layer (1 for a pane on its own).
     const throughs = new Float32Array(MAX_FLOOR_PANES * 3);
-    const edgeOnly = new Float32Array(MAX_FLOOR_PANES);
-    const uEdgeOnly = U("uEdgeOnly");
+    /*
+     * The casters (item 52): everything standing in the
+     * lamp's light, painted in its own shape, for the floor to work out the
+     * shadows on the photographs from (effects/optics/casters).
+     */
+    gl.uniform1i(U("uCasters"), 3);
+    const uHasCasters = U("uHasCasters");
+    const uCasterNear = U("uCasterNear");
+    const uCasterOnGlass = U("uCasterOnGlass");
+    const uCasterFace = U("uCasterFace");
+    const uCasterPrint = U("uCasterPrint");
+    const uCasterPrintFace = U("uCasterPrintFace");
+    const uCasterStrength = U("uCasterStrength");
+    const casterCanvas = document.createElement("canvas");
+    const casterTex = gl.createTexture();
     const marks = new Float32Array(MAX_FLOOR_PANES * 2);
     const uMarks = U("uMarks");
     const uMarksProportional = U("uMarksProportional");
@@ -241,26 +262,52 @@ export function FloorLight() {
       const throwing = glassGeometry(now).filter(
         (pane) => !(pane.y + pane.h < -200 || pane.y > vh + 200) && !(pane.w < 120 || pane.h < 40),
       );
-      const stackEdges = previewing("stackedges");
       /*
-       * Bottom layers take the slots first (each carries its stack's light);
-       * the upper layers' edges, a detail on top, take what is left.
+       * Highest first: seen from above, the eye meets an upper layer's bevel
+       * before the one under it (the floor's bend takes them in this order).
+       * Panes on their own all stand at their gap, and keep their order.
        */
-      if (stackEdges) {
-        throwing.sort((a, b) => (a.stack.index > 0 ? 1 : 0) - (b.stack.index > 0 ? 1 : 0));
+      const heightOf = (pane: (typeof throwing)[number]) =>
+        Number.isFinite(pane.stack.zBottom) ? pane.stack.zBottom : pane.causes.gap;
+      /*
+       * More panes in view than the pass has slots for (Lab samples has a
+       * dozen): the ones nearest the lights take them -- a pane far from
+       * every light throws nothing anyone can see. Then highest first.
+       */
+      if (throwing.length > MAX_FLOOR_PANES) {
+        const lights = pointLights().filter((l) => l.charge > 0.002);
+        const farness = (pane: (typeof throwing)[number]) => {
+          let best = Infinity;
+          for (const l of lights) {
+            const dx = Math.max(pane.x - l.x, 0, l.x - (pane.x + pane.w));
+            const dy = Math.max(pane.y - l.y, 0, l.y - (pane.y + pane.h));
+            best = Math.min(best, Math.hypot(dx, dy));
+          }
+          return best;
+        };
+        const kept = new Set(
+          [...throwing].sort((a, b) => farness(a) - farness(b)).slice(0, MAX_FLOOR_PANES),
+        );
+        for (let i = throwing.length - 1; i >= 0; i--) {
+          if (!kept.has(throwing[i]!)) throwing.splice(i, 1);
+        }
       }
+      throwing.sort((a, b) => heightOf(b) - heightOf(a));
       for (const pane of throwing) {
         if (n >= MAX_FLOOR_PANES) break;
         /*
-         * A stack's light is counted once: by its bottom layer, carrying the
-         * whole stack (uThrough). The layers above it add only their edges
-         * (below), and each shows the floor under it in its own layer -- the light
-         * that has come through the WHOLE stack -- and the layer below it
-         * leaves the part it covers to it (2a, Ony 2026-09-30: a pane under
-         * another sees only what came through the one above). Left to the
-         * lower layer, the upper pane's frost blurred a layer inside another
-         * pane that redraws every frame, and it came out as a hard rectangle
-         * in the overlap.
+         * Every layer of a stack filters the light on its own, at its own
+         * height (Ony, 2026-10-01: light through one pane and then another is
+         * changed by both, "in a different way since the two glass pane are
+         * not stacked on top of each other evenly and so only part of the
+         * light that exits the first pane will enter the second pane and the
+         * rest will hit the floor"). The floor follows each ray up to the
+         * lamp and every pane it crosses -- at that pane's height, so at its
+         * own point -- does to it what that pane does: its frost, its edges,
+         * its marks, its own transmission (uThrough). Under the overlap the
+         * light has crossed both; under an overhang, one. Each layer still
+         * shows the floor under it in its own layer, and the layer below
+         * leaves the part it covers to the one above (2a, 8ed097c).
          */
         const over = pane.stack.aboveRect;
         const overlap = over
@@ -271,32 +318,10 @@ export function FloorLight() {
               h: Math.min(pane.y + pane.h, over.y + over.h) - Math.max(pane.y, over.y),
             }
           : null;
-        /*
-         * An upper layer still has edges, and they still bend the light that
-         * crosses them: the dark rim under its bevel and the bright seam
-         * inside it -- the shadow of its edge on the floor -- and the bend
-         * of the floor seen through it. Those it adds (uEdgeOnly); what it
-         * lets through is in the bottom layer's uThrough already. (Ony,
-         * 2026-10-01: the shadow at the upper pane's left corner had gone
-         * with 8ed097c, which left upper layers out of the floor entirely.)
-         */
-        const upper = pane.stack.index > 0;
-        if (upper && !stackEdges) {
-          drawnPanes.push({
-            el: pane.el,
-            x: pane.x,
-            y: pane.y,
-            w: pane.w,
-            h: pane.h,
-            over: overlap,
-          });
-          continue;
-        }
-        edgeOnly[n] = upper ? 1 : 0;
         rects.set([pane.x, pane.y, pane.w, pane.h], n * 4);
         seeds[n] = pane.s;
         edges[n] = pane.e;
-        gaps[n] = pane.causes.gap;
+        gaps[n] = heightOf(pane);
         iors[n] = pane.causes.material.ior;
         frosts[n] = pane.causes.material.frost;
         const sigma = pane.causes.material.scatter;
@@ -306,7 +331,8 @@ export function FloorLight() {
           roughRatios.set(row.ratio, n * 4);
           roughSpreads.set(row.spread, n * 4);
         }
-        throughs.set(upper ? [1, 1, 1] : pane.stack.throughScale, n * 3);
+        // Its own transmission straight on (Fresnel at both faces and absorption: effects/optics/stack).
+        throughs.set(slab(pane.causes.material, pane.causes.thickness).T, n * 3);
         marks[n * 2] = pane.causes.scratch;
         marks[n * 2 + 1] = pane.causes.smudge;
         drawnPanes.push({ el: pane.el, x: pane.x, y: pane.y, w: pane.w, h: pane.h, over: overlap });
@@ -366,7 +392,29 @@ export function FloorLight() {
       gl.uniform4fv(uRoughRatio, roughRatios);
       gl.uniform4fv(uRoughSpread, roughSpreads);
       gl.uniform3fv(uThrough, throughs);
-      gl.uniform1fv(uEdgeOnly, edgeOnly);
+      gl.uniform1f(uHasCasters, casterTex ? 1 : 0);
+      if (casterTex) {
+        paintCasters(casterCanvas, casterList());
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, casterTex);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, casterCanvas);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        // Heights above the photograph: type and buttons just off it; what rests on a pane, the pane's height and its own.
+        gl.uniform1f(uCasterNear, CASTER_NEAR_STANDOFF * t("shadowGap"));
+        gl.uniform1f(uCasterFace, CASTER_NEAR_STANDOFF * t("shadowGap"));
+        gl.uniform1f(uCasterStrength, t("castShadowStrength"));
+        // A mounted print stands a whole "Content depth" off its glass.
+        gl.uniform1f(uCasterPrintFace, t("shadowGap"));
+        gl.uniform1f(uCasterPrint, t("floorGap") + t("glassThickness") + t("shadowGap"));
+        gl.uniform1f(
+          uCasterOnGlass,
+          t("floorGap") + t("glassThickness") + CASTER_NEAR_STANDOFF * t("shadowGap"),
+        );
+      }
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -463,6 +511,7 @@ export function FloorLight() {
     );
 
     return () => {
+      document.documentElement.removeAttribute("data-cast-shadows");
       loop.stop();
       stopCharge();
       stopFlash();

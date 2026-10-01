@@ -14,8 +14,17 @@ export type PreparedImage = {
   variants: PreparedVariant[];
 };
 
-const MAX_EDGE = 2560;
-const QUALITY = 0.82;
+/*
+ * The largest rendition's long edge, and the encoder's quality.
+ *
+ * 2560 at 0.82 was soft on desktop (Ony, 2026-10-01: "on desktop they are
+ * very low quality"): a full-bleed photograph is drawn about 1.1 to 1.3
+ * screen-widths wide (its parallax box), which on a 1920 screen at 1.5 or 2
+ * device pixels per CSS pixel is 3200 to 5000 pixels across. 4096 covers a
+ * 2x laptop and a 1.5x desktop; the smaller renditions keep phones fast.
+ */
+const MAX_EDGE = 4096;
+const QUALITY = 0.9;
 
 /** The real pixel width of an encoded image. */
 async function widthOf(file: Blob): Promise<number> {
@@ -153,6 +162,35 @@ function slugify(name: string) {
 
 /** Upload one file plus its responsive renditions, then create its photos row. */
 export async function uploadPhoto(input: File, categoryId: string | null, sortOrder: number) {
+  const { path } = await storePhoto(input, {
+    categoryId,
+    sortOrder,
+    published: false,
+    portfolio: true,
+  });
+  return path;
+}
+
+/**
+ * A site photograph (item 38c): uploaded for a place on a page -- the hero,
+ * a full-bleed frame -- and kept out of the portfolio. Published, because it
+ * is put somewhere the moment it is uploaded. Returns its id.
+ */
+export async function uploadSitePhoto(input: File): Promise<string> {
+  const { id } = await storePhoto(input, {
+    categoryId: null,
+    sortOrder: 0,
+    published: true,
+    portfolio: false,
+  });
+  return id;
+}
+
+async function storePhoto(
+  input: File,
+  opts: { categoryId: string | null; sortOrder: number; published: boolean; portfolio: boolean },
+): Promise<{ path: string; id: string }> {
+  const { categoryId, sortOrder } = opts;
   const prepared = await prepareImage(input);
   const stem = `uploads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${slugify(input.name)}`;
   const path = `${stem}.webp`;
@@ -176,7 +214,7 @@ export async function uploadPhoto(input: File, categoryId: string | null, sortOr
     if (!error) sources[String(variant.width)] = variantPath;
   }
 
-  const { error } = await supabase.from("photos").insert({
+  const row = {
     storage_path: path,
     width: prepared.width,
     height: prepared.height,
@@ -201,10 +239,31 @@ export async function uploadPhoto(input: File, categoryId: string | null, sortOr
     title: input.name.replace(/\.[^.]+$/, ""),
     category_id: categoryId,
     sort_order: sortOrder,
-    published: false,
-  });
+    published: opts.published,
+  };
+  const insert = (r: Record<string, unknown>) =>
+    (
+      supabase.from("photos") as unknown as {
+        insert: (r: Record<string, unknown>) => {
+          select: (c: string) => {
+            single: () => PromiseLike<{
+              data: { id: string } | null;
+              error: { message: string } | null;
+            }>;
+          };
+        };
+      }
+    )
+      .insert(r)
+      .select("id")
+      .single();
+  let { data, error } = await insert(opts.portfolio ? row : { ...row, in_portfolio: false });
+  // Before the site-photos SQL has run there is no in_portfolio column: store it plainly.
+  if (error && !opts.portfolio && /in_portfolio/.test(error.message)) {
+    ({ data, error } = await insert(row));
+  }
   if (error) throw error;
-  return path;
+  return { path, id: data?.id ?? "" };
 }
 
 /**

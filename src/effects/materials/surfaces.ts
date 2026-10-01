@@ -20,6 +20,8 @@
  *   ordinary glass, scratches and printing ink barely fluoresce at all.
  */
 
+import { t } from "@/lib/tuning";
+
 export type Fluorescence = {
   /** Visible light given back per unit of UV absorbed, relative (0 to 1). */
   yield: number;
@@ -42,7 +44,15 @@ export const SURFACE_MATERIALS: Readonly<Record<SurfaceMaterialId, SurfaceMateri
   /** Type: printing ink and the page's copy. Ink absorbs, it does not glow. */
   ink: { id: "ink", fluorescence: { yield: 0, colour: [1, 1, 1] } },
   /** The orange buttons: a fluorescent (day-glo) pigment, the brightest thing under UV. */
-  "dayglo-orange": { id: "dayglo-orange", fluorescence: { yield: 1, colour: [1.0, 0.42, 0.1] } },
+  "dayglo-orange": {
+    id: "dayglo-orange",
+    fluorescence: {
+      get yield() {
+        return t("uvDayglo");
+      },
+      colour: [1.0, 0.42, 0.1],
+    },
+  },
   /**
    * A photographic print's paper: its brighteners glow where the image is
    * thin (the highlights and borders), blue-white. Scaled by how white the
@@ -50,9 +60,25 @@ export const SURFACE_MATERIALS: Readonly<Record<SurfaceMaterialId, SurfaceMateri
    */
   "print-paper": { id: "print-paper", fluorescence: { yield: 0.45, colour: BRIGHTENER_BLUE } },
   /** Finger grease and skin oil: barely there under UV. */
-  "grime-oil": { id: "grime-oil", fluorescence: { yield: 0.03, colour: [0.7, 0.8, 1.0] } },
+  "grime-oil": {
+    id: "grime-oil",
+    fluorescence: {
+      get yield() {
+        return t("uvGrease");
+      },
+      colour: [0.7, 0.8, 1.0],
+    },
+  },
   /** Dust and lint on the glass: fibres carrying laundry brighteners. */
-  "grime-dust": { id: "grime-dust", fluorescence: { yield: 0.7, colour: BRIGHTENER_BLUE } },
+  "grime-dust": {
+    id: "grime-dust",
+    fluorescence: {
+      get yield() {
+        return t("uvDust");
+      },
+      colour: BRIGHTENER_BLUE,
+    },
+  },
 };
 
 /** The attribute a surface names its material on. */

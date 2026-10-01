@@ -65,8 +65,6 @@ export const PREVIEWS = {
     "Two panes resting dry on each other (the Contact stack on Lab samples): the air film between them shows Newton's colours where both faces are polished, black where they touch (light engine step G)",
   broken:
     "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
-  stackedges:
-    "Item 2a follow-up: the upper pane of a stack throws its own edge onto the photograph -- the dark rim under its bevel and the bright seam inside it, and the floor seen through it bends at its bevel -- which went missing with 8ed097c (Ony, 2026-10-01: the shadow at the left corner); the stack's light is still counted once",
   shardlight:
     "Item 10 step 3b, with ?try=broken: each piece of a broken pane mirrors the room at its own slope, per pixel in the glass shader -- a mirror turned by t turns the reflection by 2t, so the room's reflection breaks up piece by piece along the cracks; a hole reflects nothing",
   solids:
@@ -100,6 +98,8 @@ function read(): ReadonlySet<string> {
   } catch {
     list = [];
   }
+  // And the ones switched on in the lab, which stay on in this browser (storedPreviews).
+  for (const name of storedPreviews()) if (!list.includes(name)) list.push(name);
   active = new Set(list);
   if (list.length > 0) document.documentElement.dataset["try"] = list.join(" ");
   return active;
@@ -108,6 +108,38 @@ function read(): ReadonlySet<string> {
 /** Whether a change that is not yet approved is switched on for this page load. */
 export function previewing(name: PreviewName): boolean {
   return read().has(name);
+}
+
+const STORE = "onysnow:previews";
+
+/**
+ * The previews switched on in the lab (Ony, 2026-10-01: "Make all the try=
+ * stuff into toggles"). Kept in this browser, so they stay on as he goes
+ * round the site; only ever read for him signed in as the admin (read()).
+ */
+export function storedPreviews(): PreviewName[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return (window.localStorage.getItem(STORE) ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s): s is PreviewName => s in PREVIEWS);
+  } catch {
+    return [];
+  }
+}
+
+/** Switch a preview on or off in this browser (the lab's switches). Takes effect on the next load. */
+export function setStoredPreview(name: PreviewName, on: boolean) {
+  const now = new Set(storedPreviews());
+  if (on) now.add(name);
+  else now.delete(name);
+  try {
+    if (now.size) window.localStorage.setItem(STORE, [...now].join(","));
+    else window.localStorage.removeItem(STORE);
+  } catch {
+    /* no storage: the address's ?try= still works */
+  }
 }
 
 /** For tests: forget what was read. */
