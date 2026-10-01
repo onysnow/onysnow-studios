@@ -25,7 +25,12 @@ export const CRACK_PHOTOS: Readonly<Record<GlassKind, readonly string[]>> = {
     "/glass-shards/shard-11.webp",
   ],
   tempered: [],
-  laminated: [],
+  /*
+   * Ony's two (2026-10-01): struck hard and held in place -- radials, rings
+   * of short chords between them and a hole where the strike went through.
+   * Cut out on transparent ground like the pieces above.
+   */
+  laminated: ["/cracks/laminated-1.webp", "/cracks/laminated-2.webp"],
 };
 
 /**
