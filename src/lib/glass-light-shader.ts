@@ -8,6 +8,7 @@ import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
 import { LAMP_COLOUR } from "@/effects/light/lights";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { BOKEH_GLSL } from "@/effects/optics/bokeh.glsl";
+import { BACKLIT_GLSL } from "@/effects/optics/backlit.glsl";
 import { CONTACT_GAP_GLSL, FILM_LUT_MAX, FILM_LUT_SCALE } from "@/effects/optics/thin-film";
 
 /**
@@ -110,6 +111,10 @@ uniform float uGap;         // this pane's gap to the photographs behind it, CSS
  */
 uniform float uIor;          // this pane's material
 uniform float uFrost;        // this pane's material
+uniform float uBacklitGain;  // backlit glass (effects/optics/backlit): 0 off
+uniform float uBacklitEdge;  // 0 both sides, 1 left, 2 right, 3 below, 4 above, 5 behind
+uniform float uBacklitFill;  // how far in it carries, against the pane's size
+uniform vec3  uBacklitColour;
 uniform float uBounce;       // 1: light bouncing off the lit photograph lights the glass from below (?try=bounce, effects/light/bounce)
 uniform float uContact;      // 1: resting dry on the pane below (?try=contact, effects/optics/thin-film)
 uniform vec4 uFilmRect;      // where it overlaps that pane, CSS px
@@ -289,6 +294,7 @@ vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
 
 ${BOKEH_GLSL}
 ${CONTACT_GAP_GLSL}
+${BACKLIT_GLSL}
 
 /*
  * The pane's signed distance, with the bevel's lines rounded through the
@@ -1268,6 +1274,13 @@ void main() {
     }
     colour += inside * uBokehGain * discs;
   }
+
+  /*
+   * Backlit glass: light shone in through the pane's edge, let out by its
+   * frost across the face, by its rims, and spilling past them
+   * (effects/optics/backlit). Light, so it adds, before the tone map.
+   */
+  colour += backlitAt(p, halfSize, depth, uBacklitEdge, uBacklitFill, uFrost, uBacklitColour, uBacklitGain);
 
   colour = uBurn > 0.5 ? toneMapGlassBurn(colour) : toneMapGlass(colour);
 

@@ -39,8 +39,6 @@ export const PREVIEWS = {
     "Light engine step H: the light through a frosted face from its microfacets (Walter et al. 2007) -- how much gets through and how widely it scatters -- in place of two rules of thumb",
   photolights:
     "Light engine step I: the brightest spots of the photographs behind the panes -- neon, windows, lamps they recorded -- are lights under the glass, shining up into it in their own colour and following the photographs as they slide",
-  backlight:
-    "Light engine step I: a light behind the glass, under the photographs, like a lightbox (Environment > Backlight): the panes glow from beneath and their rims catch it",
   kelvin:
     "The lamp's colour from its temperature, as a camera's white balance speaks of it (Light > Lamp colour temperature): a blackbody's glow, 1900 K candle to 10000 K blue sky",
   vignette:
@@ -87,8 +85,6 @@ export type PreviewName = keyof typeof PREVIEWS;
  * paths and their tests stay as they were; the lab no longer offers them as
  * switches.
  */
-// Not the backlight: a lamp at the screen's centre under the glass is not
-// what Ony means by backlit (2026-10-01) -- back to a switch until it is.
 export const ON_BY_DEFAULT: readonly PreviewName[] = [
   "kelvin",
   "flash",

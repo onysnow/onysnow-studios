@@ -48,6 +48,7 @@ import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { LAMP_REFLECTION_ENABLED, frostRoughness } from "@/effects/optics/reflection";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 import { holdLoader } from "@/lib/app-ready";
+import { backlitColour, BACKLIT_GAIN } from "@/effects/optics/backlit-colour";
 import { discRadiusForBlur, hiddenLightMap, markLightNear } from "@/effects/optics/bokeh";
 
 /**
@@ -180,6 +181,10 @@ export function GlassLight({
     const uPlasticCount = U("uPlasticCount");
     const uOilGlow = U("uOilGlow");
     const uPipedGain = U("uPipedGain");
+    const uBacklitGain = U("uBacklitGain");
+    const uBacklitEdge = U("uBacklitEdge");
+    const uBacklitFill = U("uBacklitFill");
+    const uBacklitColour = U("uBacklitColour");
     const uPipedReach = U("uPipedReach");
     const uDustGlow = U("uDustGlow");
     // Item 18b: the plastic lit here, not by CSS (html[data-try~="shaderplastic"] in styles.css).
@@ -709,6 +714,11 @@ export function GlassLight({
       };
       gl.uniform3fv(uOilGlow, glow("grime-oil"));
       gl.uniform1f(uPipedGain, t("pipedLight"));
+      // Backlit glass: the light shone in at the panes' edges (effects/optics/backlit).
+      gl.uniform1f(uBacklitGain, t("backlight") * BACKLIT_GAIN);
+      gl.uniform1f(uBacklitEdge, t("backlightEdge"));
+      gl.uniform1f(uBacklitFill, t("backlightSize"));
+      gl.uniform3fv(uBacklitColour, backlitColour());
       gl.uniform1f(uPipedReach, Math.max(t("pipedReach"), 1));
       gl.uniform3fv(uDustGlow, glow("grime-dust"));
       gl.uniform1f(uBurn, previewing("burn") ? 1 : 0);

@@ -87,38 +87,69 @@ export const tuning: Record<string, Knob> = {
   // screen -- photographic middle grey. Brighter rooms reflect more; a window
   // at night shows the room because outside is darker than 4% of it.
   /*
-   * A backlight (light engine step I, item 31b; ?try=backlight): a light
-   * behind the glass, under the photographs, as a lightbox is -- one light
-   * with the glass above it, so the panes glow from beneath and their rims
-   * catch it. 0 is off.
+   * Backlit glass (Ony, 2026-10-01, with a photograph of a backlit frosted
+   * slab): light enters the glass from behind one edge and the frost
+   * scatters it through the whole pane -- brightest at the edge it comes
+   * in by, falling away smoothly across it, the edge itself burning, and a
+   * spill of its colour onto what is beyond that edge. Not a circle behind
+   * the glass: the old backlight was a lamp at the screen's centre.
+   * effects/optics/backlit, drawn in the glass shader. 0 is off.
    */
   backlight: {
     label: "Backlight",
     group: "Environment",
-    // On when its switch is: the switch alone should show it (Ony: "doesnt seem to do anything").
-    value: 0.8,
+    value: 0.6,
     min: 0,
     max: 3,
     step: 0.05,
-    hint: "A light behind the glass, under the photographs, like a lightbox: the panes glow from beneath and their rims catch it. Against the lamp's strength; 0 is off. Needs its switch above (Backlight under the glass).",
+    hint: "Light shone into the glass from behind one edge and filling the pane through its frost. 0 is off. Clear glass barely glows -- the light goes straight through it; frosted glass fills with it.",
+  },
+  backlightEdge: {
+    label: "Backlight comes from",
+    group: "Environment",
+    value: 0,
+    min: 0,
+    max: 5,
+    step: 1,
+    // Ony: "the lights would enter from off screen on the left or right side. or both at the same time to make it even".
+    options: ["Both sides", "The left", "The right", "Below", "Above", "Behind the whole pane"],
+    hint: "Which edge the light enters by: off screen at the left, the right, or both at once to even it out. Behind the whole pane is a lightbox: an even glow, a little dimmer toward the rims.",
+  },
+  backlightSize: {
+    label: "Backlight fill",
+    group: "Environment",
+    value: 0.45,
+    min: 0.05,
+    max: 3,
+    step: 0.05,
+    hint: "How far into the pane the light carries before it fades, against the pane's own size: low is a glow hugging the edge, 1 fades across the whole pane, high fills it almost evenly. More frost scatters it sooner.",
   },
   backlightKelvin: {
-    label: "Backlight colour",
+    label: "Backlight white",
     group: "Environment",
     value: 6500,
     min: 1900,
     max: 10000,
     step: 100,
-    hint: "The lightbox's colour from its temperature, in kelvin as on a camera: 2700 a warm bulb, 5000 a print-viewing box, 6500 daylight white, higher bluer (a blackbody, effects/light/blackbody).",
+    hint: "Its white from its temperature, in kelvin as on a camera: 2700 a warm bulb, 6500 daylight, higher bluer. With colour at 0 this is its colour.",
   },
-  backlightSize: {
-    label: "Backlight size",
+  backlightHue: {
+    label: "Backlight hue",
     group: "Environment",
-    value: 1,
-    min: 0.1,
-    max: 2,
-    step: 0.05,
-    hint: "How big the lightbox is, against half the screen: smaller is a lamp behind the photograph, larger an even glow from the whole box. The bigger, the softer its light on the rims.",
+    value: 175,
+    min: 0,
+    max: 360,
+    step: 1,
+    hint: "Its colour round the colour wheel, in degrees: 0 red, 30 orange, 60 yellow, 120 green, 175 teal, 220 blue, 280 violet.",
+  },
+  backlightSaturation: {
+    label: "Backlight colour",
+    group: "Environment",
+    value: 0,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "How coloured it is: 0 is the white above, 1 the full hue (a coloured LED strip).",
   },
   roomBrightness: {
     label: "Room brightness",

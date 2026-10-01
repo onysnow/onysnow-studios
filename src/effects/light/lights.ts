@@ -492,45 +492,12 @@ export function setTorch(x: number, y: number, aim: Aim, charge: number) {
 }
 
 /*
- * A backlight (item 31b, ?try=backlight): one light behind the glass, under
- * the middle of the screen, as big as a lightbox -- half the screen across,
- * so what it lights it lights softly and evenly -- the gap below the panes.
- * White, as a lightbox's daylight tubes are. The "Backlight" knob sets how
- * strong it is against the lamp; 0 puts it out.
+ * The backlight is not a light at a point any more: it was a lamp under the
+ * middle of the screen, and showed as a circle behind the glass (Ony,
+ * 2026-10-01: "not what I mean"). Backlit glass is now light shone into
+ * each pane through its edge and filling it (effects/optics/backlit),
+ * drawn by the glass shader.
  */
-export const BACKLIGHT_COLOUR = [0.97, 0.99, 1.0] as const;
-let backlightViewport = { w: 1280, h: 800 };
-export const backLight: Light = {
-  id: "backlight",
-  kind: "point",
-  get x() {
-    return backlightViewport.w / 2;
-  },
-  set x(_v: number) {},
-  get y() {
-    return backlightViewport.h / 2;
-  },
-  set y(_v: number) {},
-  get height() {
-    return t("floorGap");
-  },
-  get radius() {
-    return (Math.min(backlightViewport.w, backlightViewport.h) / 2) * t("backlightSize");
-  },
-  // Its colour from its temperature ("Backlight colour"); 6500 K is the daylight white it always was.
-  get colour() {
-    return t("backlightKelvin") === 6500 ? BACKLIGHT_COLOUR : blackbodyRgb(t("backlightKelvin"));
-  },
-  get gain() {
-    return t("coreGain") * t("backlight");
-  },
-  get charge() {
-    return previewing("backlight") && t("backlight") > 0 ? 1 : 0;
-  },
-  set charge(_v: number) {},
-  uv: 0,
-  below: true,
-};
 
 /** The lights that stand at a point: the lamp, the flash, the flare and the torch while they burn, and the emitters. */
 export function pointLights(): Light[] {
@@ -538,7 +505,6 @@ export function pointLights(): Light[] {
   if (flashLight.charge > 0) out.push(flashLight);
   if (flareLight.charge > 0) out.push(flareLight);
   if (torchLight.charge > 0) out.push(torchLight);
-  if (backLight.charge > 0) out.push(backLight);
   for (const e of emitters) if (e.charge > 0) out.push(e);
   return out;
 }
@@ -550,7 +516,6 @@ export function strongestCharge(): number {
     flashLight.charge,
     flareLight.charge,
     torchLight.charge,
-    backLight.charge,
   );
   for (const e of emitters) strongest = Math.max(strongest, e.charge);
   return strongest;
@@ -566,12 +531,6 @@ export const pointer = { x: -9999, y: -9999 };
 export function commitLights() {
   cursorLamp.x = pointer.x;
   cursorLamp.y = pointer.y;
-  if (typeof document !== "undefined") {
-    backlightViewport = {
-      w: document.documentElement.clientWidth || window.innerWidth,
-      h: document.documentElement.clientHeight || window.innerHeight,
-    };
-  }
 }
 
 const changeWatchers = new Set<() => void>();
