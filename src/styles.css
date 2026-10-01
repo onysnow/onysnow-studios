@@ -2880,6 +2880,16 @@ html.is-winding * {
   z-index: 1;
 }
 
+/* Party balloons in the room in front of the page (Balloons.tsx, task 74, ?try=balloons). */
+.balloons-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 8000;
+  pointer-events: none;
+}
+
 /* The light through the glass, on the photographs. See FloorLight.tsx. */
 .floor-light {
   position: fixed;

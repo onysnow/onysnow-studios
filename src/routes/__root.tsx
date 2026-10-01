@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeldTool } from "@/components/site/ToolTray";
 import { PhotoLights } from "@/components/site/PhotoLights";
 import { WaterDrops } from "@/components/site/WaterDrops";
+import { Balloons } from "@/components/site/Balloons";
 import { Vignette } from "@/components/site/Vignette";
 import { RedRoom } from "@/components/site/RedRoom";
 import { FreeSurfaces } from "@/components/site/FreeSurfaces";
@@ -205,6 +206,8 @@ function RootComponent() {
           <PhotoLights />
           {/* Rain on the glass (task 77, ?try=drops). */}
           <WaterDrops />
+          {/* Party balloons in the room (task 74, ?try=balloons). */}
+          <Balloons />
           {/* The lens's corners (catalogue item 32, ?try=vignette). */}
           <Vignette />
           {/* Secret 2, the darkroom (item 39, ?try=redroom). */}

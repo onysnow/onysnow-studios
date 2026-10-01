@@ -65,6 +65,8 @@ export const PREVIEWS = {
     "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
   shardlight:
     "Item 10 step 3b, with ?try=broken: each piece of a broken pane mirrors the room at its own slope, per pixel in the glass shader -- a mirror turned by t turns the reflection by 2t, so the room's reflection breaks up piece by piece along the cracks; a hole reflects nothing",
+  balloons:
+    "Task 74: helium party balloons in the room in front of the page -- they rise to the top of the window and wander on its draughts, the pointer's wake pushes them, a click pops one; latex lit by every light, crystal ones throwing coloured shadows (Water & room > Balloons)",
   drops:
     "Task 77: rain on the glass -- drops bead, merge and run once heavy enough (the Furmidge threshold), leaving trails; each drop is a lens holding the photograph behind it upside down, sharp through the frost, with every light's highlight (Water > Rain)",
   puppets:
