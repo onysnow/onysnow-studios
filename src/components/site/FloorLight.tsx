@@ -154,6 +154,7 @@ export function FloorLight() {
     const uFloorScale = U("uFloorScale");
     const floorScales = new Float32Array(MAX_LIGHTS);
     const uCasterStrength = U("uCasterStrength");
+    const uRoomFill = U("uRoomFill");
     // The caster layers: two RGB masks, a layer to a channel, each with its height, face and colour (effects/optics/casters).
     const uCasterCount = U("uCasterCount");
     const uCasterLayer = U("uCasterLayer");
@@ -438,6 +439,7 @@ export function FloorLight() {
         gl.uniform3fv(uCasterTint, layerTint);
         gl.uniform1f(uCasterStrength, t("castShadowStrength"));
       }
+      gl.uniform1f(uRoomFill, t("roomFill"));
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

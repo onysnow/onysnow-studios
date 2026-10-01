@@ -949,6 +949,20 @@ export const tuning: Record<string, Knob> = {
     step: 10,
     hint: "Lower means a closer light: longer, softer shadows.",
   },
+  roomFill: {
+    label: "Room fill",
+    group: "Shadows",
+    value: 1,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "How much of the room's own light reaches the photographs while a lamp burns. 1 is the page as it is; low is a dark room, where the lamp's pool and its shadows are all you see (a shadow-puppet show wants about 0.05-0.1).",
+    presets: [
+      { label: "Page", value: 1 },
+      { label: "Dim room", value: 0.4 },
+      { label: "Show", value: 0.08 },
+    ],
+  },
   shadowSoftness: {
     label: "Light size",
     group: "Shadows",

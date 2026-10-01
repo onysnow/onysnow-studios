@@ -138,6 +138,12 @@ uniform float uHasCasters;
 /* A card's print: how high above the photograph, and above its pane's face (the mask's blue). */
 /* How much of the light a caster blocks ("Cast shadow strength"). */
 uniform float uCasterStrength;
+/*
+ * The room's own light on the photographs while a lamp burns ("Room fill",
+ * docs/research/shadows.md 6 Change 1): 1 is today's page, lower is a darker
+ * room, where the lamp's pool and its shadows are all there is.
+ */
+uniform float uRoomFill;
 uniform float uFloorScale[MAX_LIGHTS]; // each light's brightness and distance against the defaults (P / H^2)
 
 ${EDGE_PROFILE_GLSL}
@@ -505,10 +511,12 @@ void main() {
    */
   vec4 f = vec4(0.0);
   vec3 coloured = vec3(0.0);  // the same sum, each light in its own colour
+  float burning = 0.0;        // the strongest light's charge: how far the room has gone over to the lamps
   for (int i = 0; i < MAX_LIGHTS; i++) {
     if (i >= uLightCount) break;
     float c = uLightCharge[i];
     float lit = c * c * (3.0 - 2.0 * c);
+    burning = max(burning, lit);
     vec2 at = look - uViewShift;
     // A line light (a neon tube) reaches this point from its nearest point.
     vec2 from = nearestOnLight(at, uLightPos[i].xy, uLightSpan[i]);
@@ -549,6 +557,20 @@ void main() {
    * back in when it copies the buffer out.
    */
   vec3 light = warm * add;
+  /*
+   * The room fill (docs/research/shadows.md 6 Change 1): the photograph is
+   * lit by the room (A) plus the lamps, out = photo x (A + E). The part of
+   * that under 1 is a multiply, which this layer can do as darkening:
+   * photo x m x (1 - a) + light, with m = min(1, A + E). E here is the
+   * lamps' light as it lands, so the pool's bright core gives the
+   * photograph back its own exposure (estimate: E = the light's
+   * brightest channel after the film curve). Over 1 the lamps add,
+   * as they always did. A = 1 is exactly the old floor.
+   */
+  float E = max(add.r, max(add.g, add.b));
+  float roomFill = mix(1.0, clamp(uRoomFill, 0.0, 1.0), burning);
+  float m = min(1.0, roomFill + (1.0 - roomFill) * E);
+  a = 1.0 - m * (1.0 - a);
   gl_FragColor = vec4(a > 0.0 ? light / a : vec3(0.0), a);
 }
 `;
