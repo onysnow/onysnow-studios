@@ -607,4 +607,11 @@ Problems:
   gap + thickness + standoff, and both of a letter's shadows use that one
   height.
 - Point / Bulb / Diffuser light-size presets: done (f9fcf86).
-- Still to build: the puppet stage (task 83), quality and debug controls.
+- The puppet stage (a first cut of task 83 on Lab samples) is removed at
+  Ony's word (2026-10-01: he wanted shadows good enough for a show, not a
+  show). What it added stays, renamed: shape casters (effects/optics/
+  shape-casters: things in the room with their own outline and height,
+  used by the balloons) and the room-fill override (effects/light/
+  room-fill, used by the torch).
+- Still to build: shadow quality (mip prefilter) and a debug view of the
+  mask layers.

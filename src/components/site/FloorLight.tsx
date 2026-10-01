@@ -4,7 +4,7 @@ import { unscattered } from "@/effects/optics/scatter";
 import { slab } from "@/effects/optics/stack";
 import { previewing } from "@/effects/engine/preview";
 import { casterList, MAX_CASTER_LAYERS, paintCasters } from "@/effects/optics/casters";
-import { stageRoomFill } from "@/effects/optics/puppets";
+import { roomFillOverride } from "@/effects/light/room-fill";
 import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
@@ -440,7 +440,7 @@ export function FloorLight() {
         gl.uniform3fv(uCasterTint, layerTint);
         gl.uniform1f(uCasterStrength, t("castShadowStrength"));
       }
-      gl.uniform1f(uRoomFill, Math.min(t("roomFill"), stageRoomFill()));
+      gl.uniform1f(uRoomFill, Math.min(t("roomFill"), roomFillOverride()));
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

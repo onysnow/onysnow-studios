@@ -73,8 +73,6 @@ export const PREVIEWS = {
     "Task 74: helium party balloons in the room in front of the page -- they rise to the top of the window and wander on its draughts, the pointer's wake pushes them, a click pops one; latex lit by every light, crystal ones throwing coloured shadows (Water & room > Balloons)",
   drops:
     "Task 77: rain on the glass -- drops bead, merge and run once heavy enough (the Furmidge threshold), leaving trails; each drop is a lens holding the photograph behind it upside down, sharp through the frost, with every light's highlight (Water > Rain)",
-  puppets:
-    "Item 83 on Lab samples: a shadow-puppet show -- a point lamp over a photograph, cut-outs held between them, and only their shadows seen: sharp and life-size near the screen, larger and softer drawn toward the lamp, coloured through cellophane; the room goes dark while it plays",
   solids:
     "Glass solids on Lab samples -- prism, sphere, cube, cone, pyramid, rod -- ray traced through their glass",
   tools:

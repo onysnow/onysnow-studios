@@ -11,7 +11,7 @@ import {
   BALLOON_VERTEX,
   MAX_BALLOON_LIGHTS,
 } from "@/effects/balloons/balloon.glsl";
-import { addPuppet, type Puppet } from "@/effects/optics/puppets";
+import { addShapeCaster, type ShapeCaster } from "@/effects/optics/shape-casters";
 
 /** CSS px per metre of the room (balloons.md 6: 500-700, estimate): an 11" balloon is 167 px. */
 const PX_PER_M = 600;
@@ -46,8 +46,8 @@ type Balloon = {
   colour: readonly [number, number, number];
   finish: number;
   seed: number;
-  puppet: Puppet;
-  removePuppet: () => void;
+  shadow: ShapeCaster;
+  removeShadow: () => void;
 };
 
 type Shred = {
@@ -244,7 +244,7 @@ export function Balloons() {
           anchor = { x: 0, y: 0 };
         }
         const crystal = finish === 1;
-        const puppet: Puppet = {
+        const shadow: ShapeCaster = {
           id: `balloon-${n}`,
           path: shapePath,
           x: -9999,
@@ -262,8 +262,8 @@ export function Balloons() {
           colour,
           finish,
           seed: n,
-          puppet,
-          removePuppet: addPuppet(puppet),
+          shadow,
+          removeShadow: addShapeCaster(shadow),
         });
       };
       // For the verification rigs (dev only).
@@ -298,7 +298,7 @@ export function Balloons() {
             age: 0,
           });
         }
-        b.removePuppet();
+        b.removeShadow();
         // Its ribbon falls free.
         loose.push(b.links);
         world.removeRigidBody(b.body);
@@ -407,9 +407,9 @@ export function Balloons() {
           const r = (b.phys.diameter / 2) * PX_PER_M;
           const cx = p.x * PX_PER_M;
           const cy = p.y * PX_PER_M;
-          b.puppet.x = cx;
-          b.puppet.y = cy + r * 0.12;
-          b.puppet.angle = rot;
+          b.shadow.x = cx;
+          b.shadow.y = cy + r * 0.12;
+          b.shadow.angle = rot;
           const c = Math.cos(rot);
           const sn = Math.sin(rot);
           const corners = [
@@ -541,7 +541,7 @@ export function Balloons() {
         task.stop();
         window.removeEventListener("pointerdown", onDown);
         window.removeEventListener("resize", onResize);
-        for (const b of balloons) b.removePuppet();
+        for (const b of balloons) b.removeShadow();
         world.free();
         if (room) gl.deleteTexture(room);
         gl.deleteBuffer(vbo);

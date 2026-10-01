@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { pointer, setFire } from "@/effects/light/lights";
 import { flameFlickerAt, TORCH } from "@/effects/light/flame";
-import { setStageRoomFill } from "@/effects/optics/puppets";
+import { setRoomFillOverride } from "@/effects/light/room-fill";
 
 /** The drawing round the flame, CSS px; the flame is drawn at half that resolution and scaled up. */
 const W = 240;
@@ -75,7 +75,7 @@ export function FireTorch() {
     let fan = 0;
     let tilt = 0;
     let frame = 0;
-    setStageRoomFill(ROOM_WHILE_LIT);
+    setRoomFillOverride(ROOM_WHILE_LIT);
 
     const step = (now: number) => {
       frame = requestAnimationFrame(step);
@@ -210,7 +210,7 @@ export function FireTorch() {
     return () => {
       cancelAnimationFrame(frame);
       setFire(-9999, -9999, 1, 0);
-      setStageRoomFill(1);
+      setRoomFillOverride(1);
     };
   }, []);
 

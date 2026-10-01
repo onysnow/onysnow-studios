@@ -1003,11 +1003,11 @@ export const tuning: Record<string, Knob> = {
     min: 0,
     max: 1,
     step: 0.01,
-    hint: "How much of the room's own light reaches the photographs while a lamp burns. 1 is the page as it is; low is a dark room, where the lamp's pool and its shadows are all you see (a shadow-puppet show wants about 0.05-0.1).",
+    hint: "How much of the room's own light reaches the photographs while a lamp burns. 1 is the page as it is; low is a dark room, where the lamp's pool and its shadows are all you see (a dark room is about 0.05-0.1).",
     presets: [
       { label: "Page", value: 1 },
       { label: "Dim room", value: 0.4 },
-      { label: "Show", value: 0.08 },
+      { label: "Dark room", value: 0.08 },
     ],
   },
   shadowSoftness: {
@@ -1017,7 +1017,7 @@ export const tuning: Record<string, Knob> = {
     min: 1,
     max: 200,
     step: 1,
-    hint: "The emitter's radius. This is what sets the penumbra. Point (4 px, about a 1 mm filament or LED die) throws the crisp shadows of a shadow-puppet lamp; Bulb is today's lamp; Diffuser is a softbox.",
+    hint: "The emitter's radius. This is what sets the penumbra. Point (4 px, about a 1 mm filament or LED die) throws crisp, hard-edged shadows; Bulb is today's lamp; Diffuser is a softbox.",
     // docs/research/shadows.md 6 "Build for task 83": Point R = 4 px.
     presets: [
       { label: "Point", value: 4 },
