@@ -878,6 +878,24 @@ function KnobRow({
           className="mt-1 w-full accent-[var(--amber)]"
         />
       )}
+      {knob.presets ? (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {knob.presets.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              aria-pressed={value === p.value}
+              onClick={() => onChange(p.value)}
+              className={cn(
+                "rounded border border-input px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground",
+                value === p.value && "border-[var(--amber)] text-foreground",
+              )}
+            >
+              {p.label} <span className="font-mono opacity-70">{p.value}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {hintShown ? <p className="text-xs leading-snug text-muted-foreground">{knob.hint}</p> : null}
     </div>
   );

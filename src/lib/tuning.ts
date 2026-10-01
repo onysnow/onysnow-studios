@@ -56,6 +56,8 @@ export type Knob = {
   hint?: string;
   /** A choice rather than an amount: the names of min, min + step, ... (the lab shows a list). */
   options?: readonly string[];
+  /** Named values the lab offers as one-click buttons under the slider. */
+  presets?: readonly { label: string; value: number }[];
 };
 
 export const tuning: Record<string, Knob> = {
@@ -954,7 +956,13 @@ export const tuning: Record<string, Knob> = {
     min: 1,
     max: 200,
     step: 1,
-    hint: "The emitter's radius. This is what sets the penumbra.",
+    hint: "The emitter's radius. This is what sets the penumbra. Point (4 px, about a 1 mm filament or LED die) throws the crisp shadows of a shadow-puppet lamp; Bulb is today's lamp; Diffuser is a softbox.",
+    // docs/research/shadows.md 6 "Build for task 83": Point R = 4 px.
+    presets: [
+      { label: "Point", value: 4 },
+      { label: "Bulb", value: 46 },
+      { label: "Diffuser", value: 120 },
+    ],
   },
 
   floorView: {
