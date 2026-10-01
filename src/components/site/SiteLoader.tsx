@@ -54,8 +54,14 @@ const SEEN = "onysnow:loaded";
  * is a real thing the page is doing, in the order it does them, so the text
  * is honest about the wait rather than decorative.
  */
-const WORDS = ["Loading", "Metering", "Focusing", "Developing"] as const;
-const WORD_MS = 1900;
+/*
+ * One word, run through the languages again every couple of seconds until
+ * the site has arrived (Ony, 2026-10-01: "make the word loading have the
+ * language sequence animation every couple seconds before returning to the
+ * word loading until its successfully loaded"). It was four words in turn.
+ */
+const WORD = "Loading";
+const WORD_MS = 2400;
 
 /**
  * The warm-up gets this long, then you are let in regardless of what is still
@@ -150,11 +156,23 @@ export function SiteLoader() {
     };
   }, [router]);
 
-  // Cycle the word only while there is still something to wait for.
+  // Run the word through the languages again, only while there is still something to wait for.
   useEffect(() => {
     if (state !== "holding") return;
-    const id = window.setInterval(() => setWord((n) => (n + 1) % WORDS.length), WORD_MS);
+    const id = window.setInterval(() => setWord((n) => n + 1), WORD_MS);
     return () => window.clearInterval(id);
+  }, [state]);
+
+  /*
+   * On a phone there is no pointer to light the glass with and nothing to
+   * click past: once the site has arrived it goes straight in (Ony,
+   * 2026-10-01). On a desktop the word turns to "Ready" and waits.
+   */
+  useEffect(() => {
+    if (state !== "ready") return;
+    if (!window.matchMedia?.("(pointer: coarse), (hover: none)").matches) return;
+    remember();
+    setState("leaving");
   }, [state]);
 
   /*
@@ -236,10 +254,12 @@ export function SiteLoader() {
           -- a caption explaining an effect is an admission the effect did
           not carry itself.
         */}
-        <div className="glass site-loader__pane" aria-hidden="true" />
-        <div className="glass site-loader__pane" aria-hidden="true" />
-
-        {/* The word lives ON the glass, centred in the pane it sits on. */}
+        {/*
+          One pane, larger, the screen's full width (Ony, 2026-10-01: "remove
+          the top two glass panes and only keep the one but make it larger and
+          extend all the way to the left and right sides"). The word lives ON
+          the glass, centred in it.
+        */}
         <div className="glass site-loader__pane site-loader__pane--wide">
           <div className="site-loader__readout">
             {/*
@@ -249,8 +269,8 @@ export function SiteLoader() {
             */}
             <p className="site-loader__word">
               <ScrambleText
-                key={state === "holding" ? WORDS[word] : "ready"}
-                text={state === "holding" ? (WORDS[word] ?? "Loading") : "Ready"}
+                key={state === "holding" ? `${WORD}-${word}` : "ready"}
+                text={state === "holding" ? WORD : "Ready"}
                 startOnView={false}
                 totalMs={900}
               />
