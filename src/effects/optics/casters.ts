@@ -239,7 +239,14 @@ function hiddenByClip(node: Element, top: Element): boolean {
 function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect; words: Word[] } {
   const at = el.getBoundingClientRect();
   const key =
-    `${Math.round(at.width)}x${Math.round(at.height)}|${el.textContent?.length ?? 0}` +
+    /*
+     * The text itself, not only its length: an animated heading (the hero's
+     * ScrambleText) cycles random letters at the same count, size and line
+     * breaks, and a length-only key kept the shadow of whatever letters were
+     * showing when it was first measured -- the hero title cast an "E", a
+     * "v", a "b" that were never in it (Ony, 2026-10-01).
+     */
+    `${Math.round(at.width)}x${Math.round(at.height)}|${el.textContent ?? ""}` +
     `|${fontGeneration}|${lastGlyphAt(el, at)}`;
   const hit = wordCache.get(el);
   if (hit && hit.key === key) return { at, words: hit.words };
