@@ -113,8 +113,15 @@ export function lampDiscAt(
   return { across, along: across / Math.max(cos, 0.2) };
 }
 
-/** The mask is drawn at this share of the page's resolution: shadows are soft. */
-export const CASTER_SCALE = 0.5;
+/**
+ * The mask is drawn at the page's own resolution. It was half, and then
+ * blurred a pixel on top -- 2 to 3 CSS px of softness that no lamp put
+ * there -- so a thin stroke's shadow came out grey and fuzzy even with the
+ * lamp right beside it, where a small light throws a crisp, dark shadow
+ * (Ony, 2026-10-01). The softness now is only the lamp's own: its size,
+ * the caster's height and the frost (casterCover).
+ */
+export const CASTER_SCALE = 1;
 
 /** How opaque each kind of caster is to the lamp's light. */
 export function casterOpacity(el: Element, material: SurfaceMaterial): number {
@@ -129,10 +136,43 @@ type Word = { text: string; x: number; y: number; font: string; spacing: string;
 
 const wordCache = new WeakMap<Element, { key: string; words: Word[] }>();
 
+/*
+ * Bumped whenever a web font finishes loading. The cache was keyed on the
+ * block's size alone, and a heading laid out in the fallback font before
+ * its own arrived keeps its size while its lines break differently -- so
+ * the words' shadows stayed where the fallback put them: "to remember."
+ * cast at the end of the first line, off to the right of "want", while the
+ * words themselves had wrapped under it (Ony, 2026-10-01).
+ */
+let fontGeneration = 0;
+if (typeof document !== "undefined") {
+  document.fonts?.addEventListener?.("loadingdone", () => {
+    fontGeneration += 1;
+  });
+}
+
+/** Where a block's last character sits: changes whenever its lines break differently. */
+function lastGlyphAt(el: HTMLElement, at: DOMRect): string {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let last: Text | null = null;
+  for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+    if (/\S/.test(node.data)) last = node;
+  }
+  if (!last) return "";
+  const end = last.data.trimEnd().length;
+  const range = document.createRange();
+  range.setStart(last, Math.max(0, end - 1));
+  range.setEnd(last, end);
+  const r = range.getBoundingClientRect();
+  return `${Math.round(r.left - at.left)},${Math.round(r.top - at.top)}`;
+}
+
 /** The words of a block of type, where each one sits (relative to the block), in its own font. */
 function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect; words: Word[] } {
   const at = el.getBoundingClientRect();
-  const key = `${Math.round(at.width)}x${Math.round(at.height)}|${el.textContent?.length ?? 0}`;
+  const key =
+    `${Math.round(at.width)}x${Math.round(at.height)}|${el.textContent?.length ?? 0}` +
+    `|${fontGeneration}|${lastGlyphAt(el, at)}`;
   const hit = wordCache.get(el);
   if (hit && hit.key === key) return { at, words: hit.words };
   const words: Word[] = [];
@@ -168,6 +208,38 @@ function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect;
   return { at, words };
 }
 
+const bare = new WeakMap<Element, boolean>();
+
+/** Whether a computed colour paints nothing. */
+export function isClear(colour: string): boolean {
+  if (colour === "transparent" || colour === "rgba(0, 0, 0, 0)") return true;
+  const slash = colour.match(/\/\s*([\d.]+)(%?)\s*\)$/);
+  if (slash) return Number(slash[1]) / (slash[2] ? 100 : 1) < 0.05;
+  const rgba = colour.match(/^rgba\([^)]*,\s*([\d.]+)\)$/);
+  if (rgba) return Number(rgba[1]) < 0.05;
+  return false;
+}
+
+/**
+ * A link or button that is only its words -- no fill, no border, no
+ * picture -- casts its letters, not its box. "Explore the work" is an <a>
+ * with nothing round its type, and threw a solid bar (Ony, 2026-10-01).
+ */
+function bareText(el: HTMLElement): boolean {
+  const known = bare.get(el);
+  if (known !== undefined) return known;
+  const cs = getComputedStyle(el);
+  const filled = cs.backgroundImage !== "none" || !isClear(cs.backgroundColor);
+  const bordered = ["Top", "Right", "Bottom", "Left"].some(
+    (side) =>
+      parseFloat(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
+      cs.getPropertyValue(`border-${side.toLowerCase()}-style`) !== "none",
+  );
+  const result = !filled && !bordered && (el.textContent ?? "").trim().length > 0;
+  bare.set(el, result);
+  return result;
+}
+
 export type Caster = {
   el: HTMLElement;
   material: SurfaceMaterial;
@@ -196,8 +268,7 @@ export function paintCasters(canvas: HTMLCanvasElement, casters: readonly Caster
   ctx.fillRect(0, 0, w, h);
   ctx.globalCompositeOperation = "lighter";
   ctx.setTransform(CASTER_SCALE, 0, 0, CASTER_SCALE, 0, 0);
-  // A pixel's softness at this scale: the taps then read a shape, not its aliasing.
-  ctx.filter = "blur(1px)";
+
   const vh = window.innerHeight;
   for (const c of casters) {
     const r = c.el.getBoundingClientRect();
@@ -209,8 +280,8 @@ export function paintCasters(canvas: HTMLCanvasElement, casters: readonly Caster
     // A print's frame is a span too: it is drawn as its box, not as type.
     const isType =
       !c.print &&
-      /^(H[1-6]|P|BLOCKQUOTE|SPAN|LI)$/.test(c.el.tagName) &&
-      !c.el.classList.contains("plastic");
+      !c.el.classList.contains("plastic") &&
+      (/^(H[1-6]|P|BLOCKQUOTE|SPAN|LI)$/.test(c.el.tagName) || bareText(c.el));
     if (isType) {
       const { at, words } = wordsOf(c.el, ctx);
       ctx.textBaseline = "alphabetic";
@@ -230,5 +301,4 @@ export function paintCasters(canvas: HTMLCanvasElement, casters: readonly Caster
       ctx.fill();
     }
   }
-  ctx.filter = "none";
 }

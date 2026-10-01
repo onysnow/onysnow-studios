@@ -29,3 +29,16 @@ describe("shadows thrown onto the photographs, through the glass (item 52)", () 
     expect(CASTERS_GLSL).not.toContain("`");
   });
 });
+
+describe("isClear", () => {
+  it("knows a colour that paints nothing", async () => {
+    const { isClear } = await import("./casters");
+    expect(isClear("rgba(0, 0, 0, 0)")).toBe(true);
+    expect(isClear("transparent")).toBe(true);
+    expect(isClear("oklch(0.72 0.14 68 / 0)")).toBe(true);
+    expect(isClear("rgba(10, 10, 10, 0.5)")).toBe(false);
+    expect(isClear("rgb(224, 148, 40)")).toBe(false);
+    expect(isClear("oklch(0.72 0.14 68)")).toBe(false);
+    expect(isClear("oklch(0.72 0.14 68 / 40%)")).toBe(false);
+  });
+});
