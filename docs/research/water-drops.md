@@ -1076,3 +1076,27 @@ design → `?try` → verify measured → Ony approves).
   - whether 8-bit height bands on small droplets (half-float is the fallback);
   - the CSS-px-to-mm pane scale (how big a pane is in real life), which sets
     every threshold in §2.
+
+## 8. Status (2026-10-01)
+
+- Step 1, the sim core: done (51d8ce6, `src/effects/water/sim.ts`, 12 tests
+  as 7.5 lists). Changes from the plan: a fixed 1/120 s step with an
+  accumulator (frame-rate independence holds exactly, not just to 5%); a
+  drop is held at its front edge and lays its film behind it (it was
+  helped by its own film).
+- Steps 2-4, drop map, water layer, highlights: done behind `?try=drops`
+  (b3ca43b, 80c697e). The map is at full CSS px, not half: at 3.6 px/mm a
+  typical rain drop is 7 px across and half resolution drew it as a
+  3-texel block. Highlights are in the water layer, not the glass light
+  pass.
+- **A correction to 7.2 "the drop shows the photograph sharp".** The site's
+  glass is etched on its back face (shadows.md 7; the satin preview etches
+  the front "like the back"). A drop on the polished front does not wet
+  the etch, so it images the frosted face a glass-thickness away: the
+  photograph blurred wider than the drop, shifted (n-1) x thickness x
+  slope, about 7 px. So on the site's glass a drop shows the frost beside
+  it and only its reflections stand out (computed). It is a clear lens
+  onto the sharp photograph only where the front is etched too or the
+  glass is clear. Which the site wants is a question for Ony (todo 88).
+- Still to do: step 5 (droplets and wiped tracks), 6 (caustic and shadow
+  behind), 7 (tiers, idle, perf), 8 (side by side, Ony).
