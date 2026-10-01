@@ -141,6 +141,18 @@ export function lampSeen(): boolean {
   return byId.get(heldTool())?.lampSeen ?? true;
 }
 
+/**
+ * Whether the camera is in the hand: the lamp, white or UV, with its ring,
+ * its winding and its shutter. Every other tool is its own cursor -- the
+ * ring, the dot, the charge and the shutter are put away with the lamp
+ * (Ony, 2026-10-01: "when I am using the other tools I dont want to be able
+ * to use/see the original cursor with its charge effects or anything").
+ */
+export function cameraInHand(): boolean {
+  const id = heldTool();
+  return id === "lamp" || id === "blacklight";
+}
+
 /** Whether the tray is shown (?try=tools, or ?try=broken for the hammer). */
 export function toolTray(): boolean {
   return previewing("tools") || previewing("broken");

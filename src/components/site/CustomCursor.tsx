@@ -5,6 +5,7 @@ import { CameraIris } from "./CameraIris";
 import { t } from "@/lib/tuning";
 import { useEffect, useRef } from "react";
 import { watchShutterCharge } from "@/lib/shutter-charge";
+import { cameraInHand, onToolChange } from "@/effects/tools/held";
 import { CursorLight } from "./CursorLight";
 import { GlassLight } from "./GlassLight";
 import { FlareOverlay } from "./FlareOverlay";
@@ -357,7 +358,24 @@ export function CustomCursor() {
       el.toggleAttribute("data-armed", armed);
     };
 
-    const charger = watchShutterCharge({ onCharge: applyCharge });
+    /*
+     * Another tool in the hand: the camera is put away -- no ring, no dot, no
+     * winding, no shutter (cameraInHand). Marked on <html> for the
+     * stylesheet, and the charge held at nothing while it is.
+     */
+    const showCamera = () => {
+      const on = cameraInHand();
+      document.documentElement.toggleAttribute("data-other-tool", !on);
+      if (!on) applyCharge(0, false);
+    };
+    const charger = watchShutterCharge({
+      onCharge: (charge, armed) => (cameraInHand() ? applyCharge(charge, armed) : undefined),
+    });
+    showCamera();
+    const stopTool = onToolChange(() => {
+      if (!cameraInHand()) charger.spend();
+      showCamera();
+    });
 
     /*
      * The seam. `window.__charge(0.9)` winds it; `window.__charge(0)` lets go.
@@ -373,6 +391,8 @@ export function CustomCursor() {
     }
 
     const onClick = (event: MouseEvent) => {
+      // Another tool is in the hand: its clicks are its own, the shutter is put away.
+      if (!cameraInHand()) return;
       /*
        * The click that ends a hold is swallowed whole.
        *
@@ -451,6 +471,8 @@ export function CustomCursor() {
 
     return () => {
       releaseLamp();
+      stopTool();
+      document.documentElement.removeAttribute("data-other-tool");
       charger.stop();
       window.removeEventListener("click", onClick, true);
       follow?.stop();

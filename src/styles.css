@@ -282,6 +282,11 @@
  * confirmed a fine pointer, so touch devices and anyone with reduced motion
  * keep their own pointer and never meet this at all.
  */
+/* Another tool in the hand: the camera's ring and dot are put away with it (CustomCursor, held cameraInHand). */
+html[data-other-tool] .custom-cursor {
+  display: none;
+}
+
 .custom-cursor {
   /*
    * The ring's diameter, inherited by the aperture.
