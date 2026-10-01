@@ -108,7 +108,7 @@ describe("the reflection is worked out from causes", () => {
     expect(src).toContain("float piped = couple * exp(-dl / uPipedReach) * uPipedGain;");
     expect(tuning["pipedReach"]?.value).toBe(780);
     // The marks are on the face only, never the bevel.
-    expect(src).toContain("float onFace = inside * smoothstep(0.9, 1.0, band);");
+    expect(src).toContain("float onFace = inside * frontTop * frontBot");
   });
 
   it("is drawn in the glass shader, from Fresnel, ungated by the lamp", () => {

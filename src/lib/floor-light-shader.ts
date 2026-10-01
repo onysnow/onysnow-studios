@@ -375,8 +375,8 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
       marks = (marks + around * uHasSurface) / 5.0;
       cover = marksCover(marks, uGrimeFloor, 1.0) * uMarks[i];
     }
-    // On the flat face only, never the bevel (Ony: no marks on the edges).
-    cover *= smoothstep(0.9, 1.0, x);
+    // On the whole front face, bevel included, to the rim (Ony, 2026-10-01), as the glass shader draws them.
+    cover *= smoothstep(0.0, 0.05, x);
     float groove = cover.x;
     float smear = cover.y;
     through *= (1.0 - SMUDGE_EXTINCTION * smear) * (1.0 - SCRATCH_SHADOW * groove);

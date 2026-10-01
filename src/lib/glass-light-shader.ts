@@ -1015,11 +1015,19 @@ void main() {
     rim += vec3((farTopLine * topOpenness + farBotLine * botOpenness) * withinX) * 5.0 * direct * EDGE_GLOW;
 
     /*
-     * The marks are on the flat face only (Ony: no scratches or smudges on
-     * the edges or sides). They fade out over the last tenth of the bevel,
-     * where it meets the face, so there is no line where they stop.
+     * The marks are on the whole front face, bevel included, right to its
+     * rim -- but never on the side faces you can see past it (Ony,
+     * 2026-10-01: "you can see where the texture/scratch/smudge layer in the
+     * glass cuts off ... It should go all the way to the edge but not down
+     * the sides if they are visible"). They stopped at the bevel's inner
+     * line, a clean strip round every pane. A side face shows within its own
+     * width of the rim (uFaces); the marks end there over a pixel.
      */
-    float onFace = inside * smoothstep(0.9, 1.0, band);
+    float frontTop = smoothstep(topT - 0.5, topT + 1.0, dTop);
+    float frontBot = smoothstep(botT - 0.5, botT + 1.0, dBot);
+    float frontL = smoothstep(max(uFaces.z, 0.5) - 0.5, max(uFaces.z, 0.5) + 1.0, frag.x - uRect.x);
+    float frontR = smoothstep(max(uFaces.w, 0.5) - 0.5, max(uFaces.w, 0.5) + 1.0, uRect.x + uRect.z - frag.x);
+    float onFace = inside * frontTop * frontBot * mix(frontL * frontR, 1.0, uStraight);
     vec3 face = vec3(onFace * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
 
     /*
