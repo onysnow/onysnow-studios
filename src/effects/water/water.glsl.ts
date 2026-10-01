@@ -180,6 +180,7 @@ uniform vec2 uWetTexel;       // one wet-map texel, in uv
 uniform sampler2D uFog;       // the condensation map: R how far it has built up
 uniform float uFogAmount;     // its full density, 0-1
 uniform float uFogSide;       // 0: on the rain's face (wiped by it); 1: on the other face (veiling it)
+uniform float uSamples;       // samples a pixel where there is water: 1, or 4 (rotated grid)
 uniform float uClear;         // 1: the water clears the etch (rain on the etched face); 0: on the polished face, reflections only
 uniform float uIor;
 uniform float uGlassIor;
@@ -281,9 +282,8 @@ vec3 fogColour(vec2 page) {
   return c * (0.94 + 0.12 * hash12(floor(gl_FragCoord.xy)));
 }
 
-void main() {
-  // This pixel, pane CSS px from the top left; the maps were drawn with y = 0 at v = 0.
-  vec2 local = vec2(gl_FragCoord.x, uPane.w * uScale - gl_FragCoord.y) / uScale;
+// Everything at one point of the pane (pane CSS px from the top left): its colour and how much it covers.
+vec4 shadeAt(vec2 local) {
   vec2 uvP = local / uPane.zw;
   vec2 uvD = uvP * uDropsUv;
   vec4 d = texture2D(uDrops, uvD);
@@ -310,9 +310,8 @@ void main() {
   if (uFogSide < 0.5) fogA *= 1.0 - max(coverD, coverW);
 
   if (cover <= 0.0 && film <= 0.0) {
-    if (fogA <= 0.0) { gl_FragColor = vec4(0.0); return; }
-    gl_FragColor = vec4(fogColour(pageHere), fogA);
-    return;
+    if (fogA <= 0.0) return vec4(0.0);
+    return vec4(fogColour(pageHere), fogA);
   }
 
   // The water's height and slope here, mm and mm per mm: both maps, by central differences over one texel.
@@ -385,6 +384,9 @@ void main() {
 
     // Through: the scene from SCENE distance, less what the flat glass would do anyway.
     vec2 tanOut = tir ? vec2(0.0) : out3.xy / max(-out3.z, 0.05);
+    // Near the rim the bent sight runs off sideways; past a slope of 2 it shows only a blur of the scene, not a speckle of far-off pixels.
+    float tl = length(tanOut);
+    if (tl > 2.0) tanOut *= 2.0 / tl;
     vec2 tanFlat = V.xy / max(-V.z, 0.05);
     vec2 seenPage = page + uScene * (tanOut - tanFlat);
     vec3 through = tir ? vec3(0.0) : photoAt(seenPage);
@@ -415,6 +417,14 @@ void main() {
     }
     vec3 back = frostLit;
     if (k2 < 1.0) {
+      /*
+       * Leaving the front face, glass to air: Fresnel rises to all of it as
+       * the sight nears the angle where it is trapped, so the room fades
+       * into the frost's glow instead of stopping in a hard ring.
+       */
+      float cosExit = sqrt(1.0 - k2);
+      float fgl = pow((uGlassIor - 1.0) / (uGlassIor + 1.0), 2.0);
+      float Fexit = fgl + (1.0 - fgl) * pow(1.0 - cosExit, 5.0);
       vec3 dir = vec3(kOut, sqrt(1.0 - k2));              // into the room, toward you
       vec3 room = uHasRoom > 0.5
         ? decodeRadiance(texture2D(uRoomTex, roomUvDir(dir)).rgb) * uRoomExposure
@@ -440,7 +450,7 @@ void main() {
          * brighter in total).
          */
         float wide = max(size, 0.1);
-        float disc = 1.0 - smoothstep(wide * 0.6, wide * 1.4, off);
+        float disc = 1.0 - smoothstep(wide * 0.4, wide * 1.6, off);
         float core = LAMP_CORE * pow(16.0 / max(uLightRadius[i], 1.0), 2.0);
         back += uLightColour[i] * disc * core * (size * size) / (wide * wide);
         /*
@@ -452,6 +462,7 @@ void main() {
         float bl = off / (wide * BLOOM_WIDTH);
         back += uLightColour[i] * core * BLOOM_SHARE * (size * size) / (wide * wide) * exp(-bl * bl);
       }
+      back = mix(back, frostLit, Fexit);
     }
     vec3 water = through * T * (1.0 - Fin) + back * Fin;
     /*
@@ -496,7 +507,7 @@ void main() {
       float size = atan(max(uLightRadius[i], 1.0) / dist);
       float off = acos(clamp(dot(roomDir, L), -1.0, 1.0));
       float wide = max(size, 0.1);
-      float disc = 1.0 - smoothstep(wide * 0.6, wide * 1.4, off);
+      float disc = 1.0 - smoothstep(wide * 0.4, wide * 1.6, off);
       float core = LAMP_CORE * pow(16.0 / max(uLightRadius[i], 1.0), 2.0);
       spec += uLightColour[i] * disc * core * (size * size) / (wide * wide);
     }
@@ -531,6 +542,33 @@ void main() {
       alpha = a;
     }
   }
-  gl_FragColor = vec4(col, alpha);
+  return vec4(col, alpha);
+}
+
+/*
+ * Each pixel, sampled four times inside itself where there is water
+ * (rotated-grid supersampling; uSamples 4 on machines that can afford it):
+ * a drop turns the view through it fast -- the scene's image in it, its
+ * glints, the rim where the reflection turns total -- and one sample a
+ * pixel left stair-steps and single bright pixels (Ony, 2026-10-01: "Make
+ * sure pixels aren't visible in the drops"). The four are averaged as
+ * light (premultiplied by their cover).
+ */
+void main() {
+  // This pixel, pane CSS px from the top left; the maps were drawn with y = 0 at v = 0.
+  vec2 local = vec2(gl_FragCoord.x, uPane.w * uScale - gl_FragCoord.y) / uScale;
+  vec4 c = shadeAt(local);
+  if (uSamples < 1.5 || c.a <= 0.0) {
+    gl_FragColor = c;
+    return;
+  }
+  float p = 1.0 / uScale;
+  vec4 acc = vec4(0.0);
+  for (int k = 0; k < 4; k++) {
+    vec2 o = k == 0 ? vec2(0.125, 0.375) : k == 1 ? vec2(-0.375, 0.125) : k == 2 ? vec2(-0.125, -0.375) : vec2(0.375, -0.125);
+    vec4 q = shadeAt(local + o * p);
+    acc += vec4(q.rgb * q.a, q.a);
+  }
+  gl_FragColor = acc.a > 1e-4 ? vec4(acc.rgb / acc.a, acc.a * 0.25) : vec4(0.0);
 }
 `;

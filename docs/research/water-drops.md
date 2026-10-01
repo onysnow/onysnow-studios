@@ -1299,6 +1299,15 @@ rim lights up near a lamp. And each glint gets the camera's bloom, a faint
 lobe four times its width (BLOOM_*), so it reads as a small star, not a lone
 pixel.
 
+No visible pixels (Ony, 2026-10-01: "Make sure pixels aren't visible in the
+drops"): each pixel where there is water is sampled four times inside
+itself (rotated grid; full tier only) and averaged as light; the room's
+reflection fades into the frost's glow by the front face's own Fresnel as
+the sight nears being trapped, instead of stopping at a hard ring; the
+glint's edge is softened; and near the rim, where the bent sight runs off
+sideways, the scene it samples is held to a slope of 2 so it blurs rather
+than speckles.
+
 No shadow is drawn: with the rain on the far face and the lamp in front,
 there is nothing behind a drop near enough to show one (the scene is metres
 away); the drop shows instead as clear glass in the lit frost.

@@ -12,7 +12,7 @@ import {
 import { paneCanvas } from "@/effects/engine/compositor";
 import { glassGeometry } from "@/effects/scene/scene";
 import { pointLights, roomLight } from "@/effects/light/lights";
-import { surfaceScaleCap } from "@/effects/engine/quality";
+import { quality, surfaceScaleCap } from "@/effects/engine/quality";
 import { rainType } from "@/effects/water/rain-types";
 import { camera } from "@/effects/camera/camera";
 import { t } from "@/lib/tuning";
@@ -180,6 +180,7 @@ export function WaterDrops() {
       "uFog",
       "uFogAmount",
       "uFogSide",
+      "uSamples",
       "uClear",
       "uIor",
       "uGlassIor",
@@ -956,6 +957,8 @@ export function WaterDrops() {
       gl.uniform1i(u.uFog!, 6);
       gl.uniform1f(u.uFogAmount!, st.fog ? t("fogAmount") : 0);
       gl.uniform1f(u.uFogSide!, Math.round(t("fogSide")));
+      // Four samples a pixel where there is water, on machines that run the full tier.
+      gl.uniform1f(u.uSamples!, quality() === "full" ? 4 : 1);
       const frosted = pane.causes.material.frost > 0;
       // On clear glass the water is a lens whichever face it is on; on frosted glass, only on the etched face.
       gl.uniform1f(u.uClear!, !frosted || Math.round(t("rainFace")) === 0 ? 1 : 0);
