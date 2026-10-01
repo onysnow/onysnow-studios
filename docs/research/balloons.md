@@ -590,6 +590,57 @@ A **slow-motion** lab control (×1/100 to ×1/1000) shows the tear itself.
 
 ---
 
+## 7. Shape, measured (2026-10-01)
+
+Ony: the balloons were "weirdly shaped" with "half bulges on the side". The
+first cut drew a circle stretched 1.15x and pinched toward the knot by a
+smoothstep that only started below the middle, so the outline had a
+shoulder on each side where the pinch began, and its normals came from the
+unpinched circle.
+
+### 7.1 The profile
+
+Measured from a product photograph of a standard 11-inch round latex
+balloon, side on against white ([Michaels, "11" Standard Latex Balloon,
+Apple Red"](https://www.michaels.com/product/11-standard-latex-balloon-M20041041);
+used only to measure the silhouette, not shipped): the red pixels thresholded
+row by row, half-width against height, both over the width W.
+
+- Crown to neck: **1.30 W**. Widest **41.5%** of the way down from the
+  crown.
+- Below the widest point the outline is close to a straight cone to the
+  neck; above it, a round crown.
+- Knot: 0.097 W long below the neck, 0.08 W wide.
+- A 5-inch balloon from the same maker is rounder (1.02 W tall), as small
+  balloons are; the site's sizes are 9-16 inch, so the 11-inch profile is
+  used for all of them **(estimate)**.
+
+Fitted as rho(u) = A sqrt(u) (1 - u)^P (1 + B u + C u^2), u = 0 at the crown
+and 1 at the neck: A 2.2014, P 0.8848, B 0.2846, C 0.0803; rms error 0.6%
+of the half-width, 5% only in the last pixels at the neck
+(`src/effects/balloons/shape.ts`, tested against the measured table).
+
+### 7.2 What changed
+
+- The balloon is drawn as a surface of revolution of that profile,
+  x^2 + z^2 = rho(y)^2, with its own normal (x, -rho rho', z), turned with
+  the balloon (the first cut never turned its normals, so a tilted
+  balloon's light lay as if it were upright).
+- Drawn at the device's pixels (capped 2x); the edge is antialiased over
+  one device pixel measured square to the outline.
+- The shadow it throws uses the same outline; the pop hit test too.
+- Physics: the crown sits 1.08 radii above the widest point and the cone
+  reaches 1.52 below, so the body is a ball at -0.08 r plus a massless ball
+  of 0.55 r at 0.9 r; buoyancy acts at the volume's centroid, 0.079 r
+  below the widest point (computed from the profile); the ribbon is tied at
+  the bottom of the knot.
+- Latex is satin: the room it reflects is blurred over about 0.25 rad
+  before sampling, and the rim uses the Fresnel term with roughness
+  (Lagarde), which removed the saturated outline round every balloon.
+- The volume of this shape is 1.18 times the sphere of the same width
+  (computed); the free lift was already set from the helium chart's real
+  balloons, so it is unchanged.
+
 ## Sources
 
 Physics and fracture:

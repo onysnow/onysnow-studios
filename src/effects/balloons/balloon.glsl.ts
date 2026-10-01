@@ -2,8 +2,12 @@
  * The latex balloon (task 74; docs/research/balloons.md 2, 6 "The balloon
  * shader"). One quad per balloon, viewport CSS px.
  *
- * - Shape: a teardrop -- a circle stretched 1.15x along its axis, narrowing
- *   toward the knot -- with a small knot cap (estimate, from photographs).
+ * - Shape: a surface of revolution about the balloon's axis, its profile
+ *   measured from a photograph of a real 11-inch latex balloon
+ *   (effects/balloons/shape, tested): a round crown, widest 41.5% of the
+ *   way down, an almost straight cone to the neck, and the knot below. The
+ *   normal is the surface's own, (x, -rho rho', z), turned with the
+ *   balloon, so the light lies on it as it would on the real thing.
  * - Thickness: stretching thins the wall, so the colour is lightest over
  *   the body, a little denser at the pole spot (1.6x, Garcia-Herrera) and
  *   far denser toward the neck (about 10x, estimate). Through the wall,
@@ -22,6 +26,7 @@
  */
 
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
+import { SHAPE_GLSL } from "@/effects/balloons/shape";
 
 export const MAX_BALLOON_LIGHTS = 4;
 
@@ -30,13 +35,16 @@ attribute vec2 aPos;       // viewport px
 attribute vec2 aLocal;     // balloon frame, in radii: x across, y toward the knot
 attribute vec3 aColour;    // the latex at full inflation
 attribute vec3 aInfo;      // radius px, finish (0 fashion, 1 crystal, 2 neon), height above the page px
+attribute vec2 aRot;       // the balloon's turn: cos, sin
 uniform vec2 uViewport;
 varying vec2 vLocal;
 varying vec3 vColour;
 varying vec3 vInfo;
 varying vec2 vPos;
+varying vec2 vRot;
 void main() {
   vLocal = aLocal;
+  vRot = aRot;
   vColour = aColour;
   vInfo = aInfo;
   vPos = aPos;
@@ -52,6 +60,8 @@ varying vec2 vLocal;
 varying vec3 vColour;
 varying vec3 vInfo;
 varying vec2 vPos;
+varying vec2 vRot;
+uniform float uPixel;      // device px per CSS px
 uniform int uLightCount;
 uniform vec3 uLightPos[${MAX_BALLOON_LIGHTS}];
 uniform vec3 uLightColour[${MAX_BALLOON_LIGHTS}];
@@ -64,32 +74,36 @@ uniform float uCameraDistance;
 uniform float uAmbient;
 
 const float F0 = 0.042;
+${SHAPE_GLSL}
 
 void main() {
   float R = vInfo.x;
   float finish = vInfo.y;
   vec2 p = vLocal;
-  // The knot: a small rounded cap below the neck.
-  float knot = 0.0;
-  {
-    vec2 k = (p - vec2(0.0, 1.2)) / vec2(0.07, 0.06);
-    knot = 1.0 - smoothstep(0.8, 1.0, length(k));
-  }
-  // The body: stretched 1.15 along the axis, narrowing toward the knot.
-  float along = p.y / 1.15;
-  float narrow = 1.0 - 0.28 * smoothstep(0.0, 1.0, along) * smoothstep(-0.2, 1.0, along);
-  vec2 q = vec2(p.x / max(narrow, 0.2), along);
-  float d = length(q);
-  float edge = 1.5 / R;   // about a pixel and a half, in radii
-  float body = 1.0 - smoothstep(1.0 - edge, 1.0, d);
+  // One device pixel, in radii: the width of the antialiased edge.
+  float px = 1.0 / max(R * uPixel, 1.0);
+
+  // The knot: a small bulb below the neck (measured: 0.19 radii long, 0.08 each side).
+  vec2 kq = (p - vec2(0.0, BAL_NECK + BAL_KNOT_LENGTH * 0.5)) / vec2(BAL_KNOT_HALF, BAL_KNOT_LENGTH * 0.5);
+  float knot = clamp((1.0 - length(kq)) * BAL_KNOT_HALF / px * 0.5 + 0.5, 0.0, 1.0);
+
+  // The body: a surface of revolution, x^2 + z^2 = rho(y)^2.
+  float u = (p.y - BAL_CROWN) / BAL_LENGTH;
+  float rho = balProfile(u);
+  if (u > 0.9) rho = max(rho, BAL_NECK_HALF);
+  float drho = balSlope(u) / BAL_LENGTH;            // d(rho)/dy
+  // How far inside the outline, measured square to it.
+  float inward = (rho - abs(p.x)) / sqrt(1.0 + drho * drho);
+  float body = u > 0.0 && u < 1.0 ? clamp(inward / px + 0.5, 0.0, 1.0) : 0.0;
   float cover = max(body, knot);
   if (cover <= 0.0) { gl_FragColor = vec4(0.0); return; }
 
-  // The normal of the body as a sphere-like height field.
-  float z = sqrt(max(1.0 - d * d, 0.0));
-  vec3 N = normalize(vec3(q.x, q.y, max(z, 0.02)));
-  // Where along the skin: 0 at the pole, 1 at the neck.
-  float u = clamp((along + 1.0) * 0.5, 0.0, 1.0);
+  float z = sqrt(max(rho * rho - p.x * p.x, 0.0));
+  vec3 Nl = normalize(vec3(p.x, -rho * drho, max(z, 0.02)));
+  // Turned with the balloon into the page's frame.
+  vec3 N = vec3(Nl.x * vRot.x - Nl.y * vRot.y, Nl.x * vRot.y + Nl.y * vRot.x, Nl.z);
+  // Where along the skin: 0 at the crown (the pole), 1 at the neck.
+  u = clamp(u, 0.0, 1.0);
   float thick = 1.0 + 0.6 * (1.0 - smoothstep(0.0, 0.08, u)) + 9.0 * smoothstep(0.75, 1.0, u);
   thick = mix(thick, 12.0, knot);
   // The dye: exp(-sigma) = the colour at full inflation.
@@ -127,9 +141,20 @@ void main() {
   vec3 viewRay = normalize(vec3(vPos - uViewCentre, -uCameraDistance));
   vec3 Nw = normalize(vec3(N.xy, N.z));
   vec3 roomDir = reflect(viewRay, Nw);
+  /*
+   * Latex is satin, not a mirror (roughness about 0.25 rad, estimate from
+   * the reference photographs: its reflections are soft-edged): the room
+   * texture it samples is blurred over that cone when it loads (Balloons),
+   * and at a grazing slant a rough face reflects less than a polished one
+   * (the Fresnel term with roughness, F0 + (max(1 - a, F0) - F0)(1 - cos)^5,
+   * Lagarde). A mirror-sharp, full-strength rim was the saturated outline
+   * round every balloon.
+   */
   vec3 room = uHasRoom > 0.5
     ? decodeRadiance(texture2D(uRoomTex, roomUvDir(roomDir)).rgb) * uRoomExposure
     : vec3(0.3);
+  const float ROUGH = 0.45;
+  F = F0 + (max(1.0 - ROUGH, F0) - F0) * pow(1.0 - cosV, 5.0);
 
   vec3 out3;
   float alpha;
@@ -147,7 +172,13 @@ void main() {
     alpha = 1.0;
   }
   if (finish > 1.5) out3 += vColour * glow * 1.5;
-  out3 = mix(out3, vColour * 0.25 * (uAmbient + colour), knot);
-  gl_FragColor = vec4(min(out3, vec3(1.0)), alpha * cover);
+  // The knot: the same latex, gathered thick, so darker and deeper in colour, with its own glint.
+  vec3 knotColour = vColour * 0.6 * (uAmbient + colour) + room * 0.08 + spec * 0.5;
+  out3 = mix(out3, knotColour, knot);
+  alpha = mix(alpha, 1.0, knot);
+  // Brighter than the screen goes to white, as a sensor clips, not to a saturated hue.
+  float pk = max(out3.r, max(out3.g, out3.b));
+  if (pk > 1.0) out3 = mix(out3 / pk, vec3(1.0), clamp((pk - 1.0) / pk, 0.0, 1.0));
+  gl_FragColor = vec4(out3, alpha * cover);
 }
 `;

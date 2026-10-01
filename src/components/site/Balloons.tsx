@@ -12,6 +12,7 @@ import {
   MAX_BALLOON_LIGHTS,
 } from "@/effects/balloons/balloon.glsl";
 import { addShapeCaster, type ShapeCaster } from "@/effects/optics/shape-casters";
+import { BUOYANCY_Y, CROWN_Y, TIE_Y, inside, outlinePath } from "@/effects/balloons/shape";
 
 /** CSS px per metre of the room (balloons.md 6: 500-700, estimate): an 11" balloon is 167 px. */
 const PX_PER_M = 600;
@@ -99,8 +100,10 @@ export function Balloons() {
       const aLocal = A("aLocal");
       const aColour = A("aColour");
       const aInfo = A("aInfo");
+      const aRot = A("aRot");
       const u = {
         viewport: U("uViewport"),
+        pixel: U("uPixel"),
         lightCount: U("uLightCount"),
         lightPos: U("uLightPos"),
         lightColour: U("uLightColour"),
@@ -124,7 +127,19 @@ export function Balloons() {
           const c = document.createElement("canvas");
           c.width = 1024;
           c.height = 256;
-          c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
+          /*
+           * Latex is satin: what it reflects is the room blurred over a
+           * cone about 0.25 rad wide (estimate, from the soft reflections in
+           * the reference photographs) -- 40 px of this 1024 px panorama.
+           * Blurred once here, in the image's own (log) encoding, which is
+           * close enough at this width (estimate); sampled once per pixel.
+           */
+          const cx = c.getContext("2d");
+          if (cx) {
+            cx.filter = "blur(14px)";
+            cx.drawImage(img, -32, -32, c.width + 64, c.height + 64);
+            cx.filter = "none";
+          }
           room = gl.createTexture();
           gl.activeTexture(gl.TEXTURE3);
           gl.bindTexture(gl.TEXTURE_2D, room);
@@ -180,9 +195,8 @@ export function Balloons() {
         return (rng >>> 0) / 4294967296;
       };
       const balloons: Balloon[] = [];
-      const shapePath = new Path2D(
-        "M50 4 C78 4 92 26 90 50 C88 74 66 90 52 96 L48 96 C34 90 12 74 10 50 C8 26 22 4 50 4 Z",
-      );
+      // Its outline for the shadow it throws: the measured profile (effects/balloons/shape).
+      const shapePath = new Path2D(outlinePath());
       const make = (n: number) => {
         const inches = SIZES[Math.floor(random() * SIZES.length)]!;
         const fill = Math.round(t("balloonFill")) === 1 ? "air" : "helium";
@@ -216,7 +230,20 @@ export function Balloons() {
              * quarter of a radius toward the knot (estimate); a thin shell's
              * inertia, 2/3 m r^2.
              */
-            .setMassProperties(phys.mass, { x: 0, y: 0.25 * r }, (2 / 3) * phys.mass * r * r)
+            // (In the collider's frame, which sits 0.08 r up: 0.25 r below the widest point.)
+            .setMassProperties(phys.mass, { x: 0, y: 0.33 * r }, (2 / 3) * phys.mass * r * r)
+            .setRestitution(0.6)
+            .setFriction(0.8)
+            .setCollisionGroups(BALLOON)
+            // Its crown is 1.08 radii above the widest point (effects/balloons/shape).
+            .setTranslation(0, -0.08 * r),
+          body,
+        );
+        // The cone below, down to the neck: a second, massless ball (it touches walls; the mass is set above).
+        world.createCollider(
+          R.ColliderDesc.ball(0.55 * r)
+            .setTranslation(0, 0.9 * r)
+            .setDensity(0)
             .setRestitution(0.6)
             .setFriction(0.8)
             .setCollisionGroups(BALLOON),
@@ -225,11 +252,11 @@ export function Balloons() {
         const links: Balloon["links"] = [];
         const seg = STRING_M / LINKS;
         let prev = body;
-        let anchor = { x: 0, y: r * 1.2 };
+        let anchor = { x: 0, y: r * TIE_Y };
         for (let k = 0; k < LINKS; k++) {
           const link = world.createRigidBody(
             R.RigidBodyDesc.dynamic()
-              .setTranslation(x, y + r * 1.2 + (k + 1) * seg)
+              .setTranslation(x, y + r * TIE_Y + (k + 1) * seg)
               .setLinearDamping(0.8),
           );
           world.createCollider(
@@ -310,7 +337,13 @@ export function Balloons() {
         for (const b of [...balloons].reverse()) {
           const p = b.body.translation();
           const r = b.phys.diameter / 2;
-          if (Math.hypot(p.x - x, (p.y - y) / 1.15) < r) {
+          // Into the balloon's own frame, in radii.
+          const rot = b.body.rotation();
+          const dx = (x - p.x) / r;
+          const dy = (y - p.y) / r;
+          const lx = dx * Math.cos(rot) + dy * Math.sin(rot);
+          const ly = -dx * Math.sin(rot) + dy * Math.cos(rot);
+          if (inside(lx, ly)) {
             pop(b);
             task.wake();
             return;
@@ -374,7 +407,14 @@ export function Balloons() {
              */
             const weight = b.phys.mass * 9.81;
             b.body.addForce({ x: fx, y: fy + weight }, true);
-            b.body.addForceAtPoint({ x: 0, y: -(b.phys.netLift + weight) }, p, true);
+            // The middle of the air it displaces: 0.079 radii below its widest point (the measured shape's volume centroid).
+            const rot = b.body.rotation();
+            const rr = (b.phys.diameter / 2) * BUOYANCY_Y;
+            b.body.addForceAtPoint(
+              { x: 0, y: -(b.phys.netLift + weight) },
+              { x: p.x - Math.sin(rot) * rr, y: p.y + Math.cos(rot) * rr },
+              true,
+            );
           }
           world.timestep = DT;
           world.step();
@@ -408,17 +448,20 @@ export function Balloons() {
           const cx = p.x * PX_PER_M;
           const cy = p.y * PX_PER_M;
           b.shadow.x = cx;
-          b.shadow.y = cy + r * 0.12;
+          b.shadow.y = cy;
           b.shadow.angle = rot;
           const c = Math.cos(rot);
           const sn = Math.sin(rot);
+          // The quad round the measured outline: crown to the bottom of the knot, a pixel or two spare.
+          const top = CROWN_Y - 0.06;
+          const bottom = TIE_Y + 0.06;
           const corners = [
-            [-1.15, -1.25],
-            [1.15, -1.25],
-            [1.15, 1.4],
-            [-1.15, -1.25],
-            [1.15, 1.4],
-            [-1.15, 1.4],
+            [-1.08, top],
+            [1.08, top],
+            [1.08, bottom],
+            [-1.08, top],
+            [1.08, bottom],
+            [-1.08, bottom],
           ] as const;
           for (const [lx, ly] of corners) {
             const ox = lx * r;
@@ -432,16 +475,22 @@ export function Balloons() {
               r,
               b.finish,
               FLOAT_HEIGHT,
+              c,
+              sn,
             );
           }
         }
+        // At the screen's own pixels (capped at 2x): a balloon's edge is as sharp as the display.
+        const k = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
         const ctx = layer.getContext("2d");
-        if (layer.width !== W || layer.height !== H) {
-          layer.width = W;
-          layer.height = H;
+        if (layer.width !== Math.round(W * k) || layer.height !== Math.round(H * k)) {
+          layer.width = Math.round(W * k);
+          layer.height = Math.round(H * k);
         }
         if (!ctx) return;
-        ctx.clearRect(0, 0, W, H);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, layer.width, layer.height);
+        ctx.setTransform(k, 0, 0, k, 0, 0);
         // The ribbons, under the balloons: a curling ribbon, satin grey.
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
@@ -451,8 +500,8 @@ export function Balloons() {
           const r = (b.phys.diameter / 2) * PX_PER_M;
           ctx.beginPath();
           ctx.moveTo(
-            p.x * PX_PER_M - Math.sin(rot) * r * 1.22,
-            p.y * PX_PER_M + Math.cos(rot) * r * 1.22,
+            p.x * PX_PER_M - Math.sin(rot) * r * TIE_Y,
+            p.y * PX_PER_M + Math.cos(rot) * r * TIE_Y,
           );
           for (const l of b.links) {
             const q = l.translation();
@@ -473,7 +522,7 @@ export function Balloons() {
           ctx.lineWidth = 2;
           ctx.stroke();
         }
-        if (verts.length > 0 && beginPass(W, H, "balloons")) {
+        if (verts.length > 0 && beginPass(Math.round(W * k), Math.round(H * k), "balloons")) {
           gl.useProgram(program);
           gl.enable(gl.BLEND);
           gl.blendFuncSeparate(
@@ -483,6 +532,7 @@ export function Balloons() {
             gl.ONE_MINUS_SRC_ALPHA,
           );
           gl.uniform2f(u.viewport, W, H);
+          gl.uniform1f(u.pixel, k);
           let n = 0;
           for (const l of pointLights()) {
             if (n >= MAX_BALLOON_LIGHTS || l.below || l.charge <= 0.002) continue;
@@ -507,7 +557,7 @@ export function Balloons() {
           gl.uniform1f(u.ambient, document.documentElement.hasAttribute("data-uv") ? 0.05 : 0.45);
           gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
           gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.DYNAMIC_DRAW);
-          const stride = 10 * 4;
+          const stride = 12 * 4;
           gl.enableVertexAttribArray(aPos);
           gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, stride, 0);
           gl.enableVertexAttribArray(aLocal);
@@ -516,10 +566,12 @@ export function Balloons() {
           gl.vertexAttribPointer(aColour, 3, gl.FLOAT, false, stride, 16);
           gl.enableVertexAttribArray(aInfo);
           gl.vertexAttribPointer(aInfo, 3, gl.FLOAT, false, stride, 28);
-          gl.drawArrays(gl.TRIANGLES, 0, verts.length / 10);
-          for (const a of [aPos, aLocal, aColour, aInfo]) gl.disableVertexAttribArray(a);
+          gl.enableVertexAttribArray(aRot);
+          gl.vertexAttribPointer(aRot, 2, gl.FLOAT, false, stride, 40);
+          gl.drawArrays(gl.TRIANGLES, 0, verts.length / 12);
+          for (const a of [aPos, aLocal, aColour, aInfo, aRot]) gl.disableVertexAttribArray(a);
           gl.disable(gl.BLEND);
-          ctx.drawImage(buffer, 0, 0);
+          ctx.drawImage(buffer, 0, 0, W, H);
           endPass();
         }
         // The shreds of a popped balloon.
