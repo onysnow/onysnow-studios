@@ -20,7 +20,7 @@ const BASE =
  * for it and it has never once been generated. The original is appended to the
  * srcset separately when it is genuinely larger.
  */
-export const VARIANT_WIDTHS = [320, 480, 640, 1280] as const;
+export const VARIANT_WIDTHS = [320, 480, 640, 1280, 1920, 2560] as const;
 
 /** Stable public URL for a stored object. */
 export function photoUrl(storagePath: string | null | undefined): string {

@@ -13,6 +13,12 @@ export type Category = Tables["categories"]["Row"];
 /** `sources` is Json in the generated types; narrow it to what we actually store. */
 export type Photo = Omit<Tables["photos"]["Row"], "sources"> & {
   sources: Record<string, string> | null;
+  /**
+   * false: a site photograph, uploaded for a place on a page, kept out of the
+   * portfolio (migration 20261001120000_site_photos). Absent until that SQL
+   * has run, when every photograph is the portfolio's.
+   */
+  in_portfolio?: boolean | null;
 };
 
 export type Service = Tables["services"]["Row"];
@@ -106,14 +112,24 @@ export function galleryPhotosQuery(categoryId: string | null | undefined, page =
   return queryOptions({
     queryKey: ["photos", "gallery", categoryId ?? "all", page],
     staleTime: STALE,
-    queryFn: () =>
-      rows<"photos", Photo>("photos", PHOTO_COLS, (q) => {
-        const base = q.eq("published", true);
-        const scoped = categoryId ? base.eq("category_id", categoryId) : base;
-        return scoped
-          .order("sort_order")
-          .range(page * GALLERY_PAGE_SIZE, (page + 1) * GALLERY_PAGE_SIZE - 1);
-      }),
+    queryFn: async () => {
+      const page_ = (onlyPortfolio: boolean) =>
+        rows<"photos", Photo>("photos", PHOTO_COLS, (q) => {
+          const base = q.eq("published", true);
+          const scoped = categoryId ? base.eq("category_id", categoryId) : base;
+          // Site photographs (a hero, a frame) are not the portfolio's.
+          const portfolio = onlyPortfolio ? scoped.eq("in_portfolio", true) : scoped;
+          return portfolio
+            .order("sort_order")
+            .range(page * GALLERY_PAGE_SIZE, (page + 1) * GALLERY_PAGE_SIZE - 1);
+        });
+      try {
+        return await page_(true);
+      } catch {
+        // The column is not there until its SQL has run: every photograph is the portfolio's.
+        return page_(false);
+      }
+    },
   });
 }
 

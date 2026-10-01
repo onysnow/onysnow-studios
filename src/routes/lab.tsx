@@ -1,6 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { CONTENT_CHANGED } from "@/hooks/use-admin";
+import { PagePhotosPanel } from "@/components/admin/PagePhotosPanel";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -157,6 +168,21 @@ function Lab() {
     // The page reads them as it starts: reload it.
     setReloads((n) => n + 1);
   };
+  // What the side menu edits: the look (the controls) or the site's content (38c).
+  const [section, setSection] = useState<Section>("look");
+  // A saved edit changes the site: show it in the preview.
+  useEffect(() => {
+    let timer = 0;
+    const onChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setReloads((n) => n + 1), 500);
+    };
+    window.addEventListener(CONTENT_CHANGED, onChange);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(CONTENT_CHANGED, onChange);
+    };
+  }, []);
   // Descriptions under every control: folded away unless asked for (Ony, 2026-10-01).
   const [showHints, setShowHints] = useState(false);
   const enterRedRoomNext = useRef(false);
@@ -486,183 +512,233 @@ function Lab() {
 
       <div className="flex min-h-0 flex-1 flex-col-reverse lg:flex-row">
         {/* ── The controls. */}
-        <aside className="flex min-h-0 flex-1 flex-col border-border/60 lg:w-[23rem] lg:flex-none lg:border-r">
-          <div className="space-y-2 border-b border-border/60 p-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Find a control"
-                aria-label="Find a control"
-                className="h-8 w-full rounded-md border border-input bg-transparent pl-8 pr-2 text-sm"
-              />
-            </div>
-            <div className="flex flex-wrap gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  resetTuning(TUNING_DEFAULTS);
-                  setSaveState("idle");
-                  bump();
-                  toast.success("Every control back to the source's value (not saved yet)");
-                }}
-                title="Every control back to the value in the source. Not saved until you save."
-              >
-                <RotateCcw /> Source values
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  void navigator.clipboard
-                    ?.writeText(serializeTuning())
-                    .then(() => toast.success("Copied — paste it over the defaults in tuning.ts"))
-                    .catch(() => toast.error("Could not reach the clipboard"));
-                }}
-              >
-                <ClipboardCopy /> Copy values
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-pressed={showHints}
-                onClick={() => setShowHints((v) => !v)}
-                title="Show or hide the description under every control (each has its own (i) too)"
-              >
-                <Info /> {showHints ? "Hide descriptions" : "Show descriptions"}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Causes only: the {Object.keys(RESULTS).length} results physics sets from these have no
-              control. Most do nothing until the pointer&rsquo;s light is on the glass.
-            </p>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto p-3" data-lab-controls>
-            {groups.map(([group, all]) => {
-              const knobs = all.filter(matches);
-              const switches = previewsIn(group).filter(
-                (name) =>
-                  !needle ||
-                  PREVIEW_TITLES[name].toLowerCase().includes(needle) ||
-                  PREVIEWS[name].toLowerCase().includes(needle) ||
-                  name.includes(needle),
-              );
-              if (knobs.length === 0 && switches.length === 0) return null;
-              const dead =
-                all.length > 0 &&
-                all.every((entry) => entry[1].modes === "raster") &&
-                mode !== "raster";
-              const twinned = all.some((entry) => isPerMode(entry[1]));
-              const other: TuningMode = mode === "raster" ? "css" : "raster";
-              const moved = all.filter(
-                ([key]) => valueIn(key, mode) !== TUNING_DEFAULTS[key],
-              ).length;
-
-              const rows = (inMode: TuningMode, prefix: string) => (
-                <div className="space-y-4">
-                  {knobs.map(([key, knob]) => (
-                    <KnobRow
-                      key={key}
-                      id={`knob-${prefix}${key}`}
-                      knob={knob}
-                      value={valueIn(key, inMode)}
-                      source={TUNING_DEFAULTS[key] ?? knob.value}
-                      onChange={(value) => set(key, value, inMode)}
-                      showHint={showHints}
-                    />
+        <aside
+          className={cn(
+            "flex min-h-0 flex-1 flex-col border-border/60 lg:flex-none lg:border-r",
+            SECTION_WIDTH[section],
+          )}
+        >
+          {/* What the side menu is editing: the look, or the site's content (38c). */}
+          <div className="border-b border-border/60 p-3">
+            <label
+              htmlFor="lab-section"
+              className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted-foreground"
+            >
+              Editing
+            </label>
+            <select
+              id="lab-section"
+              data-lab-section
+              value={section}
+              onChange={(e) => setSection(e.target.value as Section)}
+              className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+            >
+              {SECTIONS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label}
+                    </option>
                   ))}
-                </div>
-              );
-
-              return (
-                <details
-                  key={group}
-                  open={Boolean(needle) || !dead}
-                  className={cn(
-                    "mb-3 rounded-lg border border-border/60",
-                    group === "Liquid glass" && !dead && "border-[var(--amber)]/30",
-                  )}
-                >
-                  <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                    <span>
-                      {GROUP_TITLES[group] ?? group}
-                      {twinned ? (
-                        <span className="ml-2 normal-case tracking-normal text-[var(--amber)]">
-                          {mode === "raster" ? "liquid" : "CSS"} set
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="normal-case tracking-normal">
-                      {dead ? "liquid glass only" : moved ? `${moved} changed` : ""}
-                    </span>
-                  </summary>
-                  <div className="px-3 pb-4 pt-1">
-                    {switches.length ? (
-                      <div className="mb-4 space-y-2 rounded-md bg-muted/40 p-2" data-lab-switches>
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                          Not approved yet — switch on to try
-                        </p>
-                        {switches.map((name) => (
-                          <PreviewSwitch
-                            key={name}
-                            name={name}
-                            on={switchedOn.has(name)}
-                            showHint={showHints}
-                            onChange={(on) => flip(name, on)}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                    {dead ? (
-                      <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-                        These drive the liquid glass shader and do nothing to CSS glass. Switch the
-                        glass (top bar) to see them work.
-                      </p>
-                    ) : group === "Liquid glass" ? (
-                      <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
-                        Edge width (under Glass shape) has the most leverage here: across the flat
-                        face the surface normal is straight out, so refraction and every specular
-                        are zero there. All of this glass lives on the edge.
-                      </p>
-                    ) : null}
-                    <div className={dead ? "opacity-60" : undefined}>{rows(mode, "")}</div>
-                    {twinned ? (
-                      <details className="mt-5 rounded-md border border-border/60 p-3">
-                        <summary className="cursor-pointer text-xs text-muted-foreground">
-                          The {other === "raster" ? "liquid" : "CSS"} glass set — not on screen
-                        </summary>
-                        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                          This group keeps separate values for each glass. These apply when the
-                          preview runs the other one.
-                        </p>
-                        <Button
-                          className="mt-2 mb-4"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            for (const [key, knob] of all) {
-                              if (isPerMode(knob)) setValueIn(key, other, valueIn(key, mode));
-                            }
-                            bump();
-                            toast.success(
-                              `Copied this set to ${other === "raster" ? "liquid" : "CSS"}`,
-                            );
-                          }}
-                        >
-                          <Copy /> Copy the live set over these
-                        </Button>
-                        <div className="opacity-70">{rows(other, `${other}-`)}</div>
-                      </details>
-                    ) : null}
-                  </div>
-                </details>
-              );
-            })}
+                </optgroup>
+              ))}
+            </select>
           </div>
+          {section === "look" ? (
+            <>
+              <div className="space-y-2 border-b border-border/60 p-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Find a control"
+                    aria-label="Find a control"
+                    className="h-8 w-full rounded-md border border-input bg-transparent pl-8 pr-2 text-sm"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      resetTuning(TUNING_DEFAULTS);
+                      setSaveState("idle");
+                      bump();
+                      toast.success("Every control back to the source's value (not saved yet)");
+                    }}
+                    title="Every control back to the value in the source. Not saved until you save."
+                  >
+                    <RotateCcw /> Source values
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      void navigator.clipboard
+                        ?.writeText(serializeTuning())
+                        .then(() =>
+                          toast.success("Copied — paste it over the defaults in tuning.ts"),
+                        )
+                        .catch(() => toast.error("Could not reach the clipboard"));
+                    }}
+                  >
+                    <ClipboardCopy /> Copy values
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-pressed={showHints}
+                    onClick={() => setShowHints((v) => !v)}
+                    title="Show or hide the description under every control (each has its own (i) too)"
+                  >
+                    <Info /> {showHints ? "Hide descriptions" : "Show descriptions"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Causes only: the {Object.keys(RESULTS).length} results physics sets from these
+                  have no control. Most do nothing until the pointer&rsquo;s light is on the glass.
+                </p>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-3" data-lab-controls>
+                {groups.map(([group, all]) => {
+                  const knobs = all.filter(matches);
+                  const switches = previewsIn(group).filter(
+                    (name) =>
+                      !needle ||
+                      PREVIEW_TITLES[name].toLowerCase().includes(needle) ||
+                      PREVIEWS[name].toLowerCase().includes(needle) ||
+                      name.includes(needle),
+                  );
+                  if (knobs.length === 0 && switches.length === 0) return null;
+                  const dead =
+                    all.length > 0 &&
+                    all.every((entry) => entry[1].modes === "raster") &&
+                    mode !== "raster";
+                  const twinned = all.some((entry) => isPerMode(entry[1]));
+                  const other: TuningMode = mode === "raster" ? "css" : "raster";
+                  const moved = all.filter(
+                    ([key]) => valueIn(key, mode) !== TUNING_DEFAULTS[key],
+                  ).length;
+
+                  const rows = (inMode: TuningMode, prefix: string) => (
+                    <div className="space-y-4">
+                      {knobs.map(([key, knob]) => (
+                        <KnobRow
+                          key={key}
+                          id={`knob-${prefix}${key}`}
+                          knob={knob}
+                          value={valueIn(key, inMode)}
+                          source={TUNING_DEFAULTS[key] ?? knob.value}
+                          onChange={(value) => set(key, value, inMode)}
+                          showHint={showHints}
+                        />
+                      ))}
+                    </div>
+                  );
+
+                  return (
+                    <details
+                      key={group}
+                      open={Boolean(needle) || !dead}
+                      className={cn(
+                        "mb-3 rounded-lg border border-border/60",
+                        group === "Liquid glass" && !dead && "border-[var(--amber)]/30",
+                      )}
+                    >
+                      <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        <span>
+                          {GROUP_TITLES[group] ?? group}
+                          {twinned ? (
+                            <span className="ml-2 normal-case tracking-normal text-[var(--amber)]">
+                              {mode === "raster" ? "liquid" : "CSS"} set
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="normal-case tracking-normal">
+                          {dead ? "liquid glass only" : moved ? `${moved} changed` : ""}
+                        </span>
+                      </summary>
+                      <div className="px-3 pb-4 pt-1">
+                        {switches.length ? (
+                          <div
+                            className="mb-4 space-y-2 rounded-md bg-muted/40 p-2"
+                            data-lab-switches
+                          >
+                            <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                              Not approved yet — switch on to try
+                            </p>
+                            {switches.map((name) => (
+                              <PreviewSwitch
+                                key={name}
+                                name={name}
+                                on={switchedOn.has(name)}
+                                showHint={showHints}
+                                onChange={(on) => flip(name, on)}
+                              />
+                            ))}
+                          </div>
+                        ) : null}
+                        {dead ? (
+                          <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+                            These drive the liquid glass shader and do nothing to CSS glass. Switch
+                            the glass (top bar) to see them work.
+                          </p>
+                        ) : group === "Liquid glass" ? (
+                          <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
+                            Edge width (under Glass shape) has the most leverage here: across the
+                            flat face the surface normal is straight out, so refraction and every
+                            specular are zero there. All of this glass lives on the edge.
+                          </p>
+                        ) : null}
+                        <div className={dead ? "opacity-60" : undefined}>{rows(mode, "")}</div>
+                        {twinned ? (
+                          <details className="mt-5 rounded-md border border-border/60 p-3">
+                            <summary className="cursor-pointer text-xs text-muted-foreground">
+                              The {other === "raster" ? "liquid" : "CSS"} glass set — not on screen
+                            </summary>
+                            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                              This group keeps separate values for each glass. These apply when the
+                              preview runs the other one.
+                            </p>
+                            <Button
+                              className="mt-2 mb-4"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                for (const [key, knob] of all) {
+                                  if (isPerMode(knob)) setValueIn(key, other, valueIn(key, mode));
+                                }
+                                bump();
+                                toast.success(
+                                  `Copied this set to ${other === "raster" ? "liquid" : "CSS"}`,
+                                );
+                              }}
+                            >
+                              <Copy /> Copy the live set over these
+                            </Button>
+                            <div className="opacity-70">{rows(other, `${other}-`)}</div>
+                          </details>
+                        ) : null}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto p-3" data-lab-content={section}>
+              <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+                {section === "page-photos" ? (
+                  <PagePhotosPanel page={pageKeyOf(framePath)} />
+                ) : (
+                  <SectionScreen section={section} />
+                )}
+              </Suspense>
+            </div>
+          )}
         </aside>
 
         {/* ── The site, live. */}
@@ -965,4 +1041,122 @@ function PreviewSwitch({
       ) : null}
     </div>
   );
+}
+
+/** The side menu's sections: the look, and every part of the site's content (38c). */
+type Section =
+  | "look"
+  | "page-photos"
+  | "words"
+  | "portfolio"
+  | "categories"
+  | "services"
+  | "testimonials"
+  | "journal"
+  | "settings"
+  | "advanced"
+  | "inquiries"
+  | "subscribers";
+
+const SECTIONS: { label: string; items: { id: Section; label: string }[] }[] = [
+  { label: "Look", items: [{ id: "look", label: "Light, glass, shadows & cursor" }] },
+  {
+    label: "Pages",
+    items: [
+      { id: "page-photos", label: "Photos on the pages (hero, frames…)" },
+      { id: "words", label: "Words on the pages" },
+      { id: "services", label: "Services" },
+      { id: "testimonials", label: "Testimonials" },
+      { id: "journal", label: "Journal" },
+    ],
+  },
+  {
+    label: "Portfolio",
+    items: [
+      { id: "portfolio", label: "Portfolio photos (upload & edit)" },
+      { id: "categories", label: "Portfolio categories" },
+    ],
+  },
+  {
+    label: "Site",
+    items: [
+      { id: "settings", label: "Site settings (fonts, links, assets)" },
+      { id: "advanced", label: "Advanced (custom CSS)" },
+      { id: "inquiries", label: "Inquiries" },
+      { id: "subscribers", label: "Subscribers" },
+    ],
+  },
+];
+
+/** How wide the side menu is for each: the admin screens need room. */
+const SECTION_WIDTH: Record<Section, string> = {
+  look: "lg:w-[23rem]",
+  "page-photos": "lg:w-[26rem]",
+  words: "lg:w-[38rem]",
+  portfolio: "lg:w-[44rem]",
+  categories: "lg:w-[38rem]",
+  services: "lg:w-[38rem]",
+  testimonials: "lg:w-[38rem]",
+  journal: "lg:w-[44rem]",
+  settings: "lg:w-[38rem]",
+  advanced: "lg:w-[44rem]",
+  inquiries: "lg:w-[38rem]",
+  subscribers: "lg:w-[34rem]",
+};
+
+/** The Studio's screens, loaded only when opened here. */
+const SCREENS = {
+  words: lazy(() =>
+    import("@/components/admin/screens/PagesPage").then((m) => ({ default: m.PagesPage })),
+  ),
+  portfolio: lazy(() =>
+    import("@/components/admin/screens/PhotosPage").then((m) => ({ default: m.PhotosPage })),
+  ),
+  categories: lazy(() =>
+    import("@/components/admin/screens/CategoriesPage").then((m) => ({
+      default: m.CategoriesPage,
+    })),
+  ),
+  services: lazy(() =>
+    import("@/components/admin/screens/ServicesPage").then((m) => ({ default: m.ServicesPage })),
+  ),
+  testimonials: lazy(() =>
+    import("@/components/admin/screens/TestimonialsPage").then((m) => ({
+      default: m.TestimonialsPage,
+    })),
+  ),
+  journal: lazy(() =>
+    import("@/components/admin/screens/PostsPage").then((m) => ({ default: m.PostsPage })),
+  ),
+  settings: lazy(() =>
+    import("@/components/admin/screens/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+  ),
+  advanced: lazy(() =>
+    import("@/components/admin/screens/AdvancedPage").then((m) => ({ default: m.AdvancedPage })),
+  ),
+  inquiries: lazy(() =>
+    import("@/components/admin/screens/InquiriesPage").then((m) => ({
+      default: m.InquiriesPage,
+    })),
+  ),
+  subscribers: lazy(() =>
+    import("@/components/admin/screens/SubscribersPage").then((m) => ({
+      default: m.SubscribersPage,
+    })),
+  ),
+} as const;
+
+function SectionScreen({ section }: { section: Exclude<Section, "look" | "page-photos"> }) {
+  const Screen = SCREENS[section];
+  return (
+    <div className="lab-screen">
+      <Screen />
+    </div>
+  );
+}
+
+/** The page the preview shows, as page photos name it ("/" is home). */
+function pageKeyOf(path: string): string {
+  const first = path.split("?")[0]!.split("/").filter(Boolean)[0];
+  return first ?? "home";
 }
