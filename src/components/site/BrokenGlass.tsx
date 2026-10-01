@@ -13,6 +13,9 @@ import { loadShard, shardOutline, shardsFor } from "@/lib/glass-shards";
 import { cursorLamp, onLightChange, pointLights } from "@/effects/light/lights";
 // Glass's index: a crack face seen through the pane lies at 1/n of its depth.
 import { N_GLASS, crackGlow, type CrackLightSource } from "@/effects/optics/crack-light";
+import { faceLean, faceNormal, faceRoom, type RoomSampler } from "@/effects/optics/crack-face";
+import { decodeRadiance, kneeRadiance, ROOM_KNEE, roomUvDir } from "@/effects/optics/environment";
+import { roomLight } from "@/effects/light/lights";
 import { viewState } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
 import { previewing } from "@/effects/engine/preview";
@@ -47,20 +50,6 @@ function hash(k: number, n: number): number {
 }
 
 /**
- * How far the fracture face leans off square to the pane along a crack,
- * radians, at arc length `s`: twist hackle turns it in and out as it runs,
- * most near the impact, where the face is mist and hackle.
- */
-function leanAt(k: number, s: number, rough: number): number {
-  const a = 0.12 + 0.14 * rough;
-  return (
-    a *
-    (0.65 * Math.sin(s / (31 + 20 * hash(k, 1)) + 6.3 * hash(k, 2)) +
-      0.35 * Math.sin(s / (9 + 6 * hash(k, 3)) + 6.3 * hash(k, 4)))
-  );
-}
-
-/**
  * One stroke that adds `tint` at `amount` and the lights' `glow` at
  * `share`, as a colour for the "lighter" blend (which adds colour times
  * alpha); null if it adds nothing.
@@ -81,6 +70,47 @@ function additive(
 
 /** The glass's own green, seen through the depth of a crack face (sRGB). */
 const FACE_TINT = [168, 228, 214] as const;
+
+/**
+ * The room the glass reflects (html[data-room-hdr], the same panorama the
+ * glass shader samples), read once into memory so a crack face can be asked
+ * what it mirrors in any direction (effects/optics/crack-face).
+ */
+let roomPixels: { w: number; h: number; data: Uint8ClampedArray } | null = null;
+let roomLoading = "";
+function roomSampler(onLoad: () => void): RoomSampler | null {
+  const src = document.documentElement.getAttribute("data-room-hdr");
+  if (src && roomLoading !== src) {
+    roomLoading = src;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = 256;
+      c.height = 64;
+      const cx = c.getContext("2d", { willReadFrequently: true });
+      if (!cx) return;
+      // Softened as a fracture face's ripples and hackle soften what it mirrors.
+      cx.filter = "blur(2px)";
+      cx.drawImage(img, 0, 0, c.width, c.height);
+      roomPixels = { w: c.width, h: c.height, data: cx.getImageData(0, 0, c.width, c.height).data };
+      onLoad();
+    };
+    img.src = src;
+  }
+  const px = roomPixels;
+  if (!px) return null;
+  return (dir) => {
+    const [u, v] = roomUvDir(dir.x, dir.y, dir.z);
+    const x = Math.min(px.w - 1, Math.max(0, Math.floor((((u % 1) + 1) % 1) * px.w)));
+    const y = Math.min(px.h - 1, Math.max(0, Math.floor(v * px.h)));
+    const k = (y * px.w + x) * 4;
+    const g = roomLight.gain;
+    return [0, 1, 2].map((i) =>
+      kneeRadiance(decodeRadiance(px.data[k + i]! / 255) * g, ROOM_KNEE),
+    ) as [number, number, number];
+  };
+}
 
 type Props = {
   kind?: GlassKind;
@@ -226,6 +256,9 @@ export function BrokenGlass({
      */
     if (pane && previewing("shardlight")) adoptLayer(pane, "pane:broken", canvas);
     const shardMap = document.createElement("canvas");
+    // A photographed break's crack shape, as shade and as the light on it.
+    const maskShade = document.createElement("canvas");
+    const maskLight = document.createElement("canvas");
     // The frosted photograph, cached: blurring is the costly part.
     const frost = document.createElement("canvas");
     let frostFor = "";
@@ -392,34 +425,7 @@ export function BrokenGlass({
       const ix = broken.impact.x;
       const iy = broken.impact.y;
       const crushed = broken.shards.find((s) => s.crushed);
-      if (broken.photo) {
-        /*
-         * ---- The photographed cracks: the photograph itself, where it is crack ----
-         *
-         * Laid with its strike on the struck point, turned and scaled as the
-         * shards were; not inside a hole, where the glass has gone.
-         */
-        const { loaded, placement } = broken.photo;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(0, 0, w, h);
-        for (const s of broken.shards) {
-          if (!s.missing) continue;
-          s.poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-          ctx.closePath();
-        }
-        ctx.clip("evenodd");
-        ctx.translate(placement.at.x, placement.at.y);
-        ctx.rotate(placement.turn);
-        const k = placement.scale / loaded.layerScale;
-        ctx.scale(k, k);
-        ctx.translate(
-          -loaded.map.strike.x * loaded.layerScale,
-          -loaded.map.strike.y * loaded.layerScale,
-        );
-        ctx.drawImage(loaded.layer, 0, 0);
-        ctx.restore();
-      } else if (crushed && !crushed.missing) {
+      if (crushed && !crushed.missing) {
         ctx.save();
         ctx.beginPath();
         crushed.poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
@@ -427,8 +433,9 @@ export function BrokenGlass({
         ctx.clip();
         const cr = broken.crush * 1.3;
         const spot = ctx.createRadialGradient(ix, iy, 0, ix, iy, cr);
-        spot.addColorStop(0, "rgb(236 244 242 / 0.85)");
-        spot.addColorStop(1, "rgb(214 232 228 / 0.5)");
+        // Pulverised glass scatters: pale, but no paint-white disc (Ony: cracks are glass).
+        spot.addColorStop(0, "rgb(236 244 242 / 0.5)");
+        spot.addColorStop(1, "rgb(214 232 228 / 0.22)");
         ctx.fillStyle = spot;
         ctx.fillRect(ix - cr, iy - cr, cr * 2, cr * 2);
         // Crazing: short cracks every way, and little arcs where flakes spalled.
@@ -440,7 +447,7 @@ export function BrokenGlass({
           const x0 = ix + r0 * Math.cos(a);
           const y0 = iy + r0 * Math.sin(a);
           const b2 = a + (hash(seed, 4000 + k) - 0.5) * 2.4;
-          ctx.strokeStyle = k % 3 ? "rgb(255 255 255 / 0.55)" : "rgb(40 60 60 / 0.35)";
+          ctx.strokeStyle = k % 3 ? "rgb(255 255 255 / 0.3)" : "rgb(40 60 60 / 0.35)";
           ctx.beginPath();
           if (k % 5 === 0) {
             ctx.arc(x0, y0, len, b2, b2 + 1.6);
@@ -458,7 +465,7 @@ export function BrokenGlass({
        * short to cut anything off, fading as they run out (the white burst at
        * the heart of every impact photograph).
        */
-      if (!broken.photo && !crushed?.missing && broken.crush > 0) {
+      if (!crushed?.missing && broken.crush > 0) {
         ctx.globalCompositeOperation = "lighter";
         const n = Math.round(30 + 50 * energy);
         for (let k = 0; k < n; k++) {
@@ -472,7 +479,7 @@ export function BrokenGlass({
             ix + r1 * Math.cos(a + bend),
             iy + r1 * Math.sin(a + bend),
           );
-          g.addColorStop(0, "rgb(230 246 242 / 0.55)");
+          g.addColorStop(0, "rgb(230 246 242 / 0.3)");
           g.addColorStop(1, "rgb(168 228 214 / 0)");
           ctx.strokeStyle = g;
           ctx.lineWidth = 0.6;
@@ -483,7 +490,7 @@ export function BrokenGlass({
         }
         // The burst's glow: light scattered by the crazed glass, soft past the rim.
         const halo = ctx.createRadialGradient(ix, iy, broken.crush * 0.6, ix, iy, broken.crush * 3);
-        halo.addColorStop(0, "rgb(220 240 236 / 0.28)");
+        halo.addColorStop(0, "rgb(220 240 236 / 0.14)");
         halo.addColorStop(1, "rgb(220 240 236 / 0)");
         ctx.fillStyle = halo;
         ctx.fillRect(
@@ -513,7 +520,94 @@ export function BrokenGlass({
       };
       const depth = THICKNESS / N_GLASS;
       const roughReach = broken.crush * 4 + 10;
-      const photoCracks = !!broken.photo;
+      const room = roomSampler(wake);
+
+      if (broken.photo) {
+        /*
+         * ---- A photographed break's cracks, as glass ----
+         *
+         * The photograph says WHERE the cracks are (its crack strength, the
+         * layer's alpha), not how they look: photographed, they are white
+         * lines lit by someone else's light (Ony, 2026-10-01: they "look
+         * terrible"; cracks are glass, hard to see until light hits them).
+         * So only its shape is used: a hairline of shade where the gap turns
+         * the light from behind away, and the light that reaches the faces
+         * here -- the room's, a few per cent, and each lamp's, piped along
+         * the pane to the gap and flashing where it is close
+         * (effects/optics/crack-light) -- in the lamp's own colour.
+         */
+        const { loaded, placement } = broken.photo;
+        const pw = Math.round(w * dpr);
+        const ph = Math.round(h * dpr);
+        for (const c of [maskShade, maskLight]) {
+          if (c.width !== pw) c.width = pw;
+          if (c.height !== ph) c.height = ph;
+        }
+        const placeMask = (mc: CanvasRenderingContext2D) => {
+          mc.setTransform(1, 0, 0, 1, 0, 0);
+          mc.globalCompositeOperation = "source-over";
+          mc.clearRect(0, 0, pw, ph);
+          mc.setTransform(dpr, 0, 0, dpr, 0, 0);
+          mc.save();
+          mc.beginPath();
+          mc.rect(0, 0, w, h);
+          for (const sh of broken!.shards) {
+            if (!sh.missing) continue;
+            sh.poly.forEach((q, i) => (i ? mc.lineTo(q.x, q.y) : mc.moveTo(q.x, q.y)));
+            mc.closePath();
+          }
+          mc.clip("evenodd");
+          mc.translate(placement.at.x, placement.at.y);
+          mc.rotate(placement.turn);
+          const k = placement.scale / loaded.layerScale;
+          mc.scale(k, k);
+          mc.translate(
+            -loaded.map.strike.x * loaded.layerScale,
+            -loaded.map.strike.y * loaded.layerScale,
+          );
+          mc.drawImage(loaded.layer, 0, 0);
+          mc.restore();
+          mc.globalCompositeOperation = "source-in";
+        };
+        const sc = maskShade.getContext("2d");
+        const lc = maskLight.getContext("2d");
+        if (sc && lc) {
+          placeMask(sc);
+          sc.fillStyle = "rgb(10 16 16)";
+          sc.fillRect(0, 0, w, h);
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.globalAlpha = 0.42;
+          ctx.drawImage(maskShade, 0, 0);
+          ctx.restore();
+          placeMask(lc);
+          // The room's few per cent, glass-green.
+          lc.fillStyle = "rgb(168 228 214 / 0.07)";
+          lc.fillRect(0, 0, w, h);
+          lc.globalCompositeOperation = "source-atop";
+          for (const l of sources) {
+            const on = l.charge * l.strength;
+            if (on <= 0.01) continue;
+            const [r, g, b] = l.colour.map((v) => Math.round(Math.min(1, v) * 255));
+            // Piped along the pane (crack-light PIPED_REACH), and a flash where the lamp is close over it.
+            const piped = lc.createRadialGradient(l.at.x, l.at.y, 0, l.at.x, l.at.y, 520);
+            piped.addColorStop(0, `rgb(${r} ${g} ${b} / ${Math.min(1, 0.55 * on).toFixed(3)})`);
+            piped.addColorStop(1, `rgb(${r} ${g} ${b} / 0)`);
+            lc.fillStyle = piped;
+            lc.fillRect(0, 0, w, h);
+            const flash = lc.createRadialGradient(l.at.x, l.at.y, 0, l.at.x, l.at.y, 90);
+            flash.addColorStop(0, `rgb(255 255 255 / ${Math.min(1, 0.8 * on).toFixed(3)})`);
+            flash.addColorStop(1, "rgb(255 255 255 / 0)");
+            lc.fillStyle = flash;
+            lc.fillRect(0, 0, w, h);
+          }
+          ctx.save();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.globalCompositeOperation = "lighter";
+          ctx.drawImage(maskLight, 0, 0);
+          ctx.restore();
+        }
+      }
       broken.cracks.forEach((c: Crack, ck) => {
         if (c.kind === "crush" && crushed?.missing) return;
         let run = 0;
@@ -530,7 +624,7 @@ export function BrokenGlass({
           // Near the impact the face is mist and hackle: rough, whiter.
           const fromImpact = Math.hypot(mx - ix, my - iy);
           const rough = c.kind === "crush" ? 1 : Math.exp(-fromImpact / roughReach);
-          const lean = leanAt(ck, run + len / 2, rough);
+          const lean = faceLean(c.kind, ck, run + len / 2, rough);
           run += len;
           /*
            * The face runs through the pane's depth leaning by `lean`; from
@@ -544,56 +638,35 @@ export function BrokenGlass({
           const oy = ny * wide;
 
           // The face's normal, leaning with it: (n cos lean, sin lean).
-          const fn = { x: nx * Math.cos(lean), y: ny * Math.cos(lean), z: Math.sin(lean) };
+          const fn = faceNormal({ x: nx, y: ny }, lean);
           // What every light sends to the eye from this face: its mirror flash and the piped light.
           const { rgb: glow, flash } = crackGlow(sources, { x: mx, y: my }, fn, eye, rough);
           /*
-           * The room: a fracture face is a new, clean mirror, and seen at a
-           * slant it shows the lit room and the light through the pane --
-           * which is why a crack reads as a bright line in daylight. The
-           * wider the ribbon, the more of it you see; mist and hackle
-           * scatter it white.
+           * The room: what the face mirrors of it, in the direction it sends
+           * your sight (effects/optics/crack-face) -- for most faces a few
+           * per cent by the back face's bounce, so clear glass; more where it
+           * leans over, and a bright window there is bright in it. Mist and
+           * hackle near the strike scatter some of the room's light white.
            */
-          const room = 0.32 + 0.08 * Math.min(1, Math.abs(wide) / 3) + 0.3 * rough;
-          if (photoCracks) {
-            /*
-             * Photographed: the photograph already shows the crack as the room
-             * lights it. What it cannot show is this lamp, so only the lamp's
-             * flash and its piped light are added -- along the pieces' edges,
-             * each crack being two pieces' edge, so at half each time.
-             */
-            const extra = additive([0, 0, 0], 0, glow, 0.5);
-            if (extra) {
-              ctx.globalCompositeOperation = "lighter";
-              ctx.strokeStyle = extra;
-              ctx.lineWidth = 1.1;
-              ctx.beginPath();
-              ctx.moveTo(a.x, a.y);
-              ctx.lineTo(b.x, b.y);
-              ctx.stroke();
-            }
-            continue;
-          }
-
+          const seen = room ? faceRoom({ x: mx, y: my }, fn, eye, room).rgb : [0, 0, 0];
+          const mist = 0.06 * rough;
+          const roomRgb = [0, 1, 2].map((i) => seen[i]! * (FACE_TINT[i]! / 255) + mist) as [
+            number,
+            number,
+            number,
+          ];
           // The air gap: light from behind it is turned away, a hairline of shade.
           ctx.globalCompositeOperation = "source-over";
-          ctx.strokeStyle = `rgb(10 16 16 / ${(0.3 + 0.15 * rough).toFixed(3)})`;
-          ctx.lineWidth = 0.7;
+          ctx.strokeStyle = `rgb(10 16 16 / ${(0.34 + 0.16 * rough).toFixed(3)})`;
+          ctx.lineWidth = 0.8;
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
           ctx.stroke();
           // The face: a ribbon from the crack to its far edge, glass-green, lit.
           ctx.globalCompositeOperation = "lighter";
-          const [fr, fg, fb] = FACE_TINT;
-          const white = rough * 0.7;
-          const tint = [
-            (fr + (255 - fr) * white) / 255,
-            (fg + (255 - fg) * white) / 255,
-            (fb + (255 - fb) * white) / 255,
-          ] as const;
           if (Math.abs(wide) > 0.6) {
-            ctx.fillStyle = additive(tint, room * 0.22, glow, 0.22) ?? "transparent";
+            ctx.fillStyle = additive(roomRgb, 0.6, glow, 0.22) ?? "transparent";
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
             ctx.lineTo(b.x, b.y);
@@ -603,7 +676,8 @@ export function BrokenGlass({
             ctx.fill();
           }
           // Its far edge, where the face meets the pane's surface, catches the most.
-          ctx.strokeStyle = additive(tint, room, glow, 1) ?? "transparent";
+          // The light piped along the pane leaves at the gap along its whole run: the edge carries it.
+          ctx.strokeStyle = additive(roomRgb, 1, glow, 1.3) ?? "transparent";
           ctx.lineWidth = 0.55 + 0.6 * rough;
           ctx.beginPath();
           ctx.moveTo(a.x + ox, a.y + oy);
@@ -629,7 +703,7 @@ export function BrokenGlass({
       ctx.globalCompositeOperation = "lighter";
       for (const s of broken.shards) {
         if (!s.missing) continue;
-        ctx.strokeStyle = "rgb(206 236 226 / 0.5)";
+        ctx.strokeStyle = "rgb(206 236 226 / 0.22)";
         ctx.lineWidth = 2.2;
         ctx.beginPath();
         s.poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));

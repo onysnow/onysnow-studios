@@ -91,7 +91,19 @@ thickness along the light.
 2. **Each piece reflects the room at its own tilt**, per pixel in the glass
    shader (the shard map, `shard-map.ts`; built as `?try=shardlight` in
    b458bd9, now part of ?try=broken).
-3. **Cracks as faces, not white lines**: the map carries each crack's band
+3. ✅ (2026-10-01, canvas; the shader version is 3b) **Cracks as faces, not
+   white lines.** Done in the break's own layer: each crack's face leans by
+   its kind (radial nearly square, concentric ~30 deg, the cone ~60 deg,
+   twisted by hackle; `effects/optics/crack-face`, tested) and shows the
+   room only as the face really sends your sight to it -- found while
+   testing: from the front no face can both reflect totally and send you
+   back out the front (inside, your sight is within 41 deg of straight in;
+   out again it must be within 41 deg of straight out; a mirror turning it
+   that far meets it short of the critical angle), so a face mirrors the
+   room by a few per cent at most and the cracks are clear glass until a
+   light lines up or pipes to them. Photographed breaks keep the photo's
+   crack SHAPE only (shade where the gap turns light away, the lamps' light
+   on it), not its white pixels. Earlier plan: the map carries each crack's band
    (its lean through the thickness, so its width) and the shader draws it as a
    TIR mirror -- dark-clear, flashing with the lamp and the room only where
    they line up -- tinted by the glass's own green. The white canvas strokes
