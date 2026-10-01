@@ -25,7 +25,8 @@
  * BrokenGlass) reads the photograph's pixels and draws.
  */
 
-import type { Crack, Pt, Shard } from "./fracture";
+import type { Crack, GlassKind, Pt, Shard } from "./fracture";
+import { pieceTilt } from "./shard-tilt";
 
 /** A greyscale image, 0 to 1, row by row. */
 export type Grey = {
@@ -687,6 +688,8 @@ export function photoBreak(
   pl: Placement,
   seed = 1,
   energy = 0.7,
+  /** What glass it is and how hard it was struck, for how its pieces tilt (shard-tilt). */
+  tilt: { kind: GlassKind; energy: number } = { kind: "annealed", energy },
 ): PhotoBreak {
   const { w, h, strike } = map;
   const shards: PhotoBreak["shards"] = [];
@@ -696,7 +699,6 @@ export function photoBreak(
     return x - Math.floor(x);
   };
   const reachDiag = Math.max(map.extent, 1);
-  const deg = Math.PI / 180;
   const present = new Set<number>();
   for (const l of regions.labels) if (l >= 0) present.add(l);
   const all = regionLoops(regions.labels, w, h);
@@ -727,11 +729,30 @@ export function photoBreak(
     );
     const knock = atEdge ? 0 : 0.3 + 0.7 * Math.exp(-reach * 4);
     const k = label;
+    // Left in the dent the blow pushed in, and knocked (shard-tilt); a piece
+    // the photograph's edge cuts through is held where it is.
+    // The way out from the strike, on the pane (the photograph is turned onto it).
+    const away = Math.hypot(cx - strike.x, cy - strike.y) || 1;
+    const ox = (cx - strike.x) / away;
+    const oy = (cy - strike.y) / away;
+    const ct = Math.cos(pl.turn);
+    const st = Math.sin(pl.turn);
+    const t = atEdge
+      ? { tiltX: 0, tiltY: 0 }
+      : pieceTilt(
+          tilt.kind,
+          tilt.energy,
+          ct * ox - st * oy,
+          st * ox + ct * oy,
+          reach * 0.5,
+          rand(500 + k),
+          rand(600 + k),
+        );
     shards.push({
       poly: outer,
       holes: onPane.slice(1),
-      tiltX: (rand(500 + k) - 0.5) * 0.8 * deg * knock,
-      tiltY: (rand(600 + k) - 0.5) * 0.8 * deg * knock,
+      tiltX: t.tiltX,
+      tiltY: t.tiltY,
       slip: { x: (rand(700 + k) - 0.5) * 1.6 * knock, y: (rand(800 + k) - 0.5) * 1.6 * knock },
       reach: reach * 0.5,
       crushed: label === regions.crushed,

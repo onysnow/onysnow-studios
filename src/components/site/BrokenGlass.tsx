@@ -254,6 +254,7 @@ export function BrokenGlass({
             placement,
             seed,
             kind === "annealed" ? energy : 0,
+            { kind, energy },
           );
           const shards: Piece[] = [...pb.shards];
           /*
