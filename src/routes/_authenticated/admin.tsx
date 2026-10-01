@@ -16,6 +16,7 @@ import {
   Settings,
   SlidersHorizontal,
   Sparkles,
+  House,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminStatus } from "@/hooks/use-admin";
@@ -99,10 +100,14 @@ function AdminLayout() {
     <SidebarProvider>
       <Sidebar>
         <SidebarHeader>
-          <div className="flex items-center gap-2 px-2 py-1">
+          <Link
+            to="/"
+            className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-sidebar-accent"
+            title="Back to the site"
+          >
             <Camera className="size-5 text-primary" />
             <span className="font-display text-xl">Studio</span>
-          </div>
+          </Link>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
@@ -151,6 +156,12 @@ function AdminLayout() {
         <header className="flex h-16 items-center gap-3 border-b border-border px-4">
           <SidebarTrigger />
           <p className="text-sm text-muted-foreground">Signed in as {data.user?.email}</p>
+          {/* The way out, where it is seen (Ony: "put a more obvious nav to get back to the home page"). */}
+          <Button asChild size="sm" className="ml-auto" data-studio-home>
+            <Link to="/">
+              <House /> Back to the site
+            </Link>
+          </Button>
         </header>
         <div className="p-5 sm:p-8">
           <Outlet />
