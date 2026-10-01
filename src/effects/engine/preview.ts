@@ -65,6 +65,7 @@ export const PREVIEWS = {
     "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
   shardlight:
     "Item 10 step 3b, with ?try=broken: each piece of a broken pane mirrors the room at its own slope, per pixel in the glass shader -- a mirror turned by t turns the reflection by 2t, so the room's reflection breaks up piece by piece along the cracks; a hole reflects nothing",
+  webs: "Task 75: a garden spider's orb web in the corner of the hero, built from measured webs and solved thread by thread -- it sways in the room's air and the pointer's wake, glints where each light catches its threads, tears when you pull a thread too far, and a flick cuts through it",
   balloons:
     "Task 74: helium party balloons in the room in front of the page -- they rise to the top of the window and wander on its draughts, the pointer's wake pushes them, a click pops one; latex lit by every light, crystal ones throwing coloured shadows (Water & room > Balloons)",
   drops:

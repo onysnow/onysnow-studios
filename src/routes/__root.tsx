@@ -3,6 +3,7 @@ import { HeldTool } from "@/components/site/ToolTray";
 import { PhotoLights } from "@/components/site/PhotoLights";
 import { WaterDrops } from "@/components/site/WaterDrops";
 import { Balloons } from "@/components/site/Balloons";
+import { SpiderWebs } from "@/components/site/SpiderWebs";
 import { Vignette } from "@/components/site/Vignette";
 import { RedRoom } from "@/components/site/RedRoom";
 import { FreeSurfaces } from "@/components/site/FreeSurfaces";
@@ -208,6 +209,8 @@ function RootComponent() {
           <WaterDrops />
           {/* Party balloons in the room (task 74, ?try=balloons). */}
           <Balloons />
+          {/* A spider's web (task 75, ?try=webs). */}
+          <SpiderWebs />
           {/* The lens's corners (catalogue item 32, ?try=vignette). */}
           <Vignette />
           {/* Secret 2, the darkroom (item 39, ?try=redroom). */}

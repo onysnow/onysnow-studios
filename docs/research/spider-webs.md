@@ -592,3 +592,21 @@ approximated on the CPU per segment for the cursor lamp only:
   Compare against the Zawischa and EPOD photos.
 - Our own reference: a desk lamp moved around a real web (or a cotton
   thread) in front of a framed print, to set glint gain and base opacity.
+
+## 7. Status (2026-10-01)
+
+- **The Rapier spike failed on pins.** In @dimforge/rapier2d-compat 0.21.0 a
+  soft body built from raw particles + `setEdges` with
+  `setPinnedParticles` (and, separately, `attachParticle` to a fixed body,
+  and the root body set fixed) fell freely under gravity with its pins:
+  433 particles, 864 edges, 1.35 ms a step in Node (computed here). So the
+  web uses the 6.1 fallback: XPBD after Ten Minute Physics' cloth (MIT),
+  in `src/effects/webs/net.ts`, with tension-only threads, per-type
+  compliance and tear strain, and air relaxation, as 6.1 lists.
+- Built behind `?try=webs`: the orb generator (`orb.ts`, the 3.1 numbers),
+  sway in the room's air and the pointer's wake, grab-and-pull tearing,
+  flick-to-cut, and each light's glint by the cone condition (2.1).
+  Tests: tension only, pins, tear strains 0.27 / 2.7, cut, hub height,
+  node count, radials denser below, settles without tearing.
+- Still to do: dew drops (the drop lens), corner cobwebs, iridescence,
+  the lab controls of 6.3.

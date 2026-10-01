@@ -2880,6 +2880,16 @@ html.is-winding * {
   z-index: 1;
 }
 
+/* A spider's web in the hero's corner (SpiderWebs.tsx, task 75, ?try=webs): in front of the page. */
+.spider-web-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 7000;
+  pointer-events: none;
+}
+
 /* Party balloons in the room in front of the page (Balloons.tsx, task 74, ?try=balloons). */
 .balloons-layer {
   position: fixed;
