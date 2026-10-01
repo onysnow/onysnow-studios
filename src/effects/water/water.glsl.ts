@@ -12,8 +12,9 @@
  *    slope. A drop is a plano-convex lens on the glass: a ray from the eye
  *    entering its curved face at slope s is turned toward the drop's centre
  *    by (n - 1) s once it is out of the flat back of the pane (Snell at both
- *    faces, small angles), and meets the photograph `gap` behind the glass
- *    displaced by (n - 1) gap grad(h) toward the centre. With the gap
+ *    faces, small angles), and meets what is `gap` behind it displaced by
+ *    (n - 1) gap grad(h) toward the centre -- the frosted back face, or
+ *    the photograph when the front is etched too (see the shader). With the gap
  *    longer than the drop's focal length the image crosses over: every drop
  *    holds the photograph upside down and small, as the reference
  *    photographs do (7.4 photos 1, 2, 7). The water fills the frosted
@@ -77,7 +78,8 @@ uniform vec3 uImageFit;       // its aspect and object-position
 uniform vec4 uPane;           // the pane's x, y, w, h, page px
 uniform float uScale;         // buffer px per CSS px
 uniform float uPxPerMm;
-uniform float uGap;           // how far behind the glass the photograph is, px
+uniform float uGap;           // how far behind the drop's face what it images is, px
+uniform float uFrostBlur;     // the frosted back face's blur, px (0: the drop sees the photograph itself)
 uniform float uIor;
 uniform vec3 uRoom;           // the room, where its image has not loaded: a dim warm grey
 uniform sampler2D uRoomTex;   // the room the glass reflects (effects/optics/environment)
@@ -118,7 +120,22 @@ void main() {
   vec2 grad = vec2(dx, dy);
   // The lens: toward the centre (where the height rises) by (n - 1) gap grad(h).
   vec2 page = uPane.xy + local + (uIor - 1.0) * uGap * grad;
-  vec3 seen = uHasPhoto > 0.5 ? texture2D(uPhoto, coverUv(page, uImage, uImageFit)).rgb : uRoom;
+  /*
+   * The site's glass is etched on its BACK face (satin, shadows.md 7: the
+   * frosted face is the lower one; ?try=satin etches the front too). A drop
+   * on the polished front does not wet that etch: what it shows is the
+   * frosted face, the glass's thickness behind it, which is the photograph
+   * blurred by more than the drop is wide -- shifted a few pixels by the
+   * lens, it is the same colour as the frost beside it. So on a frosted
+   * pane the drop lets the pane's own view through untouched and adds only
+   * what its face reflects (below); the layer under it already shows the
+   * frost. On a front that is etched too, the water fills the etch and the
+   * drop is a clear window onto the sharp photograph, the gap further back,
+   * inverted when the gap is past its focal length.
+   */
+  bool clear = uFrostBlur < 0.5;
+  vec3 seen = uRoom;
+  if (clear && uHasPhoto > 0.5) seen = texture2D(uPhoto, coverUv(page, uImage, uImageFit)).rgb;
   // Fresnel at this slant (Schlick), n from air.
   vec3 N = normalize(vec3(-grad, 1.0));
   float cosI = N.z;
@@ -166,7 +183,17 @@ void main() {
     // A lamp seen directly is far brighter than what it lights: the reflection clips to white even at 2%.
     spec += uLightColour[i] * disc * fl * 60.0 * (size * size) / (wide * wide) + uLightColour[i] * disc * fl * 4.0;
   }
-  col += spec;
-  gl_FragColor = vec4(min(col, vec3(1.0)), cover);
+  if (clear) {
+    col += spec;
+    gl_FragColor = vec4(min(col, vec3(1.0)), cover);
+  } else {
+    // Only the reflection, over the frost the pane already shows: room x F and the glints, as coverage.
+    // Light added over what is behind: colour times alpha is the light (the context is not premultiplied).
+    vec3 add = room * F + spec;
+    float peak = max(add.r, max(add.g, add.b));
+    gl_FragColor = peak > 1e-4
+      ? vec4(add / peak, min(peak, 1.0) * cover)
+      : vec4(0.0);
+  }
 }
 `;

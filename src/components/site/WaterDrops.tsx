@@ -77,6 +77,7 @@ export function WaterDrops() {
       scale: CU("uScale"),
       pxPerMm: CU("uPxPerMm"),
       gap: CU("uGap"),
+      frostBlur: CU("uFrostBlur"),
       ior: CU("uIor"),
       room: CU("uRoom"),
       lightCount: CU("uLightCount"),
@@ -161,6 +162,18 @@ export function WaterDrops() {
       };
       img.src = roomSrc;
     }
+
+    // How much the pane blurs what is behind it, from its backdrop-filter (as GlassLight reads it).
+    const blurOf = new WeakMap<HTMLElement, number>();
+    const paneBlur = (el: HTMLElement) => {
+      let b = blurOf.get(el);
+      if (b === undefined) {
+        const m = /blur\(([\d.]+)px\)/.exec(getComputedStyle(el).backdropFilter || "");
+        b = m ? Number(m[1]) : 30;
+        blurOf.set(el, b);
+      }
+      return b;
+    };
 
     const sims = new Map<HTMLElement, DropSim>();
     // For the verification rigs (dev only): the sims, to count drops and runners.
@@ -267,8 +280,18 @@ export function WaterDrops() {
       gl.uniform4f(u.pane, pane.x, pane.y, pane.w, pane.h);
       gl.uniform1f(u.scale, LAYER_SCALE);
       gl.uniform1f(u.pxPerMm, PX_PER_MM);
-      // The photograph is the pane's gap behind its face, plus the glass's thickness.
-      gl.uniform1f(u.gap, pane.causes.gap + pane.causes.thickness);
+      /*
+       * What the drop images: the frosted back face, the glass's thickness
+       * behind it, blurred as the pane blurs; or, with the front etched too
+       * (?try=satin), the photograph itself, the gap further back.
+       */
+      const frontEtched = previewing("satin") && pane.causes.material.frost > 0;
+      const frosted = pane.causes.material.frost > 0 && !frontEtched;
+      gl.uniform1f(
+        u.gap,
+        frosted ? pane.causes.thickness : pane.causes.gap + pane.causes.thickness,
+      );
+      gl.uniform1f(u.frostBlur, frosted ? paneBlur(pane.el) : 0);
       gl.uniform1f(u.ior, WATER.n);
       gl.uniform3f(u.room, 0.05, 0.045, 0.04);
       gl.activeTexture(gl.TEXTURE3);
