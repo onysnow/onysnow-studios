@@ -786,6 +786,74 @@ export const tuning: Record<string, Knob> = {
     step: 20,
     hint: "The distance, in px, over which light running inside the pane falls to a third (absorbed and scattered out on the way). Longer reaches the far edges brighter.",
   },
+  /*
+   * The black light's scene (docs/black-light.md; Ony, 2026-10-01: "The
+   * blacklight effect is terrible"). components/site/BlackLightScene.
+   */
+  uvType: {
+    label: "Black light type",
+    group: "Light",
+    value: 1,
+    min: 0,
+    max: 1,
+    step: 1,
+    options: ["365 nm (filtered: faint violet)", "395 nm LED (strong purple wash)"],
+    hint: "A filtered 365 nm black light gives almost no visible light, so what fluoresces stands out against near-black; a 395 nm LED bar or torch also throws a strong purple that washes faint glows out.",
+  },
+  uvRoomDark: {
+    label: "Room under the black light",
+    group: "Light",
+    value: 0.92,
+    min: 0,
+    max: 1,
+    step: 0.01,
+    hint: "How dark the room is while the black light is held: black lights are used with the lights off, and fluorescence is too faint to see in a lit room. 1 is pitch dark beyond its reach.",
+  },
+  uvReach: {
+    label: "Black light reach",
+    group: "Light",
+    value: 560,
+    min: 150,
+    max: 1600,
+    step: 10,
+    hint: "How far, px, its UV carries across the page before it is too weak to make anything glow.",
+  },
+  uvPaper: {
+    label: "UV: photo paper",
+    group: "Light",
+    value: 0.9,
+    min: 0,
+    max: 2,
+    step: 0.05,
+    hint: "How strongly the photographs' paper glows blue under UV (its optical brighteners): the whites most, the highlights and midtones less, the dark ink-heavy parts not at all.",
+  },
+  uvNeon: {
+    label: "UV: colours in the photographs",
+    group: "Light",
+    value: 1,
+    min: 0,
+    max: 2,
+    step: 0.05,
+    hint: "How hard the photographs' strong colours blaze under the black light, as fluorescent pigments do: reds and pinks hot pink, yellows and greens neon green, cyans electric blue, each with a halo. 0: only the whites glow.",
+  },
+  uvUranium: {
+    label: "UV: uranium glass",
+    group: "Light",
+    value: 1,
+    min: 0,
+    max: 3,
+    step: 0.05,
+    hint: "The panes as uranium glass: under the black light the glass itself glows vivid green through its body, its edges brightest, lighting what is round them. 0 is ordinary glass, which barely glows.",
+  },
+  uvInk: {
+    label: "UV: white type",
+    group: "Light",
+    value: 0.8,
+    min: 0,
+    max: 2,
+    step: 0.05,
+    hint: "How strongly the light type glows blue-white under UV, as white ink with brighteners does. 0: ordinary ink, dark.",
+  },
   uvDayglo: {
     label: "UV: orange buttons (day-glo)",
     group: "Light",
@@ -987,6 +1055,78 @@ export const tuning: Record<string, Knob> = {
       "Laser pointer",
     ],
     hint: "What every visitor's cursor is: the lamp, a black light (only UV: things fluoresce), a burning road flare, a flashlight (press and hold to plant and aim it), an illuminated magnifying glass, or a laser pointer. Saved for everyone with the rest.",
+  },
+  /*
+   * The laser pointer (Ony, 2026-10-01: "We need to be able to change what
+   * kind of laser it is- like its color and output and maybe beam size. but
+   * also make the beam reach further ... the tiniest particles passing
+   * through the laser ... a sort of flicker ... not at the parts of the laser
+   * that are inside the glass", and "bounce off the inside left and right
+   * sides of the glass"). components/site/LaserBeam.
+   */
+  laserColour: {
+    label: "Laser colour",
+    group: "Cursor",
+    value: 0,
+    min: 0,
+    max: 6,
+    step: 1,
+    options: [
+      "Red (650 nm)",
+      "Orange-red (635 nm)",
+      "Yellow (589 nm)",
+      "Green (532 nm)",
+      "Blue (450 nm)",
+      "Violet (405 nm)",
+      "White (every colour)",
+    ],
+    hint: "The laser's wavelength, as real pointers come. The glass bends each colour by its own amount (violet most), and float glass's iron soaks up red over a long path, so a green beam carries further inside a pane. White is every colour at once: a prism fans it into a spectrum.",
+  },
+  laserPower: {
+    label: "Laser output",
+    group: "Cursor",
+    value: 5,
+    min: 1,
+    max: 500,
+    step: 1,
+    hint: "Its power in milliwatts: 1-5 a pointer, 50-100 a burning-bright one, 500 a show laser. More power, a brighter beam, brighter spots where it strikes, and more light thrown on the glass round them.",
+  },
+  laserWidth: {
+    label: "Laser beam width",
+    group: "Cursor",
+    value: 1.2,
+    min: 0.5,
+    max: 8,
+    step: 0.1,
+    hint: "How wide the beam is drawn, px; its glow is four times as wide.",
+  },
+  laserReach: {
+    label: "Laser reach",
+    group: "Cursor",
+    value: 9000,
+    min: 1000,
+    max: 30000,
+    step: 500,
+    hint: "How far the beam is followed, px of path, and so how many bounces it gets before it is let go.",
+  },
+  laserDust: {
+    label: "Dust in the beam",
+    group: "Cursor",
+    value: 0.5,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "Specks drifting through the beam in the air, each catching it for a moment as it crosses: the flicker you see along a real laser. None inside the glass. 0 is clean air.",
+  },
+  laserMirrorEnds: {
+    label: "Laser bounces off the panes' ends",
+    group: "Cursor",
+    value: 1,
+    min: 0,
+    max: 1,
+    step: 1,
+    options: ["No: it leaves through them", "Yes: they are mirrored"],
+    hint: "A beam meeting a pane's left or right end head-on would simply leave through it. With the ends mirrored (as a light guide's ends are silvered), it bounces back along the glass instead.",
   },
   ringWidth: {
     label: "Ring line width",

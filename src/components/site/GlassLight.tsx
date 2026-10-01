@@ -181,6 +181,7 @@ export function GlassLight({
     const uPlasticCount = U("uPlasticCount");
     const uOilGlow = U("uOilGlow");
     const uPipedGain = U("uPipedGain");
+    const uUranium = U("uUranium");
     const uBacklitGain = U("uBacklitGain");
     const uBacklitEdge = U("uBacklitEdge");
     const uBacklitFill = U("uBacklitFill");
@@ -715,6 +716,7 @@ export function GlassLight({
       gl.uniform3fv(uOilGlow, glow("grime-oil"));
       gl.uniform1f(uPipedGain, t("pipedLight"));
       // Backlit glass: the light shone in at the panes' edges (effects/optics/backlit).
+      gl.uniform1f(uUranium, t("uvUranium"));
       gl.uniform1f(uBacklitGain, t("backlight") * BACKLIT_GAIN);
       gl.uniform1f(uBacklitEdge, t("backlightEdge"));
       gl.uniform1f(uBacklitFill, t("backlightSize"));

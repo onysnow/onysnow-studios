@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Magnifier } from "@/components/site/Magnifier";
 import { FlareTorch } from "@/components/site/FlareTorch";
+import { BlackLightScene } from "./BlackLightScene";
 import { LaserBeam } from "@/components/site/LaserBeam";
 import { Hammer } from "@/components/site/Hammer";
 import { Flashlight } from "@/components/site/Flashlight";
@@ -111,6 +112,7 @@ export function HeldTool() {
       {held === "magnifier" ? <Magnifier /> : null}
       {held === "flare" ? <FlareTorch /> : null}
       {held === "laser" ? <LaserBeam /> : null}
+      {held === "blacklight" ? <BlackLightScene /> : null}
       {held === "flashlight" ? <Flashlight /> : null}
       {held === "hammer" ? <Hammer /> : null}
       {tray ? <Tray held={held} /> : null}

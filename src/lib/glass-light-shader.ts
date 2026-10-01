@@ -111,6 +111,7 @@ uniform float uGap;         // this pane's gap to the photographs behind it, CSS
  */
 uniform float uIor;          // this pane's material
 uniform float uFrost;        // this pane's material
+uniform float uUranium;      // uranium glass: how hard the glass itself glows green under UV (0: ordinary glass)
 uniform float uBacklitGain;  // backlit glass (effects/optics/backlit): 0 off
 uniform float uBacklitEdge;  // 0 both sides, 1 left, 2 right, 3 below, 4 above, 5 behind
 uniform float uBacklitFill;  // how far in it carries, against the pane's size
@@ -358,6 +359,8 @@ const vec3 LAMP_WHITE = vec3(${LAMP_COLOUR.join(", ")});
  * glows several times brighter than the same spot merely lit.
  */
 const float FLUOR_GAIN = 3.0;
+// Uranium glass's emission: a vivid yellow-green, peaking near 520 nm.
+const vec3 URANIUM_GREEN = vec3(0.38, 1.0, 0.1);
 
 const vec3 PLASTIC_ORANGE = vec3(1.0, 0.62, 0.225); // oklch(0.8 0.17 58), the buttons' own
 
@@ -1090,7 +1093,21 @@ void main() {
      */
     vec3 opal = onFace * uvCos * uvCos * uvCos * unlit * (1.0 - exp(-uScatter)) * 0.5
       * (uLightColour[i] / LAMP_WHITE) * (1.0 - uvShare);
-    lampLight += (tint * face + mirror) * lit + fluor * lit + opal * lit;
+    /*
+     * Uranium glass (Ony, 2026-10-01, with a photograph of a uranium glass
+     * dish under a black light): the glass itself fluoresces, a vivid green
+     * through its whole body. Its uranyl ions absorb UV and re-emit around
+     * 520 nm; the light it makes inside is trapped by total internal
+     * reflection and leaves mostly at the edges, so the rims blaze
+     * brighter than the face, and they light what is round them green
+     * (into the glow layer, which spills past the rim). Reached by the UV's
+     * own falloff, not shaded by the grime.
+     */
+    float uvIn = uvCos * uvCos * uvCos * uvShare * uUranium;
+    float uranRim = exp(-max(depth, 0.0) / 5.0);
+    vec3 uranium = URANIUM_GREEN * uvIn * (inside * 2.2 + 5.0 * uranRim * inside);
+    lampGlow += URANIUM_GREEN * uvIn * uranRim * 4.0 * lit;
+    lampLight += (tint * face + mirror) * lit + fluor * lit + opal * lit + uranium * lit;
     lampMirror += mirror * lit;
     lampGlow += tint * rim * lit;
     /*

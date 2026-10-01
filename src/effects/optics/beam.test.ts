@@ -164,3 +164,23 @@ describe("a prism in the beam's plane (25g)", () => {
     expect(exitAngle(405)).toBeGreaterThan(exitAngle(650));
   });
 });
+
+describe("mirrored ends (Ony: bounce off the inside left and right sides)", () => {
+  const band = { x: 0, y: 0, w: 1000, h: 200, r: 0, n: 1.52, absorb: 0 };
+  it("a beam meeting an end head-on leaves through it, unless the ends are mirrored", () => {
+    const open = traceBeam({ x: 500, y: 100 }, { x: 1, y: 0.02 }, [band], { maxLength: 5000 });
+    expect(open.hits.some((h) => h.kind === "exit")).toBe(true);
+    const mirrored = traceBeam(
+      { x: 500, y: 100 },
+      { x: 1, y: 0.02 },
+      [{ ...band, mirrorEnds: true }],
+      {
+        maxLength: 5000,
+        maxDepth: 6,
+      },
+    );
+    // It comes back: an internal reflection at the right end, then it runs to the left end.
+    expect(mirrored.hits[0]!.kind).toBe("internal");
+    expect(mirrored.segments.some((s) => s.inside === 0 && s.b.x < 10)).toBe(true);
+  });
+});

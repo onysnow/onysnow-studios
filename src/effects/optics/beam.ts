@@ -43,6 +43,12 @@ export type BeamPane = {
    * x, y, w, h then only bound it.
    */
   poly?: readonly Vec[];
+  /**
+   * Its left and right ends silvered: a beam meeting them from inside is
+   * reflected whole, as a light guide's mirrored ends do (Ony: "bounce off
+   * the inside left and right sides of the glass").
+   */
+  mirrorEnds?: boolean;
 };
 
 export type BeamSegment = {
@@ -256,7 +262,8 @@ export function traceBeam(
     const n1 = leaving ? pane.n : 1;
     const n2 = leaving ? 1 : pane.n;
     const cosI = Math.min(1, Math.abs(ray.d.x * nrm.x + ray.d.y * nrm.y));
-    const R = fresnel(cosI, n1, n2);
+    const mirrored = leaving && pane.mirrorEnds === true && Math.abs(outward.x) > 0.9;
+    const R = mirrored ? 1 : fresnel(cosI, n1, n2);
     const kind: BeamHit["kind"] = leaving ? (R >= 1 ? "internal" : "exit") : "enter";
     hits.push({ at: end, energy: arriving, pane: bestPane, kind });
 
