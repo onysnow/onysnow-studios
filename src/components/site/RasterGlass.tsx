@@ -119,6 +119,7 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
 
     let live = true;
     const instances: Instance[] = [];
+    const watchers: MutationObserver[] = [];
 
     /*
      * The library's frames come from the page's one loop (effects/engine/
@@ -260,8 +261,23 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
            * slot, under the light layers, with a z-index the library cannot
            * override.
            */
-          const render = pane.querySelector<HTMLElement>(":scope > canvas:not([data-layer])");
-          if (render) adoptLayer(pane, "pane:liquid", render);
+          const adopt = () => {
+            const render = pane.querySelector<HTMLElement>(":scope > canvas:not([data-layer])");
+            if (render) adoptLayer(pane, "pane:liquid", render);
+          };
+          adopt();
+          /*
+           * And again whenever the library puts in a new canvas (it rebuilds
+           * its render on a resize or a lost context). An unadopted one keeps
+           * the library's own z-index, -1, which is ABOVE the light under the
+           * glass (pane:under, -2): the lamp's light through the pane vanished
+           * while the lamp was over it and came back only past the pane's
+           * edge, where the page's own canvas shows it (Ony, 2026-10-01, item
+           * 56; seen in a test run as an unnamed canvas at z -1).
+           */
+          const watch = new MutationObserver(adopt);
+          watch.observe(pane, { childList: true });
+          watchers.push(watch);
 
           /*
            * Hand the pane whatever the tuning panel currently holds.
@@ -322,6 +338,7 @@ export function RasterGlass({ enabled }: { enabled: boolean }) {
 
     return () => {
       live = false;
+      for (const w of watchers) w.disconnect();
       stopListening();
       sizes.disconnect();
       frames.stop();
