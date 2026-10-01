@@ -33,8 +33,8 @@ anything or it's not help do we start from scratch."
 
 | # | Research | Feeds tasks | Status |
 |---|---|---|---|
-| R0 | Capability gaps and tools survey (all tasks) | all | to do, first |
-| R6 | Shadows good enough for a shadow puppet show | 83, 52, every light | to do |
+| R0 | Capability gaps and tools survey (all tasks) | all | done: tools-survey.md |
+| R6 | Shadows good enough for a shadow puppet show | 83, 52, every light | done: shadows.md |
 | R2 | Water drops: follow-up (raindrop-fx port, perf) | 77, 76 | first pass done |
 | R1 | Black light: calibration against real photos | 73 | first pass done |
 | R5 | Broken glass: follow-up (three-pinata fit, physics) | 84 | first pass done |
