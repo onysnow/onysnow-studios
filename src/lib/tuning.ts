@@ -949,6 +949,15 @@ export const tuning: Record<string, Knob> = {
     step: 10,
     hint: "Lower means a closer light: longer, softer shadows.",
   },
+  rainAmount: {
+    label: "Rain",
+    group: "Water",
+    value: 0.03,
+    min: 0,
+    max: 0.5,
+    step: 0.005,
+    hint: "Drops landing per second on each square centimetre of glass (?try=drops). They bead where they land, merge, and run once they are heavy enough to overcome the glass's grip (about 9 uL for water on a window).",
+  },
   roomFill: {
     label: "Room fill",
     group: "Shadows",

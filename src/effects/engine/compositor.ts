@@ -32,6 +32,12 @@ export const PANE_LAYERS = [
    * ?try=shardlight): the glass itself, so under every light on it.
    */
   "pane:broken",
+  /**
+   * Water drops on the face (WaterDrops, task 77, ?try=drops): each drop a
+   * lens showing the photograph sharp through the frost, with its own
+   * reflections. Under the glare and the light on the glass.
+   */
+  "pane:water",
   /** The glare the shutter flash sweeps across the face. */
   "pane:glare",
   /** The light arriving UNDER the glass, on the photographs (FloorLight). */
@@ -67,6 +73,7 @@ export const LAYER_CLASS: Readonly<Record<PaneLayer, string>> = {
   "pane:refraction": "glass__refract",
   "pane:liquid": "glass__liquid",
   "pane:broken": "glass__broken",
+  "pane:water": "glass__water",
   "pane:glare": "glass__glare",
   "pane:under": "glass__under",
   "pane:surface": "glass__surface",

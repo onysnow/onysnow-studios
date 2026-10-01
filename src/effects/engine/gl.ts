@@ -100,6 +100,8 @@ export function beginPass(width: number, height: number, name = "pass"): Shared 
   const h = Math.max(1, Math.round(height));
   if (canvas.width !== w) canvas.width = w;
   if (canvas.height !== h) canvas.height = h;
+  // A pass that drew into a texture (the water's drop map) must not leave it bound.
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.disable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ZERO);
   gl.disable(gl.SCISSOR_TEST);

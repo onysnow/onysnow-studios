@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeldTool } from "@/components/site/ToolTray";
 import { PhotoLights } from "@/components/site/PhotoLights";
+import { WaterDrops } from "@/components/site/WaterDrops";
 import { Vignette } from "@/components/site/Vignette";
 import { RedRoom } from "@/components/site/RedRoom";
 import { FreeSurfaces } from "@/components/site/FreeSurfaces";
@@ -202,6 +203,8 @@ function RootComponent() {
           <HeldTool />
           {/* The photographs' own lights, under the glass (item 31, ?try=photolights). */}
           <PhotoLights />
+          {/* Rain on the glass (task 77, ?try=drops). */}
+          <WaterDrops />
           {/* The lens's corners (catalogue item 32, ?try=vignette). */}
           <Vignette />
           {/* Secret 2, the darkroom (item 39, ?try=redroom). */}

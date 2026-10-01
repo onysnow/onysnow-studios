@@ -2927,7 +2927,8 @@ html.is-winding * {
  * The light under a pane, drawn inside it: above the glass's own render
  * (the frost, or the liquid canvas at -3), below its text. See FloorLight.
  */
-.glass > .glass__under {
+.glass > .glass__under,
+.glass > .glass__water {
   position: absolute;
   inset: 0;
   width: 100%;
