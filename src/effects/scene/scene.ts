@@ -131,6 +131,11 @@ export type GlassRect = {
    * is bound as a texture.
    */
   src: string;
+  /**
+   * The same photograph at the size the page shows it: the water's drops
+   * image it sharp, and the smallest variant (src) is too soft for that.
+   */
+  srcFull: string;
   ix: number;
   iy: number;
   iw: number;
@@ -292,8 +297,15 @@ function backdropOf(el: HTMLElement, side: "above" | "below"): HTMLImageElement 
   const images = scene.querySelectorAll<HTMLImageElement>("img[src]");
   for (let i = images.length - 1; i >= 0; i -= 1) {
     const img = images[i];
-    // Skip the blurred placeholder, which is an inline data URI.
-    if (img && !img.src.startsWith("data:") && img.naturalWidth > 0) return img;
+    /*
+     * Skip the blurred placeholder, which is an inline data URI, and any
+     * photograph standing ON the pane (a card on the Lab samples pane): it
+     * is in front of the glass, not behind it. Taking the last image in the
+     * scene picked the card, so the pane refracted -- and its rain drops
+     * imaged -- a photograph that was not behind it.
+     */
+    if (img && !img.src.startsWith("data:") && img.naturalWidth > 0 && !el.contains(img))
+      return img;
   }
   return null;
 }
@@ -538,6 +550,7 @@ function imageFields(reading: ImageReading | null) {
   const { img, rect, box } = reading;
   return {
     src: smallestVariant(img),
+    full: img.currentSrc || img.src,
     x: rect.left,
     y: rect.top,
     w: rect.width,
@@ -623,6 +636,7 @@ function freeze(reading: SceneReading): GlassRect[] {
       faces: facesAt(p.el, r, p.causes.thickness, reading.viewportWidth, reading.viewportHeight),
       s: surfaceSeed(p.el),
       src: above?.src ?? "",
+      srcFull: above?.full ?? "",
       ix: above?.x ?? 0,
       iy: above?.y ?? 0,
       iw: above?.w ?? 1,

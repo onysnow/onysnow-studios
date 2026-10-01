@@ -1100,3 +1100,134 @@ design → `?try` → verify measured → Ony approves).
   glass is clear. Which the site wants is a question for Ony (todo 88).
 - Still to do: step 5 (droplets and wiped tracks), 6 (caustic and shadow
   behind), 7 (tiers, idle, perf), 8 (side by side, Ony).
+
+## 9. Rebuild for photorealism (2026-10-01)
+
+Ony, after seeing the first cut: the rain "looks low res and pixelated",
+"like shitty CGI". He is right. Looked at side by side with the Commons
+photographs (§7.4: [Raindrops on a window](https://commons.wikimedia.org/wiki/File:Raindrops_on_a_window.jpg),
+[GGB reflection in raindrops](https://commons.wikimedia.org/wiki/File:GGB_reflection_in_raindrops.jpg),
+[Rain.drops](https://commons.wikimedia.org/wiki/File:Rain.drops.jpg)), the
+first cut is wrong in six ways:
+
+| What the photographs show | What the first cut drew | Why |
+|---|---|---|
+| Large drops 15-30 px across in a 1280 px frame; tiny droplets 1-4 px, thousands of them | drops 5-10 px, no droplets | `PX_PER_MM` 3.6 put a 4 mm drop at 14 px |
+| Smooth, sharp edges at screen resolution | 1 CSS px layer, upscaled by the device pixel ratio | `LAYER_SCALE` 1 ignored `devicePixelRatio` |
+| Drops never quite round: pinned outlines, pear shapes with a point at the top and the weight at the bottom, merged blobs | perfect circles | the map drew a spherical cap over a circle |
+| Dense droplets with clean vertical tracks where runners swept them | nothing | step 5 not built |
+| Each drop a clear lens holding the scene behind, sharp over a soft background | on the site's frosted panes, an almost invisible ring and a cyan dot | the drop was treated as sitting on polished glass over a back-etched face, so it showed only reflections |
+| Spray mist as small round lenses | single-pixel hash speckle | a placeholder |
+
+### 9.1 Decisions
+
+- **Scale: 6 px per mm** (estimate from the photographs). A water drop on
+  a vertical window starts to run at a contact diameter of 4.4 mm (§2.3), so
+  the largest standing drops are about that size. In the three Commons
+  frames above the largest standing drops measure 20-30 px across 1280 px,
+  which is 5-7 px per mm at the frame's own width; on our 1338 px window the
+  same framing is 6 px per mm.
+- **Device resolution.** The drop map, the droplet map and the water layer
+  are drawn at the device pixel ratio (capped at 2), so an edge is as sharp
+  as the screen.
+- **Height precision.** The drop map is half-float when the GPU can render
+  to it (`OES_texture_half_float` + `EXT_color_buffer_half_float`, which
+  also allows blending); RGBA8 otherwise. Small droplets go in their own
+  map with a finer height scale (0.5 mm full scale, 2 um a step), so their
+  slopes do not band.
+- **Wet glass goes clear.** The panes are frosted. Frosted glass is clear
+  where water lies on its etched face, because the water fills the
+  roughness and its index (1.33) is close to the glass's (1.5), so the
+  surface stops scattering ([Phys. Educ. 50 638 (2015), "How does frosted
+  glass become transparent?"](https://iopscience.iop.org/article/10.1088/0031-9120/50/5/638)).
+  The rain falls on the etched face, so every drop, droplet and wet track
+  is a clear window onto the photograph, sharp against the frost around
+  it. This is the look of every reference photograph (sharp drops over a
+  soft background) and it is physical. It replaces the "reflections only"
+  mode of §8, which stays available as the "Rain on: polished face" cause
+  in the lab (todo 88d).
+- **The lens is ray traced, not approximated.** Per pixel: the eye ray
+  refracts into the water at the surface normal (Snell, from the height
+  map's gradient), crosses the flat water-glass face, the glass's
+  thickness, the flat glass-air face and the gap, and lands on the
+  photograph. The tangential invariant n sin(theta) carries it from medium
+  to medium; where it reaches 1 at the glass-air face the ray is totally
+  reflected and the point shows the room's reflection instead (dark).
+  The offset that results is h tan(theta_w) + T tan(theta_g) + G tan(theta_a)
+  along the slope, which inverts and shrinks the photograph when the
+  photograph is beyond the drop's focal length and magnifies it when it is
+  inside, as the GGB tower (photo 1) and the EPOD drops (photo 8) show.
+- **Matching the frost's colour.** The water layer is drawn with ordinary
+  alpha over the frost (blend modes cannot see the pane's backdrop-filter
+  from inside the pane: tested, a multiply child of a backdrop-filtered,
+  isolated pane multiplies only the pane's own tint). So the drop's colour
+  is computed the way the pane computes its frost, minus the blur: the
+  photograph, saturated by the pane's own `saturate()` and veiled by the
+  pane's own fill colour, both read from the pane's computed style. The
+  lamp's light on the photograph (FloorLight, `pane:under`) is above the
+  water layer and lights drops and frost alike.
+- **Shape.**
+  - Contact line: the circle of the cap's radius, perturbed by harmonics
+    2-4 with per-drop random phase, amplitude growing with size (pinning
+    on more defects) **(estimate: 3% for a droplet, 9% for a 4 mm drop)**.
+  - Gravity on vertical glass: wider and taller at the bottom, narrower at
+    the top (the advancing angle below, the receding above, §2.2): an egg
+    profile whose apex sits below the centre **(estimate: apex 15% of the
+    radius low, taper 25% at the top)**, as the pear drops of photos 2, 3, 5.
+  - Running drops stretch along their run and leave a tail (raindrop-fx
+    `velocitySpread`, already ported).
+- **Droplets (step 5).** A persistent droplet map per pane. Rain landing
+  splashes: besides the drops the sim tracks, each landing adds tiny
+  droplets (0.1-0.6 mm, log-normal) around it, and condensation adds them
+  everywhere at the "Condensation" rate. Each is drawn once into the map
+  as a small cap; every frame, every drop wipes the droplets under it (it
+  has swallowed them) and a running drop wipes its whole path (the clean
+  tracks of photo 3). Spray mist lands as droplets too, replacing the
+  speckle.
+- **Wet tracks.** A runner leaves a film: wet glass, so clear. A
+  persistent wet map per pane (half resolution: a film's edge is soft)
+  takes each runner's path and fades as the film dries (`FILM_DRY`).
+
+### 9.2 Light under the water (built with the rebuild)
+
+The room's light reaching the photograph through the water is gathered
+under a drop's crown and starved under its edge. To first order in the
+slope (each bit of water bends light by about (n - 1) times its slope),
+the irradiance on the photograph a distance D behind is
+E = 1 / (1 + D (n - 1) laplacian(h)) **(computed)**: bright under the
+crown, where the cap curves down, dark under the edge, where the slope
+falls from the contact angle to nothing. The room's light arrives from a
+wide cone, which blurs the pattern: the laplacian is taken over D tan 30
+deg **(estimate)**, and E is held to 0.3-1.8 where the first-order form
+breaks down (past the drop's focus). What a drop shows is the photograph
+at the point its ray lands, lit by this: the edge of a drop images the
+starved ring under its own edge, which is what gives drops their dark
+rims over an evenly lit scene (photos 3 and 5).
+
+### 9.3 Checked (2026-10-01)
+
+Rendered at 1.5x device pixels on the home page (cards pane) and Lab
+samples (night photograph, bright neon), compared side by side with
+Commons "Rain.drops", "Raindrops on a window" and "GGB reflection in
+raindrops":
+
+- each drop holds the photograph inverted and shrunk, sharp against the
+  frost; over bright lights they glow in the lights' colours (photo 6);
+- drops are pear-shaped and irregular, larger ones more so;
+- edges are dark, centres bright;
+- highlights are small white glints, one per light;
+- runners sweep clean vertical tracks through the droplets (photo 3).
+
+Fixes found while checking: the pane's photograph was taken from the
+last image in its section, which on Lab samples was a card standing on
+the pane, so the pane refracted (and its drops imaged) a picture that
+was not behind it (scene.ts backdropOf now skips images on the pane);
+highlights clipped per channel turned into violet dots (now clipped to
+white); the 400-drop cap held a pane at 9% coverage (now 1500).
+
+### 9.4 Still to do
+
+- A lamp's own caustic (a sharp bright point under each drop, offset
+  away from the lamp) on top of the room's.
+- Perf with `?perf=1` on a real GPU; swiftshader here runs the whole
+  page at under 1 fps, so it says nothing about cost.

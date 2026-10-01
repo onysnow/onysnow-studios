@@ -72,7 +72,7 @@ export const PREVIEWS = {
   balloons:
     "Task 74: helium party balloons in the room in front of the page -- they rise to the top of the window and wander on its draughts, the pointer's wake pushes them, a click pops one; latex lit by every light, crystal ones throwing coloured shadows (Water & room > Balloons)",
   drops:
-    "Task 77: rain on the glass -- drops bead, merge and run once heavy enough (the Furmidge threshold), leaving trails; each drop is a lens holding the photograph behind it upside down, sharp through the frost, with every light's highlight (Water > Rain)",
+    "Task 77: rain on the glass, rebuilt for photorealism -- drawn at the screen's own pixels, drops at their real size, pear-shaped and irregular, thousands of tiny droplets between them; wet frosted glass goes clear, so each drop is a lens holding the photograph sharp and upside down, dark-rimmed, with every light's glint; heavy drops run and sweep clean tracks (Water > Rain, Droplets, Rain lands on)",
   solids:
     "Glass solids on Lab samples -- prism, sphere, cube, cone, pyramid, rod -- ray traced through their glass",
   tools:
