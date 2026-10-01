@@ -239,6 +239,14 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
   // Every pane's transmission this ray crossed, and the clearest one's: all but one more are paid for.
   vec3 crossedT = vec3(1.0);
   vec3 clearestT = vec3(0.0);
+  /*
+   * Light turned by a higher pane's bevel meets the panes below it where the
+   * turn sends it, not where the straight line would (Ony, 2026-10-01: only
+   * part of the light out of the first pane enters the second). Panes come
+   * highest first; each bevel's turn is kept per unit of height, so a pane
+   * lower down is met that much further along it.
+   */
+  vec2 turnedPerGap = vec2(0.0);
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
     // This pane's own causes: how high it stands, what glass it is.
@@ -262,6 +270,7 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     float toGlass = max(height - gap, 1.0) / max(height, 1.0);
     // Back along the ray to this pane's plane.
     vec2 Q = P + (lightXY - P) * (gap / max(height, gap + 1.0));
+    Q += turnedPerGap * gap;
     vec4 r = uRect[i];
     vec2 hs = r.zw * 0.5;
     vec2 q = Q - (r.xy + hs);
@@ -282,7 +291,12 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     float pen = max(softFloor * toGlass, 1.0);
     if (d <= -pen) continue;
     float inGlass = smoothstep(-pen, pen, d);
-    underFrost = max(underFrost, frostBlur * inGlass);
+    /*
+     * Two frosted panes blur more than either alone: each spreads the light
+     * by its own scatter over its own gap, and spreads of that kind add in
+     * quadrature (the variances add). It was the larger of the two.
+     */
+    underFrost = sqrt(underFrost * underFrost + frostBlur * frostBlur * inGlass * inGlass);
     faceHeight = max(faceHeight, gap * step(0.5, inGlass));
     d = max(d, 0.0);
     float W = max(uEdge[i], 1.0);
@@ -326,6 +340,14 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     vec3 band = smoothstep(from - soft, from + soft, vec3(x))
               * (1.0 - smoothstep(from + width - soft, from + width + soft, vec3(x)));
     through += band * pool * passes * 0.92 / width;
+    /*
+     * The light this bevel turned came through the glass a little toward the
+     * rim of where the straight line crosses it (the band lands shift * W
+     * inward); the panes below meet that turned ray, so carry the offset
+     * down to them, per unit of height.
+     */
+    vec2 outward = edgeNormal * (dot(q, edgeNormal) >= 0.0 ? 1.0 : -1.0);
+    turnedPerGap += outward * (shift * W) * band.g * inGlass / max(gap, 1.0);
 
     /*
      * The marks on the glass, where this ray crossed it (Q), so their pattern

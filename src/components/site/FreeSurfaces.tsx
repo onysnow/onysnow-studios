@@ -64,9 +64,14 @@ export function FreeSurfaces() {
       window.clearTimeout(pending);
       pending = window.setTimeout(scan, 250);
     };
-    const timer = window.setTimeout(scan, 400);
+    // Watched only after the first scan: before then React may still be
+    // hydrating the page, and writing the light onto its elements then is a
+    // hydration mismatch.
     const changes = new MutationObserver(soon);
-    changes.observe(document.body, { childList: true, subtree: true, characterData: true });
+    const timer = window.setTimeout(() => {
+      scan();
+      changes.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }, 400);
     return () => {
       window.clearTimeout(timer);
       window.clearTimeout(pending);
