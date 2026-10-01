@@ -52,7 +52,8 @@
  */
 
 import type { SurfaceMaterial } from "@/effects/materials/surfaces";
-import { litSurfaceList } from "@/effects/scene/scene";
+import { glassGeometry, litSurfaceList } from "@/effects/scene/scene";
+import { t } from "@/lib/tuning";
 
 /**
  * How far type and buttons stand off what they rest on, as a share of
@@ -68,19 +69,51 @@ export const CASTER_NEAR_STANDOFF = 0.45;
  */
 export function casterList(): Caster[] {
   const out: Caster[] = [];
+  const panes = glassGeometry();
+  const content = t("shadowGap");
   for (const s of litSurfaceList()) {
-    const onGlass = s.el.closest(".glass") !== null;
+    const paneEl = s.el.closest<HTMLElement>(".glass");
+    const onGlass = paneEl !== null;
     if (s.el.classList.contains("transmitted")) continue;
     /*
      * A photograph not on a pane is the floor itself. One on a pane -- a
      * card's print -- stands on it like the type and throws its two shadows
      * the same way (Ony, 2026-10-01: "The cards need to cast 2 shadows as
      * well"), from its own height: a mounted print stands further off the
-     * glass than a line of type (blue channel, uCasterPrint*).
+     * glass than a line of type.
      */
     const isPhoto = s.el.querySelector("img") !== null || s.el.tagName === "IMG";
     if (isPhoto && !onGlass) continue;
-    out.push({ el: s.el, material: s.material, onGlass, print: isPhoto });
+    /*
+     * Its own height above the photograph (docs/research/shadows.md 5.5,
+     * 6 Change 3): on a pane, that pane's own top face -- its height over
+     * the photograph plus its thickness -- and its standoff over it; off the
+     * glass, its standoff over the photograph. It was one global height per
+     * kind, from the settings, whatever pane it stood on.
+     */
+    let face = 0;
+    let top = 0;
+    if (paneEl) {
+      const pane = panes.find((g) => g.el === paneEl);
+      const bottom = pane
+        ? Number.isFinite(pane.stack.zBottom)
+          ? pane.stack.zBottom
+          : pane.causes.gap
+        : t("floorGap");
+      // The pane's frosted face, where the floor pass has it (FloorLight's uGap).
+      face = bottom;
+      top = bottom + (pane ? pane.causes.thickness : t("glassThickness"));
+    }
+    const standoff = isPhoto ? 1 : s.standoff || CASTER_NEAR_STANDOFF;
+    out.push({
+      el: s.el,
+      material: s.material,
+      onGlass,
+      print: isPhoto,
+      height: top + standoff * content,
+      face,
+      tint: casterTint(s.el, s.material),
+    });
   }
   return out;
 }
@@ -267,15 +300,99 @@ export type Caster = {
   el: HTMLElement;
   material: SurfaceMaterial;
   onGlass: boolean;
-  /** A photograph mounted on a pane (a card): its own height, the mask's blue. */
+  /** A photograph mounted on a pane (a card), drawn as its box. */
   print?: boolean;
+  /** Its height above the photograph, CSS px. */
+  height: number;
+  /** Its pane's frosted face (the pane's height over the photograph, as the floor pass has it), 0 if not on glass. */
+  face: number;
+  /** What light gets through where it fully covers: 0 for ink, its colour for coloured plastic. */
+  tint: readonly [number, number, number];
+};
+
+/** As many caster layers as the floor pass reads: two RGB masks. */
+export const MAX_CASTER_LAYERS = 6;
+
+/** One layer of the mask: the casters standing at one height, on one face, passing one colour. */
+export type CasterLayer = {
+  height: number;
+  face: number;
+  tint: readonly [number, number, number];
 };
 
 /**
- * Paint the casters into the mask: red, those just off the photograph;
- * green, those resting on glass. The canvas is the page at CASTER_SCALE.
+ * What light a caster lets through where it fully covers the lamp
+ * (docs/research/shadows.md 6 Change 3: shadows carry colour). Ink and dark
+ * plastic: none. The day-glo orange sheet passes orange (Exploratorium,
+ * coloured shadows; its own transmission, effects/materials/surfaces).
  */
-export function paintCasters(canvas: HTMLCanvasElement, casters: readonly Caster[]) {
+export function casterTint(el: Element, material: SurfaceMaterial): [number, number, number] {
+  if (el.classList.contains("plastic") && !el.classList.contains("plastic--dark")) {
+    return material.id === "dayglo-orange" ? [0.95, 0.45, 0.08] : [0.4, 0.4, 0.4];
+  }
+  return [0, 0, 0];
+}
+
+/**
+ * Sort the casters into at most MAX_CASTER_LAYERS layers, one per height,
+ * face and colour (2 px apart counts as the same height). With more, the
+ * nearest heights share a layer. Returns the layers and each caster's layer.
+ */
+export function groupCasters(casters: readonly Caster[]): {
+  layers: CasterLayer[];
+  index: number[];
+} {
+  const same = (l: CasterLayer, c: Caster) =>
+    Math.abs(l.height - c.height) <= 2 &&
+    Math.abs(l.face - c.face) <= 2 &&
+    l.tint.every((v, i) => Math.abs(v - c.tint[i]!) < 0.01);
+  const layers: CasterLayer[] = [];
+  const index: number[] = [];
+  for (const c of casters) {
+    let k = layers.findIndex((l) => same(l, c));
+    if (k < 0 && layers.length < MAX_CASTER_LAYERS) {
+      layers.push({ height: c.height, face: c.face, tint: c.tint });
+      k = layers.length - 1;
+    }
+    if (k < 0) {
+      // Full: the layer whose height is nearest, on the same face if there is one.
+      let best = 0;
+      let bestD = Infinity;
+      layers.forEach((l, i) => {
+        const d = Math.abs(l.height - c.height) + (l.face === c.face ? 0 : 1000);
+        if (d < bestD) {
+          bestD = d;
+          best = i;
+        }
+      });
+      k = best;
+    }
+    index.push(k);
+  }
+  return { layers, index };
+}
+
+/**
+ * Paint the casters into the masks, a layer to a channel: canvas 0 holds
+ * layers 0-2 in red, green and blue, canvas 1 layers 3-5. Each at the page's
+ * resolution (CASTER_SCALE). Returns the layers, for the floor pass's
+ * heights and colours.
+ */
+export function paintCasters(
+  canvases: readonly HTMLCanvasElement[],
+  casters: readonly Caster[],
+): CasterLayer[] {
+  const { layers, index } = groupCasters(casters);
+  canvases.forEach((canvas, n) => paintMask(canvas, casters, index, n));
+  return layers;
+}
+
+function paintMask(
+  canvas: HTMLCanvasElement,
+  casters: readonly Caster[],
+  index: readonly number[],
+  n: number,
+) {
   const w = Math.max(
     1,
     Math.round((document.documentElement.clientWidth || window.innerWidth) * CASTER_SCALE),
@@ -293,13 +410,17 @@ export function paintCasters(canvas: HTMLCanvasElement, casters: readonly Caster
   ctx.setTransform(CASTER_SCALE, 0, 0, CASTER_SCALE, 0, 0);
 
   const vh = window.innerHeight;
-  for (const c of casters) {
+  casters.forEach((c, i) => {
+    const k = index[i]!;
+    if (Math.floor(k / 3) !== n) return;
     const r = c.el.getBoundingClientRect();
-    if (r.bottom < -200 || r.top > vh + 200 || r.width < 1) continue;
-    const a = casterOpacity(c.el, c.material);
+    if (r.bottom < -200 || r.top > vh + 200 || r.width < 1) return;
+    // How much of its area it covers: type and a print, all of it (colour, if any, is the layer's tint).
+    const a = c.tint.some((v) => v > 0) ? 1 : casterOpacity(c.el, c.material);
     const v = Math.round(255 * a);
-    const colour = c.print ? `rgb(0 0 ${v})` : c.onGlass ? `rgb(0 ${v} 0)` : `rgb(${v} 0 0)`;
-    ctx.fillStyle = colour;
+    const channel = k % 3;
+    ctx.fillStyle =
+      channel === 0 ? `rgb(${v} 0 0)` : channel === 1 ? `rgb(0 ${v} 0)` : `rgb(0 0 ${v})`;
     // A print's frame is a span too: it is drawn as its box, not as type.
     const isType =
       !c.print &&
@@ -323,5 +444,5 @@ export function paintCasters(canvas: HTMLCanvasElement, casters: readonly Caster
       ctx.roundRect(r.left, r.top, r.width, r.height, radius);
       ctx.fill();
     }
-  }
+  });
 }

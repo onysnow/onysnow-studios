@@ -3,7 +3,7 @@ import { roughRow } from "@/effects/optics/rough-transmission";
 import { unscattered } from "@/effects/optics/scatter";
 import { slab } from "@/effects/optics/stack";
 import { previewing } from "@/effects/engine/preview";
-import { CASTER_NEAR_STANDOFF, casterList, paintCasters } from "@/effects/optics/casters";
+import { casterList, MAX_CASTER_LAYERS, paintCasters } from "@/effects/optics/casters";
 import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
@@ -149,17 +149,20 @@ export function FloorLight() {
      * shadows on the photographs from (effects/optics/casters).
      */
     gl.uniform1i(U("uCasters"), 3);
+    gl.uniform1i(U("uCasters2"), 4);
     const uHasCasters = U("uHasCasters");
-    const uCasterNear = U("uCasterNear");
     const uFloorScale = U("uFloorScale");
     const floorScales = new Float32Array(MAX_LIGHTS);
-    const uCasterOnGlass = U("uCasterOnGlass");
-    const uCasterFace = U("uCasterFace");
-    const uCasterPrint = U("uCasterPrint");
-    const uCasterPrintFace = U("uCasterPrintFace");
     const uCasterStrength = U("uCasterStrength");
-    const casterCanvas = document.createElement("canvas");
+    // The caster layers: two RGB masks, a layer to a channel, each with its height, face and colour (effects/optics/casters).
+    const uCasterCount = U("uCasterCount");
+    const uCasterLayer = U("uCasterLayer");
+    const uCasterTint = U("uCasterTint");
+    const layerGeom = new Float32Array(MAX_CASTER_LAYERS * 2);
+    const layerTint = new Float32Array(MAX_CASTER_LAYERS * 3);
+    const casterCanvases = [document.createElement("canvas"), document.createElement("canvas")];
     const casterTex = gl.createTexture();
+    const casterTex2 = gl.createTexture();
     const marks = new Float32Array(MAX_FLOOR_PANES * 2);
     const uMarks = U("uMarks");
     const uMarksProportional = U("uMarksProportional");
@@ -410,28 +413,30 @@ export function FloorLight() {
       gl.uniform4fv(uRoughRatio, roughRatios);
       gl.uniform4fv(uRoughSpread, roughSpreads);
       gl.uniform3fv(uThrough, throughs);
-      gl.uniform1f(uHasCasters, casterTex ? 1 : 0);
-      if (casterTex) {
-        paintCasters(casterCanvas, casterList());
-        gl.activeTexture(gl.TEXTURE3);
-        gl.bindTexture(gl.TEXTURE_2D, casterTex);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, casterCanvas);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        // Heights above the photograph: type and buttons just off it; what rests on a pane, the pane's height and its own.
-        gl.uniform1f(uCasterNear, CASTER_NEAR_STANDOFF * t("shadowGap"));
-        gl.uniform1f(uCasterFace, CASTER_NEAR_STANDOFF * t("shadowGap"));
+      gl.uniform1f(uHasCasters, casterTex && casterTex2 ? 1 : 0);
+      if (casterTex && casterTex2) {
+        const layers = paintCasters(casterCanvases, casterList());
+        [casterTex, casterTex2].forEach((tex, n) => {
+          gl.activeTexture(gl.TEXTURE3 + n);
+          gl.bindTexture(gl.TEXTURE_2D, tex);
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, casterCanvases[n]!);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        });
+        layerGeom.fill(0);
+        layerTint.fill(0);
+        layers.forEach((l, k) => {
+          layerGeom[k * 2] = l.height;
+          layerGeom[k * 2 + 1] = l.face;
+          layerTint.set(l.tint, k * 3);
+        });
+        gl.uniform1i(uCasterCount, layers.length);
+        gl.uniform2fv(uCasterLayer, layerGeom);
+        gl.uniform3fv(uCasterTint, layerTint);
         gl.uniform1f(uCasterStrength, t("castShadowStrength"));
-        // A mounted print stands a whole "Content depth" off its glass.
-        gl.uniform1f(uCasterPrintFace, t("shadowGap"));
-        gl.uniform1f(uCasterPrint, t("floorGap") + t("glassThickness") + t("shadowGap"));
-        gl.uniform1f(
-          uCasterOnGlass,
-          t("floorGap") + t("glassThickness") + CASTER_NEAR_STANDOFF * t("shadowGap"),
-        );
       }
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);

@@ -1,9 +1,9 @@
 /** The GLSL twin of effects/optics/casters.ts castPoint and lampDiscAt; see that file. */
 export const CASTERS_GLSL = /* glsl */ `
 // effects/optics/casters.ts: how much of the lamp the casters hide from a
-// point P of the photograph. ch picks the mask's channel (red: just off the
-// photograph; green: resting on glass); h is that channel's height.
-float casterCover(sampler2D mask, vec2 viewportCss, vec2 P, vec2 L, float H, float R, float h, float extra, int ch) {
+// point P of the photograph. layer picks the mask (0-2 the first, 3-5 the
+// second) and its channel; h is that layer's height.
+float casterCover2(sampler2D mask, sampler2D mask2, vec2 viewportCss, vec2 P, vec2 L, float H, float R, float h, float extra, int layer) {
   if (h <= 0.0 || h >= H - 1.0) return 0.0;
   vec2 c = P + (L - P) * (h / H);
   vec2 toL = L - P;
@@ -30,7 +30,9 @@ float casterCover(sampler2D mask, vec2 viewportCss, vec2 P, vec2 L, float H, flo
     float r = sqrt((fk + 0.5) / 12.0);
     float ang = fk * 2.3999632 + spin;
     vec2 o = rad * (cos(ang) * r * b) + tng * (sin(ang) * r * a);
-    vec4 m = texture2D(mask, (c + o) / viewportCss);
+    vec2 uv = (c + o) / viewportCss;
+    vec4 m = layer < 3 ? texture2D(mask, uv) : texture2D(mask2, uv);
+    int ch = layer < 3 ? layer : layer - 3;
     sum += ch == 0 ? m.r : (ch == 1 ? m.g : m.b);
   }
   return sum / 12.0;

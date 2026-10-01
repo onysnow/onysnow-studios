@@ -124,18 +124,18 @@ uniform vec2 uMarks[${MAX_FLOOR_PANES}];
 uniform float uMarksProportional; // 1 while previewing ?try=marks
 /*
  * The casters (effects/optics/casters): what stands in the
- * lamp's light, painted in its own shape -- red just off the photograph
- * (uCasterNear px up), green resting on glass (uCasterOnGlass px up).
+ * lamp's light, painted in its own shape, in layers: each its own height,
+ * the face it rests on, and the colour it passes (uCasterLayer, uCasterTint).
  */
-uniform sampler2D uCasters;
+uniform sampler2D uCasters;   // caster layers 0-2, one to a channel
+uniform sampler2D uCasters2;  // caster layers 3-5
+#define MAX_CASTER_LAYERS 6
+uniform int  uCasterCount;
+uniform vec2 uCasterLayer[MAX_CASTER_LAYERS]; // its height above the photograph, and the face it rests on (0: none)
+uniform vec3 uCasterTint[MAX_CASTER_LAYERS];  // the light it passes where it fully covers (0: none)
 uniform float uHasCasters;
-uniform float uCasterNear;
-uniform float uCasterOnGlass;
 /* How far what rests on a pane stands off its frosted face, which catches its shadow too. */
-uniform float uCasterFace;
 /* A card's print: how high above the photograph, and above its pane's face (the mask's blue). */
-uniform float uCasterPrint;
-uniform float uCasterPrintFace;
 /* How much of the light a caster blocks ("Cast shadow strength"). */
 uniform float uCasterStrength;
 uniform float uFloorScale[MAX_LIGHTS]; // each light's brightness and distance against the defaults (P / H^2)
@@ -418,25 +418,28 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
    */
   if (uHasCasters > 0.5) {
     vec2 css = uViewport / uScale;
-    float near = casterCover(uCasters, css, P, lightXY, height, radius, uCasterNear, 0.0, 0);
-    // The frost's spread, carried to the caster's plane: (H - h) / H of it (docs/research/shadows.md 6 Change 5).
-    float onGlass = casterCover(uCasters, css, P, lightXY, height, radius, uCasterOnGlass, underFrost * max(height - uCasterOnGlass, 0.0) / max(height, 1.0), 1);
     /*
-     * Under a pane, its frosted face is lit too, and what rests on it throws
-     * a shadow there first -- close, sharp, from the lamp's height above the
-     * glass -- before the one on the photograph further down: each letter
-     * its own, falling away from the lamp wherever the lamp is.
+     * Each layer of casters at its own height, on its own face, passing its
+     * own colour (docs/research/shadows.md 6 Change 3). On the photograph:
+     * projected from the lamp from the layer's height, spread by the frost
+     * of the glass its light crossed, (H - h) / H of it carried to the
+     * caster's plane. Under the pane it rests on, its frosted face is lit
+     * too, and it throws a closer, sharper shadow there first, from its
+     * height over that face.
      */
-    float onFace = faceHeight > 0.0
-      ? casterCover(uCasters, css, P, lightXY, height - faceHeight, radius, uCasterFace, 0.0, 1)
-      : 0.0;
-    // The cards' prints, the same two shadows from their own, greater height.
-    float printBelow = casterCover(uCasters, css, P, lightXY, height, radius, uCasterPrint, underFrost * max(height - uCasterPrint, 0.0) / max(height, 1.0), 2);
-    float printFace = faceHeight > 0.0
-      ? casterCover(uCasters, css, P, lightXY, height - faceHeight, radius, uCasterPrintFace, 0.0, 2)
-      : 0.0;
-    light *= (1.0 - near * uCasterStrength) * (1.0 - onGlass * uCasterStrength) * (1.0 - onFace * uCasterStrength)
-      * (1.0 - printBelow * uCasterStrength) * (1.0 - printFace * uCasterStrength);
+    for (int k = 0; k < MAX_CASTER_LAYERS; k++) {
+      if (k >= uCasterCount) break;
+      float h = uCasterLayer[k].x;
+      float face = uCasterLayer[k].y;
+      vec3 pass = mix(vec3(1.0), uCasterTint[k], uCasterStrength);
+      float extra = face > 0.0 ? underFrost * max(height - h, 0.0) / max(height, 1.0) : 0.0;
+      float below = casterCover2(uCasters, uCasters2, css, P, lightXY, height, radius, h, extra, k);
+      light *= mix(vec3(1.0), pass, below);
+      if (face > 0.0 && faceHeight > 0.0 && abs(faceHeight - face) < 3.0) {
+        float onFace = casterCover2(uCasters, uCasters2, css, P, lightXY, height - face, radius, h - face, 0.0, k);
+        light *= mix(vec3(1.0), pass, onFace);
+      }
+    }
   }
 
   vec3 add = light * uLightGain;
