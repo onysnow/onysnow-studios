@@ -2902,6 +2902,24 @@ html.is-winding * {
 }
 
 /* Party balloons in the room in front of the page (Balloons.tsx, task 74, ?try=balloons). */
+/*
+ * The plastic buttons' rounded edges, lit by every light (PlasticBevel.tsx).
+ * Under the balloons (they float in front of the page), over the page.
+ */
+.plastic-bevel-layer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 7900;
+  pointer-events: none;
+}
+
+/* The bevel's own curve mirrors the lights and the scene there: the 1 px drawn rim retires. */
+html[data-plastic-bevel] .plastic::after {
+  display: none;
+}
+
 .balloons-layer {
   position: fixed;
   inset: 0;

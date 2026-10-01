@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeldTool } from "@/components/site/ToolTray";
 import { PhotoLights } from "@/components/site/PhotoLights";
 import { WaterDrops } from "@/components/site/WaterDrops";
+import { PlasticBevel } from "@/components/site/PlasticBevel";
 import { Balloons } from "@/components/site/Balloons";
 import { SpiderWebs } from "@/components/site/SpiderWebs";
 import { Fireworks } from "@/components/site/Fireworks";
@@ -208,6 +209,8 @@ function RootComponent() {
           <PhotoLights />
           {/* Rain on the glass (task 77, ?try=drops). */}
           <WaterDrops />
+          {/* The plastic buttons' rounded edges, lit by every light. */}
+          <PlasticBevel />
           {/* Party balloons in the room (task 74, ?try=balloons). */}
           <Balloons />
           {/* A spider's web (task 75, ?try=webs). */}
