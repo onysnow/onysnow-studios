@@ -996,6 +996,17 @@ export function GlassLight({
         const sy = Math.floor((viewportHeight() - (pane.y + pane.h) - BLEED) * scale);
         const sh = Math.ceil((pane.h + BLEED * 2) * scale);
         gl.scissor(sx, sy, sw, sh);
+        /*
+         * Cleared first, inside the scissor. The buffer is shared by every
+         * pane in turn, and the region was only cleared after a pane's glow
+         * pass -- which runs only while the light is lit. Unlit, the next
+         * pane's draw blended over the last pane's pixels where their bled
+         * regions overlap, and copied them into its own layer: a stacked
+         * pane showed its neighbour's light a second time, cut off in a
+         * hard straight line where its own region ended (todo 2a follow-up,
+         * the Contact stack's line and its half-lit edge).
+         */
+        gl.clear(gl.COLOR_BUFFER_BIT);
         gl.uniform1f(uGlowOnly, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
 
