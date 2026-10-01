@@ -590,3 +590,21 @@ Problems:
 - Calibrated transmission colours for real dyed hide (no measured spectra
   found).
 - The R7 flame data, for the candle and oil-lamp preset.
+
+## 7. Status (2026-10-01)
+
+- Change 1 (room fill): done as a "Room fill" knob (04295d5). The part of
+  photo x (A + E) under 1 is darkening in the floor layer, so the
+  blend-mode pair was not needed; over 1 the lamps add as before. E is the
+  light's brightest channel after the film curve **(estimate)**.
+- Change 2 (power and distance): done (63c60e8).
+- Change 3 (caster layers): done with 6 layers in two RGB masks (0b09293),
+  not the 8-tile atlas; mip prefilter still to do.
+- Change 4 (12 Vogel taps, rotated): done (63c60e8); mipmaps still to do.
+- Change 5 (frost factor): done (63c60e8).
+- Change 6 (the face): settled: the frosted face is the pane's lower face,
+  at its gap, where the floor pass already had it; each caster stands at
+  gap + thickness + standoff, and both of a letter's shadows use that one
+  height.
+- Point / Bulb / Diffuser light-size presets: done (f9fcf86).
+- Still to build: the puppet stage (task 83), quality and debug controls.
