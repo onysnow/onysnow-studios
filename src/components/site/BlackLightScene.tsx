@@ -30,14 +30,18 @@ import { onTuningApplied, t } from "@/lib/tuning";
 const hex = (h: string) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16) / 255);
 const LEAK = [
   { rgb: hex("#1A0F4A"), wash: 0.1, emit: 1.0 }, // 365 nm (BLB / filtered LED): leak365
-  { rgb: hex("#4B22D9"), wash: 0.3, emit: 0.55 }, // 395 nm LED: leak395, "emission x0.5, leak x3"
+  // 395 nm LED: leak computed from published spectra, median #8B00FF; body #6A00D9 (uv-blacklight.md R1 §4).
+  { rgb: hex("#6A00D9"), wash: 0.3, emit: 0.55 },
 ] as const;
 /** Optical brightener glow (photo whites, paper, cotton): body and halo. */
-const OBA_BODY = hex("#8FB8FF");
-const OBA_HALO = hex("#4C63FF");
+// Brightener glow as a camera records it, computed from its emission band (uv-blacklight.md R1 §4):
+// core #E0E0FF, body #8C8CFF, halo #4C40FF (the first pass was ~25 degrees too cyan).
+const OBA_BODY = hex("#8C8CFF");
+const OBA_HALO = hex("#4C40FF");
 /** The neon-ink option's colours (artistic, off by default: a photo print never does this). */
 const HOT_PINK = hex("#FF3FB4");
-const NEON_GREEN = hex("#C8FF2A");
+// Day-glo yellow-green, corrected toward the measured hue (R1 §4).
+const NEON_GREEN = hex("#7CFF3A");
 const ELECTRIC_BLUE = hex("#4D7BFF");
 
 /** exp(k (x - 1)) as a feFuncX table: the share of the paper's glow one ink lets through. */
@@ -132,14 +136,14 @@ export function BlackLightScene() {
     <>
       {/*
         A photograph under the black light is a print on brightened paper
-        (docs/research/uv-blacklight.md 6.1): the paper glows blue, the inks
-        block it -- magenta and black most, then yellow, cyan least -- so
-        whites glow, skies keep a pale-blue glow, and saturated reds and
-        magentas go dark. Plus the violet leak the print reflects, in
+        (docs/research/uv-blacklight.md 6.1, calibrated in R1): the paper
+        glows blue, the inks block it -- yellow most, then magenta, cyan
+        least (measured, Hersch 2008) -- so whites glow, skies keep a faint
+        glow, and reds, yellows and magentas go dark. Plus the violet leak the print reflects, in
         proportion to its blue. Then the camera: bright glow clips toward a
         pale core, and the glow (only the glow) blooms in its halo blue.
 
-        T = exp(-(0.5 C + 2 M + 1 Y)), C = 1 - R, M = 1 - G, Y = 1 - B, is a
+        T = exp(-(1.6 C + 2.5 M + 3.7 Y)), C = 1 - R, M = 1 - G, Y = 1 - B, is a
         product of one exponential per channel: three lookup tables, then
         the channels multiplied (feComposite k1).
       */}
@@ -153,9 +157,13 @@ export function BlackLightScene() {
           height="116%"
         >
           <feComponentTransfer in="SourceGraphic" result="ink">
-            <feFuncR type="table" tableValues={expTable(0.5)} />
-            <feFuncG type="table" tableValues={expTable(2.0)} />
-            <feFuncB type="table" tableValues={expTable(1.0)} />
+            {/*
+              Ink weights from the measured inkjet data (Hersch 2008, uv-blacklight.md R1 §1):
+              yellow blocks the glow most, then magenta, then cyan -- C 1.6, M 2.5, Y 3.7.
+            */}
+            <feFuncR type="table" tableValues={expTable(1.6)} />
+            <feFuncG type="table" tableValues={expTable(2.5)} />
+            <feFuncB type="table" tableValues={expTable(3.7)} />
           </feComponentTransfer>
           <feColorMatrix
             in="ink"
