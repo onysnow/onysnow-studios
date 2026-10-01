@@ -2,6 +2,7 @@ import { passScaleCap } from "@/effects/engine/quality";
 import { roughRow } from "@/effects/optics/rough-transmission";
 import { unscattered } from "@/effects/optics/scatter";
 import { previewing } from "@/effects/engine/preview";
+import { CASTER_NEAR_STANDOFF, casterList, paintCasters } from "@/effects/optics/casters";
 import { useEffect, useRef, useState } from "react";
 
 import { glassGeometry, viewState } from "@/effects/scene/scene";
@@ -136,6 +137,19 @@ export function FloorLight() {
     const throughs = new Float32Array(MAX_FLOOR_PANES * 3);
     const edgeOnly = new Float32Array(MAX_FLOOR_PANES);
     const uEdgeOnly = U("uEdgeOnly");
+    /*
+     * The casters (?try=castshadows, item 52): everything standing in the
+     * lamp's light, painted in its own shape, for the floor to work out the
+     * shadows on the photographs from (effects/optics/casters).
+     */
+    gl.uniform1i(U("uCasters"), 3);
+    const uHasCasters = U("uHasCasters");
+    const uCasterNear = U("uCasterNear");
+    const uCasterOnGlass = U("uCasterOnGlass");
+    const uCasterFace = U("uCasterFace");
+    const uCasterStrength = U("uCasterStrength");
+    const casterCanvas = document.createElement("canvas");
+    const casterTex = gl.createTexture();
     const marks = new Float32Array(MAX_FLOOR_PANES * 2);
     const uMarks = U("uMarks");
     const uMarksProportional = U("uMarksProportional");
@@ -367,6 +381,27 @@ export function FloorLight() {
       gl.uniform4fv(uRoughSpread, roughSpreads);
       gl.uniform3fv(uThrough, throughs);
       gl.uniform1fv(uEdgeOnly, edgeOnly);
+      const casting = previewing("castshadows");
+      gl.uniform1f(uHasCasters, casting ? 1 : 0);
+      if (casting && casterTex) {
+        paintCasters(casterCanvas, casterList());
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, casterTex);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, casterCanvas);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        // Heights above the photograph: type and buttons just off it; what rests on a pane, the pane's height and its own.
+        gl.uniform1f(uCasterNear, CASTER_NEAR_STANDOFF * t("shadowGap"));
+        gl.uniform1f(uCasterFace, CASTER_NEAR_STANDOFF * t("shadowGap"));
+        gl.uniform1f(uCasterStrength, t("castShadowStrength"));
+        gl.uniform1f(
+          uCasterOnGlass,
+          t("floorGap") + t("glassThickness") + CASTER_NEAR_STANDOFF * t("shadowGap"),
+        );
+      }
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

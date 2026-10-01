@@ -723,6 +723,15 @@ export const tuning: Record<string, Knob> = {
     max: 1,
     step: 0.02,
   },
+  castShadowStrength: {
+    label: "Cast shadow strength",
+    group: "Shadows",
+    value: 0.6,
+    min: 0,
+    max: 1,
+    step: 0.02,
+    hint: "With ?try=castshadows: how much of the lamp's light the type and buttons block -- 1 is solid ink blocking all of it, as type does; lower if the shadows read too heavy. How dark a shadow ends up still follows the lamp's own light there.",
+  },
   shadowGap: {
     label: "Content depth",
     group: "Shadows",

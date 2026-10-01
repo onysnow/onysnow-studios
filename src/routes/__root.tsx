@@ -3,6 +3,7 @@ import { HeldTool } from "@/components/site/ToolTray";
 import { PhotoLights } from "@/components/site/PhotoLights";
 import { Vignette } from "@/components/site/Vignette";
 import { RedRoom } from "@/components/site/RedRoom";
+import { FreeSurfaces } from "@/components/site/FreeSurfaces";
 import { useQuery } from "@tanstack/react-query";
 import { roomScript } from "@/lib/rooms";
 import { ROOM_KEYS, ROOM_HDR_KEYS } from "@/lib/site-assets";
@@ -198,6 +199,8 @@ function RootComponent() {
           <Vignette />
           {/* Secret 2, the darkroom (item 39, ?try=redroom). */}
           <RedRoom />
+          {/* The hero's copy and buttons, lit and throwing shadows (item 52, ?try=castshadows). */}
+          <FreeSurfaces />
           {/*
             Last in the tree, first on the screen.
 

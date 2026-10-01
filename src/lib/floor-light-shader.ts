@@ -5,6 +5,7 @@ import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { WAVINESS_GLSL } from "@/effects/optics/waviness.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
+import { CASTERS_GLSL } from "@/effects/optics/casters.glsl";
 import { SCRATCH_SHADOW, SMUDGE_EXTINCTION, SMUDGE_SCATTER } from "@/effects/optics/surface-layers";
 
 /**
@@ -127,6 +128,19 @@ uniform float uEdgeOnly[${MAX_FLOOR_PANES}];
 /* How much of the scratch (x) and smudge (y) layers each pane wears. */
 uniform vec2 uMarks[${MAX_FLOOR_PANES}];
 uniform float uMarksProportional; // 1 while previewing ?try=marks
+/*
+ * The casters (?try=castshadows, effects/optics/casters): what stands in the
+ * lamp's light, painted in its own shape -- red just off the photograph
+ * (uCasterNear px up), green resting on glass (uCasterOnGlass px up).
+ */
+uniform sampler2D uCasters;
+uniform float uHasCasters;
+uniform float uCasterNear;
+uniform float uCasterOnGlass;
+/* How far what rests on a pane stands off its frosted face, which catches its shadow too. */
+uniform float uCasterFace;
+/* How much of the light a caster blocks ("Cast shadow strength"). */
+uniform float uCasterStrength;
 
 ${EDGE_PROFILE_GLSL}
 ${WAVINESS_GLSL}
@@ -134,6 +148,7 @@ ${REFLECTION_GLSL}
 ${SHADOW_GLSL}
 ${TRANSMISSION_GLSL}
 ${SURFACE_LAYERS_GLSL}
+${CASTERS_GLSL}
 /* How dirty the pane is: the same clarity threshold the marks on the face use. */
 uniform float uGrimeFloor;
 /* How far the viewpoint moves the photograph behind the glass, CSS px. */
@@ -220,6 +235,10 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
   float slant = slantSpread(cosT);
 
   vec3 light = vec3(pool);
+  // The frost of the pane over this point spreads the light crossing it: a caster on the glass throws a softer shadow.
+  float underFrost = 0.0;
+  // And how high that pane's frosted face is: a second thing the light lands on.
+  float faceHeight = 0.0;
   for (int i = 0; i < ${MAX_FLOOR_PANES}; i++) {
     if (i >= uCount) break;
     // This pane's own causes: how high it stands, what glass it is.
@@ -263,6 +282,8 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
     float pen = max(softFloor * toGlass, 1.0);
     if (d <= -pen) continue;
     float inGlass = smoothstep(-pen, pen, d);
+    underFrost = max(underFrost, frostBlur * inGlass);
+    faceHeight = max(faceHeight, gap * step(0.5, inGlass));
     d = max(d, 0.0);
     float W = max(uEdge[i], 1.0);
     float x = d / W;
@@ -363,6 +384,30 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
       through *= pool / max(face, vec3(1e-4));
     }
     light *= mix(vec3(1.0), through * uThrough[i] / max(pool, 1e-4), inGlass);
+  }
+
+  /*
+   * What stands in the light (?try=castshadows): the share of the lamp's disc
+   * the casters hide from here, each at its own height -- projected from the
+   * lamp, softened by the disc and stretched toward it at a slant, and for a
+   * caster on a pane spread by the frost the light crosses on the way down
+   * (effects/optics/casters). What it hides is the lamp's own light here, so
+   * the shadow is as deep as that light is strong.
+   */
+  if (uHasCasters > 0.5) {
+    vec2 css = uViewport / uScale;
+    float near = casterCover(uCasters, css, P, lightXY, height, radius, uCasterNear, 0.0, 0);
+    float onGlass = casterCover(uCasters, css, P, lightXY, height, radius, uCasterOnGlass, underFrost * 0.5, 1);
+    /*
+     * Under a pane, its frosted face is lit too, and what rests on it throws
+     * a shadow there first -- close, sharp, from the lamp's height above the
+     * glass -- before the one on the photograph further down: each letter
+     * its own, falling away from the lamp wherever the lamp is.
+     */
+    float onFace = faceHeight > 0.0
+      ? casterCover(uCasters, css, P, lightXY, height - faceHeight, radius, uCasterFace, 0.0, 1)
+      : 0.0;
+    light *= (1.0 - near * uCasterStrength) * (1.0 - onGlass * uCasterStrength) * (1.0 - onFace * uCasterStrength);
   }
 
   vec3 add = light * uLightGain;

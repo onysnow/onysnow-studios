@@ -1077,8 +1077,42 @@ span:has(> .photo-surface) {
 .glass h4,
 .glass p,
 .glass blockquote {
-  text-shadow: var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px)
-    rgba(0, 0, 0, calc(var(--cast-alpha, 0) * 0.55));
+  /*
+   * One shadow for the whole block, under all of it: a drop-shadow of the
+   * block, not a text-shadow. Animated headings are a span per letter, and a
+   * text-shadow is painted per span, before that span's letter and after
+   * the one before it -- so each letter's shadow lay over its neighbour
+   * (Ony, 2026-10-01: "the individual letters shadows go on top of the
+   * other letters"). Same offset, blur and darkness as before.
+   */
+  filter: drop-shadow(
+    var(--cast-x, 0px) var(--cast-y, 0px) var(--cast-blur, 0px)
+      rgba(0, 0, 0, calc(var(--cast-alpha, 0) * 0.55))
+  );
+}
+
+/*
+ * ?try=castshadows (item 52): the type's shadows are worked out per pixel
+ * from its own glyphs (the floor light, effects/optics/casters), each letter
+ * falling away from the lamp wherever the lamp is -- a whole block's shadow
+ * offset one way (above) is wrong for the letters on the lamp's other side.
+ */
+html[data-try~="castshadows"] .glass h1,
+html[data-try~="castshadows"] .glass h2,
+html[data-try~="castshadows"] .glass h3,
+html[data-try~="castshadows"] .glass h4,
+html[data-try~="castshadows"] .glass p,
+html[data-try~="castshadows"] .glass blockquote {
+  filter: none;
+}
+
+/*
+ * The hero's copy and buttons stand above the photograph's floor light, as
+ * the panes do: their shadows fall on the photograph, not over them.
+ */
+html[data-try~="castshadows"] [data-photo] :is(h1, h2, h3, p, .plastic, a) {
+  position: relative;
+  z-index: 2;
 }
 
 /*
@@ -1227,6 +1261,7 @@ html[data-try~="shaderplastic"] .glass .plastic::after {
   .glass blockquote {
     box-shadow: none;
     text-shadow: none;
+    filter: none;
   }
 }
 

@@ -65,6 +65,8 @@ export const PREVIEWS = {
     "Two panes resting dry on each other (the Contact stack on Lab samples): the air film between them shows Newton's colours where both faces are polished, black where they touch (light engine step G)",
   broken:
     "Broken panes on Lab samples -- annealed, tempered, laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
+  castshadows:
+    "Item 52: everything standing in the light -- the copy and buttons on the panes, the cards, the hero's copy and buttons -- throws its shadow onto the photographs in its own shape, through the glass: projected from the lamp (further and larger the higher it stands and the nearer the lamp), softened and drawn out toward the lamp at a slant, spread by the frost it passes, and as dark as the lamp's light there is strong; and the hero's buttons catch the lamp like the others",
   stackedges:
     "Item 2a follow-up: the upper pane of a stack throws its own edge onto the photograph -- the dark rim under its bevel and the bright seam inside it, and the floor seen through it bends at its bevel -- which went missing with 8ed097c (Ony, 2026-10-01: the shadow at the left corner); the stack's light is still counted once",
   shardlight:

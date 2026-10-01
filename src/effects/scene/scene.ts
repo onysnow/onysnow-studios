@@ -1063,6 +1063,19 @@ export type LitSurfaceOptions = {
   material?: SurfaceMaterialId;
 };
 
+/** Every lit surface and how far it stands off what it rests on (the shadow casters, effects/optics/casters). */
+export function litSurfaceList(): {
+  el: HTMLElement;
+  standoff: number;
+  material: SurfaceMaterial;
+}[] {
+  return [...litSurfaces].map((el) => ({
+    el,
+    standoff: standoffs.get(el) ?? 1,
+    material: surfaceMaterials.get(el) ?? SURFACE_MATERIALS.ink,
+  }));
+}
+
 /** Add a surface resting on the glass; it is told where the light falls on it. */
 export function registerLitSurface(el: HTMLElement, options: LitSurfaceOptions = {}) {
   if (options.occludes === false) nonOccluding.add(el);
