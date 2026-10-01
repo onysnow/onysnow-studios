@@ -87,11 +87,12 @@ export type PreviewName = keyof typeof PREVIEWS;
  * paths and their tests stay as they were; the lab no longer offers them as
  * switches.
  */
+// Not the backlight: a lamp at the screen's centre under the glass is not
+// what Ony means by backlit (2026-10-01) -- back to a switch until it is.
 export const ON_BY_DEFAULT: readonly PreviewName[] = [
   "kelvin",
   "flash",
   "photolights",
-  "backlight",
   "dimroom",
   "marks",
   "roughglass",
