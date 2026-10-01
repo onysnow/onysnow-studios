@@ -15,9 +15,10 @@
  *   colour at full inflation.
  * - Light, per light: Blinn-Phong for the specular (F0 0.042, latex n
  *   1.519; roughness about 0.1, estimate), wrapped diffuse for opaque
- *   "fashion" latex (w 0.3, estimate), none for crystal latex; the room the
- *   page reflects, by Fresnel -- which also makes the bright rim (2.4: the
- *   rim is Fresnel plus the slant path, no separate term).
+ *   "fashion" latex (w 0.3, estimate), none for crystal latex; the scene it
+ *   is in (the page's own photographs, effects/light/scene-env), by Fresnel
+ *   -- which also makes the bright rim (2.4: the rim is Fresnel plus the
+ *   slant path, no separate term), coloured by what is behind it.
  * - Crystal (transparent) latex lets the page through, tinted twice (in
  *   and out of the balloon), and darker at the rim where the path through
  *   the wall is slanted: alpha 1 - T^(2/cos).
@@ -27,6 +28,8 @@
 
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { SHAPE_GLSL } from "@/effects/balloons/shape";
+import { SCENE_ENV_GLSL } from "@/effects/light/scene-env";
+import { CAMERA_MATCH_GLSL } from "@/effects/light/camera-match";
 
 export const MAX_BALLOON_LIGHTS = 4;
 
@@ -56,6 +59,8 @@ void main() {
 export const BALLOON_FRAGMENT = /* glsl */ `
 precision highp float;
 ${ENVIRONMENT_GLSL}
+${SCENE_ENV_GLSL}
+${CAMERA_MATCH_GLSL}
 varying vec2 vLocal;
 varying vec3 vColour;
 varying vec3 vInfo;
@@ -78,6 +83,27 @@ uniform float uAmbient;
 
 const float F0 = 0.042;
 ${SHAPE_GLSL}
+
+/*
+ * The room panorama in a direction. Near straight up or down every column
+ * of an equirectangular image meets at a point, and a blurred one pinches
+ * there into a star of seams across the balloon's crown: averaged round
+ * the pole instead.
+ */
+vec3 roomAt(vec3 d) {
+  vec3 c = decodeRadiance(texture2D(uRoomTex, roomUvDir(d)).rgb);
+  float pole = smoothstep(0.75, 0.97, abs(d.y));
+  if (pole > 0.0) {
+    float h = length(d.xz);
+    vec3 ring = vec3(0.0);
+    for (int k = 0; k < 6; k++) {
+      float a = float(k) * 1.0471976;
+      ring += decodeRadiance(texture2D(uRoomTex, roomUvDir(vec3(h * cos(a), d.y, h * sin(a)))).rgb);
+    }
+    c = mix(c, ring / 6.0, pole);
+  }
+  return c * uRoomExposure;
+}
 
 void main() {
   float R = vInfo.x;
@@ -168,10 +194,28 @@ void main() {
    * Lagarde). A mirror-sharp, full-strength rim was the saturated outline
    * round every balloon.
    */
-  vec3 room = uHasRoom > 0.5
-    ? decodeRadiance(texture2D(uRoomTex, roomUvDir(roomDir)).rgb) * uRoomExposure
-    : vec3(0.3);
+  /*
+   * What it reflects is the scene it is in (effects/light/scene-env): the
+   * photographs behind it at its rim, where the reflected ray turns back
+   * into the page; the room, lit by the scene's own light, where it faces
+   * the viewer. Not a stock studio panorama: that one's violet window ringed
+   * every balloon (Ony, 2026-10-01: "that purple glow on the edges").
+   */
   const float ROUGH = 0.45;
+  float behind;
+  vec3 page = scenePage(vec3(vPos, P.z), roomDir, ROUGH * 0.6, behind);
+  vec3 roomSide = uHasRoom > 0.5 ? roomBalanced(roomAt(roomDir)) : uSceneAverage * 0.7;
+  vec3 room = mix(roomSide, page, behind);
+  // The room's light on the latex takes the scene's colour too: half its tint, its brightness kept.
+  float avgL = dot(uSceneAverage, vec3(0.2126, 0.7152, 0.0722));
+  vec3 ambient = uAmbient * mix(vec3(1.0), clamp(uSceneAverage / max(avgL, 0.04), 0.0, 2.0), 0.5);
+  /*
+   * The room's light is not even: it comes mostly from above and from the
+   * viewer's side, so the skin facing up and out is lit more than the
+   * underside and the turned-away edge (a hemisphere light: the shading that
+   * gives a balloon its roundness in a photograph; weights estimates).
+   */
+  ambient *= (0.9 + 0.25 * clamp(-N.y, -1.0, 1.0)) * (0.65 + 0.35 * N.z);
   F = F0 + (max(1.0 - ROUGH, F0) - F0) * pow(1.0 - cosV, 5.0);
 
   vec3 out3;
@@ -180,23 +224,25 @@ void main() {
     // Crystal: the page through it, tinted in and out; slanted at the rim.
     vec3 through = pow(T, vec3(2.0 / max(cosV, 0.15)));
     alpha = clamp(1.0 - (through.r + through.g + through.b) / 3.0, 0.0, 0.92);
-    vec3 tint = vColour * (uAmbient + colour * 0.3);
+    vec3 tint = vColour * (ambient + colour * 0.3);
     out3 = tint * (1.0 - F) + room * F + spec;
     alpha = max(alpha, clamp(F * 2.0 + length(spec), 0.0, 1.0));
   } else {
     // Fashion (and neon) latex: opaque, its colour lit, lighter where stretched thin.
     vec3 albedo = mix(vColour, vColour * T * 2.0, 0.35);
-    out3 = albedo * (uAmbient + colour) * (1.0 - F) + room * F + spec;
+    out3 = albedo * (ambient + colour) * (1.0 - F) + room * F + spec;
     alpha = 1.0;
   }
   if (finish > 1.5) out3 += vColour * glow * 1.5;
   // The knot: the same latex, gathered thick, so darker and deeper in colour, with its own glint.
-  vec3 knotColour = vColour * 0.6 * (uAmbient + colour) + room * 0.08 + spec * 0.5;
+  vec3 knotColour = vColour * 0.6 * (ambient + colour) + room * 0.08 + spec * 0.5;
   out3 = mix(out3, knotColour, knot);
   alpha = mix(alpha, 1.0, knot);
   // Brighter than the screen goes to white, as a sensor clips, not to a saturated hue.
   float pk = max(out3.r, max(out3.g, out3.b));
   if (pk > 1.0) out3 = mix(out3 / pk, vec3(1.0), clamp((pk - 1.0) / pk, 0.0, 1.0));
+  // As the photographs' camera recorded it (effects/light/camera-match): their black, their shoulder, their grain.
+  out3 = cameraMatch(out3 * max(pk, 1.0), gl_FragCoord.xy / uPixel);
   gl_FragColor = vec4(out3, alpha * cover);
 }
 `;

@@ -3,6 +3,7 @@ import { previewing } from "@/effects/engine/preview";
 import { addTask, ORDER } from "@/effects/engine/scheduler";
 import { beginPass, buildProgram, endPass, sharedGl } from "@/effects/engine/gl";
 import { pointLights, pointer, roomLight, type Light } from "@/effects/light/lights";
+import { sceneEnvironment } from "@/effects/light/scene-env";
 import { imageLights, R0 } from "@/effects/light/image-sources";
 import { glassGeometry } from "@/effects/scene/scene";
 import { camera } from "@/effects/camera/camera";
@@ -116,13 +117,17 @@ export function Balloons() {
         roomTex: U("uRoomTex"),
         hasRoom: U("uHasRoom"),
         roomExposure: U("uRoomExposure"),
+        scene: U("uScene"),
+        hasScene: U("uHasScene"),
+        sceneView: U("uSceneView"),
+        sceneAverage: U("uSceneAverage"),
         viewCentre: U("uViewCentre"),
         cameraDistance: U("uCameraDistance"),
         ambient: U("uAmbient"),
       };
       const vbo = gl.createBuffer();
 
-      // The room the latex reflects, as WaterDrops loads it.
+      // The room behind the viewer, which the latex mirrors on its face (as WaterDrops loads it): balanced to the scene's light in the shader.
       let room: WebGLTexture | null = null;
       const roomSrc = document.documentElement.getAttribute("data-room-hdr");
       if (roomSrc) {
@@ -155,6 +160,9 @@ export function Balloons() {
         };
         img.src = roomSrc;
       }
+
+      // The scene the latex reflects and is lit by: the page's own photographs (effects/light/scene-env).
+      const scene = sceneEnvironment(gl, () => task.wake());
 
       // The room: the window's edges are its ceiling, floor and walls.
       const world = new R.World({ x: 0, y: 9.81 });
@@ -590,6 +598,13 @@ export function Balloons() {
           gl.uniform1i(u.roomTex, 3);
           gl.uniform1f(u.hasRoom, room ? 1 : 0);
           gl.uniform1f(u.roomExposure, roomLight.gain);
+          const sceneTex = scene.update();
+          gl.activeTexture(gl.TEXTURE4);
+          gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+          gl.uniform1i(u.scene, 4);
+          gl.uniform1f(u.hasScene, sceneTex ? 1 : 0);
+          gl.uniform2f(u.sceneView, W, H);
+          gl.uniform3f(u.sceneAverage, ...scene.average);
           gl.uniform2f(u.viewCentre, W / 2, H / 2);
           gl.uniform1f(u.cameraDistance, camera.distance(W));
           // The room's own light on the latex (estimate), dimmer under the black light's dark room.
@@ -635,6 +650,7 @@ export function Balloons() {
         for (const b of balloons) b.removeShadow();
         world.free();
         if (room) gl.deleteTexture(room);
+        scene.dispose();
         gl.deleteBuffer(vbo);
       };
     });
