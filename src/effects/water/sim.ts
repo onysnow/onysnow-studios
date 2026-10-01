@@ -49,6 +49,15 @@ export const TRAIL_SIZE: readonly [number, number] = [0.3, 0.5];
 /** The film grid's cell, mm, and how fast a film dries, 1/s (estimate: about 20 s). */
 export const FILM_CELL = 2;
 export const FILM_DRY = 1 / 20;
+/**
+ * Spray too fine to see as drops lands as mist: volume per FILM_CELL cell,
+ * which condenses into a drop once a cell holds MIST_CONDENSE uL
+ * (liquids-spray.md 5.3: "condense into a drop at >= 0.5 uL in a 2 mm
+ * cell", estimate), and dries meanwhile at MIST_DRY of itself a second
+ * (estimate: a fine mist on glass is gone in under a minute).
+ */
+export const MIST_CONDENSE = 0.5;
+export const MIST_DRY = 1 / 30;
 /** The pinning field's cell, mm, and how far it moves the hysteresis either way (estimate). */
 export const PIN_CELL = 6;
 /** How strongly a drop is steered sideways by the field's gradient, mm (estimate). */
@@ -150,6 +159,11 @@ export class DropSim {
   readonly film: Float32Array;
   readonly filmCols: number;
   readonly filmRows: number;
+  /** Mist: spray volume not yet a drop, uL per FILM_CELL cell, and which liquid. */
+  readonly mist: Float32Array;
+  readonly mistLiquid: Uint8Array;
+  /** Bumped whenever the mist changes, for a renderer that uploads it. */
+  mistVersion = 0;
   private nextSerial = 1;
   private readonly pinField: Float32Array;
   private readonly pinCols: number;
@@ -179,6 +193,8 @@ export class DropSim {
     this.filmCols = Math.max(1, Math.ceil(o.width / FILM_CELL));
     this.filmRows = Math.max(1, Math.ceil(o.height / FILM_CELL));
     this.film = new Float32Array(this.filmCols * this.filmRows);
+    this.mist = new Float32Array(this.filmCols * this.filmRows);
+    this.mistLiquid = new Uint8Array(this.filmCols * this.filmRows);
     this.pinCols = Math.max(2, Math.ceil(o.width / PIN_CELL) + 1);
     this.pinRows = Math.max(2, Math.ceil(o.height / PIN_CELL) + 1);
     this.pinField = new Float32Array(this.pinCols * this.pinRows);
@@ -279,6 +295,48 @@ export class DropSim {
     this.film[j * this.filmCols + i] = 1;
   }
 
+  /**
+   * Spray landing (task 76): `volume` uL of `liquid` at a point. Into a drop
+   * it lands on; otherwise into the mist, which becomes a drop where enough
+   * gathers. Returns whether it went into a drop.
+   */
+  deposit(x: number, y: number, volume: number, liquid = 0): boolean {
+    if (!(volume > 0) || x < 0 || y < 0 || x >= this.width || y >= this.height) return false;
+    for (let i = 0; i < this.count; i++) {
+      if (this.liquid[i] !== liquid) continue;
+      const a = this.radius(i);
+      const dx = this.x[i]! - x;
+      const dy = this.y[i]! - y;
+      if (dx * dx + dy * dy < a * a) {
+        this.vol[i] = this.vol[i]! + volume;
+        return true;
+      }
+    }
+    const c = Math.floor(y / FILM_CELL) * this.filmCols + Math.floor(x / FILM_CELL);
+    if (this.mistLiquid[c] !== liquid && this.mist[c]! > 0) {
+      // Another liquid's mist here: the newer one takes the cell (they do not mix in this model).
+      this.mist[c] = 0;
+    }
+    this.mistLiquid[c] = liquid;
+    this.mist[c] = this.mist[c]! + volume;
+    this.mistVersion++;
+    if (this.mist[c]! >= MIST_CONDENSE) {
+      const cx = (c % this.filmCols) * FILM_CELL + FILM_CELL / 2;
+      const cy = Math.floor(c / this.filmCols) * FILM_CELL + FILM_CELL / 2;
+      const v = this.mist[c]!;
+      this.mist[c] = 0;
+      this.addVolume(cx, cy, v, liquid);
+    }
+    return false;
+  }
+
+  /** The total volume in the mist, uL. */
+  mistVolume(): number {
+    let s = 0;
+    for (let i = 0; i < this.mist.length; i++) s += this.mist[i]!;
+    return s;
+  }
+
   /** Remove a drop by index (swap with the last). */
   remove(i: number) {
     const last = --this.count;
@@ -322,6 +380,18 @@ export class DropSim {
     // The film dries.
     const dry = Math.exp(-FILM_DRY * dt);
     for (let i = 0; i < this.film.length; i++) this.film[i] = this.film[i]! * dry;
+    if (this.evaporate) {
+      const mistDry = Math.exp(-MIST_DRY * dt);
+      let any = false;
+      for (let i = 0; i < this.mist.length; i++) {
+        const m = this.mist[i]!;
+        if (m <= 0) continue;
+        const next = m * mistDry;
+        this.mist[i] = next < 1e-4 ? 0 : next;
+        any = true;
+      }
+      if (any) this.mistVersion++;
+    }
     // Toward the friction-law speed, the same whatever the step (exact for a first-order lag).
     const ease = 1 - Math.exp(-dt / SPEED_TAU);
     for (let i = 0; i < this.count; i++) {

@@ -32,10 +32,13 @@ export const HEIGHT_MAX = 3;
 export const MAP_VERTEX = /* glsl */ `
 attribute vec2 aPos;      // pane px
 attribute vec4 aDrop;     // local x, y (the contact circle is the unit circle), contact radius mm, cap height mm
+attribute float aLiquid;  // effects/water/liquids id
 uniform vec2 uMapSize;    // the pane, px
 varying vec4 vDrop;
+varying float vLiquid;
 void main() {
   vDrop = aDrop;
+  vLiquid = aLiquid;
   vec2 clip = aPos / uMapSize * 2.0 - 1.0;
   gl_Position = vec4(clip.x, clip.y, 0.0, 1.0);
 }
@@ -44,6 +47,7 @@ void main() {
 export const MAP_FRAGMENT = /* glsl */ `
 precision highp float;
 varying vec4 vDrop;
+varying float vLiquid;
 const float HEIGHT_MAX = ${HEIGHT_MAX.toFixed(1)};
 void main() {
   float a = vDrop.z;
@@ -54,7 +58,10 @@ void main() {
   float h = r < a ? sqrt(max(R * R - r * r, 0.0)) - (R - h0) : 0.0;
   // Coverage, antialiased over the outermost few per cent of the radius.
   float cover = 1.0 - smoothstep(0.92, 1.0, length(vDrop.xy));
-  gl_FragColor = vec4(max(h, 0.0) / HEIGHT_MAX, 0.0, 0.0, cover);
+  // G and B: how much of this point is blood and slime, as coverage (water is neither).
+  float blood = abs(vLiquid - 1.0) < 0.5 ? cover : 0.0;
+  float slime = abs(vLiquid - 2.0) < 0.5 ? cover : 0.0;
+  gl_FragColor = vec4(max(h, 0.0) / HEIGHT_MAX, blood, slime, cover);
 }
 `;
 
@@ -86,6 +93,11 @@ uniform sampler2D uRoomTex;   // the room the glass reflects (effects/optics/env
 uniform float uHasRoom;
 uniform float uRoomExposure;
 uniform vec2 uViewCentre;     // page px
+uniform vec3 uSigmaBlood;     // absorption per mm (effects/water/liquids)
+uniform vec3 uSigmaSlime;
+uniform sampler2D uMist;      // spray mist: R amount (1 = about to bead), G blood, B slime
+uniform float uHasMist;
+uniform vec2 uMistUv;         // the pane's share of the mist texture
 uniform float uCameraDistance; // CSS px
 uniform int uLightCount;
 uniform vec3 uLightPos[${MAX_WATER_LIGHTS}];    // page px, height px
@@ -111,7 +123,25 @@ void main() {
   vec4 m = texture2D(uMap, uv);
   // The contact line, antialiased over about a pixel (the map's coverage ramps over the drop's outer 8%).
   float cover = smoothstep(0.05, 0.6, m.a);
-  if (cover <= 0.0) { gl_FragColor = vec4(0.0); return; }
+  if (cover <= 0.0) {
+    /*
+     * Spray mist (task 76): droplets too small to draw one by one. Each
+     * pixel of glass is a droplet or not, in proportion to how much mist is
+     * there (a hash, so the speckle holds still); a water droplet catches
+     * the room's light as a pale fleck, blood and slime are their dye.
+     */
+    if (uHasMist < 0.5) { gl_FragColor = vec4(0.0); return; }
+    vec4 mist = texture2D(uMist, local / uPane.zw * uMistUv);
+    float amount = mist.r;
+    if (amount <= 0.002) { gl_FragColor = vec4(0.0); return; }
+    vec2 cell = floor(local * uScale);
+    float hsh = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
+    float fleck = step(hsh, amount * 0.3);
+    vec3 dye = mist.g > 0.5 ? vec3(0.32, 0.02, 0.02) : (mist.b > 0.5 ? vec3(0.25, 0.6, 0.18) : vec3(0.85, 0.88, 0.92));
+    float a = mist.g > 0.5 || mist.b > 0.5 ? 0.7 * fleck + 0.1 * amount : 0.22 * fleck + 0.05 * amount;
+    gl_FragColor = vec4(dye, a);
+    return;
+  }
   float h = m.r * HEIGHT_MAX;
   // The slope, mm per mm, by central differences over one map texel each way.
   vec2 texelMm = uMapTexel / uMapUv * uPane.zw / uPxPerMm;
@@ -136,6 +166,15 @@ void main() {
   bool clear = uFrostBlur < 0.5;
   vec3 seen = uRoom;
   if (clear && uHasPhoto > 0.5) seen = texture2D(uPhoto, coverUv(page, uImage, uImageFit)).rgb;
+  /*
+   * Blood and slime take light out on the way through: exp(-sigma h) per
+   * colour (Beer-Lambert; water-drops 4: blood is saturated red in a 0.1 mm
+   * film and red-black in a 1 mm drop, lighter at the rim).
+   */
+  float bloodFrac = clamp(m.g / max(m.a, 1e-3), 0.0, 1.0);
+  float slimeFrac = clamp(m.b / max(m.a, 1e-3), 0.0, 1.0);
+  vec3 T = exp(-(uSigmaBlood * bloodFrac + uSigmaSlime * slimeFrac) * h);
+  float absorbs = 1.0 - (T.r + T.g + T.b) / 3.0;
   // Fresnel at this slant (Schlick), n from air.
   vec3 N = normalize(vec3(-grad, 1.0));
   float cosI = N.z;
@@ -184,8 +223,27 @@ void main() {
     spec += uLightColour[i] * disc * fl * 60.0 * (size * size) / (wide * wide) + uLightColour[i] * disc * fl * 4.0;
   }
   if (clear) {
-    col += spec;
+    col = seen * T * (1.0 - F) + room * F + spec;
     gl_FragColor = vec4(min(col, vec3(1.0)), cover);
+  } else if (absorbs > 0.02) {
+    /*
+     * A dyed drop on the frosted pane: what it lets through is the frost's
+     * view (the photograph blurred, as the pane blurs it: 12 Vogel taps over
+     * twice the blur radius) times its transmission, plus its reflections.
+     */
+    vec3 frost = uRoom;
+    if (uHasPhoto > 0.5) {
+      vec3 sum = vec3(0.0);
+      for (int k = 0; k < 12; k++) {
+        float fk = float(k);
+        float rr = sqrt((fk + 0.5) / 12.0) * 2.0 * uFrostBlur;
+        float an = fk * 2.3999632;
+        sum += texture2D(uPhoto, coverUv(uPane.xy + local + rr * vec2(cos(an), sin(an)), uImage, uImageFit)).rgb;
+      }
+      frost = sum / 12.0;
+    }
+    col = frost * T * (1.0 - F) + room * F + spec;
+    gl_FragColor = vec4(min(col, vec3(1.0)), cover * smoothstep(0.02, 0.25, absorbs));
   } else {
     // Only the reflection, over the frost the pane already shows: room x F and the glints, as coverage.
     // Light added over what is behind: colour times alpha is the light (the context is not premultiplied).

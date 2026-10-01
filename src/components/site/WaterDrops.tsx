@@ -14,8 +14,9 @@ import { glassGeometry } from "@/effects/scene/scene";
 import { pointLights, roomLight } from "@/effects/light/lights";
 import { camera } from "@/effects/camera/camera";
 import { t } from "@/lib/tuning";
-import { DropSim } from "@/effects/water/sim";
-import { WATER } from "@/effects/water/liquids";
+import { DropSim, FILM_CELL, MIST_CONDENSE } from "@/effects/water/sim";
+import { BLOOD, SLIME, WATER } from "@/effects/water/liquids";
+import { onSpray, squeeze } from "@/effects/water/spray";
 import { rainVolume } from "@/effects/water/rain";
 import {
   COMPOSE_FRAGMENT,
@@ -61,6 +62,7 @@ export function WaterDrops() {
     if (!mapProgram || !composeProgram) return;
     const mapPos = gl.getAttribLocation(mapProgram, "aPos");
     const mapDrop = gl.getAttribLocation(mapProgram, "aDrop");
+    const mapLiquid = gl.getAttribLocation(mapProgram, "aLiquid");
     const composePos = gl.getAttribLocation(composeProgram, "aPos");
     const MU = (n: string) => gl.getUniformLocation(mapProgram, n);
     const CU = (n: string) => gl.getUniformLocation(composeProgram, n);
@@ -89,6 +91,11 @@ export function WaterDrops() {
       roomExposure: CU("uRoomExposure"),
       viewCentre: CU("uViewCentre"),
       cameraDistance: CU("uCameraDistance"),
+      sigmaBlood: CU("uSigmaBlood"),
+      sigmaSlime: CU("uSigmaSlime"),
+      mist: CU("uMist"),
+      hasMist: CU("uHasMist"),
+      mistUv: CU("uMistUv"),
     };
 
     const quadBuffer = gl.createBuffer();
@@ -176,6 +183,18 @@ export function WaterDrops() {
     };
 
     const sims = new Map<HTMLElement, DropSim>();
+    const mists = new Map<
+      HTMLElement,
+      { tex: WebGLTexture | null; version: number; data: Uint8Array }
+    >();
+    const simFor = (pane: ReturnType<typeof glassGeometry>[number]) => {
+      let sim = sims.get(pane.el);
+      if (!sim) {
+        sim = new DropSim({ width: pane.w / PX_PER_MM, height: pane.h / PX_PER_MM, seed: seed++ });
+        sims.set(pane.el, sim);
+      }
+      return sim;
+    };
     // For the verification rigs (dev only): the sims, to count drops and runners.
     if (import.meta.env.DEV) (window as unknown as { __waterSims?: unknown }).__waterSims = sims;
     const layers = new Map<HTMLElement, HTMLCanvasElement>();
@@ -201,7 +220,7 @@ export function WaterDrops() {
         layer = paneCanvas(pane.el, "pane:water");
         layers.set(pane.el, layer);
       }
-      if (sim.count === 0) {
+      if (sim.count === 0 && sim.mistVolume() <= 0) {
         layer.getContext("2d")?.clearRect(0, 0, layer.width, layer.height);
         return;
       }
@@ -211,7 +230,7 @@ export function WaterDrops() {
       ensureMap(mw, mh);
 
       // 1. The drop map.
-      const need = sim.count * 36;
+      const need = sim.count * 42;
       if (verts.length < need) verts = new Float32Array(need * 2);
       let k = 0;
       for (let i = 0; i < sim.count; i++) {
@@ -241,6 +260,7 @@ export function WaterDrops() {
           verts[k++] = qy * 1.05;
           verts[k++] = a;
           verts[k++] = h0;
+          verts[k++] = sim.liquid[i]!;
         }
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -254,11 +274,14 @@ export function WaterDrops() {
       gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, verts.subarray(0, k), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(mapPos);
-      gl.vertexAttribPointer(mapPos, 2, gl.FLOAT, false, 24, 0);
+      gl.vertexAttribPointer(mapPos, 2, gl.FLOAT, false, 28, 0);
       gl.enableVertexAttribArray(mapDrop);
-      gl.vertexAttribPointer(mapDrop, 4, gl.FLOAT, false, 24, 8);
-      gl.drawArrays(gl.TRIANGLES, 0, k / 6);
+      gl.vertexAttribPointer(mapDrop, 4, gl.FLOAT, false, 28, 8);
+      gl.enableVertexAttribArray(mapLiquid);
+      gl.vertexAttribPointer(mapLiquid, 1, gl.FLOAT, false, 28, 24);
+      gl.drawArrays(gl.TRIANGLES, 0, k / 7);
       gl.disableVertexAttribArray(mapDrop);
+      gl.disableVertexAttribArray(mapLiquid);
       gl.disable(gl.BLEND);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -303,6 +326,54 @@ export function WaterDrops() {
       const vhNow = document.documentElement.clientHeight || window.innerHeight;
       gl.uniform2f(u.viewCentre, vw / 2, vhNow / 2);
       gl.uniform1f(u.cameraDistance, camera.distance(vw));
+      gl.uniform3f(u.sigmaBlood, ...BLOOD.sigma);
+      gl.uniform3f(u.sigmaSlime, ...SLIME.sigma);
+      // The spray's mist, uploaded when it changed.
+      let mist = mists.get(pane.el);
+      if (!mist) {
+        mist = {
+          tex: gl.createTexture(),
+          version: -1,
+          data: new Uint8Array(sim.filmCols * sim.filmRows * 4),
+        };
+        mists.set(pane.el, mist);
+      }
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, mist.tex);
+      if (mist.version !== sim.mistVersion) {
+        mist.version = sim.mistVersion;
+        const d = mist.data;
+        for (let c = 0; c < sim.mist.length; c++) {
+          const v = sim.mist[c]!;
+          d[c * 4] = Math.round(255 * Math.min(1, v / MIST_CONDENSE));
+          d[c * 4 + 1] = v > 0 && sim.mistLiquid[c] === BLOOD.id ? 255 : 0;
+          d[c * 4 + 2] = v > 0 && sim.mistLiquid[c] === SLIME.id ? 255 : 0;
+          d[c * 4 + 3] = 255;
+        }
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          sim.filmCols,
+          sim.filmRows,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          d,
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      }
+      gl.uniform1i(u.mist, 4);
+      gl.uniform1f(u.hasMist, sim.mistVolume() > 0 ? 1 : 0);
+      gl.uniform2f(
+        u.mistUv,
+        sim.width / (sim.filmCols * FILM_CELL),
+        sim.height / (sim.filmRows * FILM_CELL),
+      );
       let n = 0;
       for (const l of pointLights()) {
         if (n >= MAX_WATER_LIGHTS || l.below || l.charge <= 0.002) continue;
@@ -347,15 +418,7 @@ export function WaterDrops() {
         if (pane.y + pane.h < 0 || pane.y > vh || pane.w < 40 || pane.h < 40) continue;
         // A drop shows the photograph behind its pane; a pane with none (the header bar) gets no rain yet.
         if (!pane.src) continue;
-        let sim = sims.get(pane.el);
-        if (!sim) {
-          sim = new DropSim({
-            width: pane.w / PX_PER_MM,
-            height: pane.h / PX_PER_MM,
-            seed: seed++,
-          });
-          sims.set(pane.el, sim);
-        }
+        const sim = simFor(pane);
         const areaCm2 = (sim.width * sim.height) / 100;
         const expected = rain * areaCm2 * dt;
         let spawn = Math.floor(expected);
@@ -368,7 +431,8 @@ export function WaterDrops() {
             WATER.id,
           );
         }
-        const moved = sim.step(dt) || spawn > 0;
+        const mistBefore = sim.mistVersion;
+        const moved = sim.step(dt) || spawn > 0 || sim.mistVersion !== mistBefore;
         if (moved) busy = true;
         if (moved || lightsMoved || !layers.has(pane.el)) drawPane(pane, sim);
       }
@@ -378,6 +442,26 @@ export function WaterDrops() {
         idleTimer = window.setTimeout(() => task.wake(), 250);
       }
       return busy;
+    });
+    /*
+     * The spray bottle (task 76): a squeeze aimed at a page point lands on
+     * whatever panes its cone covers (effects/water/spray), as mist or into
+     * the drops it hits; slime lands as gobs.
+     */
+    const stopSpray = onSpray((x, y, liquid) => {
+      const parcels = squeeze(liquid, random);
+      for (const pane of glassGeometry()) {
+        if (!pane.src) continue;
+        const sim = simFor(pane);
+        for (const p of parcels) {
+          const px = x + p.dx * PX_PER_MM - pane.x;
+          const py = y + p.dy * PX_PER_MM - pane.y;
+          if (px < 0 || py < 0 || px >= pane.w || py >= pane.h) continue;
+          if (p.gob) sim.addVolume(px / PX_PER_MM, py / PX_PER_MM, p.volume, liquid);
+          else sim.deposit(px / PX_PER_MM, py / PX_PER_MM, p.volume, liquid);
+        }
+      }
+      task.wake();
     });
     const wake = () => task.wake();
     window.addEventListener("pointermove", wake, { passive: true });
@@ -389,6 +473,8 @@ export function WaterDrops() {
       () => {},
     );
     return () => {
+      stopSpray();
+      for (const m of mists.values()) gl.deleteTexture(m.tex);
       task.stop();
       stopLoss();
       window.clearTimeout(idleTimer);

@@ -172,4 +172,16 @@ describe("DropSim (water-drops 7.5 step 1)", () => {
     expect(ratio).toBeGreaterThan(3);
     expect(ratio).toBeLessThan(5);
   });
+
+  it("spray: volume sprayed = volume in drops + volume in mist, exactly; mist condenses at 0.5 uL a cell", () => {
+    const sim = quiet({ evaporate: false });
+    let sprayed = 0;
+    for (let k = 0; k < 400; k++) {
+      const v = 0.003 + (k % 7) * 0.002;
+      sim.deposit(50 + (k % 3) * 0.3, 60 + (k % 5) * 0.3, v);
+      sprayed += v;
+    }
+    expect(Math.abs(sim.totalVolume() + sim.mistVolume() - sprayed)).toBeLessThan(1e-6);
+    expect(sim.count).toBeGreaterThan(0);
+  });
 });

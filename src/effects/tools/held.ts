@@ -38,7 +38,7 @@ function chosenTool(): ToolId {
  */
 
 export type ToolId =
-  "lamp" | "blacklight" | "flare" | "laser" | "magnifier" | "flashlight" | "hammer";
+  "lamp" | "blacklight" | "flare" | "laser" | "magnifier" | "flashlight" | "hammer" | "spray";
 
 export type Tool = {
   id: ToolId;
@@ -74,6 +74,12 @@ export const TOOLS: readonly Tool[] = [
    * is a moment, so the lamp stays in the other hand to see the cracks by.
    */
   { id: "hammer", label: "Hammer", lamp: "white", lampSeen: true },
+  /*
+   * A spray bottle (task 76, with ?try=drops): water, blood or slime onto
+   * the glass (Water > "Spray bottle holds"). The lamp stays in the other
+   * hand to see the drops by, as with the hammer.
+   */
+  { id: "spray", label: "Spray bottle", lamp: "white", lampSeen: true },
 ];
 
 const byId = new Map(TOOLS.map((t) => [t.id, t]));
@@ -153,14 +159,16 @@ export function cameraInHand(): boolean {
   return id === "lamp" || id === "blacklight";
 }
 
-/** Whether the tray is shown (?try=tools, or ?try=broken for the hammer). */
+/** Whether the tray is shown (?try=tools, ?try=broken for the hammer, ?try=drops for the spray bottle). */
 export function toolTray(): boolean {
-  return previewing("tools") || previewing("broken");
+  return previewing("tools") || previewing("broken") || previewing("drops");
 }
 
-/** The tools on offer: the hammer only while breaking glass is being tried (?try=broken). */
+/** The tools on offer: the hammer only while breaking glass is tried (?try=broken), the spray bottle only with the drops (?try=drops). */
 export function toolsOffered(): readonly Tool[] {
-  return TOOLS.filter((t) => t.id !== "hammer" || previewing("broken"));
+  return TOOLS.filter(
+    (t) => (t.id !== "hammer" || previewing("broken")) && (t.id !== "spray" || previewing("drops")),
+  );
 }
 
 /** For tests: put the hand back as a fresh page load would find it. */

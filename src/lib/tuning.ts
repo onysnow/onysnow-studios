@@ -958,6 +958,16 @@ export const tuning: Record<string, Knob> = {
     step: 0.005,
     hint: "Drops landing per second on each square centimetre of glass (?try=drops). They bead where they land, merge, and run once they are heavy enough to overcome the glass's grip (about 9 uL for water on a window).",
   },
+  sprayLiquid: {
+    label: "Spray bottle holds",
+    group: "Water",
+    value: 0,
+    min: 0,
+    max: 2,
+    step: 1,
+    options: ["Water", "Blood", "Slime (green)"],
+    hint: "What the spray bottle sprays (?try=drops, then the bottle in the tray). Water and blood spray as a fine cone that mists the glass and beads where enough gathers; slime is too thick to atomise and comes out as gobs.",
+  },
   roomFill: {
     label: "Room fill",
     group: "Shadows",

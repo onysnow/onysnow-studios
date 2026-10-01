@@ -72,8 +72,8 @@ export const SLIME: Liquid = {
   thetaA: 60,
   thetaR: 20,
   n: 1.34,
-  // Dyed in the lab; clear by default.
-  sigma: [0, 0, 0],
+  // A green dye, the toy's classic (estimate: passes green, takes most red and blue in a millimetre).
+  sigma: [0.9, 0.12, 0.8],
   trails: false,
   // Very slow (hours).
   evaporation: 0.00005,
