@@ -54,6 +54,8 @@ export type Knob = {
    */
   modes?: "raster";
   hint?: string;
+  /** A choice rather than an amount: the names of min, min + step, ... (the lab shows a list). */
+  options?: readonly string[];
 };
 
 export const tuning: Record<string, Knob> = {
@@ -93,11 +95,30 @@ export const tuning: Record<string, Knob> = {
   backlight: {
     label: "Backlight",
     group: "Environment",
-    value: 0,
+    // On when its switch is: the switch alone should show it (Ony: "doesnt seem to do anything").
+    value: 0.8,
     min: 0,
     max: 3,
     step: 0.05,
-    hint: "A light behind the glass, under the photographs, like a lightbox: the panes glow from beneath and their rims catch it. Against the lamp's strength; 0 is off. Needs ?try=backlight.",
+    hint: "A light behind the glass, under the photographs, like a lightbox: the panes glow from beneath and their rims catch it. Against the lamp's strength; 0 is off. Needs its switch above (Backlight under the glass).",
+  },
+  backlightKelvin: {
+    label: "Backlight colour",
+    group: "Environment",
+    value: 6500,
+    min: 1900,
+    max: 10000,
+    step: 100,
+    hint: "The lightbox's colour from its temperature, in kelvin as on a camera: 2700 a warm bulb, 5000 a print-viewing box, 6500 daylight white, higher bluer (a blackbody, effects/light/blackbody).",
+  },
+  backlightSize: {
+    label: "Backlight size",
+    group: "Environment",
+    value: 1,
+    min: 0.1,
+    max: 2,
+    step: 0.05,
+    hint: "How big the lightbox is, against half the screen: smaller is a lamp behind the photograph, larger an even glow from the whole box. The bigger, the softer its light on the rims.",
   },
   roomBrightness: {
     label: "Room brightness",
@@ -164,7 +185,7 @@ export const tuning: Record<string, Knob> = {
     min: 0,
     max: 1,
     step: 0.05,
-    hint: "The lens's darker corners: 1 is the cos^4 law for how far away the camera is (closer, darker corners), 0 none. Needs ?try=vignette.",
+    hint: "The lens's darker corners: 1 is the cos^4 law for how far away the camera is (closer, darker corners), 0 none. Needs its switch above (Lens vignetting).",
   },
   polariser: {
     label: "Polarising filter",
@@ -173,7 +194,7 @@ export const tuning: Record<string, Knob> = {
     min: 0,
     max: 1,
     step: 0.05,
-    hint: "0 no filter; 1 a perfect polariser on the lens (exposure made up). Turn it with the angle below to cut or keep the glass's reflections. Needs ?try=polariser.",
+    hint: "0 no filter; 1 a perfect polariser on the lens (exposure made up). Turn it with the angle below to cut or keep the glass's reflections. Needs its switch above (Polarising filter).",
   },
   polariserAngle: {
     label: "Polarising filter angle",
@@ -487,7 +508,7 @@ export const tuning: Record<string, Knob> = {
     min: 1500,
     max: 10000,
     step: 50,
-    hint: "In kelvin, as on a camera: 1900 a candle, 2700 a household bulb, 3200 tungsten, 5500 daylight, 6500 the screen's white, higher is bluer. Needs ?try=kelvin.",
+    hint: "In kelvin, as on a camera: 1900 a candle, 2700 a household bulb, 3200 tungsten, 5500 daylight, 6500 the screen's white, higher is bluer. Needs its switch above (Lamp colour from temperature).",
   },
   coreGain: {
     label: "Core gain",
@@ -703,6 +724,24 @@ export const tuning: Record<string, Knob> = {
     step: 0.05,
     hint: "How much the camera spreads a lit edge into a glow round it. The bright line itself stays; this is only the soft light around it.",
   },
+  roomChoice: {
+    label: "Room reflected (HDRI)",
+    group: "Reflection",
+    value: 0,
+    min: 0,
+    max: 6,
+    step: 1,
+    options: [
+      "A different room each visit",
+      "Metro",
+      "Aquarium",
+      "Studio",
+      "Lobby",
+      "Fireplace",
+      "Station",
+    ],
+    hint: "Which photographed room the glass reflects. Each is a real 360-degree HDR photograph; the default hands every visit the next one. Swap the pictures themselves in the Studio's site assets.",
+  },
   // ---- CSS-side ----
   displacement: {
     label: "Refraction",
@@ -730,7 +769,7 @@ export const tuning: Record<string, Knob> = {
     min: 0,
     max: 1,
     step: 0.02,
-    hint: "With ?try=castshadows: how much of the lamp's light the type and buttons block -- 1 is solid ink blocking all of it, as type does; lower if the shadows read too heavy. How dark a shadow ends up still follows the lamp's own light there.",
+    hint: "With its switch above on (Shadows through the glass): how much of the lamp's light the type and buttons block -- 1 is solid ink blocking all of it, as type does; lower if the shadows read too heavy. How dark a shadow ends up still follows the lamp's own light there.",
   },
   shadowGap: {
     label: "Content depth",

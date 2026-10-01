@@ -305,10 +305,14 @@ export function GlassLight({
      */
     let room: WebGLTexture | null = null;
     let roomRequested = false;
+    let roomFor: string | null = null;
     const requestRoom = () => {
-      if (roomRequested) return;
+      // Another room chosen in the lab ("Room reflected"): load it in place of this one.
+      const want = document.documentElement.getAttribute("data-room-hdr");
+      if (roomRequested && want === roomFor) return;
       roomRequested = true;
-      const src = document.documentElement.getAttribute("data-room-hdr");
+      roomFor = want;
+      const src = want;
       if (!src) return;
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -328,8 +332,10 @@ export function GlassLight({
           rgb[j + 1] = rgba[i + 1]!;
           rgb[j + 2] = rgba[i + 2]!;
         }
+        if (roomFor !== src) return; // a newer choice is on its way
         const tex = gl.createTexture();
         if (!tex) return;
+        if (room) gl.deleteTexture(room);
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_2D, tex);
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);

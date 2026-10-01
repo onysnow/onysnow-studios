@@ -515,9 +515,12 @@ export const backLight: Light = {
     return t("floorGap");
   },
   get radius() {
-    return Math.min(backlightViewport.w, backlightViewport.h) / 2;
+    return (Math.min(backlightViewport.w, backlightViewport.h) / 2) * t("backlightSize");
   },
-  colour: BACKLIGHT_COLOUR,
+  // Its colour from its temperature ("Backlight colour"); 6500 K is the daylight white it always was.
+  get colour() {
+    return t("backlightKelvin") === 6500 ? BACKLIGHT_COLOUR : blackbodyRgb(t("backlightKelvin"));
+  },
   get gain() {
     return t("coreGain") * t("backlight");
   },

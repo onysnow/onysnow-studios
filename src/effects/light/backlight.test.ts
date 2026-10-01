@@ -13,9 +13,10 @@ describe("the backlight", () => {
     tuning["backlight"]!.value = 0;
   });
 
-  it("is out by default, and out at 0 even when tried", () => {
+  it("is out unless switched on, and out at 0 even when switched on", () => {
     expect(pointLights()).not.toContain(backLight);
     resetPreviews(["backlight"]);
+    tuning["backlight"]!.value = 0;
     expect(pointLights()).not.toContain(backLight);
   });
 

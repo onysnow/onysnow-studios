@@ -5,7 +5,8 @@ import { Vignette } from "@/components/site/Vignette";
 import { RedRoom } from "@/components/site/RedRoom";
 import { FreeSurfaces } from "@/components/site/FreeSurfaces";
 import { useQuery } from "@tanstack/react-query";
-import { roomScript } from "@/lib/rooms";
+import { applyRoomChoice, roomScript } from "@/lib/rooms";
+import { onTuningApplied, t } from "@/lib/tuning";
 import { ROOM_KEYS, ROOM_HDR_KEYS } from "@/lib/site-assets";
 import { safeHref } from "@/lib/safe-content";
 import {
@@ -157,6 +158,12 @@ function RootComponent() {
   const raster = useRasterGlass();
   // Inside the lab's preview frame: take the editor's draft tuning (lab-bridge).
   useEffect(() => listenForLabDraft(), []);
+  // The room the lab chose to reflect (Reflection > Room reflected).
+  useEffect(() => {
+    const apply = () => applyRoomChoice(t("roomChoice"));
+    apply();
+    return onTuningApplied(apply);
+  }, []);
   /*
    * The previews and test switches are Ony's alone (item 48): check this
    * browser's note of the admin against the real session, and drop it the

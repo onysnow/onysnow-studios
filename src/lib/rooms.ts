@@ -55,8 +55,27 @@ export function roomScript(sources?: readonly string[], hdrSources?: readonly st
     `try{var p=parseInt(localStorage.getItem(${JSON.stringify(KEY)}),10);` +
     `if(!isNaN(p))i=(p+1)%r.length;localStorage.setItem(${JSON.stringify(KEY)},String(i));}catch(e){}` +
     `var h=${JSON.stringify(hdr)};` +
+    // Kept for the lab's choice of room (applyRoomChoice).
+    `window.__onysnowRooms={r:r,h:h,i:i};` +
     `document.documentElement.style.setProperty("--room",'url("'+r[i]+'")');` +
     `document.documentElement.setAttribute("data-room-hdr",h[i]);` +
     `}catch(e){}})();`
   );
+}
+
+/**
+ * The room the lab chose ("Room reflected", 0 = a different one each visit):
+ * put on the page in place of the visit's own, or the visit's own back.
+ */
+export function applyRoomChoice(choice: number) {
+  if (typeof window === "undefined") return;
+  const rooms = (window as unknown as { __onysnowRooms?: { r: string[]; h: string[]; i: number } })
+    .__onysnowRooms;
+  if (!rooms) return;
+  const i = choice >= 1 && choice <= rooms.r.length ? Math.round(choice) - 1 : rooms.i;
+  const root = document.documentElement;
+  const hdr = rooms.h[i]!;
+  if (root.getAttribute("data-room-hdr") === hdr) return;
+  root.style.setProperty("--room", `url("${rooms.r[i]!}")`);
+  root.setAttribute("data-room-hdr", hdr);
 }

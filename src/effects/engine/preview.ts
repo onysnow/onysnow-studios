@@ -100,6 +100,8 @@ function read(): ReadonlySet<string> {
   } catch {
     list = [];
   }
+  // And the ones switched on in the lab, which stay on in this browser (storedPreviews).
+  for (const name of storedPreviews()) if (!list.includes(name)) list.push(name);
   active = new Set(list);
   if (list.length > 0) document.documentElement.dataset["try"] = list.join(" ");
   return active;
@@ -108,6 +110,38 @@ function read(): ReadonlySet<string> {
 /** Whether a change that is not yet approved is switched on for this page load. */
 export function previewing(name: PreviewName): boolean {
   return read().has(name);
+}
+
+const STORE = "onysnow:previews";
+
+/**
+ * The previews switched on in the lab (Ony, 2026-10-01: "Make all the try=
+ * stuff into toggles"). Kept in this browser, so they stay on as he goes
+ * round the site; only ever read for him signed in as the admin (read()).
+ */
+export function storedPreviews(): PreviewName[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return (window.localStorage.getItem(STORE) ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s): s is PreviewName => s in PREVIEWS);
+  } catch {
+    return [];
+  }
+}
+
+/** Switch a preview on or off in this browser (the lab's switches). Takes effect on the next load. */
+export function setStoredPreview(name: PreviewName, on: boolean) {
+  const now = new Set(storedPreviews());
+  if (on) now.add(name);
+  else now.delete(name);
+  try {
+    if (now.size) window.localStorage.setItem(STORE, [...now].join(","));
+    else window.localStorage.removeItem(STORE);
+  } catch {
+    /* no storage: the address's ?try= still works */
+  }
 }
 
 /** For tests: forget what was read. */

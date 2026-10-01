@@ -16,6 +16,7 @@ import {
   Tablet,
   Undo2,
   Upload,
+  Info,
 } from "lucide-react";
 import { settingsQuery } from "@/lib/content";
 import { saveSiteTuning } from "@/lib/admin";
@@ -41,6 +42,12 @@ import { isFromFrame, isToolId, sendLabDraft, sendLabHold, sendLabRedRoom } from
 import { TOOLS, type ToolId } from "@/effects/tools/held";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  PREVIEWS,
+  setStoredPreview,
+  storedPreviews,
+  type PreviewName,
+} from "@/effects/engine/preview";
 import { requireAdmin } from "@/lib/admin-gate";
 
 export const Route = createFileRoute("/lab")({
@@ -139,7 +146,19 @@ function Lab() {
    * The red room (item 39) in the preview: its switch in the frame's
    * address, and a request to go straight in once the frame is ready.
    */
-  const [redRoom, setRedRoom] = useState(false);
+  // The previews switched on (in this browser, so the whole site shows them to Ony).
+  const [switchedOn, setSwitchedOn] = useState<ReadonlySet<PreviewName>>(
+    () => new Set(storedPreviews()),
+  );
+  const redRoom = switchedOn.has("redroom");
+  const flip = (name: PreviewName, on: boolean) => {
+    setStoredPreview(name, on);
+    setSwitchedOn(new Set(storedPreviews()));
+    // The page reads them as it starts: reload it.
+    setReloads((n) => n + 1);
+  };
+  // Descriptions under every control: folded away unless asked for (Ony, 2026-10-01).
+  const [showHints, setShowHints] = useState(false);
   const enterRedRoomNext = useRef(false);
   const [reloads, setReloads] = useState(0);
   const [device, setDevice] = useState<Device>("desktop");
@@ -274,13 +293,14 @@ function Lab() {
     } catch {
       // The curtain then plays once in the frame. Harmless.
     }
-    return `${page}?glass=${getGlassMode()}${redRoom ? "&try=redroom" : ""}`;
+    return `${page}?glass=${getGlassMode()}`;
     // The mode is sent by message after this; changing it must not reload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, reloads, redRoom]);
+  }, [page, reloads]);
 
   const groups = useMemo(() => {
     const byGroup = new Map<string, [string, Knob][]>();
+    for (const group of GROUP_ORDER) byGroup.set(group, []);
     for (const entry of Object.entries(tuning)) {
       // Results have no control: physics sets them (RESULTS in tuning.ts).
       if (isResult(entry[0])) continue;
@@ -288,7 +308,10 @@ function Lab() {
       list.push(entry);
       byGroup.set(entry[1].group, list);
     }
-    return [...byGroup.entries()];
+    // A section with neither a control nor a switch has nothing to show.
+    return [...byGroup.entries()].filter(
+      ([group, list]) => list.length > 0 || previewsIn(group).length > 0,
+    );
   }, []);
 
   const needle = query.trim().toLowerCase();
@@ -400,7 +423,7 @@ function Lab() {
                 sendLabRedRoom(frame.current);
               } else {
                 enterRedRoomNext.current = true;
-                setRedRoom(true);
+                flip("redroom", true);
               }
             }}
             title="Secret 2, the red room (?try=redroom): the preview goes dark but for the safelight, with the photograph most in view hanging on the line. Lights on or Escape leaves; winding the shutter and clicking a photograph gets back in."
@@ -502,6 +525,15 @@ function Lab() {
               >
                 <ClipboardCopy /> Copy values
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-pressed={showHints}
+                onClick={() => setShowHints((v) => !v)}
+                title="Show or hide the description under every control (each has its own (i) too)"
+              >
+                <Info /> {showHints ? "Hide descriptions" : "Show descriptions"}
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">
               Causes only: the {Object.keys(RESULTS).length} results physics sets from these have no
@@ -512,8 +544,18 @@ function Lab() {
           <div className="min-h-0 flex-1 overflow-y-auto p-3" data-lab-controls>
             {groups.map(([group, all]) => {
               const knobs = all.filter(matches);
-              if (knobs.length === 0) return null;
-              const dead = all.every((entry) => entry[1].modes === "raster") && mode !== "raster";
+              const switches = previewsIn(group).filter(
+                (name) =>
+                  !needle ||
+                  PREVIEW_TITLES[name].toLowerCase().includes(needle) ||
+                  PREVIEWS[name].toLowerCase().includes(needle) ||
+                  name.includes(needle),
+              );
+              if (knobs.length === 0 && switches.length === 0) return null;
+              const dead =
+                all.length > 0 &&
+                all.every((entry) => entry[1].modes === "raster") &&
+                mode !== "raster";
               const twinned = all.some((entry) => isPerMode(entry[1]));
               const other: TuningMode = mode === "raster" ? "css" : "raster";
               const moved = all.filter(
@@ -530,6 +572,7 @@ function Lab() {
                       value={valueIn(key, inMode)}
                       source={TUNING_DEFAULTS[key] ?? knob.value}
                       onChange={(value) => set(key, value, inMode)}
+                      showHint={showHints}
                     />
                   ))}
                 </div>
@@ -546,7 +589,7 @@ function Lab() {
                 >
                   <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-xs uppercase tracking-[0.18em] text-muted-foreground">
                     <span>
-                      {group}
+                      {GROUP_TITLES[group] ?? group}
                       {twinned ? (
                         <span className="ml-2 normal-case tracking-normal text-[var(--amber)]">
                           {mode === "raster" ? "liquid" : "CSS"} set
@@ -558,6 +601,22 @@ function Lab() {
                     </span>
                   </summary>
                   <div className="px-3 pb-4 pt-1">
+                    {switches.length ? (
+                      <div className="mb-4 space-y-2 rounded-md bg-muted/40 p-2" data-lab-switches>
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                          Not approved yet — switch on to try
+                        </p>
+                        {switches.map((name) => (
+                          <PreviewSwitch
+                            key={name}
+                            name={name}
+                            on={switchedOn.has(name)}
+                            showHint={showHints}
+                            onChange={(on) => flip(name, on)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
                     {dead ? (
                       <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
                         These drive the liquid glass shader and do nothing to CSS glass. Switch the
@@ -662,14 +721,18 @@ function KnobRow({
   value,
   source,
   onChange,
+  showHint,
 }: {
   id: string;
   knob: Knob;
   value: number;
   source: number;
   onChange: (value: number) => void;
+  showHint: boolean;
 }) {
   const moved = value !== source;
+  const [open, setOpen] = useState(false);
+  const hintShown = Boolean(knob.hint) && (showHint || open);
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
@@ -683,6 +746,21 @@ function KnobRow({
           <span className="truncate">{knob.label}</span>
         </label>
         <div className="flex flex-none items-center gap-1">
+          {knob.hint ? (
+            <button
+              type="button"
+              className={cn(
+                "rounded p-1 text-muted-foreground hover:text-foreground",
+                hintShown && "text-foreground",
+              )}
+              aria-label={`${knob.label}: what it does`}
+              aria-expanded={hintShown}
+              title="What it does"
+              onClick={() => setOpen((v) => !v)}
+            >
+              <Info className="size-3" />
+            </button>
+          ) : null}
           {moved ? (
             <button
               type="button"
@@ -694,29 +772,199 @@ function KnobRow({
               <RotateCcw className="size-3" />
             </button>
           ) : null}
-          <input
-            type="number"
-            aria-label={`${knob.label} value`}
-            min={knob.min}
-            max={knob.max}
-            step={knob.step}
-            value={value}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="w-20 rounded border border-input bg-transparent px-1.5 py-0.5 text-right font-mono text-xs"
-          />
+          {knob.options ? null : (
+            <input
+              type="number"
+              aria-label={`${knob.label} value`}
+              min={knob.min}
+              max={knob.max}
+              step={knob.step}
+              value={value}
+              onChange={(e) => onChange(Number(e.target.value))}
+              className="w-20 rounded border border-input bg-transparent px-1.5 py-0.5 text-right font-mono text-xs"
+            />
+          )}
         </div>
       </div>
-      <input
-        id={id}
-        type="range"
-        min={knob.min}
-        max={knob.max}
-        step={knob.step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-1 w-full accent-[var(--amber)]"
-      />
-      {knob.hint ? <p className="text-xs leading-snug text-muted-foreground">{knob.hint}</p> : null}
+      {knob.options ? (
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+        >
+          {knob.options.map((label, i) => (
+            <option key={label} value={knob.min + i * knob.step}>
+              {label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          id={id}
+          type="range"
+          min={knob.min}
+          max={knob.max}
+          step={knob.step}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="mt-1 w-full accent-[var(--amber)]"
+        />
+      )}
+      {hintShown ? <p className="text-xs leading-snug text-muted-foreground">{knob.hint}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * The sections, in the order they are worth reaching for, and what each is
+ * called here. The cursor first: it is the hand everything else answers.
+ */
+const GROUP_ORDER = [
+  "Cursor",
+  "Light",
+  "Environment",
+  "Reflection",
+  "Glass shape",
+  "Glass",
+  "Shadows",
+  "Camera",
+  "Lens flare",
+  "Afterimage",
+  "Liquid glass",
+  "Site",
+] as const;
+
+const GROUP_TITLES: Record<string, string> = {
+  Cursor: "Cursor & what you hold",
+  Light: "The lamp",
+  Environment: "Room & backlight",
+  Reflection: "Reflection",
+  "Glass shape": "Glass shape",
+  Glass: "Glass",
+  Shadows: "Shadows & light through the glass",
+  Camera: "Camera",
+  "Lens flare": "Lens flare",
+  Afterimage: "Afterimage",
+  "Liquid glass": "Liquid glass",
+  Site: "Site & secrets",
+};
+
+/** Every ?try= preview as a switch, in the section it belongs to. */
+const PREVIEW_GROUP: Record<PreviewName, (typeof GROUP_ORDER)[number]> = {
+  tools: "Cursor",
+  flashlight: "Cursor",
+  magnifier: "Cursor",
+  flare: "Cursor",
+  laser: "Cursor",
+  blacklight: "Cursor",
+  kelvin: "Light",
+  flash: "Light",
+  photolights: "Light",
+  backlight: "Environment",
+  dimroom: "Reflection",
+  satin: "Reflection",
+  coating: "Glass",
+  marks: "Glass",
+  roughglass: "Glass",
+  corners: "Glass shape",
+  contact: "Glass",
+  broken: "Glass",
+  shardlight: "Glass",
+  solids: "Glass",
+  shaderplastic: "Glass",
+  castshadows: "Shadows",
+  bounce: "Shadows",
+  gapparallax: "Shadows",
+  polariser: "Camera",
+  vignette: "Camera",
+  burn: "Camera",
+  liquidlights: "Liquid glass",
+  liquidedge: "Liquid glass",
+  quality: "Site",
+  redroom: "Site",
+};
+
+/** A short name for each preview; its full description is PREVIEWS[name]. */
+const PREVIEW_TITLES: Record<PreviewName, string> = {
+  tools: "Tool tray (pick what you hold)",
+  flashlight: "Flashlight",
+  magnifier: "Magnifying glass",
+  flare: "Road flare",
+  laser: "Laser pointer",
+  blacklight: "Black light (UV)",
+  kelvin: "Lamp colour from temperature",
+  flash: "Shutter flash lights the scene",
+  photolights: "Photographs' own lights",
+  backlight: "Backlight under the glass",
+  dimroom: "Room lamps rolled off",
+  satin: "Satin front face",
+  coating: "Museum and opal glass (Lab samples)",
+  marks: "Smudges and scratches by coverage",
+  roughglass: "Frost from microfacets",
+  corners: "Rounded bevel corners",
+  contact: "Panes resting on each other (Newton's rings)",
+  broken: "Broken glass (Lab samples)",
+  shardlight: "Broken pieces reflect the room",
+  solids: "Glass solids (Lab samples)",
+  shaderplastic: "Buttons lit by the glass shader",
+  castshadows: "Shadows through the glass, per letter",
+  bounce: "Bounce light from the photographs",
+  gapparallax: "Parallax from each pane's gap",
+  polariser: "Polarising filter",
+  vignette: "Lens vignetting",
+  burn: "Film burn on bright light",
+  liquidlights: "Liquid glass lit by the scene only",
+  liquidedge: "Liquid glass edges like CSS",
+  quality: "Quality tiers for slow devices",
+  redroom: "The red room (secret 2)",
+};
+
+function previewsIn(group: string): PreviewName[] {
+  return (Object.keys(PREVIEW_GROUP) as PreviewName[]).filter((n) => PREVIEW_GROUP[n] === group);
+}
+
+/** One preview's switch. */
+function PreviewSwitch({
+  name,
+  on,
+  showHint,
+  onChange,
+}: {
+  name: PreviewName;
+  on: boolean;
+  showHint: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = `preview-${name}`;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="flex min-w-0 items-center gap-2 text-sm">
+          <input
+            id={id}
+            type="checkbox"
+            checked={on}
+            onChange={(e) => onChange(e.target.checked)}
+            className="size-4 flex-none accent-[var(--amber)]"
+            data-lab-preview-switch={name}
+          />
+          <span className="truncate">{PREVIEW_TITLES[name]}</span>
+        </label>
+        <button
+          type="button"
+          className="rounded p-1 text-muted-foreground hover:text-foreground"
+          aria-label={`${PREVIEW_TITLES[name]}: what it does`}
+          aria-expanded={showHint || open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <Info className="size-3" />
+        </button>
+      </div>
+      {showHint || open ? (
+        <p className="mt-1 text-xs leading-snug text-muted-foreground">{PREVIEWS[name]}</p>
+      ) : null}
     </div>
   );
 }
