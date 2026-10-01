@@ -637,3 +637,442 @@ raindrop effect cost 1.69 ms on PS3
 4. Caustic and shadow through the existing two canvases.
 5. Spray tool and the liquids table (water, blood, slime).
 6. Water surface (Elias/Wallace heightfield) reusing steps 1, 3 and 4.
+
+---
+
+## 7. R2 port plan (follow-up)
+
+Research only, 2026-10-01. No site code changed. This answers what R2 left
+open in [research-plan.md](research-plan.md): which parts of raindrop-fx can
+go into our WebGL1 engine and how, what it costs on a mid-range Android phone,
+reference photographs, and the build steps for tasks 77 and 76. Numbers marked
+**(computed)** were worked out or measured here, with the method given.
+Numbers marked **(estimate)** are judgement and still need measuring.
+
+**What I read.**
+
+- **raindrop-fx.** Cloned at `HEAD` [`bae4081`](https://github.com/SardineFish/raindrop-fx/tree/bae4081)
+  (2023-01-10, the last commit). MIT, "Copyright (c) 2021 SardineFish"
+  ([LICENSE](https://github.com/SardineFish/raindrop-fx/blob/bae4081/LICENSE)).
+- **Its renderer, zogra-renderer.** Cloned at [`02b6b4a`](https://github.com/SardineFish/zogra-renderer/tree/02b6b4a)
+  (2023-02-17). MIT, "Copyright (c) 2020 SardineFish"
+  ([LICENSE](https://github.com/SardineFish/zogra-renderer/blob/02b6b4a/LICENSE)).
+  raindrop-fx's [package.json](https://github.com/SardineFish/raindrop-fx/blob/bae4081/package.json)
+  pulls `zogra-renderer ^1.3.5` from npm, but what I read is the repo's master
+  branch. So the zogra lines below show how the renderer behaves; they may
+  not match the published 1.3.x byte for byte.
+
+Every link below goes to the line I read.
+
+### 7.1 What raindrop-fx does, part by part
+
+#### Simulation: CPU TypeScript, three files
+
+| Part | What the code does | Where |
+|---|---|---|
+| Loop | Each `requestAnimationFrame` runs `simulator.update`, then `renderer.render`. **The step is fixed at `dt: 0.03` s whatever the frame time.** The real frame time is computed and then not used. So the sim runs at 1.8× real time at 60 Hz and 3.6× at 120 Hz **(computed)** | [index.ts L76–L91, L119–L124](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/index.ts#L76-L124) |
+| Defaults | spawn every 0.1 s, sizes 60–100 px, at most 2000 drops, gravity 2400 px/s², `slipRate` 0, `motionInterval` 0.1–0.4 s, `trailDistance` 20–30 px, `trailDropSize` 0.3–0.5, `trailDropDensity` 0.2, `evaporate` 10/s, `initialSpread` 0.5, `shrinkRate` 0.01, `velocitySpread` 0.3, `xShifting` 0–0.1 | [index.ts L21–L65](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/index.ts#L21-L65) |
+| Spawning | Every `spawnInterval`, one drop appears at a uniformly random point with a uniformly random size, while the count is ≤ `spawnLimit`. A new drop joins the collision grid only on the next frame | [spawner.ts L30–L44](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/spawner.ts#L30-L44), [simulator.ts L168–L174](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/simulator.ts#L168-L174) |
+| Mass and size | `mass = (size·density)²`; size = `(spread+1)·√mass/density`. The units are px², so the behaviour changes with screen resolution. Trail drops have density 0.2, so they look 5× wider than their mass would make them | [raindrop.ts L38–L49](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/raindrop.ts#L38-L49) |
+| Evaporation | `mass -= evaporate·dt` every step. **Nothing removes a drop at zero mass.** Below zero, √m is NaN, so the drop's size vanishes. The acceleration `g − R/m` also flips sign, so the drop shoots downward and is deleted once `y < −100`. It works by accident | [raindrop.ts L71–L79](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/raindrop.ts#L71-L79), [simulator.ts L199](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/simulator.ts#L199) |
+| Sliding (stick-slip) | Every 0.1–0.4 s, `randomMotion` re-rolls a resistance `R = U(0,1)·g·4·lerp(spawnSize, 1−slipRate)²`. Each step, `a = (g·m − R)/m` and `vy −= a·dt`, clamped to `vy ≤ 0` (y points up) | [raindrop.ts L65–L79, L110–L115](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/raindrop.ts#L65-L115) |
+| Wander | `vx = |vy|·shift`, with `shift = U(−1,1)·U(0, 0.1)` re-rolled together with R | [raindrop.ts L77, L114](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/raindrop.ts#L77-L114) |
+| Shape | `spread.y` rises toward `velocitySpread·(2/π)·atan(0.005|vy|)` with speed. Both spreads decay as `shrinkRate^dt`, i.e. to 1% within 1 s. A new drop lands with `initialSpread` 0.5, the "splat" | [raindrop.ts L82–L85](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/raindrop.ts#L82-L85) |
+| Trails | After 20–30 px of travel, a drop of mass ≥ 1000 splits off a trail drop. The trail drop is `size.x·U(0.3,0.5)` across, at density 0.2, placed ±5 px sideways and `size.y/4` above the drop. It gets spread `(0.1, |vy|·0.01·trailSpread)` and `parent = this`, and the parent loses its mass | [raindrop.ts L88–L108](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/raindrop.ts#L88-L108) |
+| Collision grid | Uniform cells of `0.3·spawnSize.max` = 30 px. Each cell is an array with swap-remove, and a drop is re-binned whenever it changes cell. The check covers the 3×3 neighbouring cells. It skips self, parent and child, and siblings. Two drops merge when their distance is less than the sum of `mergeDistance = size.x·(1+spread.x)·0.16·colliderSize`. The heavier drop absorbs the lighter; mass adds, and the velocity is the momentum-weighted average | [simulator.ts L82–L103, L119, L205–L214, L218–L265](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/simulator.ts#L82-L265), [raindrop.ts L56–L59, L117–L124](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/raindrop.ts#L56-L124) |
+
+**What that pinning model amounts to (computed).** With the defaults,
+`R_max/g = 4·100² = 40 000 px²`. A drop therefore moves during a given
+interval exactly when `U < m/40 000`:
+
+- spawned drops (m = 3 600–10 000) move in 9–25% of intervals;
+- a merge of two of the largest (m = 20 000) moves in 50%;
+- trail drops (m ≈ 100–600) move in under 2%.
+
+So the chance of moving is proportional to mass. There is no threshold, and
+nothing depends on where the drop is. That is the part we replace with
+physics (§7.2).
+
+**Two grid flaws (computed).** I re-ran the logic, see "Measured here" in §7.3.
+
+- **Missed merges.** The merge reach of one large drop gets to 61.6 px, but a
+  cell is 30 px. So the 3×3 check misses pairs: on average 0.6 overlapping,
+  unrelated pairs per frame stay unmerged, at about 1 150 drops (found by
+  brute-force comparison).
+- **Row wrap.** `gridAt` does not check `x < width`, so the right-hand
+  neighbour of the last column wraps into the next row
+  ([simulator.ts L134–L143](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/simulator.ts#L134-L143)).
+  It is harmless, because the distance check still applies.
+
+#### Rendering: zogra-renderer, WebGL2
+
+The frame ([renderer.ts L365–L389](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L365-L389))
+runs at full canvas resolution, in this order:
+
+1. **Droplets.** `drawMeshProceduralInstance` draws `dropletsPerSeconds·dt`
+   quads per frame (500·0.03 = 15) into a droplet texture that is never
+   cleared. Position and size come from a hash of `gl_InstanceID`
+   ([droplet-vert.glsl L32–L50](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/droplet-vert.glsl#L32-L50),
+   [renderer.ts L485–L493](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L485-L493)).
+2. **Mist.** It adds `dt/mistTime` into an **R16F** target, so the glass fogs
+   over about 10 s ([renderer.ts L291, L423–L429](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L423-L429)).
+3. **Raindrops.** The target is cleared, then one instanced draw covers every
+   drop. Each drop is a quad with a per-instance `mat4` plus `size`
+   ([L23–L26, L445–L478](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L445-L478)).
+   The fragment shader writes `(n.xy·a, size·a, a)` from `raindrop.png`
+   ([raindrop-frag.glsl L16–L18](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/raindrop-frag.glsl#L16-L18)).
+   - RGB blends `(ONE_MINUS_DST_COLOR, ONE_MINUS_SRC_COLOR)`, which is
+     `s + d − 2sd`, an exclusion ([L28–L36](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L28-L36)).
+   - Alpha keeps zogra's default `(ONE, ONE_MINUS_SRC_ALPHA)`, a union that
+     saturates toward 1 ([zogra shader.ts L182–L212](https://github.com/SardineFish/zogra-renderer/blob/02b6b4a/zogra-renderer/src/core/shader.ts#L182-L212)).
+4. **Erase.** The raindrop texture is blitted into the droplet and mist
+   textures with `(ZERO, ONE_MINUS_SRC_ALPHA)`, using alpha =
+   `smoothstep(0.93, 1.0, a)`. Running drops wipe the droplets and the fog
+   ([L109–L117, L479–L482](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L479-L482),
+   [erase.glsl](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/erase.glsl#L14-L19)).
+5. **Background.** The blurred background is drawn, with the mist over it
+   ([L431–L443](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L431-L443)).
+6. **Compose** ([compose.glsl L23–L57](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/compose.glsl#L23-L57)):
+   - droplets and drops are combined by exclusion;
+   - `mask = smoothstep(0.96, 0.99, a)`;
+   - `uv += −(rg−0.5)·(b·0.6 + 0.4)`;
+   - `normal = normalize((rg−0.5)·2, 1)`;
+   - colour `+= (lambert − 0.8)·0.2`, which darkens the side away from the
+     light;
+   - specular is **off** by default (`[0,0,0]`, [index.ts L62](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/index.ts#L62));
+   - output alpha is the mask, drawn over the background.
+
+**The sprite** ([assets/img/raindrop.png](https://github.com/SardineFish/raindrop-fx/blob/bae4081/assets/img/raindrop.png)),
+read pixel by pixel here **(computed)**:
+
+- 256×256 px.
+- R and G are linear ramps across x and y: 126 at the centre, about 0–223
+  across. That is the normal of a cap whose slope grows with r, i.e.
+  paraboloid-like.
+- B is 0.
+- A is a soft disc: 255 at the centre, falling to about half at roughly 0.3 of
+  the width.
+
+Only the core, where the summed alpha is ≥ 0.96, shows as a drop. The soft
+skirt outside it is what makes neighbours neck together.
+
+**The refraction offset is in screen UV and does not depend on drop size.**
+
+- An edge texel (`rg − 0.5 ≈ ±0.4`) of a size-1 drop samples up to ±0.4 of the
+  whole screen away.
+- That is the far-field limit of our §3.1 formula. With
+  `sample = c + (p−c)(1 − d/f)` and d ≫ f, a drop shows a small, inverted
+  image of a large part of the scene.
+- The reference photos show exactly that (§7.4, photos 1 and 6).
+
+**Corrections to §1.2 above:**
+
+- (a) The background blur is **not** a mip lookup. It is a 4-tap down/up-sample
+  chain ([blur.ts L54–L100](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/blur.ts#L54-L100),
+  [blur.glsl](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/blur.glsl#L14-L25)),
+  and compose reads one pre-blurred texture. `generateMipmap` is called
+  ([renderer.ts L332](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L332)),
+  but nothing samples the mips.
+- (b) `EXT_color_buffer_float` is needed **only** for the R16F mist target
+  ([L282, L291](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L282-L291)).
+  The drop and droplet targets are RGBA8, zogra's default `RenderTexture`
+  format ([zogra texture.ts L292](https://github.com/SardineFish/zogra-renderer/blob/02b6b4a/zogra-renderer/src/core/texture.ts#L292)).
+- (c) The `raindropLightBump` option (`uBump`) is declared but never used in
+  [compose.glsl L19](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/compose.glsl#L19).
+- (d) Blinn-Phong is in the shader, but the defaults switch it off.
+
+### 7.2 What ports to our WebGL1 engine, and how
+
+#### WebGL2-only features and their WebGL1 replacements
+
+| raindrop-fx uses | Where | Our replacement | Support |
+|---|---|---|---|
+| a `webgl2` context | [zogra renderer.ts L69](https://github.com/SardineFish/zogra-renderer/blob/02b6b4a/zogra-renderer/src/core/renderer.ts#L69) | the shared `webgl` context ([gl.ts L53–L59](../../src/effects/engine/gl.ts)) | – |
+| GLSL ES 3.00 (`in`/`out`, `texture()`) | line 1 of every shader | rewrite in GLSL ES 1.00 (mechanical) | – |
+| instanced draw with a per-instance `mat4` (4 attribute slots) and `vertexAttribDivisor` | [renderer.ts L23–L26, L478](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L23-L26); [zogra renderer.ts L401](https://github.com/SardineFish/zogra-renderer/blob/02b6b4a/zogra-renderer/src/core/renderer.ts#L401), [array-buffer.ts L275–L299](https://github.com/SardineFish/zogra-renderer/blob/02b6b4a/zogra-renderer/src/core/array-buffer.ts#L275-L299) | **plain quads**: 4 vertices per drop in one dynamic buffer, `Uint16` indices (up to 16 383 drops), one draw call. `ANGLE_instanced_arrays` exists, but its divisors are context state that [`beginPass`](../../src/effects/engine/gl.ts) (L93–L116) does not reset, so a divisor leaked by one pass would break the next. 400 quads are 1 600 vertices **(computed)**, which is trivial without instancing | `ANGLE_instanced_arrays` 99.98%, Android 99.93% ([web3dsurvey](https://web3dsurvey.com/webgl/extensions/ANGLE_instanced_arrays)) |
+| `gl_InstanceID` for procedural droplets | [droplet-vert.glsl L34](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/droplet-vert.glsl#L34) | droplet quads made on the CPU and appended to a persistent texture, positioned by our own hash. **Don't copy** the "Gold Noise ©2015 dcerisano" Shadertoy snippet ([L15–L25](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/shader/droplet-vert.glsl#L15-L25)): it states no licence | – |
+| `UNSIGNED_INT` indices | [zogra renderer.ts L401, L429](https://github.com/SardineFish/zogra-renderer/blob/02b6b4a/zogra-renderer/src/core/renderer.ts#L401-L429) | `Uint16` | core WebGL1 |
+| R16F render target + `EXT_color_buffer_float` (the mist) | [renderer.ts L282, L291](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L282-L291) | **not ported.** The pane's frost is our CSS blur ([styles.css](../../src/styles.css) `.glass`), and "wiped clear" becomes an 8-bit channel of the drop map. Use half-float only if banding shows | `EXT_color_buffer_half_float` 99.29%, Android 93.01% (tools-survey §0) |
+| mipmaps and mirror/repeat wrap on NPOT render textures | [renderer.ts L332, L337–L344](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L332-L344) | not needed. WebGL1 allows only clamp on NPOT textures; mirror in the shader if ever wanted | – |
+| exclusion and erase blend functions | [renderer.ts L28–L36, L109–L117](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L109-L117) | core `blendFunc`. MAX for the liquid-id channel via `EXT_blend_minmax` | 99.99%, Android 100% ([web3dsurvey](https://web3dsurvey.com/webgl/extensions/EXT_blend_minmax)) |
+
+#### Part by part
+
+| Part | Decision | How |
+|---|---|---|
+| Drop list, spawning, trail split, momentum merge, parent/sibling exclusion, swap-remove grid | **Port** (MIT; keep the copyright notice in the file header) | `src/effects/water/sim.ts`: pure TypeScript with no DOM or GL, a struct-of-arrays in `Float32Array`s, so it can be unit-tested in vitest |
+| Units and time | **Change** | mm and µL through one per-pane scale. Use real `dt` from the scheduler (`Step(now, dt)`, capped at `MAX_DT` 250 ms: [scheduler.ts L47, L64, L87](../../src/effects/engine/scheduler.ts)), sub-stepped at ≤ 1/60 s |
+| Random resistance (pinning) | **Replace** | the Furmidge threshold (§2.2–§2.3) times a coarse noise pinning field (§6.1). Keep raindrop-fx's 0.1–0.4 s re-roll as a small per-drop jitter on F₀, so two equal drops still differ |
+| Unbounded acceleration | **Replace** | the friction-law speed `U = (ρgV − F₀)/(βwη)`, eased toward over about 100 ms (§2.4) |
+| Evaporation | **Port and fix** | remove the drop explicitly at `V ≤ V_min`; assert that every value is finite |
+| Grid | **Port and fix** | rebuild it every step with a counting sort over cells at least 2× the largest merge reach, bounds-checked. That is O(n) and cannot miss a pair. The 30 px vs 61.6 px case is the bug |
+| `raindrop.png` and the exclusion normal map | **Do not port** | an analytic spherical cap per fragment, `h(r) = √(R²−r²) − (R−h₀)`, blended **additively** as height (§6.2). Heights sum where drops overlap; normals come from central differences. It is exact and needs no texture unit |
+| Droplet layer and erase | **Port the idea** | a persistent RGBA8 texture per pane. New droplets go in as CPU quads; the erase pass uses the same blend `(ZERO, ONE_MINUS_SRC_ALPHA)` |
+| Compose | **Rewrite** | lens offset `Δ = −(n−1)·gap·∇h` using the pane's real gap (`uGap`, [glass-light-shader.ts L105](../../src/lib/glass-light-shader.ts)), plus Fresnel with the TIR fix, the dark rim and highlights from the light registry (§3) |
+| Blur chain, mist, zogra-renderer | **Do not port** | the frost is CSS, the drop shows the photograph sharp, and zogra makes its own WebGL2 context |
+
+#### Where it lives in our engine
+
+Nothing in the shared context renders to a texture yet. The only
+`createFramebuffer` in `src` belongs to the liquid-glass library's own
+context ([GlassRenderer.ts L403](../../src/lib/liquidglass/GlassRenderer.ts)).
+
+1. **A drop map in the shared context.**
+   - Each wet pane gets an RGBA8 texture and framebuffer at ½ CSS px.
+   - Because it lives in the same context as the glass pass, that pass samples
+     it directly, with no readback and no upload. Compare the shard map, a 2D
+     canvas uploaded with `texImage2D` ([GlassLight.tsx L836–L857](../../src/components/site/GlassLight.tsx)).
+   - [`beginPass`](../../src/effects/engine/gl.ts) (L93–L116) must also
+     `bindFramebuffer(null)`. Today it doesn't, because no pass binds one.
+   - Channels: **R** height, **G** wet film / trail, **B** liquid id (MAX
+     blend), **A** coverage. Wiped-clear droplets go in the droplet texture.
+2. **Texture unit 9.**
+   - The glass pass already uses units 0–7, and the shard map takes 8 where
+     there are more than 8 ([GlassLight.tsx L216–L274, L222](../../src/components/site/GlassLight.tsx)).
+   - `MAX_TEXTURE_IMAGE_UNITS` is ≥ 16 on 100% of reports overall and ≥ 13 on
+     100% of Android. Only Firefox has reports of 8
+     ([web3dsurvey](https://web3dsurvey.com/webgl/parameters/MAX_TEXTURE_IMAGE_UNITS)).
+   - With 8 units: no drops.
+3. **A water layer of its own, not the light layer.**
+   - The glass light layer can only add light. It outputs
+     `mix(straight, refracted, bevel) − straight`, with alpha set to its
+     brightest channel ([glass-light-shader.ts L571, L1376–L1377](../../src/lib/glass-light-shader.ts)).
+     So it cannot swap the frosted view for a darker, inverted image.
+   - Drops need a normal-alpha per-pane canvas, above the CSS frost and below
+     the light layer. A "water" pass draws it:
+     - colour: the sharp photograph through the lens offset, using the same
+       `uBackdrop` texture object (the context is shared) and the same
+       `coverUv` mapping as the glass pass (L540–L562);
+     - the dark rim and the Fresnel reflection of the room;
+     - alpha: the drop coverage.
+   - The highlights on drops go into the existing light pass, which already
+     loops over every light. It reads the normal from the drop map, so every
+     light, in its own colour, puts a highlight on every drop.
+   - This is the same two-layer split as the edge glow (`uGlowOnly`,
+     L1359–L1373).
+4. **Scheduler.**
+   - The sim is a task at `ORDER.scene` (20), so it runs before the passes (30).
+   - The map draw and the water pass run with the passes.
+   - The sim sleeps when nothing moves or spawns. Evaporation can tick at 4 Hz
+     (§6.1).
+5. **Caustic and shadow behind:** as in §6.3, unchanged.
+
+### 7.3 Performance
+
+**raindrop-fx's own numbers** ([README, "Performance"](https://github.com/SardineFish/raindrop-fx/blob/bae4081/README.md#performance)):
+
+- Windows Chrome 88: "about 6ms to update each frame with 2000 raindrops".
+- Android (Mi 10) Chrome 87: "about 6.5ms".
+- Default settings at 1920×1080: "up to 600 raindrops … 2~3ms".
+
+The README does not say how this was timed or whether GPU time is included.
+
+**Measured here (computed).**
+
+- Method: I restated `raindrop.ts`, `simulator.ts` and `spawner.ts` line for
+  line in plain JS (a scratch file, not in the repo). I timed `update` alone in
+  Node 22 on this session's 2.1 GHz Xeon (2 vCPU): 2000 warm-up steps, then
+  the mean over 2000 steps.
+
+| Settings | Mean drops | Sim, ms per step |
+|---|---|---|
+| defaults | 646 | 0.19 |
+| a spawn every 0.02 s | 1 155 | 0.45 |
+| a spawn every 0.005 s | 1 280 (merging caps it) | 0.50 |
+
+- The simulation is under a tenth of their 2–3 ms at 600 drops. The rest is
+  GPU work. Counting the passes per frame at canvas resolution
+  ([renderer.ts L365–L389](https://github.com/SardineFish/raindrop-fx/blob/bae4081/src/renderer.ts#L365-L389))
+  gives seven: droplets, mist, raindrops, two erase blits, background plus
+  mist, and compose.
+- Our design draws one pass over the wet panes (the water compose), plus the
+  drop map at ½ resolution over the pane area only.
+
+**Mid-range Android against their Mi 10:**
+
+| SoC (phone) | Geekbench 6 single-core | 3DMark Wild Life Extreme | GPU |
+|---|---|---|---|
+| Snapdragon 865 (Mi 10) | 1169 ([nanoreview](https://nanoreview.net/en/soc/qualcomm-snapdragon-865)); 1176 ([cpu-monkey](https://www.cpu-monkey.com/en/benchmark-qualcomm_snapdragon_865-geekbench_6_single_core)) | 1110 | Adreno 650 |
+| Exynos 1380 (Galaxy A35 / A54) | 1008 ([nanoreview](https://nanoreview.net/en/soc/samsung-exynos-1380)); A35: 1017 ([Notebookcheck](https://www.notebookcheck.net/Samsung-Galaxy-A35-5G-review-A-powerful-all-rounder-with-Galaxy-S-design-for-under-300.834052.0.html)) | 808 | Mali-G68 MP5 |
+| Helio G99 (Galaxy A15 4G) | 727 ([nanoreview](https://nanoreview.net/en/soc/mediatek-helio-g99)) | 346 | Mali-G57 MP2 |
+
+- **(computed)** The mid-range CPU is 0.62–0.87× the Mi 10, and the GPU
+  0.31–0.73×.
+- **(computed)** raindrop-fx's 2000 drops (6.5 ms on the Mi 10) would take
+  about 7.5–10.5 ms on these phones if CPU-bound. That assumes linear scaling;
+  it would be more if GPU-bound.
+
+**What to expect from ours on a mid-range Android phone, while drops move:**
+
+| Item | Cost | How it was worked out |
+|---|---|---|
+| Sim, ≤ 400 drops | 0.4–0.7 ms **(estimate)** | 0.12 ms here **(computed**, the 646-drop row scaled to 400) × 3–6 for a phone browser core (**estimate**: this Xeon's Geekbench score wasn't measured) |
+| Drop map, 400 quads at ½ res | < 0.3 ms **(estimate)** | the fill is the sum of the quad areas, far less than one screen |
+| Water compose over the wet panes, about 8 taps | 1–3 ms **(estimate)** | the GPU ratio above |
+| **Total** | **2–4 ms (estimate)** | over the §6.4 mobile budget of 3 ms at the low end |
+
+**But phones don't run the glass effects today.**
+
+- A coarse pointer starts in the `minimal` tier ([quality.ts L51–L58](../../src/effects/engine/quality.ts)).
+- The stylesheet strips the lit layers ([styles.css L862–L900](../../src/styles.css)).
+- The lab says "a real phone skips the glass effects" ([lab.tsx L100–L104](../../src/routes/lab.tsx)).
+- The effect layer runs only in Chromium ([e2e/perf.spec.ts L12–L15](../../e2e/perf.spec.ts)).
+
+So drops on phones are **a decision for Ony**:
+
+- (a) none, as now; or
+- (b) a phone path: the water layer at ½ device resolution, ≤ 150 drops, no
+  droplet layer and no caustics, at about 1–2 ms **(estimate)**.
+
+Measure on a real device with `?perf=1` before choosing.
+
+### 7.4 Reference photographs
+
+These are for side-by-side checks only (rule 5); none of them ships. More are
+in [Commons: Raindrops on windows](https://commons.wikimedia.org/wiki/Category:Raindrops_on_windows).
+I opened and looked at photos 1–7 myself; for photo 8 I read only its page.
+
+| # | Photo | What it shows | What we must reproduce |
+|---|---|---|---|
+| 1 | [GGB reflection in raindrops](https://commons.wikimedia.org/wiki/File:GGB_reflection_in_raindrops.jpg) (Wikimedia Commons) | Every drop holds the Golden Gate tower **inverted and shrunk**, the same way up in every drop. Each image is sharp, while the tower behind the glass is blurred. Each drop has a **thick dark crescent along its top edge** and a bright body. Elongated, merged drops show **one continuous stretched image** across the neck, not two | Inversion and shrinking from the far-field lens offset; sharp inside drops over a soft background; the dark rim on the side that images the darker part of the scene, plus the steep edge; merged drops as one lens (additive height) |
+| 2 | [Raindrops on car window](https://commons.wikimedia.org/wiki/File:Raindrops_on_car_window.jpg) (Commons) | A coloured sign behind: each drop shows its colours with **top and bottom swapped**. The drops are dark along the top and bright below. **Two long rivulets** are continuous, narrow, meandering channels with refracting walls. Pear-shaped drops have short tails | Inverted colour bands; rivulets as continuous wet streaks (the G channel), narrower than the drops that made them, with meander from the pinning field |
+| 3 | [Raindrops on a window](https://commons.wikimedia.org/wiki/File:Raindrops_on_a_window.jpg) (Commons) | A dense mist of tiny droplets with **clean vertical tracks** through it where drops ran and swept it away. Larger drops sit inside the tracks. There are hundreds of tiny droplets for every big drop, and every drop is outlined by a dark rim | The droplet-erase pass; the size distribution (very many tiny, few large); later drops following old tracks (lower pinning where wet, §6.1) |
+| 4 | [Rain drops on window 01](https://commons.wikimedia.org/wiki/File:Rain_drops_on_window_01_ies.jpg) (Commons) | Over the dark ground, the drops look **bright**, because each one images the sky, inverted. Over the bright sky they are almost invisible except for their rims. Thin wavy trails run down the right-hand side | Contrast that flips with what lies behind: a drop's brightness comes from where its lens points, not from where it sits. This is the check for the gap-based offset |
+| 5 | [Rain.drops](https://commons.wikimedia.org/wiki/File:Rain.drops.jpg) (Commons) | An overcast street with poles. A dense field of mixed sizes; each drop has a dark rim on one side and a bright core showing the sky. A few large drops have tails | The rim and core contrast at many sizes, including the smallest; a realistic spread of sizes at a given rain amount |
+| 6 | [Lights behind window with raindrops](https://www.pexels.com/photo/lights-behind-window-with-raindrops-17510497/) (Pexels) | Night. Even over **black** areas, every small drop sparkles as a bright point, because each gathers a tiny image of the street lights. The out-of-focus light discs behind are untouched | The lens offset must sample far from the drop (the whole photograph, clamped), not just the neighbourhood; this is the photo-site case of bright points in a dark print. Highlights from our lamp come on top |
+| 7 | [APOD 2017-01-27, "Venus Through Water Drops"](https://science.nasa.gov/image-article/apod-2017-january-27-venus-through-water-drops/) (John Bell; [old link](https://apod.nasa.gov/apod/ap170127.html)) | Drops on a pane, each holding the whole sunset horizon with trees and Venus. "Refracting light, the drops create images that are upside-down, so the scene has been rotated." The dark band of ground fills one side of each drop | Inversion confirmed by the photographer; each drop holds a wide field of view; the dark band is part of the "dark rim" look; a point light shows as a point in every drop |
+| 8 | [EPOD 2011-12, "Water Drops and Inverted Images"](https://epod.usra.edu/blog/2011/12/water-drops-and-inverted-images.html) (macro, drops on a surface, not a window; page text only) | "A liquid drop acts as a simple lens … so the refracted image is upside-down": flowers and a house, inverted | The optics claim already cited in §3.1 |
+
+**The test scene to match (from photos 1, 4 and 6).** Use one pane over a
+photograph with a bright top and a dark bottom.
+
+- Drops over the dark half must look bright.
+- Drops over the bright half must look dim, with dark rims.
+- Each drop must hold the inverted photograph.
+
+### 7.5 Build plan
+
+Each step goes behind `?try=drops` and follows the to-do workflow (research →
+design → `?try` → verify measured → Ony approves).
+
+#### Task 77: drops on glass
+
+1. **Sim core** (`src/effects/water/sim.ts`, `liquids.ts`; pure TS).
+   - Ported from raindrop-fx with the changes in §7.2 and a seeded RNG.
+   - vitest:
+     - **Slide threshold.** Water drops below the Furmidge volume (the §2.3
+       table, e.g. 8.7 µL at 60°/40°) stay put for 10 s with the noise field
+       off; at 1.2× they slide.
+     - **Terminal speed** is within 5% of `U = (ρgV − F₀)/(βwη)`.
+     - **Merging** conserves volume exactly and momentum to 1e-9.
+     - **Trail split** conserves volume.
+     - **Frame-rate independence.** The same seed at dt 8.3 ms and 33 ms gives
+       slide distances within 5%. raindrop-fx fails this.
+     - **Grid.** After each of 1 000 random steps, a brute-force check finds no
+       unrelated overlapping pair. raindrop-fx averages 0.6 per frame.
+     - **Evaporation** removes drops at `V_min`, and no NaN appears anywhere.
+     - **Idle.** `step` returns false once nothing moves and no source is
+       active.
+     - **Viscosity.** Blood is 3–4× slower than water for the same excess
+       weight (§4).
+2. **Drop map pass** (FBO at ½ CSS px, plain quads, additive height, MAX
+   liquid id).
+   - `beginPass` also unbinds the framebuffer.
+   - Tests:
+     - a vitest twin of the cap profile;
+     - e2e: still exactly two WebGL contexts with `?try=drops` (the
+       `e2e/gl.spec.ts` pattern);
+     - e2e: the framebuffer is unbound after the pass (the next pass draws to
+       the canvas).
+3. **Water layer: lens.**
+   - Δ from the gap; sharp photograph; dark rim; Fresnel room reflection with
+     the TIR fix (§3.1–§3.3); a normal-alpha per-pane canvas.
+   - Tests:
+     - **JS twin of the GLSL.** For a cap, the sample point lies across the
+       centre (inverted) when gap > f and on the same side when gap < f, and
+       the magnification is `1 − d/f`. The critical angle is 48.6°.
+     - **e2e pixel test.** Put one fixed drop (`?drops=test`) over a
+       top-bright/bottom-dark test photo: the drop's top half reads darker
+       than its bottom half (inverted).
+4. **Highlights from every light** (in the existing light pass, reading the
+   drop map).
+   - Test: with two lights, each drop has two highlights, displaced toward
+     each light (JS twin).
+5. **Droplets and wiped tracks** (a persistent droplet texture with the erase
+   pass, and condensation as the source).
+   - Test (e2e): pixels along a path a drop ran through have less droplet
+     coverage than before (G/A read back).
+6. **Caustic and shadow behind** (§6.3 area ratio).
+   - Test (JS twin): integrating the ratio over a drop's footprint gives the
+     footprint area to within 3%, so light is conserved.
+7. **Rain source, tiers and lab controls.**
+   - Causes only: rain amount, condensation, glass cleanliness (contact-angle
+     preset), liquid, drop cap.
+   - Sleep when idle; the cap shrinks in `lite`.
+   - Tests: the `e2e/scheduler.spec.ts` pattern (no frames while still);
+     `?perf=1` records `cpu:water-sim` and `gpu:water` (the `e2e/perf.spec.ts`
+     pattern).
+8. **Check against §7.4 side by side, measure with `?perf=1`, Ony approves.**
+
+#### Task 76: spray bottle, the same sim (after 77 step 4)
+
+1. **Tool.**
+   - Add `"spray"` to `ToolId`/`TOOLS` ([held.ts L40–L75](../../src/effects/tools/held.ts)).
+     The lamp stays in the other hand, as with the hammer.
+   - Choose the liquid in the lab.
+   - Press to spray.
+2. **Particles.**
+   - The CPU pool from the tools survey §4 decision, fired from the nozzle as a
+     cone.
+   - Droplet sizes, cone angle and flow per squeeze come from **R3** (still to
+     do). Until then they are marked **(estimate)**.
+   - A droplet lands at its screen point after its flight time.
+3. **Landing.** On a pane, call `sim.addVolume(pane, x, y, V, liquid)`:
+   - inside an existing drop's contact radius, it merges;
+   - otherwise it spawns a new drop with raindrop-fx's `initialSpread` splat;
+   - below `V_min`, it goes into the droplet texture.
+
+   Spray that misses every pane goes to the wet layer (item 26), which is
+   outside this sim.
+4. **Liquids.** θa/θr, γ, η, ρ and σ_rgb per liquid (§4).
+   - Blood absorbs by `exp(−σ·h)` in the water layer.
+   - Slime has a large F₀ and η, never sheds trail drops and stretches instead.
+5. **Tests.**
+   - Volume sprayed = volume on panes + volume off panes, exactly.
+   - The cone distribution passes a seeded statistical check.
+   - Slime spawns no trail drops; blood runs slower than water (vitest).
+   - e2e: holding the spray on a pane for 2 s makes drops appear, and some of
+     them slide.
+
+### 7.6 Decisions
+
+- **Port (MIT):** raindrop-fx's sim structure: the drop list, trail split,
+  momentum merge, parent/sibling exclusion and grid; the droplet layer with
+  its erase blend; the smoothstep metaball edge.
+- **Fix while porting:** use real dt; remove drops at zero volume; make the
+  grid unable to miss a pair.
+- **Replace with physics:** random resistance and unbounded acceleration
+  become the Furmidge threshold, the friction-law speed and a pinning field.
+  The sprite normal map becomes an analytic cap height. The UV-constant
+  refraction becomes `Δ = −(n−1)·gap·∇h`.
+- **Do not port:** zogra-renderer, the WebGL2 features, the mist target, the
+  blur chain, or the Gold Noise hash, which states no licence.
+- **Engine additions needed:** the first framebuffer in the shared context (and
+  `beginPass` unbinding it); texture unit 9; a per-pane normal-alpha water
+  layer under the light layer.
+- **Numbers:**
+  - map at ½ CSS px, RGBA8 (8-bit height at 255 = 1.5 mm, i.e. 5.9 µm a step,
+    **computed**);
+  - ≤ 400 drops per page (≤ 150 on a phone path);
+  - sim sub-step ≤ 1/60 s;
+  - grid cell ≥ 2× the largest reach;
+  - unit 9.
+- **Lab controls (causes only):** rain amount, condensation, glass cleanliness,
+  liquid, drop cap. There is no refraction knob; the gap sets it.
+- **Still unknown:**
+  - the real cost on a mid-range phone (estimates only);
+  - whether phones get drops at all (Ony);
+  - R3's spray numbers;
+  - whether 8-bit height bands on small droplets (half-float is the fallback);
+  - the CSS-px-to-mm pane scale (how big a pane is in real life), which sets
+    every threshold in §2.

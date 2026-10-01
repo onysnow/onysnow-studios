@@ -35,12 +35,12 @@ anything or it's not help do we start from scratch."
 |---|---|---|---|
 | R0 | Capability gaps and tools survey (all tasks) | all | done: tools-survey.md |
 | R6 | Shadows good enough for a shadow puppet show | 83, 52, every light | done: shadows.md |
-| R2 | Water drops: follow-up (raindrop-fx port, perf) | 77, 76 | first pass done |
-| R1 | Black light: calibration against real photos | 73 | first pass done |
+| R2 | Water drops: follow-up (raindrop-fx port, perf) | 77, 76 | first pass + port plan done (water-drops.md §7) |
+| R1 | Black light: calibration against real photos | 73 | first pass + calibration done (uv-blacklight.md R1) |
 | R5 | Broken glass: follow-up (three-pinata fit, physics) | 84 | first pass done |
-| R7 | Flame and torch light | 82 | to do |
-| R9 | Balloons | 74 | to do |
-| R10 | Spider webs | 75 | to do |
+| R7 | Flame and torch light | 82 | done: flame.md |
+| R9 | Balloons | 74 | done: balloons.md |
+| R10 | Spider webs | 75 | done: spider-webs.md |
 | R3 | Other liquids and the spray bottle | 76 | to do |
 | R12 | Jello / slime cube | 80 | to do |
 | R11 | Fire opal, quartz, crystals | 79 | to do |

@@ -503,3 +503,304 @@ emitters (skin, manganese glass, varnish) should then vanish into the wash.
 46. [A Fluorescent Material Model for Non-Spectral Editing & Rendering (2025)](https://dx.doi.org/10.1145/3721238.3730721) / [summary](https://www.themoonlight.io/en/review/a-fluorescent-material-model-for-non-spectral-editing-rendering)
 47. [Simple diffuse fluorescent BBRRDF model (MAM 2018)](https://jo.dreggn.org/home/2018_fluorescence.pdf)
 48. [Wilkie et al.: a reflectance model for diffuse fluorescent surfaces](https://dl.acm.org/doi/10.1145/1174429.1174484)
+
+---
+
+## R1 calibration (follow-up)
+
+Follow-up of 2026-10-01 for research item R1. Web research and offline
+arithmetic only; no code changed. Labels used below: **(measured)** = a
+number printed in the source; **(computed)** = worked out here from sourced
+data, with the method stated; **(estimate)** = a design value with no source.
+Data used for computation: FOGRA39L characterization data (ICC/Fogra, free),
+CIE 1931 colour-matching functions (CVRL), and the RIT camera spectral
+sensitivity database (CC BY-NC-SA 4.0: used only to derive the summary
+numbers below; the data itself must not be copied into the project, per the
+plan's licence rule). Source numbers continue from the list above (49+); [2],
+[3], [33], [35] etc. refer to that list.
+
+### C1. Printed photos under black light: what glows and what goes dark
+
+**Reference photographs and videos (to check against side by side)**
+
+| Reference | What it shows | Link |
+|---|---|---|
+| Aardenburg Fig. 1–2 | The same inkjet print on Epson Exhibition Fiber (OBA) and Crane Museo Silver Rag (no OBA), first under 4700 K Solux lamps, then under a Philips F36T8 BL tube at 0.40 W/m² UVA. The caption says the tube "causes heavy excitation of fluorescence in the blue visible region on the Epson paper"; the OBA-free print goes dark. The text says inkjet colorants "are not opaque enough to hide the substrate reflectance and OBA blue light emission until print densities get quite high". | [33] |
+| Dominey | Two blank photo papers under UV: the OBA paper "glows with a bright blue and purple tint", the other "remains dark". | [35]; video: [YouTube, "Why is this photo paper glowing?"](https://www.youtube.com/watch?v=uhVHhQtdop8) |
+| The Print Guide (2010) | Two blacklight posters: full ink coverage "glows in an expected way"; a poster with large unprinted areas on low-OBA paper gives "dull glow", because "the paper which contains low/no levels of fluorescing agents goes dark". | [55] |
+| PrinterKnowledge test | Many photo papers side by side under a UV torch: "Bright" papers respond most, "Natural" least; Epson Ultra Premium Glossy strong, the Luster version weak; HP Premium Plus Glossy low. | [56] |
+| VanOrman & Nienhaus 2020, Fig. 3 | A phone-camera photo of household items under a UV lamp (egg, honey, olive oil, turmeric, detergent, highlighter in water, tonic water). Useful as a "phone camera of a black-lit scene" reference. | [58] |
+
+I found no photograph of a printed *photograph* (picture content, not
+blank paper) under a black light with a written description of each tone.
+Aardenburg Fig. 2 is the closest; it should be viewed directly when tuning.
+
+**Measured: how much each ink lets the paper glow (inkjet).** Hersch (2008)
+printed CMY halftones (Canon IP4000 inkjet, Canon MP-101 matte OBA paper)
+and measured them with and without UV in the illuminant [49] **(measured)**:
+
+- The paper is "moderately fluorescent, with a reflectance peak of **1.22 at
+  440 nm**". Its reflectance at 380 nm with UV included is only **0.140**, so
+  it absorbs most incoming near-UV.
+- Colour difference between UV-included and UV-excluded light (ΔE94):
+  paper white **11.28**, solid cyan **0.95**, solid magenta **0.92**, solid
+  yellow **0.12** ("nearly no fluorescent emission").
+- Fitted equivalent UV transmittance of each solid ink (one pass, excitation
+  range): **cyan 0.238, magenta 0.186, yellow 0.0764**. Red, green, blue and
+  chromatic black were "fitted as zero": they "completely absorb the
+  excitation wavelength components".
+- Model structure: the UV is attenuated once on the way in, by
+  `(1 − a + a·t_u)`, and the blue emission is attenuated again on the way out
+  by `(1 − a + a·t(λ))`, plus internal reflections. Fluorescence therefore
+  matters most "on white and on highlight colors created by halftone dots of
+  small and midsize ink surface coverages".
+- Caveat: these UV transmittances were fitted for the UV part of a
+  spectrophotometer's illuminant (Gretag-Macbeth i7, Fig. 6 in [49]), not for
+  a 365 nm lamp. Ink absorption at 365 nm may differ.
+
+**Computed: the emission path.** The blue light emitted by the paper must
+pass back out through the ink. FOGRA39L (offset on coated paper) gives CIE Z
+for each patch [50]. Z is weighted by z̄(λ), which peaks at 445 nm, the same
+band as OBA emission (420–470 nm, [18]). The ratio Z(patch)/Z(paper) is the
+ink's double-pass blue-band transmittance; its square root is the single-pass
+value **(computed)**:
+
+| Solid ink (FOGRA39) | Z / Z_paper (double pass) | single pass `t_e` |
+|---|---|---|
+| Cyan 100 % | 0.709 | 0.84 |
+| Magenta 100 % | 0.201 | 0.45 |
+| Yellow 100 % | 0.094 | 0.31 |
+| Black 100 % | 0.023 | 0.15 |
+| Red (M+Y) / Green (C+Y) / Blue (C+M) | 0.031 / 0.090 / 0.210 | — |
+
+**Result: yellow blocks the glow most, then magenta, then cyan.** Combining
+both paths for a solid ink, `T = t_u · t_e` **(computed)**:
+cyan **0.20**, magenta **0.083**, yellow **0.023**, black **≈0**, and red
+0.002, green 0.005, blue 0.017. This contradicts the ordering in the first
+pass (black ≈ magenta > yellow > cyan, from The Print Guide [36]); the
+measured data of [49] put yellow first.
+
+**Conflicting report for offset yellow.** Gerlach's data, reported by John
+the Math Guy, found that "cyan, magenta, and black all do a pretty good job
+of blocking the UV. But for yellow ink ... there is a large difference in b*
+between the M1 and M2 measurements ... the ink ... [is] transparent in the
+UV", adding "I suspect that not all yellow inks do that" [51]. Even if offset
+yellow passes all the UV (`t_u = 1`), its emission path still blocks 69 %,
+so a solid offset yellow would keep `T ≈ 0.31` **(computed)**. Note that a
+yellow patch has a small Z, so a small absolute gain in blue moves its b*
+a lot; the large b* difference may overstate the glow **(inference, not
+sourced)**.
+
+**Other print types.**
+
+- **Chromogenic (RC colour) prints.** Kodak papers have used UV absorbers
+  since 1950, and "When examined under UV lamps, prints with UV absorbers
+  appear darker than when viewed under visible light". OBAs were added via
+  processing (1959–1974), in the base (from 1974) and in the polyethylene
+  layers of RC prints (from 1988). Prints with OBAs "fluoresce under UV,
+  appearing brighter and with a blue cast". The balance depends on "the
+  relative amounts of OBAs and UV absorbers" [53]. So an RC colour print
+  glows blue-white in its borders and highlights but more weakly than
+  inkjet paper with high OBA content; how much weaker is not measured.
+- **Silver gelatin (black-and-white) prints.** No OBAs in 652 samples from
+  1896–1949. OBAs first appear in 1950–54, are in 70 % of samples by
+  1960–64 and 81 % after 1980. They give a "distinct cool, blue-white
+  fluorescence ... peaking at approximately 450 nm" [54]. Silver image
+  density blocks the glow, like black ink **(inference)**.
+- **Magazines and posters (offset on coated paper).** FOGRA39 is exactly
+  this print condition [50], so the table above applies. Whether the paper
+  glows depends on its OBA content: low-OBA stock "goes dark" [55].
+- **Measurement standards.** ISO 13655 M1 requires the measuring light to
+  match D50 including UV, so OBA papers measure as they look under D50
+  viewing light; M2 excludes UV [52]. The difference between the two is the
+  "OBA index". For example, b* of +2 under M2 and −3 under M1 gives an index
+  of 5 [51]. A paper-only measurement under 365 nm lamps was not found.
+
+### C2. Relative fluorescence strengths: what is measured
+
+No source measures OBA paper, day-glo, uranium glass, tonic water and teeth
+under the same lamp and camera. The sourced numbers are listed below.
+
+| Emitter | Measured quantity | Value | Source |
+|---|---|---|---|
+| Quinine (tonic water's fluorophore) | quantum yield | **0.546** (0.5 M H₂SO₄); **0.60** (0.1 M HClO₄, 347.5 nm) | [60]; [59] |
+| Fluorescein (yellow highlighter / green dyes family) | quantum yield | **0.95** (0.1 M NaOH) | [59] |
+| Rhodamine 6G (day-glo pink/orange family) | quantum yield | **0.94–0.95** (ethanol) | [59] |
+| Uranyl in silicate glass | quantum yield | **0.7** at < 1 % uranyl, "decreases when the concentration increases" | [61] |
+| Stilbene (DSD-triazine) brightener, the OBA family | quantum yield | **0.382** for one polymeric DSD brightener in water (lower for its monomer); emission 443–446 nm | [62] |
+| OBA paper (moderate) | peak total radiance factor | **1.22 at 440 nm** (UV-including D65-type light) | [49] |
+| Day-glo paint | peak radiance factor (daylight) | yellow dye alone **177 %**; "some dye combinations exceed **300 %**" | [63] |
+| Day-glo vs conventional | brightness | up to **4×** | [25] |
+| Day-glo pigments under black light | response | "Most of our materials respond to black light ... it is usually not a quality control specification" | [64] |
+| Teeth | relative | dentin fluorescence "significantly greater" than enamel; dentin peak **440 ± 10 nm** | [65] |
+
+Quantum yields alone do not rank brightness under a black light. Brightness
+also depends on how much of the lamp's UV each material absorbs (dye
+concentration, thickness, absorption at 365 vs 395 nm), and none of those
+was found for real objects. The QYs do show that every listed emitter turns
+absorbed UV into light at a similar efficiency, within 0.4–0.95.
+
+**Computed: luminance per absorbed UV photon.** QY × (365/λ_em) for photon
+energy, × photopic luminance of the emission band (CIE ȳ, Gaussian bands at
+the sourced peaks; the widths are **estimates**). Relative to rhodamine
+(1.00): fluorescein-type yellow-green **0.81**, uranyl glass **0.85**,
+quinine **0.094**, DSD brightener **0.036** **(computed)**. Blue emitters
+(OBA, quinine, teeth, coumarin blue) put **10–30×** less luminance on
+screen per absorbed photon than green/orange ones. This holds even with
+equal or larger UV absorption.
+
+**Rendering consequence.** Treat the strengths in Recommendation B as
+*radiometric* (photon) strengths and let the colour token carry luminance.
+A blue token already has about 7 % of white's luminance in sRGB. If the
+strength factor also folds in luminance, blue emitters are dimmed twice
+**(computed reasoning)**.
+
+### C3. How phone cameras record 365 nm and 395 nm scenes
+
+- **Phones see nothing below ~390 nm.** Monochromator calibration of an
+  iPhone SE and a Galaxy S8 (and a DJI drone camera) scanned 390–700 nm
+  "because no significant response was found outside it on any of the test
+  cameras" [66]. So a 365 nm LED's main peak (FWHM about 10 nm [72]) is
+  invisible to the phone. The phone records only fluorescence and any
+  visible leak. A Gaussian 365 nm peak with 10–15 nm FWHM has essentially
+  zero energy above 390 nm **(computed)**. The dim violet that photos of 365
+  nm torches show must come from other emission, outside the main peak,
+  which is not characterised. Kennard's visible-light photos of a
+  non-fluorescent PTFE target under 365 nm torches show "some visible violet
+  light leakage" [71].
+- **A 395 nm LED straddles the cut-on.** The bins are 390–400 nm [73] or
+  395–400 nm with 10 nm FWHM [72], so roughly half the output lies where
+  the camera starts to respond. Across 28 cameras (400–720 nm, 10 nm steps;
+  response assumed to ramp to 0 at 390 nm per [66]), the blue channel's
+  signal per watt relative to 450 nm light is:
+  395 nm LED **0.016** (median; range 0.002–0.23),
+  400 nm LED **0.040**, Hg 404.7 nm **0.071**, Hg 435.8 nm **0.82**,
+  OBA-like emission (445 nm) **0.76**. The one phone in that set (Nokia
+  N900) is at the top of each range: 0.23 for the 395 nm LED and 0.50 at
+  404.7 nm **(computed from [67])**. Per watt, a camera therefore records a
+  395 nm LED about **3× (N900) to 50× (median)** more weakly than it records the paper's blue glow. The
+  violet wash still dominates 395 nm photos because the LED emits far more
+  power than the fluorescence returns ([3]; [5]).
+- **The raw sensor puts violet almost only in blue.** The median relative
+  red/green/blue response at 400 nm is 0.00/0.00/0.02 of each channel's
+  peak, and at 410 nm 0.01/0.01/0.11 [67] **(computed)**. Raw data has no
+  "red lobe". The purple seen in photos is added by the camera's colour
+  correction matrix, which maps the sensor's blue onto sRGB, where spectral
+  violet lies outside the gamut beyond the blue primary. This corrects
+  §1.3 item 3, which attributed the red component to the red filter's
+  short-wavelength response ([10]).
+- **White balance cannot remove the cast.** "Global AWB algorithms can not
+  work well if the captured image is dominated by only one or two colors"
+  [69]. Commercial AWB also restricts its estimate to "plausible scene
+  illuminant white point values" [70]. A violet lamp lies far outside that
+  set, so AWB stops partway and the cast stays (with [14]).
+
+### C4. Colour of the visible leak, in sRGB
+
+**Measured spectra.** LED Museum published uncorrected spectrometer plots
+of a Blak-Ray ML-49 BLB tube and a "blacklight" CFL [74] (images
+[lwblb.gif](http://www.ledmuseum.net/sixth/lwblb.gif),
+[uvcfl.gif](http://www.ledmuseum.net/sixth/uvcfl.gif)). Pixel measurement of
+those plots **(computed)** gives:
+
+- UV band peak at ~365 nm;
+- the Hg 404.7 nm line at **≈7 %** (tube) and **≈13 %** (CFL) of the UV peak
+  height;
+- the 435.8 nm line at about **1/7** of the 404.7 line;
+- no 546 nm line;
+- a cluster of lines at 700–850 nm, which phone IR-cut filters block
+  ([2]; [66]).
+
+The spectrometer's response is not corrected, so the ratios are
+approximate. Klipstein's description matches: "some of the 404.7 and dimmer
+407.8 nm violet mercury lines, and just enough of the blue 435.8 nm mercury
+line to have a basically blue color" [2].
+
+**Computed sRGB hue** at full saturation, normalised to the brightest
+channel. "Colorimetric" applies the CIE 1931 functions [68] and the sRGB
+matrix ([Wikipedia, sRGB](https://en.wikipedia.org/wiki/SRGB)), with negative
+channels clipped. "Camera" uses a 3×3 colour matrix fitted for each of the
+28 cameras to reproduce sRGB over 600 random smooth spectra, then takes the
+median. The fitted matrix only stands in for a real phone's processing.
+
+| Source spectrum | Colorimetric | Camera median (range) | Current token | Verdict |
+|---|---|---|---|---|
+| BLB tube leak (404.7+407.8 : 435.8 = 7 : 1) | `#6900FF` (hue 265°) | `#4500FF` (hue 256°; `#0000FF`–`#8600FF`) | `leak365` `#1A0F4A` (hue 251°) | **Confirmed** for BLB tubes. The camera hue matches; the brightness is a design choice. |
+| Filtered 365 nm LED | none (no output ≥ 390 nm) | none | `leak365` | Use a **darker** leak than a BLB (estimate; the stray emission is not characterised). |
+| 395 nm LED (FWHM 12 nm) | `#7100FF` (hue 267°) | `#8B00FF` (hue 273°; `#0000FF`–`#B800FF`) | `leak395` `#4B22D9` / `#6A3BFF` (hue ≈ 254°) | **Too blue by ~15°.** Suggested `#6A00D9` body / `#9440FF` halo (hue ≈ 266–269°, estimate on the computed hue). |
+| 400 nm LED | `#7100FF` | `#8200FF` | — | Same as 395 nm. |
+
+**Emission colours checked the same way (computed).** Peaks are sourced;
+the band widths are estimates.
+
+| Emitter (peak) | Colorimetric | Camera median | Current body | Verdict |
+|---|---|---|---|---|
+| OBA (445 nm) | `#2E00FF` (251°) | `#0000FF` (240°) | `obaGlow` `#8FB8FF` (≈218°) | **Too cyan by ~25°.** Dominey sees "bright blue and purple tint" [35]. Suggested core `#E0E0FF`, body `#8C8CFF`, halo `#4C40FF` (estimate). |
+| Quinine (450 nm, broad) | `#0036FF` (227°) | `#002BFF` (230°) | `teeth` `#A9C8FF` (≈216°) | Close for tonic water; teeth (440 nm) follow OBA. |
+| Uranyl (534 nm) | `#00FF00` (120°) | `#00FF00` | `uranium` `#5CFF2E` (≈107°) | **Confirmed** (a slight yellow shift is acceptable for clipping). |
+| Day-glo yellow/green (507–518 nm) | `#00FF60` (143°) | `#00FF80` | `#C8FF2A` (≈75°) | **Too yellow.** Suggested body near hue 100–110°, e.g. `#7CFF3A` (estimate; clipped cores may still run yellow-white). |
+| Day-glo orange (580–590 nm) | `#FFA300` (38°) | `#FFA200` | `#FF8A1F` (≈32°) | **Confirmed.** |
+| Day-glo red/pink (≈600 nm) | `#FF6700` (24°) | `#FF6400` | pink `#FF3FB4` | Emission alone is red-orange. Hot pink requires adding the reflected violet leak, which the additive model does (**inference**). Keep. |
+
+### C5. Rendering recommendations: estimate → calibrated value
+
+| Item (section) | First-pass value | Calibrated value | Status | Sources |
+|---|---|---|---|---|
+| Ink → OBA transmission (§6.1 step 3) | `T = exp(−(0.5C + 2.0M + 1.0Y + 2.5K))` | `T = Π_i (1 − a_i + a_i·t_u,i)·(1 − a_i + a_i·t_e,i)` with `t_u` = C 0.238, M 0.186, Y 0.076, K 0 and `t_e` = C 0.84, M 0.45, Y 0.31, K 0.15. Solids: C 0.20, M 0.083, Y 0.023, K ≈0; red 0.002, blue 0.017. At 50 % coverage: C 0.57, M 0.43, Y 0.35, K 0.29. If the exp form is kept, the equivalent weights are **C 1.6, M 2.5, Y 3.7, K ≥ 5**. | **Replaced** (`t_u` measured, inkjet; `t_e` computed, offset) | [49], [50] |
+| Same, offset-print variant | — | `t_u,Y = 1`: solid yellow T ≈ 0.31 | Uncertain (one anecdotal dataset) | [51] |
+| Visual claims in §6.1 step 3 | cyan T ≈ 0.6, so skies keep a pale-blue glow; yellows dim | cyan 0.20, so skies keep a **weak** glow; **yellows go darker than magenta**; red, green and blue overprints are ≈ 0 | **Corrected** | [49], [50] |
+| Ink coverage from RGB (§6.1 step 2) | `C = 1 − R′` … with gamma-encoded values | unchanged | **Estimate is best available.** No source maps photo RGB to printed ink; FOGRA39 could calibrate it later. | — |
+| Paper brightener strength `S_oba` (§6.1 step 4) | 1.0 OBA / 0 rag | inkjet "bright" papers 1.0; "natural"/rag 0–0.1; **RC colour print 0.3–0.6** (UV absorbers darken it); silver gelatin after 1955 ≈ OBA, before 1950 0 | Ordering **sourced**, values **estimate** | [56], [53], [54], [55] |
+| Leak reflection `0.15 + 0.85·b` (§6.1 step 5) | estimate | Keep. Blue-band ink reflectances support using `b`: C 0.71, M 0.20, Y 0.094, K 0.023 of paper. The 0.15 gloss floor is still an estimate. | Partly supported | [50] |
+| Highlight knee ~0.8, bloom radii 4/16/48 px, halo 30–60 % (§6.1, C.4) | estimate | unchanged | **Estimate is best available**; no measurement found | — |
+| Colour tokens (A) | all estimate | `leak365` (BLB), `uranium`, `dayglo-orange` confirmed; `leak395`, `obaGlow`, `dayglo-yellowgreen` hue changes as in C4 | Hues **computed**, hex values still design choices | [2], [66]–[68], [74] |
+| Relative strengths (B) | yellow-green 1.0, orange/pink 0.9, uranium 0.85, OBA 0.7, blue/tonic 0.5, teeth 0.4, vaseline 0.3, skin 0.03 | Ordering consistent with the QYs (day-glo 0.95 > uranyl 0.7 > quinine 0.55 > DSD 0.38). Keep the numbers, but treat them as photon strengths and do **not** also scale blue emitters down for luminance (C2). Optional QY-only set: day-glo 1.0, uranium 0.74, tonic 0.58, OBA 0.40. | **Estimate is best available**; no same-lamp comparison exists | [59]–[62] |
+| 395 nm lamp: emission ×0.5, leak ×3 (B) | estimate | Unchanged. Per watt, cameras record the 395 nm leak at only 2–23 % of blue-light sensitivity, so ×3 assumes a high-power LED. 365 nm main-peak leak is **0** in camera. | **Estimate**, partly supported | [66], [67], [3] |
+| Camera renders violet as blue + some red (§1.3.3) | stated from [10] | Raw red ≈ 0 at 400–410 nm; red comes from colour processing. Outcome ranges from pure blue to `#B800FF`, median `#8B00FF`. | **Corrected** | [67] |
+
+### C6. Decisions and what is still unknown
+
+- **Adopt** the two-path product model for printed photos (C5 row 1), with
+  inkjet values by default and a lab toggle for "offset yellow passes UV".
+- **Adopt** the hue corrections for `leak395`, `obaGlow` and
+  `dayglo-yellowgreen`. Keep the other tokens.
+- **Lab controls to expose:** paper type (OBA inkjet / rag / RC colour /
+  offset), the four `t_u` values, a lamp switch (BLB / 365 LED / 395 LED)
+  that selects the leak token and leak gain, and the strengths in B.
+- **Still unknown:**
+  - a same-lamp, same-camera measurement of the brightness of OBA paper,
+    day-glo, uranium glass, tonic water and teeth;
+  - ink transmittance at exactly 365 and 395 nm;
+  - the visible stray emission of filtered 365 nm LEDs;
+  - a real phone's colour matrix for violet;
+  - photos of actual picture prints (not blank paper) under a black light,
+    with the tones described.
+
+### Sources (follow-up)
+
+49. [Hersch 2008, "Spectral prediction model for color prints on paper with fluorescent additives", Applied Optics 47(36)](https://infoscience.epfl.ch/server/api/core/bitstreams/c809f855-4c64-406a-bbf0-614470afdb97/content) ([PubMed](https://pubmed.ncbi.nlm.nih.gov/19104523/))
+50. [FOGRA39L characterization data (ICC/Fogra)](https://www.color.org/chardata/FOGRA39L.txt) ([index page](https://www.color.org/chardata/fogra39.xalter))
+51. [John the Math Guy: What measurement condition is your spectro wearing?](http://johnthemathguy.blogspot.com/2014/10/what-measurement-condition-is-your.html)
+52. [X-Rite: The M factor (M0–M3 measurement conditions)](https://www.xrite.com/page/learn-more-about-m-standards)
+53. [Weaver 2009, A Study of Kodak Color Prints 1942–2008 (AIC Topics in Photographic Preservation 13)](https://resources.culturalheritage.org/pmgtopics/2009-volume-thirteen/13_13_Weaver.html)
+54. [Messier et al. 2005, Optical brightening agents in photographic paper (JAIC 44(1))](https://cool.culturalheritage.org/jaic/articles/jaic44-01-001.html)
+55. [The Print Guide 2010: OBAs and black light posters](http://the-print-guide.blogspot.com/2010/02/putting-glow-in-your-presswork-obas-and.html)
+56. [PrinterKnowledge: UV light test for OBAs on a variety of papers](https://www.printerknowledge.com/threads/uv-light-test-for-obaa-on-a-variety-papers.16764/)
+57. [Brighter is Better? Investigating spectral color prediction of ink on fluorescent paper (IS&T CIC 11)](https://library.imaging.org/admin/apis/public/api/ist/website/downloadArticle/cic/11/1/art00050): high ink density limits illumination reaching the substrate, so lighter colours show larger UV-in/UV-out differences
+58. [VanOrman & Nienhaus 2020, Kitchen Spectroscopy (Matter)](https://pmc.ncbi.nlm.nih.gov/articles/PMC7227594/)
+59. [Wikipedia: Quantum yield (standards table)](https://en.wikipedia.org/wiki/Quantum_yield)
+60. [OMLC PhotochemCAD: quinine sulfate](https://omlc.org/spectra/PhotochemCAD/html/081.html)
+61. [Folcher, Keller & Paris 1984, Luminescent solar concentrators using uranyl-doped silicate glasses (OSTI)](https://www.osti.gov/etdeweb/biblio/6030201)
+62. [Zhang et al. 2016, polymeric DSD-triazine fluorescent brightener (J. Wood Science)](https://jwoodscience.springeropen.com/articles/10.1007/s10086-016-1580-5)
+63. [Light Touch: Fluorescence and the color of Day-Glo paints (FSU/OSA)](https://osa.magnet.fsu.edu/teachersparents/articles/pdfs/fluorescence%20and%20the%20color%20of%20day%20glo%20paints.pdf)
+64. [DayGlo FAQ](https://www.dayglo.com/resources/faq/)
+65. [Fluorescence in direct dental resin composites and natural teeth (Dentistry Journal 14(9))](https://www.mdpi.com/2304-6767/14/9/535)
+66. [Burggraaff et al. 2019, Standardized spectral and radiometric calibration of consumer cameras (Optics Express 27(14))](https://home.strw.leidenuniv.nl/~burggraaff/papers/oe-27-14-19075.pdf)
+67. [Jiang, Liu, Gu & Süsstrunk 2013, Camera spectral sensitivity database (RIT; CC BY-NC-SA 4.0)](http://www.gujinwei.org/research/camspec/db.html)
+68. [CVRL: CIE 1931 2° colour-matching functions](http://www.cvrl.org/database/data/cmfs/ciexyz31_1.csv)
+69. [Huo et al. 2006, Robust automatic white balance algorithm using gray color points](https://acorn.stanford.edu/psych221/projects/2010/JasonSu/Papers/Robust%20Automatic%20White%20Balance%20Algorithm%20using%20Gray%20Color%20Points%20in%20Images.pdf)
+70. [US9007484B2: Alleviating dominant color failure in automatic white balance](https://patents.google.com/patent/US9007484)
+71. [David Kennard: 5 ultraviolet flashlights compared](https://www.davidkennardphotography.com/blog/1145-5-ultraviolet-flashlights-compared.xhtml)
+72. [Luminus SST-10-UV datasheet](https://download.luminus.com/datasheets/Luminus_SST-10-UV_Datasheet.pdf)
+73. [Vishay VLMU35A10-395/405 datasheet](https://www.vishay.com/docs/80411/vlmu35a10-xx5-130.pdf)
+74. [LED Museum: fluorescent and blacklight spectra](http://www.ledmuseum.net/spectra7.htm)
