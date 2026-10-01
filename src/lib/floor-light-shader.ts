@@ -123,7 +123,7 @@ uniform vec3 uThrough[${MAX_FLOOR_PANES}];
 uniform vec2 uMarks[${MAX_FLOOR_PANES}];
 uniform float uMarksProportional; // 1 while previewing ?try=marks
 /*
- * The casters (?try=castshadows, effects/optics/casters): what stands in the
+ * The casters (effects/optics/casters): what stands in the
  * lamp's light, painted in its own shape -- red just off the photograph
  * (uCasterNear px up), green resting on glass (uCasterOnGlass px up).
  */
@@ -383,7 +383,7 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
   light *= crossedT / max(clearestT, crossedT);
 
   /*
-   * What stands in the light (?try=castshadows): the share of the lamp's disc
+   * What stands in the light: the share of the lamp's disc
    * the casters hide from here, each at its own height -- projected from the
    * lamp, softened by the disc and stretched toward it at a slant, and for a
    * caster on a pane spread by the frost the light crosses on the way down

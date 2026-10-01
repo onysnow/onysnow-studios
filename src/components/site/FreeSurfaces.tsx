@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { previewing } from "@/effects/engine/preview";
 import { registerLitSurface } from "@/effects/scene/scene";
 
 /** How far type and a button stand off the photograph they are over (as on glass: components/site/Glass). */
@@ -9,7 +8,7 @@ const PLASTIC_STANDOFF = 0.5;
 
 /**
  * The copy and buttons that stand over a photograph rather than on a pane --
- * the hero's -- lit like those on the panes (item 52, ?try=castshadows; Ony,
+ * the hero's -- lit like those on the panes (item 52; Ony,
  * 2026-10-01: "None of these elements have dynamic shadows nor plastic
  * sheen"): the buttons catch the lamp, and everything throws its shadow onto
  * the photograph (effects/optics/casters).
@@ -17,7 +16,6 @@ const PLASTIC_STANDOFF = 0.5;
 export function FreeSurfaces() {
   const location = useLocation();
   useEffect(() => {
-    if (!previewing("castshadows")) return;
     let releases: (() => void)[] = [];
     // After the page's own content has rendered.
     const timer = window.setTimeout(() => {

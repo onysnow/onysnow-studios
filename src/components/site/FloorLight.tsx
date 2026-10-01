@@ -69,6 +69,12 @@ export function FloorLight() {
     if (!program) return;
     gl.useProgram(program);
     const quad = fullScreenTriangle(gl, program);
+    /*
+     * The shadows of what stands on the glass are worked out here (item 52):
+     * the stylesheet's own drop-shadows stand down while this runs, and come
+     * back wherever it does not (phones, reduced motion, no WebGL).
+     */
+    document.documentElement.setAttribute("data-cast-shadows", "");
 
     const U = (name: string) => gl.getUniformLocation(program, name);
     const uViewport = U("uViewport");
@@ -137,7 +143,7 @@ export function FloorLight() {
     // What a stack lets through relative to its bottom layer (1 for a pane on its own).
     const throughs = new Float32Array(MAX_FLOOR_PANES * 3);
     /*
-     * The casters (?try=castshadows, item 52): everything standing in the
+     * The casters (item 52): everything standing in the
      * lamp's light, painted in its own shape, for the floor to work out the
      * shadows on the photographs from (effects/optics/casters).
      */
@@ -384,9 +390,8 @@ export function FloorLight() {
       gl.uniform4fv(uRoughRatio, roughRatios);
       gl.uniform4fv(uRoughSpread, roughSpreads);
       gl.uniform3fv(uThrough, throughs);
-      const casting = previewing("castshadows");
-      gl.uniform1f(uHasCasters, casting ? 1 : 0);
-      if (casting && casterTex) {
+      gl.uniform1f(uHasCasters, casterTex ? 1 : 0);
+      if (casterTex) {
         paintCasters(casterCanvas, casterList());
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_2D, casterTex);
@@ -501,6 +506,7 @@ export function FloorLight() {
     );
 
     return () => {
+      document.documentElement.removeAttribute("data-cast-shadows");
       loop.stop();
       stopCharge();
       stopFlash();

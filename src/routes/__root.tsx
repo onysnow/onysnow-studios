@@ -206,7 +206,7 @@ function RootComponent() {
           <Vignette />
           {/* Secret 2, the darkroom (item 39, ?try=redroom). */}
           <RedRoom />
-          {/* The hero's copy and buttons, lit and throwing shadows (item 52, ?try=castshadows). */}
+          {/* The hero's copy and buttons, lit and throwing shadows (item 52). */}
           <FreeSurfaces />
           {/*
             Last in the tree, first on the screen.

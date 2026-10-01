@@ -1,6 +1,6 @@
 /**
  * Shadows thrown onto the photographs, through the glass (item 52,
- * ?try=castshadows; Ony, 2026-10-01: the shadows "dont go thru the glass like
+ * Ony, 2026-10-01: the shadows "dont go thru the glass like
  * theyre supposed to", and "The further away they are from the source of the
  * shadow combined with the angle, distance from the source of light and
  * brightness of that light the darker/more stretched/distorted it will be").
@@ -71,8 +71,12 @@ export function casterList(): Caster[] {
   for (const s of litSurfaceList()) {
     const onGlass = s.el.closest(".glass") !== null;
     if (s.el.classList.contains("transmitted")) continue;
+    /*
+     * A photograph is the floor itself; a card's print on a pane throws its
+     * shadow from the card ([data-cast], approved 2h), under the other cards.
+     */
     const isPhoto = s.el.querySelector("img") !== null || s.el.tagName === "IMG";
-    if (isPhoto && !onGlass) continue;
+    if (isPhoto) continue;
     out.push({ el: s.el, material: s.material, onGlass });
   }
   return out;

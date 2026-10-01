@@ -827,7 +827,7 @@ export const tuning: Record<string, Knob> = {
     min: 0,
     max: 1,
     step: 0.02,
-    hint: "With its switch above on (Shadows through the glass): how much of the lamp's light the type and buttons block -- 1 is solid ink blocking all of it, as type does; lower if the shadows read too heavy. How dark a shadow ends up still follows the lamp's own light there.",
+    hint: "How much of the lamp's light the type and buttons block -- 1 is solid ink blocking all of it, as type does; lower if the shadows read too heavy. How dark a shadow ends up still follows the lamp's own light there.",
   },
   shadowGap: {
     label: "Content depth",

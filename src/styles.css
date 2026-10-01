@@ -1092,17 +1092,17 @@ span:has(> .photo-surface) {
 }
 
 /*
- * ?try=castshadows (item 52): the type's shadows are worked out per pixel
+ * Where the floor light runs (item 52): the type's shadows are worked out per pixel
  * from its own glyphs (the floor light, effects/optics/casters), each letter
  * falling away from the lamp wherever the lamp is -- a whole block's shadow
  * offset one way (above) is wrong for the letters on the lamp's other side.
  */
-html[data-try~="castshadows"] .glass h1,
-html[data-try~="castshadows"] .glass h2,
-html[data-try~="castshadows"] .glass h3,
-html[data-try~="castshadows"] .glass h4,
-html[data-try~="castshadows"] .glass p,
-html[data-try~="castshadows"] .glass blockquote {
+html[data-cast-shadows] .glass h1,
+html[data-cast-shadows] .glass h2,
+html[data-cast-shadows] .glass h3,
+html[data-cast-shadows] .glass h4,
+html[data-cast-shadows] .glass p,
+html[data-cast-shadows] .glass blockquote {
   filter: none;
 }
 
@@ -1110,7 +1110,7 @@ html[data-try~="castshadows"] .glass blockquote {
  * The hero's copy and buttons stand above the photograph's floor light, as
  * the panes do: their shadows fall on the photograph, not over them.
  */
-html[data-try~="castshadows"] [data-photo] :is(h1, h2, h3, p, .plastic, a) {
+html[data-cast-shadows] [data-photo] :is(h1, h2, h3, p, .plastic, a) {
   position: relative;
   z-index: 2;
 }
@@ -1218,6 +1218,13 @@ html[data-try~="castshadows"] [data-photo] :is(h1, h2, h3, p, .plastic, a) {
 
 .plastic--dark::before {
   display: none;
+}
+
+/* Its shadow is the floor light's, through the glass, where that runs (item 52). */
+html[data-cast-shadows] .plastic--dark {
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / calc(0.45 * var(--plastic-on))),
+    0 0 5px 1px rgb(0 0 0 / calc(0.35 * var(--plastic-on)));
 }
 
 @media (prefers-reduced-motion: reduce) {
