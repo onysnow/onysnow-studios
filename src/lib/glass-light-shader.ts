@@ -1,7 +1,7 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { EDGE_SIDE_GLSL } from "@/effects/optics/edge-side.glsl";
-import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
+import { MARKS_FADE_FROM, SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { ENVIRONMENT_GLSL } from "@/effects/optics/environment.glsl";
 import { SHARD_MAP_GLSL } from "@/effects/optics/shard-map";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
@@ -1018,20 +1018,21 @@ void main() {
     rim += vec3((farTopLine * topOpenness + farBotLine * botOpenness) * withinX) * 5.0 * direct * EDGE_GLOW;
 
     /*
-     * The marks are on the whole front face, bevel included, right to its
-     * rim -- but never on the side faces you can see past it (Ony,
-     * 2026-10-01: "you can see where the texture/scratch/smudge layer in the
-     * glass cuts off ... It should go all the way to the edge but not down
-     * the sides if they are visible"). They stopped at the bevel's inner
-     * line, a clean strip round every pane. A side face shows within its own
-     * width of the rim (uFaces); the marks end there over a pixel.
+     * The front face, short of the side faces you can see past it (a side
+     * face shows within its own width of the rim, uFaces). The marks keep
+     * off the edge too (Ony, 2026-10-01: "I can see scratches and smudges on
+     * the edges/sides I don't want that"): faded out across the bevel, so
+     * there is still no line where they stop (his earlier note: "you can see
+     * where the texture/scratch/smudge layer in the glass cuts off").
      */
     float frontTop = smoothstep(topT - 0.5, topT + 1.0, dTop);
     float frontBot = smoothstep(botT - 0.5, botT + 1.0, dBot);
     float frontL = smoothstep(max(uFaces.z, 0.5) - 0.5, max(uFaces.z, 0.5) + 1.0, frag.x - uRect.x);
     float frontR = smoothstep(max(uFaces.w, 0.5) - 0.5, max(uFaces.w, 0.5) + 1.0, uRect.x + uRect.z - frag.x);
     float onFace = inside * frontTop * frontBot * mix(frontL * frontR, 1.0, uStraight);
-    vec3 face = vec3(onFace * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
+    // The marks: on the flat face, faded out across the bevel, none on the edge or the sides (MARKS_FADE_FROM).
+    float marksHere = onFace * smoothstep(${MARKS_FADE_FROM.toFixed(2)} * uEdgeWidth, uEdgeWidth, depth);
+    vec3 face = vec3(marksHere * rake * (smear * uGrimeRake + glint * uGrimeSpecks) * unlit);
 
     /*
      * ---- The lamp, reflected by the face ----
@@ -1081,7 +1082,7 @@ void main() {
      */
     // cos^3 of the slant: the irradiance falloff of effects/optics/transmission.
     float uvCos = lightHeight / sqrt(dl * dl + lightHeight * lightHeight);
-    vec3 fluor = onFace * uvCos * uvCos * uvCos * unlit * uvShare * FLUOR_GAIN
+    vec3 fluor = marksHere * uvCos * uvCos * uvCos * unlit * uvShare * FLUOR_GAIN
       * (smear * uOilGlow + glint * uDustGlow);
 
     /*

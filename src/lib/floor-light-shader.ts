@@ -1,7 +1,7 @@
 import { EDGE_PROFILE_GLSL } from "@/effects/optics/edge-profile.glsl";
 import { REFLECTION_GLSL } from "@/effects/optics/reflection.glsl";
 import { TRANSMISSION_GLSL } from "@/effects/optics/transmission.glsl";
-import { SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
+import { MARKS_FADE_FROM, SURFACE_LAYERS_GLSL } from "@/effects/optics/surface-layers.glsl";
 import { SHADOW_GLSL } from "@/effects/optics/shadow.glsl";
 import { WAVINESS_GLSL } from "@/effects/optics/waviness.glsl";
 import { LIGHTS_GLSL } from "@/effects/light/light-uniforms";
@@ -382,8 +382,8 @@ vec4 floorAt(vec2 P, float lit, vec2 lightXY, float height, float radius) {
       marks = (marks + around * uHasSurface) / 5.0;
       cover = marksCover(marks, uGrimeFloor, 1.0) * uMarks[i];
     }
-    // On the whole front face, bevel included, to the rim (Ony, 2026-10-01), as the glass shader draws them.
-    cover *= smoothstep(0.0, 0.05, x);
+    // On the flat face only, faded out across the bevel's inner part, as the glass shader draws them (MARKS_FADE).
+    cover *= smoothstep(${MARKS_FADE_FROM.toFixed(2)}, 1.0, x);
     float groove = cover.x;
     float smear = cover.y;
     through *= (1.0 - SMUDGE_EXTINCTION * smear) * (1.0 - SCRATCH_SHADOW * groove);

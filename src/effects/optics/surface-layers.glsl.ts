@@ -12,6 +12,16 @@ import { HEX_TILE_GLSL } from "./hex-tile.glsl";
  *
  * GLSL ES 1.0. Keep backticks out of the comments inside the literal.
  */
+/**
+ * Where the marks (smudges, scratches, dust) stop, as a fraction of the
+ * bevel's width in from the rim: none on the outer part of the edge, fading
+ * in across the rest of it, full on the flat face (Ony, 2026-10-01: "I can
+ * see scratches and smudges on the edges/sides I don't want that"). A fade,
+ * not a cut, so there is no line where they end (his earlier note: "you can
+ * see where the texture/scratch/smudge layer in the glass cuts off").
+ */
+export const MARKS_FADE_FROM = 0.35;
+
 export const SURFACE_LAYERS_GLSL = /* glsl */ `
 ${HEX_TILE_GLSL}
 
