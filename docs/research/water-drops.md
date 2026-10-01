@@ -1290,6 +1290,15 @@ FROM INSIDE, through the glass:
   the drops out); over a drop, the front face's own room reflection is drawn
   by the water layer.
 
+Second pass the same day (Ony: "I don't see the rain drops catching the
+light from the flash charge whatsoever"): a sight line the drop reflects too
+steeply to leave the front face was drawn black. It runs on inside the pane
+and lands on the dry frost round the drop, which glows under a lamp; it now
+shows that glow (Lambert from each lamp's height, FROST_GLOW), so a drop's
+rim lights up near a lamp. And each glint gets the camera's bloom, a faint
+lobe four times its width (BLOOM_*), so it reads as a small star, not a lone
+pixel.
+
 No shadow is drawn: with the rain on the far face and the lamp in front,
 there is nothing behind a drop near enough to show one (the scene is metres
 away); the drop shows instead as clear glass in the lit frost.

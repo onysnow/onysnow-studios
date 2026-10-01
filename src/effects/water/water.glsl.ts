@@ -205,6 +205,11 @@ const float DROPLET_FULL = ${DROPLET_HEIGHT_MAX.toFixed(2)};
  * it does in every photograph of a lamp over wet glass).
  */
 const float LAMP_CORE = 400.0;
+/* How bright the dry frost glows straight under a lamp, against the lamp's colour (estimate, matched to the light layer's glow). */
+const float FROST_GLOW = 1.5;
+/* The camera's bloom round a glint: how wide against the glint, and what share of its light (estimate). */
+const float BLOOM_WIDTH = 4.0;
+const float BLOOM_SHARE = 0.04;
 
 vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
   vec2 rel = (pt - image.xy) / max(image.zw, vec2(1.0));
@@ -388,7 +393,27 @@ void main() {
     vec3 R = reflect(tW, Nw);
     vec2 kOut = uIor * R.xy;
     float k2 = dot(kOut, kOut);
-    vec3 back = vec3(0.0);
+    /*
+     * What the glass's own frosted face looks like here, lit by the lamps:
+     * the dry etch round the drop scatters each lamp's light, brightest
+     * under it (the glow the light layer draws). A sight line trapped in the
+     * glass -- reflected by the drop too steeply to leave the front face --
+     * runs on inside the pane and lands on that frost a little way off, so
+     * it shows THIS: near a lamp the drop's rim lights up with the glow
+     * round it, as a drop on a lit frosted window does; far from any lamp
+     * it stays dark. Lambert on the face from each lamp's height,
+     * (h^2 / (d^2 + h^2))^1.5, 1 straight under it (FROST_GLOW scales it to
+     * the light layer's glow, estimate).
+     */
+    vec3 frostLit = vec3(0.0);
+    for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
+      if (i >= uLightCount) break;
+      vec2 dl = page - uLightPos[i].xy;
+      float hz = max(uLightPos[i].z, 1.0);
+      float q = hz * hz / (dot(dl, dl) + hz * hz);
+      frostLit += uLightColour[i] * FROST_GLOW * q * sqrt(q);
+    }
+    vec3 back = frostLit;
     if (k2 < 1.0) {
       vec3 dir = vec3(kOut, sqrt(1.0 - k2));              // into the room, toward you
       vec3 room = uHasRoom > 0.5
@@ -418,6 +443,14 @@ void main() {
         float disc = 1.0 - smoothstep(wide * 0.6, wide * 1.4, off);
         float core = LAMP_CORE * pow(16.0 / max(uLightRadius[i], 1.0), 2.0);
         back += uLightColour[i] * disc * core * (size * size) / (wide * wide);
+        /*
+         * The camera's bloom round it: a clipped highlight spreads into the
+         * pixels round it in any photograph (the lens's veiling glare), so
+         * a glint reads as a bright star a few pixels across, not a lone
+         * pixel. A wide, faint lobe on the same direction (BLOOM_*, estimate).
+         */
+        float bl = off / (wide * BLOOM_WIDTH);
+        back += uLightColour[i] * core * BLOOM_SHARE * (size * size) / (wide * wide) * exp(-bl * bl);
       }
     }
     vec3 water = through * T * (1.0 - Fin) + back * Fin;
