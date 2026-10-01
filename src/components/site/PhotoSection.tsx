@@ -109,9 +109,17 @@ function SeamSection({
 
     const fit = () => {
       const h = el.getBoundingClientRect().height;
-      // Split at the middle; if one side has no photograph, the other takes it all.
-      const up = above ? (below ? h / 2 : h) : 0;
-      const down = below ? h - up : 0;
+      /*
+       * The photograph above runs on under the whole band; the next one
+       * starts at the band's bottom edge, where the glass's edge stands over
+       * the join. They used to meet at the middle, and through clear glass
+       * (Frost 0) that showed as the top photograph stopping in a hard line
+       * partway down the band, the rest another, darker picture (Ony,
+       * 2026-10-01, item 55). With no photograph above, the one below takes
+       * the band.
+       */
+      const up = above ? h : 0;
+      const down = above ? 0 : below ? h : 0;
       above?.style.setProperty("--seam-below", `${up}px`);
       below?.style.setProperty("--seam-above", `${down}px`);
       el.style.marginTop = `${-up}px`;
