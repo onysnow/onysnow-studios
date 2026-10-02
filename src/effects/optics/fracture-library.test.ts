@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { placeBreak, pickEntry, type BreakEntry } from "./fracture-library";
+import { placeBreak, pickEntry, type BreakEntry, type LibraryIndex } from "./fracture-library";
 import { polygonArea } from "./fracture";
 
 /*
@@ -18,8 +18,10 @@ describe("a simulated break placed on a pane", () => {
     const f = placeBreak(entry, { ...pane, seed: 1 });
     expect(f.cracks.length).toBeGreaterThan(20);
     expect(f.duration).toBeGreaterThan(100);
-    const t0 = f.cracks.map((c) => Math.min(...c.t.filter((v: number) => v > 0)));
+    const t0 = f.cracks.map((c) => c.startedAt);
     for (let i = 1; i < t0.length; i++) expect(t0[i]).toBeGreaterThanOrEqual(t0[i - 1]! - 1e-6);
+    // The kept times run with the crack: each point after the one before it.
+    for (const c of f.cracks) expect(Math.min(...c.t)).toBeGreaterThanOrEqual(0);
     for (const c of f.cracks)
       for (const p of c.pts) {
         expect(p.x).toBeGreaterThanOrEqual(-1e-6);
@@ -56,4 +58,36 @@ describe("a simulated break placed on a pane", () => {
     expect(pickEntry({ annealed: [] }, "annealed", 1)).toBeNull();
     expect(pickEntry({}, "laminated", 1)).toBeNull();
   });
+});
+
+describe("every entry in the library", () => {
+  const index = JSON.parse(
+    readFileSync(new URL("../../../public/breaks/index.json", import.meta.url), "utf8"),
+  ) as LibraryIndex;
+  const names = Object.values(index).flat();
+  it("is listed and present", () => {
+    expect(names.length).toBeGreaterThanOrEqual(4);
+  });
+  for (const name of names) {
+    it(`${name} places on a pane, cuts it into pieces, and its cracks stay inside`, () => {
+      const e = JSON.parse(
+        readFileSync(new URL(`../../../public/breaks/${name}.json`, import.meta.url), "utf8"),
+      ) as BreakEntry;
+      expect(e.format).toBe("onysnow-break-1");
+      for (const seed of [1, 2, 5]) {
+        const f = placeBreak(e, { ...pane, seed });
+        expect(f.cracks.length).toBeGreaterThan(15);
+        const area = f.shards.reduce((a, s) => a + polygonArea(s.poly), 0);
+        expect(area / (pane.w * pane.h)).toBeCloseTo(1, 2);
+        expect(f.shards.length).toBeGreaterThan(3);
+        for (const c of f.cracks)
+          for (const p of c.pts) {
+            expect(p.x).toBeGreaterThanOrEqual(-1e-6);
+            expect(p.x).toBeLessThanOrEqual(pane.w + 1e-6);
+            expect(p.y).toBeGreaterThanOrEqual(-1e-6);
+            expect(p.y).toBeLessThanOrEqual(pane.h + 1e-6);
+          }
+      }
+    });
+  }
 });

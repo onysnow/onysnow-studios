@@ -53,11 +53,15 @@ export type BreakEntry = {
 
 /** The site's scale: pixels per millimetre of glass (docs/broken-glass-system.md 3.4). */
 export const PX_PER_MM = 4;
+/** A crack end with no other crack within this of it ended in the open, mm. */
+const FREE_END_MM = 2;
 
 /** A library crack's points in pane px, with its arrival time, after placement. */
 export type PlacedCrack = Crack & {
   /** When each point cracked, microseconds after the strike. */
   t: number[];
+  /** When the crack started, microseconds: the order the cracks were laid in. */
+  startedAt: number;
   face: "both" | "struck" | "back";
 };
 
@@ -128,7 +132,13 @@ export function placeBreak(entry: BreakEntry, im: Impact): LibraryFracture {
   const stopMm = (entry.edge_mm ?? 12) + 2.5;
   const nearEdge = (p: [number, number]) =>
     Math.abs(p[0]) > lw / 2 - stopMm || Math.abs(p[1]) > lh / 2 - stopMm;
-  for (const { c: raw } of ordered) {
+  // A crack end in the open: on no other crack (a T-junction) and not at the frame.
+  const allPts = entry.cracks.map((c) => c.pts);
+  const endsFree = (p: [number, number], own: number) =>
+    !allPts.some(
+      (pts, i) => i !== own && pts.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < FREE_END_MM),
+    );
+  for (const { c: raw, i: rawIndex, t0: startedAt } of ordered) {
     if (raw.pts.length < 2 || alongEdge(raw.pts)) continue;
     /*
      * The line runs the way the crack ran: from where it started (earliest
@@ -143,14 +153,22 @@ export function placeBreak(entry: BreakEntry, im: Impact): LibraryFracture {
     const c = forward ? raw : { ...raw, pts: [...raw.pts].reverse(), t: [...raw.t].reverse() };
     const pts = c.pts.map(place);
     const times = [...c.t];
+    const kind = kindOf(pts, c.pts, at, crush, [ix, iy]);
     /*
      * A crack the simulated frame stopped would have run on in a bigger
-     * pane: it is carried straight on, in its last direction, to this pane's
-     * own edge (the network's border catches it), with the arrival time
-     * running on at the same speed.
+     * pane, and a radial still running in the open when the simulation
+     * ended (the simulated cracks run slower than real ones, which cross a
+     * pane in tens of microseconds) would have reached the frame: either is
+     * carried straight on, in its last direction, to this pane's own edge
+     * (the network's border catches it), with the arrival time running on
+     * at the same speed. A branch that ends in the open stopped on its own,
+     * as real branches do, and stays where it stopped.
      */
     const last = c.pts[c.pts.length - 1]!;
-    if (nearEdge(last) && pts.length >= 2) {
+    const fromImpactMm = Math.hypot(last[0] - ix, last[1] - iy);
+    const runsOn =
+      nearEdge(last) || (kind === "radial" && fromImpactMm > 8 && endsFree(last, rawIndex));
+    if (runsOn && pts.length >= 2) {
       const b = pts[pts.length - 1]!;
       const a = pts[Math.max(0, pts.length - 5)]!; // the last few millimetres set the direction
       const d = Math.hypot(b.x - a.x, b.y - a.y) || 1;
@@ -160,7 +178,6 @@ export function placeBreak(entry: BreakEntry, im: Impact): LibraryFracture {
       const ta = times[times.length - 2]!;
       times.push(tb + Math.max(tb - ta, 0.5) * (reach / d));
     }
-    const kind = kindOf(pts, c.pts, at, crush, [ix, iy]);
     let from = -1;
     const path: Pt[] = [];
     const arrived: number[] = [];
@@ -191,7 +208,7 @@ export function placeBreak(entry: BreakEntry, im: Impact): LibraryFracture {
       if (!inPane(q)) break;
     }
     if (path.length >= 2) {
-      cracks.push({ kind, pts: path, segs, t: arrived, face: c.face });
+      cracks.push({ kind, pts: path, segs, t: arrived, startedAt, face: c.face });
       duration = Math.max(duration, ...arrived.filter((v) => v > 0));
     }
   }

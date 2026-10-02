@@ -24,7 +24,12 @@ import { faceLean, faceNormal, faceRoom, type RoomSampler } from "@/effects/opti
 import { EDGES, edgeAt, sideTrace, type Edge } from "@/effects/optics/crack-side";
 import { decodeRadiance, kneeRadiance, ROOM_KNEE, roomUvDir } from "@/effects/optics/environment";
 import { roomLight } from "@/effects/light/lights";
-import { viewState } from "@/effects/scene/scene";
+import { glassGeometry, viewState } from "@/effects/scene/scene";
+import { sharedGl } from "@/effects/engine/gl";
+import { photoTextures } from "@/effects/engine/photo-texture";
+import { paneLook } from "@/effects/engine/pane-look";
+import { roomTexture } from "@/effects/engine/room-texture";
+import { crackView, type CrackView } from "@/effects/optics/crack-view";
 import { camera } from "@/effects/camera/camera";
 import { previewing } from "@/effects/engine/preview";
 import { adoptLayer } from "@/effects/engine/compositor";
@@ -339,6 +344,24 @@ export function BrokenGlass({
      */
     if (pane && previewing("shardlight")) adoptLayer(pane, "pane:broken", canvas);
     const shardMap = document.createElement("canvas");
+    /*
+     * The crack-face view pass (broken glass B2, ?try=breaklib;
+     * effects/optics/crack-view): the faces drawn per pixel as what the
+     * eye's ray meets inside the glass, so the picture folds at each crack.
+     * The ribbons below stand in where there is no WebGL.
+     */
+    let faces: CrackView | null = null;
+    let facesPhotos: ReturnType<typeof photoTextures> | null = null;
+    let facesRoom: ReturnType<typeof roomTexture> | null = null;
+    if (previewing("breaklib")) {
+      const s = sharedGl();
+      if (s) {
+        facesPhotos = photoTextures(s.gl, () => wake());
+        facesRoom = roomTexture(s.gl, () => wake());
+        faces = crackView(facesPhotos, facesRoom, kind);
+      }
+    }
+    let facesFor = "";
     // A photographed break's crack shape, as shade and as the light on it.
     const maskShade = document.createElement("canvas");
     const maskLight = document.createElement("canvas");
@@ -433,6 +456,10 @@ export function BrokenGlass({
       }
       if (!broken) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (faces && facesFor !== `${brokeFor}|${dpr}`) {
+        faces.bake(broken, w, h, dpr, broken.crush * 4 + 10);
+        facesFor = `${brokeFor}|${dpr}`;
+      }
       if (canvas.width !== Math.round(w * dpr)) canvas.width = Math.round(w * dpr);
       if (canvas.height !== Math.round(h * dpr)) canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -509,6 +536,46 @@ export function BrokenGlass({
         }
       }
 
+      // ---- The crack faces, per pixel (B2): where the eye's ray meets a face, the picture folds. ----
+      if (faces) {
+        const geom = pane ? (glassGeometry().find((g) => g.el === pane) ?? null) : null;
+        const lamps = pointLights()
+          .filter((l) => l.charge > 0.002)
+          .map((l) => ({
+            x: l.x,
+            y: l.y,
+            z: l.height,
+            colour: [l.colour[0] * l.charge, l.colour[1] * l.charge, l.colour[2] * l.charge] as [
+              number,
+              number,
+              number,
+            ],
+          }));
+        faces.draw(ctx, {
+          w,
+          h,
+          scale: dpr,
+          left: rect.left,
+          top: rect.top,
+          pane: geom,
+          look: pane ? paneLook(pane) : { saturate: 1, fill: [0, 0, 0, 0] },
+          thickness: geom?.causes.thickness ?? THICKNESS,
+          gap: geom?.causes.gap ?? 70,
+          ior: geom?.causes.material.ior ?? N_GLASS,
+          frostBlur: (geom?.causes.material.frost ?? 1) > 0 ? FROST_BLUR * 0.6 : 0,
+          eye: {
+            x: document.documentElement.clientWidth / 2 + viewState.eyeX,
+            y: document.documentElement.clientHeight / 2 + viewState.eyeY,
+            z: camera.distance(document.documentElement.clientWidth),
+          },
+          arrivedUs: broken.duration
+            ? ((performance.now() - struckAt) * 1000) / SLOW_MOTION
+            : Infinity,
+          lights: lamps,
+          roomExposure: roomLight.gain,
+        });
+      }
+
       // ---- The crushed spot: pulverised glass, white, crazed with tiny cracks. ----
       const ix = broken.impact.x;
       const iy = broken.impact.y;
@@ -523,7 +590,9 @@ export function BrokenGlass({
         const spot = ctx.createRadialGradient(ix, iy, 0, ix, iy, cr);
         // Pulverised glass scatters: pale, but no paint-white disc (Ony: cracks are glass).
         spot.addColorStop(0, "rgb(236 244 242 / 0.5)");
-        spot.addColorStop(1, "rgb(214 232 228 / 0.22)");
+        spot.addColorStop(0.7, "rgb(214 232 228 / 0.22)");
+        // Fading to nothing: a simulated break has no crushed-rim crack to clip it to the spot.
+        spot.addColorStop(1, "rgb(214 232 228 / 0)");
         ctx.fillStyle = spot;
         ctx.fillRect(ix - cr, iy - cr, cr * 2, cr * 2);
         // Crazing: short cracks every way, and little arcs where flakes spalled.
@@ -947,6 +1016,9 @@ export function BrokenGlass({
     return () => {
       disposed = true;
       if (pane) clearShardMap(pane);
+      faces?.dispose();
+      facesPhotos?.dispose();
+      facesRoom?.dispose();
       cancelAnimationFrame(frame);
       window.clearTimeout(late);
       stop();

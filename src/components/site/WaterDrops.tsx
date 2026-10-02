@@ -15,6 +15,9 @@ import { pointLights, roomLight, strongestCharge } from "@/effects/light/lights"
 import { floorScale } from "@/effects/light/floor-scale";
 import { publishLensMap } from "@/effects/water/lens-map";
 import { floorMap } from "@/effects/light/floor-map";
+import { photoTextures } from "@/effects/engine/photo-texture";
+import { paneLook } from "@/effects/engine/pane-look";
+import { roomTexture } from "@/effects/engine/room-texture";
 import { roomFillOverride } from "@/effects/light/room-fill";
 import { quality, surfaceScaleCap } from "@/effects/engine/quality";
 import { rainType } from "@/effects/water/rain-types";
@@ -588,111 +591,17 @@ export function WaterDrops() {
     };
 
     /*
-     * The photographs, as textures: resampled to a power of two so they can
-     * be mipmapped -- a drop shows the photograph shrunk, and without
-     * mipmaps the shrunk image shimmers.
+     * The photographs, as textures (effects/engine/photo-texture): the same
+     * loader the crack faces use, mipmapped so a drop's shrunk image does
+     * not shimmer.
      */
-    const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
-    const photos = new Map<string, WebGLTexture | null>();
-    const texSize = new WeakMap<WebGLTexture, [number, number]>();
-    const pow2 = (n: number) => 2 ** Math.round(Math.log2(Math.max(n, 1)));
-    const photo = (src: string, fallback?: string): WebGLTexture | null => {
-      if (photos.has(src)) return photos.get(src) ?? null;
-      photos.set(src, null);
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const c = document.createElement("canvas");
-        c.width = Math.min(pow2(img.naturalWidth), maxTex, 4096);
-        c.height = Math.min(pow2(img.naturalHeight), maxTex, 4096);
-        const ctx = c.getContext("2d");
-        if (!ctx) return;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        const tex = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, c);
-        gl.generateMipmap(gl.TEXTURE_2D);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        if (tex) texSize.set(tex, [c.width, c.height]);
-        photos.set(src, tex);
-        task.wake();
-      };
-      // The full-size rendition may not be served for a texture (no CORS): the small one is.
-      img.onerror = () => {
-        if (!fallback || fallback === src) return;
-        const poll = () => {
-          const tex = photo(fallback);
-          if (tex) {
-            photos.set(src, tex);
-            task.wake();
-          } else window.setTimeout(poll, 250);
-        };
-        poll();
-      };
-      img.src = src;
-      return null;
-    };
+    const photoTex = photoTextures(gl, () => task.wake(), gl.TEXTURE1);
+    const photo = (src: string, fallback?: string) => photoTex.get(src, fallback);
 
-    // The room the glass reflects (effects/optics/environment), level 0 as GlassSolid loads it.
-    let room: WebGLTexture | null = null;
-    const roomSrc = document.documentElement.getAttribute("data-room-hdr");
-    if (roomSrc) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const c = document.createElement("canvas");
-        c.width = 1024;
-        c.height = 256;
-        c.getContext("2d")?.drawImage(img, 0, 0, c.width, c.height);
-        room = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE3);
-        gl.bindTexture(gl.TEXTURE_2D, room);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, c);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        task.wake();
-      };
-      img.src = roomSrc;
-    }
+    // The room the glass reflects (effects/engine/room-texture), shared with the crack faces.
+    const roomTex = roomTexture(gl, () => task.wake(), gl.TEXTURE3);
 
-    /*
-     * How the pane colours what it shows, read from its own style: its
-     * backdrop-filter's saturate() and its fill. Clear wet glass shows the
-     * photograph through the same glass, without the blur.
-     */
-    const looks = new WeakMap<
-      HTMLElement,
-      { saturate: number; fill: [number, number, number, number] }
-    >();
-    const probe = document.createElement("canvas");
-    probe.width = probe.height = 1;
-    const probeCtx = probe.getContext("2d", { willReadFrequently: true });
-    const lookOf = (el: HTMLElement) => {
-      let l = looks.get(el);
-      if (l) return l;
-      const cs = getComputedStyle(el);
-      const m = /saturate\(([\d.]+)(%?)\)/.exec(cs.backdropFilter || "");
-      const saturate = m ? Number(m[1]) / (m[2] ? 100 : 1) : 1;
-      let fill: [number, number, number, number] = [0, 0, 0, 0];
-      if (probeCtx) {
-        probeCtx.clearRect(0, 0, 1, 1);
-        probeCtx.fillStyle = cs.backgroundColor || "transparent";
-        probeCtx.fillRect(0, 0, 1, 1);
-        const d = probeCtx.getImageData(0, 0, 1, 1).data;
-        // Unpremultiplied, as getImageData returns it.
-        fill = [d[0]! / 255, d[1]! / 255, d[2]! / 255, d[3]! / 255];
-      }
-      l = { saturate, fill };
-      looks.set(el, l);
-      return l;
-    };
+    const lookOf = paneLook;
 
     const sims = new Map<HTMLElement, DropSim>();
     const states = new Map<HTMLElement, PaneState>();
@@ -1259,7 +1168,7 @@ export function WaterDrops() {
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.uniform1i(u.uPhoto!, 1);
       gl.uniform1f(u.uHasPhoto!, tex ? 1 : 0);
-      const size = tex ? texSize.get(tex) : undefined;
+      const size = tex ? photoTex.size(tex) : undefined;
       gl.uniform2f(u.uPhotoTexels!, size?.[0] ?? 1024, size?.[1] ?? 1024);
       gl.uniform4f(u.uImage!, pane.ix, pane.iy, pane.iw, pane.ih);
       gl.uniform3f(u.uImageFit!, pane.ia, pane.ifocus.x, pane.ifocus.y);
@@ -1298,9 +1207,9 @@ export function WaterDrops() {
       gl.uniform4f(u.uFill!, ...look.fill);
       gl.uniform3f(u.uRoom!, 0.05, 0.045, 0.04);
       gl.activeTexture(gl.TEXTURE3);
-      gl.bindTexture(gl.TEXTURE_2D, room);
+      gl.bindTexture(gl.TEXTURE_2D, roomTex.texture);
       gl.uniform1i(u.uRoomTex!, 3);
-      gl.uniform1f(u.uHasRoom!, room ? 1 : 0);
+      gl.uniform1f(u.uHasRoom!, roomTex.texture ? 1 : 0);
       gl.uniform1f(u.uRoomExposure!, roomLight.gain);
       const vw = document.documentElement.clientWidth || window.innerWidth;
       const vhNow = document.documentElement.clientHeight || window.innerHeight;
@@ -1504,7 +1413,8 @@ export function WaterDrops() {
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
       for (const layer of layers.values()) layer.remove();
-      for (const tex of photos.values()) if (tex) gl.deleteTexture(tex);
+      photoTex.dispose();
+      roomTex.dispose();
       for (const st of states.values()) {
         gl.deleteTexture(st.droplets);
         gl.deleteFramebuffer(st.dropletFbo);
