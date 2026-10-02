@@ -270,6 +270,9 @@ uniform float uLightFloor[${MAX_WATER_LIGHTS}];  // each lamp's light on the pho
 uniform vec3 uLightTint[${MAX_WATER_LIGHTS}];    // each lamp's colour, unweighted
 uniform float uRoomFill;      // the floor light's room fill: how dark the room goes while a lamp burns
 uniform float uBurning;       // the strongest lamp's charge
+uniform sampler2D uFloorMap;  // the floor light's own output this frame (effects/light/floor-map): colour over alpha
+uniform float uHasFloorMap;
+uniform vec2 uFloorSize;      // the viewport it covers, CSS px
 uniform float uNear;          // 1: the rain is on the near face of clear glass (you see each drop's outer surface)
 uniform float uFrosted;       // 1: the pane is frosted (its etch glows where a lamp lights it)
 uniform vec2 uPhotoTexels;    // the photograph's texture, texels
@@ -352,22 +355,34 @@ vec3 seenThroughWater(vec2 page, float lod, float footprint) {
   vec3 c = photoLod(clamp(coverUv(page, uImage, uImageFit), 0.0, 1.0), lod);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = clamp(mix(vec3(l), c, uSaturate), 0.0, 1.0);
-  float e = 0.0;
-  vec3 coloured = vec3(0.0);
-  for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
-    if (i >= uLightCount) break;
-    vec2 dl = page - uLightPos[i].xy;
-    float hz = max(uLightPos[i].z, 1.0);
-    float q = hz * hz / (dot(dl, dl) + hz * hz);
-    float one = uLightFloor[i] * q * sqrt(q);
-    e += one;
-    coloured += uLightTint[i] * one;
+  if (uHasFloorMap > 0.5) {
+    /*
+     * The floor light's own output where this lens lands (rain W2): the
+     * print as the floor lit it this frame, with the glass's shadows, the
+     * caustics and the other drops' shadows, composited as the floor layer
+     * is over the page: photo (1 - a) + colour a.
+     */
+    vec4 f = texture2D(uFloorMap, clamp(vec2(page.x / uFloorSize.x, 1.0 - page.y / uFloorSize.y), 0.0, 1.0));
+    c = c * (1.0 - f.a) + f.rgb * f.a;
+  } else {
+    // No floor this frame (the lamp off, or a frame before it drew): the floor's lamp model, the same maths.
+    float e = 0.0;
+    vec3 coloured = vec3(0.0);
+    for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
+      if (i >= uLightCount) break;
+      vec2 dl = page - uLightPos[i].xy;
+      float hz = max(uLightPos[i].z, 1.0);
+      float q = hz * hz / (dot(dl, dl) + hz * hz);
+      float one = uLightFloor[i] * q * sqrt(q);
+      e += one;
+      coloured += uLightTint[i] * one;
+    }
+    float E = 1.0 - exp(-e * 1.15);
+    vec3 warm = e > 1e-5 ? coloured / e : vec3(1.0);
+    float roomFill = mix(1.0, clamp(uRoomFill, 0.0, 1.0), uBurning);
+    float m = min(1.0, roomFill + (1.0 - roomFill) * E);
+    c = c * m * (1.0 - E) + warm * E;
   }
-  float E = 1.0 - exp(-e * 1.15);
-  vec3 warm = e > 1e-5 ? coloured / e : vec3(1.0);
-  float roomFill = mix(1.0, clamp(uRoomFill, 0.0, 1.0), uBurning);
-  float m = min(1.0, roomFill + (1.0 - roomFill) * E);
-  c = c * m * (1.0 - E) + warm * E;
   /*
    * The photograph's lights (rain W1): a print records a lamp or a neon
    * clipped to white, but it was far brighter than white, and a drop's lens

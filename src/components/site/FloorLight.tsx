@@ -31,6 +31,7 @@ import { t } from "@/lib/tuning";
 import { floorScale } from "@/effects/light/floor-scale";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
 import { lensMap } from "@/effects/water/lens-map";
+import { publishFloorMap } from "@/effects/light/floor-map";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -253,6 +254,15 @@ export function FloorLight() {
     };
     setLive(false);
 
+    /*
+     * The whole lit floor, copied from the buffer into a texture before the
+     * buffer is cut up for the layers (effects/light/floor-map): the water
+     * reads it so the print seen through a drop is the print as lit here.
+     */
+    let floorTex: WebGLTexture | null = null;
+    let floorTexW = 0;
+    let floorTexH = 0;
+    let floorFrame = 0;
     const step = (now: number) => {
       // Any light burning: the lamp while charged, the flash for its pulse.
       const charge = strongestCharge();
@@ -262,6 +272,7 @@ export function FloorLight() {
           clearUnder();
           wasLit = false;
           setLive(false);
+          publishFloorMap(null);
         }
         return false;
       }
@@ -467,6 +478,29 @@ export function FloorLight() {
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+      // The lit floor, whole, for the water (a copy on the GPU; nothing read back to the CPU).
+      if (!floorTex) floorTex = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE6);
+      gl.bindTexture(gl.TEXTURE_2D, floorTex);
+      if (floorTexW !== bw || floorTexH !== bh) {
+        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, bw, bh, 0);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        floorTexW = bw;
+        floorTexH = bh;
+      } else {
+        gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, bw, bh);
+      }
+      floorFrame++;
+      publishFloorMap({
+        texture: floorTex,
+        width: bw / scale,
+        height: bh / scale,
+        frame: floorFrame,
+      });
+
       // Same task as the draw, so the buffer is still there to copy from.
       for (const pane of drawnPanes) {
         const w = Math.max(1, Math.round(pane.w * scale));
@@ -566,6 +600,8 @@ export function FloorLight() {
       for (const layer of under.values()) layer.remove();
       for (const layer of received.values()) layer.remove();
       for (const tex of layers.values()) gl.deleteTexture(tex);
+      publishFloorMap(null);
+      if (floorTex) gl.deleteTexture(floorTex);
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);
       stopLoss();

@@ -14,6 +14,7 @@ import { glassGeometry } from "@/effects/scene/scene";
 import { pointLights, roomLight, strongestCharge } from "@/effects/light/lights";
 import { floorScale } from "@/effects/light/floor-scale";
 import { publishLensMap } from "@/effects/water/lens-map";
+import { floorMap } from "@/effects/light/floor-map";
 import { roomFillOverride } from "@/effects/light/room-fill";
 import { quality, surfaceScaleCap } from "@/effects/engine/quality";
 import { rainType } from "@/effects/water/rain-types";
@@ -232,6 +233,9 @@ export function WaterDrops() {
       "uLightTint",
       "uRoomFill",
       "uBurning",
+      "uFloorMap",
+      "uHasFloorMap",
+      "uFloorSize",
       "uNear",
       "uFrosted",
       "uPhotoTexels",
@@ -1241,6 +1245,13 @@ export function WaterDrops() {
       gl.uniform3fv(u.uLightTint!, lightTint);
       gl.uniform1f(u.uRoomFill!, Math.min(t("roomFill"), roomFillOverride()));
       gl.uniform1f(u.uBurning!, strongestCharge());
+      // The lit floor this frame, where the lenses land (rain W2; effects/light/floor-map).
+      const floorNow = floorMap();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, floorNow ? floorNow.texture : null);
+      gl.uniform1i(u.uFloorMap!, 0);
+      gl.uniform1f(u.uHasFloorMap!, floorNow ? 1 : 0);
+      gl.uniform2f(u.uFloorSize!, floorNow?.width ?? 1, floorNow?.height ?? 1);
       /*
        * The photograph's own lights (PhotoLights: its brightest spots, as
        * lights under the glass), carried through each drop's lens (rain W1).

@@ -519,6 +519,66 @@ def run_sheet(name, folder, dest):
     print("sheet", dest)
 
 
+def run_sheet2(name, folder, refs, dest, series="Pressed in a frame, round tip"):
+    """The B0 sheet: the simulated break beside real panes and reference photographs, with the numbers."""
+    root = HERE / "out" / name
+    stats = json.loads((root / "stats.json").read_text())
+    nij_all = json.loads((HERE / "nij-stats.json").read_text())
+    nij = nij_all[series]
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
+        bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 17)
+    except OSError:
+        font = bold = ImageFont.load_default()
+    big = 520
+    small = 300
+    W = big * 2 + 40
+    sheet = Image.new("RGB", (W, big + small + 330), "white")
+    d = ImageDraw.Draw(sheet)
+    d.text((10, 10), f"Simulated here (Peridynamics.jl, {name}): crack lines through the pane, and their order of arrival", font=bold, fill="black")
+    sheet.paste(Image.open(root / "tracing-hi.png").convert("RGB").resize((big, big), Image.LANCZOS), (10, 36))
+    sheet.paste(Image.open(root / "arrival.png").convert("RGB").resize((big, big), Image.LANCZOS), (big + 30, 36))
+    d.text((big + 30, big + 40), "yellow: first cracks; purple: last", font=font, fill="black")
+    y2 = big + 66
+    d.text((10, y2), "Real: two of the NIJ panes (same series as the numbers) and reference photographs", font=bold, fill="black")
+    files = sorted(Path(folder).glob("p-*.png"))
+    idx = {"Drop weight, blunt tip": 0, "Drop weight, round tip": 1, "Drop weight, sharp tip": 2,
+           "Pressed in a frame, blunt tip": 3, "Pressed in a frame, round tip": 4, "Pressed in a frame, sharp tip": 5}[series]
+    pics = [Image.open(f).convert("RGB") for f in files[idx * 10 : idx * 10 + 2]]
+    for r in refs:
+        pics.append(Image.open(r).convert("RGB"))
+    x = 10
+    for im in pics[:5]:
+        im = im.copy()
+        im.thumbnail((small - 10, small - 10))
+        sheet.paste(im, (x, y2 + 26))
+        x += small - 4
+        if x + small > W:
+            break
+    y = y2 + 26 + small + 10
+    c = stats["crossings"]
+    def rng(v):
+        return "n/a" if v is None else f"{v[0]:.0f} ({v[1]:.0f}-{v[2]:.0f})"
+    def pct(v):
+        return "n/a" if v is None else f"{v:.0%}"
+    rows = [
+        ("", "simulated", f"real ({series}; median, range of 10)"),
+        ("cracks crossed at 20 mm", str(c.get("20")), rng(nij["crossings"]["20"])),
+        ("cracks crossed at 50 mm", str(c.get("50")), rng(nij["crossings"]["50"])),
+        ("pieces", str(stats["pieces"]["count"]), rng(nij["pieces"])),
+        ("largest piece, share of pane", pct(stats["pieces"]["largest_share"]), pct(nij["largest_share"][0]) if nij["largest_share"] else "n/a"),
+        ("T-junction share (real cracks stop against each other)", pct(stats["junctions"]["t_share"]), pct(nij["t_share"][0]) if nij["t_share"] else "n/a"),
+        ("corners per piece (Voronoi tools give 6)", "n/a" if stats["junctions"]["corners_per_piece_mean"] is None else f"{stats['junctions']['corners_per_piece_mean']:.1f}", f"{nij['corners_per_piece'][0]:.1f}" if nij["corners_per_piece"] else "n/a"),
+    ]
+    for i, (a, b, cc) in enumerate(rows):
+        f = bold if i == 0 else font
+        d.text((10, y + i * 24), a, font=f, fill="black")
+        d.text((440, y + i * 24), b, font=f, fill="black")
+        d.text((600, y + i * 24), cc, font=f, fill="black")
+    sheet.save(dest, quality=90)
+    print("sheet", dest)
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "sim":
@@ -527,5 +587,8 @@ if __name__ == "__main__":
         run_nij(sys.argv[2])
     elif cmd == "sheet":
         run_sheet(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif cmd == "sheet2":
+        # sheet2 <name> <nij dir> <out.jpg> [ref images...]
+        run_sheet2(sys.argv[2], sys.argv[3], sys.argv[6:], sys.argv[4]) if len(sys.argv) > 6 else run_sheet2(sys.argv[2], sys.argv[3], [], sys.argv[4])
     else:
         sys.exit(__doc__)
