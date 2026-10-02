@@ -225,3 +225,40 @@ What I would revisit as it grows: whether Looks become per page; whether
 notes should become shareable with others (a client, a collaborator); and
 moving the 22 liquid-glass settings out of the everyday menu altogether once
 the CSS and liquid looks are settled.
+
+## 7. Live audit of every control (2026-10-02)
+
+Every one of the 125 controls was set to its lowest and then its highest
+value on the live home page (the lamp held and charged over a glass band;
+the black light's controls with the black light in hand, the laser's with
+the laser), each time photographed and compared pixel by pixel. Rain
+controls were tested separately this week.
+
+**Dead -- they change nothing anywhere (8).** "Light inside the glass" (3:
+amount, reach, core) and "Photo paper" (5: gloss, core, sheen, reach, room
+reflection). Both drive CSS layers that were switched off at your request
+(the "flashlight that would not go away"); the floor light and the glass
+light layer draw that light physically now. Recommendation: remove the
+eight controls from the menu.
+
+**Work only in a certain state -- the redesign shows them only there.**
+- Liquid mode only: the 21 liquid-glass controls.
+- With that tool in hand: the black light's 10 (9 work; Day-Glo needs a Day-Glo surface on the page, and the home page has none), the laser's 7
+  (all work; colour, reach and dust change nothing while the laser is
+  planted with the button held, and change it as soon as it is released).
+- Only during a click: Shutter speed (the iris animation).
+- Only with ?try=polariser: Polariser and its angle.
+- Only after the lamp is let go: the afterimage's 3.
+- Only with balloons or spray on: their 4.
+- Only with the lamp at rest: Edge at rest.
+- Only when Backlight saturation is above 0: Backlight hue (should sit
+  under saturation, greyed until it is raised).
+- Lens flare ghost shape, ghost bokeh, halo rings: only visible when the
+  lamp is far enough from the screen's centre to throw ghosts.
+- The cursor ring's width, opacity, dot and ease: the ring at rest, not
+  while the lamp is held.
+
+**To look at (2).** Room choice and Refraction strength (displacement)
+changed nothing in this test: the room only shows in reflections, which
+are faint here, and the CSS refraction may be covered by the light layer.
+I'll check both by eye before Phase 1.
