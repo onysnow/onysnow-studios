@@ -325,6 +325,9 @@ uniform vec3 uLightTint[${MAX_WATER_LIGHTS}];    // each lamp's colour, unweight
 uniform float uRoomFill;      // the floor light's room fill: how dark the room goes while a lamp burns
 uniform float uBurning;       // the strongest lamp's charge
 uniform sampler2D uFloorMap;  // the floor light's own output this frame (effects/light/floor-map): colour over alpha
+uniform sampler2D uType;      // the copy printed on the glass's near face (effects/engine/type-layer), pane-local, premultiplied
+uniform float uHasType;
+uniform float uFrostLod;      // how blurred the frosted far face shows the photograph: a mip level
 uniform float uHasFloorMap;
 uniform vec2 uFloorSize;      // the viewport it covers, CSS px
 uniform float uNear;          // 1: the rain is on the near face of clear glass (you see each drop's outer surface)
@@ -374,6 +377,31 @@ vec2 coverUv(vec2 pt, vec4 image, vec3 fit) {
   float boxAspect = image.z / max(image.w, 1.0);
   vec2 scale = boxAspect > aspect ? vec2(1.0, boxAspect / aspect) : vec2(aspect / boxAspect, 1.0);
   return (rel - fit.yz) / scale + fit.yz;
+}
+
+/*
+ * The copy printed on the glass's near face, at a page point (Ony,
+ * 2026-10-02: the letters "directly on the glass", the drops "on top of the
+ * letters magnifying the part that it's on"). Premultiplied, as the canvas
+ * came up; nothing outside the pane.
+ */
+vec4 typeAt(vec2 page) {
+  if (uHasType < 0.5) return vec4(0.0);
+  vec2 uv = (page - uPane.xy) / uPane.zw;
+  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec4(0.0);
+  return texture2D(uType, uv);
+}
+
+// A colour with the type laid over it (premultiplied type).
+vec3 overType(vec3 c, vec4 ty) { return c * (1.0 - ty.a) + ty.rgb; }
+
+// The photograph as the frosted far face shows it: blurred to the frost, saturated, veiled by the fill.
+vec3 frostedAt(vec2 page) {
+  if (uHasPhoto < 0.5) return uRoom;
+  vec3 c = photoLod(clamp(coverUv(page, uImage, uImageFit), 0.0, 1.0), uFrostLod);
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = clamp(mix(vec3(l), c, uSaturate), 0.0, 1.0);
+  return mix(c, uFill.rgb, uFill.a);
 }
 
 // The photograph as the pane shows it through clear glass: saturated and veiled by the glass's own fill, as its frost is.
@@ -654,6 +682,8 @@ vec4 shadeAt(vec2 local) {
     vec3 backDir = vec3(0.0, 0.0, 1.0);
     bool backTrapped = false;
     float Fexit = 0.0;      // what the front face keeps of that reflection on its way out
+    // Where the sight, inside a drop on the near face, lands on the glass under it: where the printed copy is.
+    vec2 baseLand = page;
     if (uNear > 0.5) {
       /*
        * ---- A drop on the near face of clear glass, seen from outside ----
@@ -679,6 +709,7 @@ vec4 shadeAt(vec2 local) {
       if (kk >= 1.0) lost = true;
       else tanOut = kT / sqrt(1.0 - kk);
       backDir = reflect(V, N);
+      baseLand = page + (h * uPxPerMm) * tW.xy / max(-tW.z, 0.05);
     } else {
       /*
        * ---- A drop on the far face, seen through the glass ----
@@ -741,6 +772,8 @@ vec4 shadeAt(vec2 local) {
     vec2 seenPage = page + uScene * (tanOut - tanFlat);
     float footprint = pagePerPixel * spread;
     vec3 through = lost ? trapped : seenThroughWater(seenPage, lodLens, footprint);
+    // On the near face the copy lies under the drop, bent and enlarged by it; on the far face it is in front, flat.
+    if (uNear > 0.5) through = overType(through, typeAt(baseLand));
 
     // Back toward you: the room and each lamp, along the reflected sight.
     vec3 back = trapped;
@@ -801,8 +834,15 @@ vec4 shadeAt(vec2 local) {
     // On the near face the drop's own surface is the front face: there is no flat glass in front of it.
     if (uNear < 0.5) water = water * (1.0 - Ff) + front * Ff;
     vec3 wetGlass = seenThroughWater(page, lodFlat, pagePerPixel);
+    if (uNear > 0.5) wetGlass = overType(wetGlass, typeAt(page));
     col = mix(wetGlass, water, cover);
     alpha = max(cover, film);
+    if (uNear < 0.5) {
+      // The copy in front of a far-face drop: seen flat, over everything.
+      vec4 ty = typeAt(page);
+      col = overType(col * alpha, ty) / max(alpha + ty.a * (1.0 - alpha), 1e-4);
+      alpha = alpha + ty.a * (1.0 - alpha);
+    }
   } else {
     /*
      * ---- A drop on the near (polished) face ----
@@ -832,9 +872,26 @@ vec4 shadeAt(vec2 local) {
       spec += uLightColour[i] * disc * core * (size * size) / (wide * wide);
     }
     vec3 add = (room + spec) * F;
-    float peak = max(add.r, max(add.g, add.b));
-    col = peak > 1e-4 ? add / peak : vec3(0.0);
-    alpha = min(peak, 1.0) * cover;
+    if (uHasType > 0.5 && cover > 0.001) {
+      /*
+       * With the copy printed on this face, a drop is a lens over it: the
+       * letters under it bent and enlarged (the sight refracted into the
+       * water and carried down the drop's height to the glass), and behind
+       * them the frosted far face a thickness further, as the pane shows it.
+       */
+      vec3 tW = refract(V, N, 1.0 / uIor);
+      vec2 base = page + (h * uPxPerMm) * tW.xy / max(-tW.z, 0.05);
+      vec2 kT = uIor * tW.xy;
+      float kk = dot(kT, kT);
+      vec2 far = base + uThickness * kT / sqrt(max(uGlassIor * uGlassIor - kk, 0.1));
+      vec3 seen = overType(frostedAt(far), typeAt(base));
+      col = seen * (1.0 - F) + add;
+      alpha = cover;
+    } else {
+      float peak = max(add.r, max(add.g, add.b));
+      col = peak > 1e-4 ? add / peak : vec3(0.0);
+      alpha = min(peak, 1.0) * cover;
+    }
   }
   /*
    * A highlight brighter than the screen goes to white, as a sensor's

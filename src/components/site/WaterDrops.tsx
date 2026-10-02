@@ -10,7 +10,12 @@ import {
   sharedGl,
 } from "@/effects/engine/gl";
 import { paneCanvas } from "@/effects/engine/compositor";
-import { glassGeometry } from "@/effects/scene/scene";
+import {
+  geometryStamp,
+  glassGeometry,
+  litSurfaceList,
+  type GlassRect,
+} from "@/effects/scene/scene";
 import { pointLights, roomLight, strongestCharge } from "@/effects/light/lights";
 import { floorScale } from "@/effects/light/floor-scale";
 import { publishLensMap } from "@/effects/water/lens-map";
@@ -18,6 +23,8 @@ import { floorMap } from "@/effects/light/floor-map";
 import { photoTextures } from "@/effects/engine/photo-texture";
 import { paneLook } from "@/effects/engine/pane-look";
 import { roomTexture } from "@/effects/engine/room-texture";
+import { paintTypeLayer } from "@/effects/engine/type-layer";
+import { fontStamp } from "@/effects/optics/casters";
 import { roomFillOverride } from "@/effects/light/room-fill";
 import { quality, surfaceScaleCap } from "@/effects/engine/quality";
 import { rainType } from "@/effects/water/rain-types";
@@ -266,6 +273,9 @@ export function WaterDrops() {
       "uFloorMap",
       "uHasFloorMap",
       "uFloorSize",
+      "uType",
+      "uHasType",
+      "uFrostLod",
       "uNear",
       "uFrosted",
       "uPhotoTexels",
@@ -606,6 +616,64 @@ export function WaterDrops() {
     const sims = new Map<HTMLElement, DropSim>();
     const states = new Map<HTMLElement, PaneState>();
     const layers = new Map<HTMLElement, HTMLCanvasElement>();
+    /*
+     * The copy printed on each pane, as a texture the drops look through
+     * (effects/engine/type-layer; Ony, 2026-10-02): repainted when the page
+     * is re-measured, a font lands, or the setting changes.
+     */
+    const typeCanvas = document.createElement("canvas");
+    // Development only: the type layer as last painted, for the rigs.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __typeLayer?: () => string }).__typeLayer = () =>
+        typeCanvas.toDataURL();
+    }
+    const types = new Map<HTMLElement, { tex: WebGLTexture | null; key: string; has: boolean }>();
+    const typeFor = (pane: GlassRect, scale: number) => {
+      const on = t("typeOnGlass") > 0.5;
+      /*
+       * The words and where their blocks sit are part of the key: an animated
+       * heading settles letter by letter after the first paint, and while its
+       * wide stand-in glyphs wrap to an extra line everything below it sits a
+       * line lower (the ghost rows of 2026-10-02).
+       */
+      let text = 0;
+      if (on) {
+        for (const su of litSurfaceList()) {
+          if (su.material.id !== "ink" || !pane.el.contains(su.el)) continue;
+          const tc = su.el.textContent ?? "";
+          for (let i = 0; i < tc.length; i++) text = (text * 31 + tc.charCodeAt(i)) | 0;
+          const r = su.el.getBoundingClientRect();
+          text = (text * 31 + Math.round((r.top - pane.y) * 4) + Math.round(r.height * 4) * 7) | 0;
+        }
+      }
+      const key = on
+        ? `${geometryStamp()}|${fontStamp()}|${Math.round(pane.w)}x${Math.round(pane.h)}|${scale}|${text}`
+        : "off";
+      let entry = types.get(pane.el);
+      if (entry && entry.key === key) return entry;
+      if (!entry) {
+        entry = { tex: null, key: "", has: false };
+        types.set(pane.el, entry);
+      }
+      entry.key = key;
+      entry.has = on && paintTypeLayer(typeCanvas, pane.el, scale);
+      if (entry.has) {
+        if (!entry.tex) entry.tex = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, entry.tex);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, typeCanvas);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      }
+      // Over the copy when the copy is on the glass (the drops sit on the letters); under it otherwise.
+      const layer = layers.get(pane.el);
+      if (layer) layer.classList.toggle("glass__water--over-type", entry.has);
+      return entry;
+    };
     let seed = 1;
     let rng = 0x2545f491;
     const random = () => {
@@ -1253,6 +1321,18 @@ export function WaterDrops() {
       gl.uniform1i(u.uFloorMap!, 0);
       gl.uniform1f(u.uHasFloorMap!, floorNow ? 1 : 0);
       gl.uniform2f(u.uFloorSize!, floorNow?.width ?? 1, floorNow?.height ?? 1);
+      // The copy printed on the glass, for the drops over it (effects/engine/type-layer).
+      const ty = typeFor(pane, k);
+      gl.activeTexture(gl.TEXTURE7);
+      gl.bindTexture(gl.TEXTURE_2D, ty.has ? ty.tex : null);
+      gl.uniform1i(u.uType!, 7);
+      gl.uniform1f(u.uHasType!, ty.has ? 1 : 0);
+      // The frost's blur as a mip level of the photograph, for a near-face drop's view of the far face.
+      const texPerPx = (size?.[0] ?? 1024) / Math.max(pane.iw, 1);
+      gl.uniform1f(
+        u.uFrostLod!,
+        frosted ? Math.max(0, Math.log2(Math.max(1, 2 * look.blur * texPerPx))) : 0,
+      );
       /*
        * The photograph's own lights (PhotoLights: its brightest spots, as
        * lights under the glass), carried through each drop's lens (rain W1).

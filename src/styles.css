@@ -2987,6 +2987,17 @@ html[data-plastic-bevel] .plastic::after {
 }
 
 /*
+ * With the copy printed on the glass ("Type on the glass", Ony 2026-10-02),
+ * the rain sits ON the letters: the water layer goes above the pane's
+ * content, and draws the letters itself, bent, wherever it draws water
+ * (effects/engine/type-layer; the water shader's typeAt). It is transparent
+ * everywhere else, so the page's own letters show there.
+ */
+.glass > .glass__water.glass__water--over-type {
+  z-index: 3 !important;
+}
+
+/*
  * OFF, by request: the two remaining "flashlight" layers.
  *
  * .photo-surface paints a specular pool of the lamp onto every photograph

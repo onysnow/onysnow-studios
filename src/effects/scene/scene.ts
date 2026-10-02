@@ -461,13 +461,26 @@ function readPane(el: HTMLElement, withOffsets = true): PaneReading {
   };
 }
 
+/**
+ * How far a surface stands off what it rests on, as a share of "Content
+ * depth". Type is printed on the glass itself when "Type on the glass" is
+ * set (Ony, 2026-10-02: "directly on the glass ... just the one [shadow]
+ * under the glass"): then its standoff is 0, and the only shadow it throws
+ * is the lamp's through the glass onto the photograph.
+ */
+function standoffOf(el: HTMLElement): number {
+  const material = surfaceMaterials.get(el) ?? SURFACE_MATERIALS.ink;
+  if (material.id === "ink" && standoffs.has(el) && t("typeOnGlass") > 0.5) return 0;
+  return standoffs.get(el) ?? 1;
+}
+
 function readSurface(el: HTMLElement): SurfaceReading {
   return {
     el,
     rect: el.getBoundingClientRect(),
     radius: cornerRadius(el),
     pane: nonOccluding.has(el) ? null : el.closest<HTMLElement>(".glass"),
-    standoff: standoffs.get(el) ?? 1,
+    standoff: standoffOf(el),
     material: surfaceMaterials.get(el) ?? SURFACE_MATERIALS.ink,
   };
 }
@@ -1085,7 +1098,7 @@ export function litSurfaceList(): {
 }[] {
   return [...litSurfaces].map((el) => ({
     el,
-    standoff: standoffs.get(el) ?? 1,
+    standoff: standoffOf(el),
     material: surfaceMaterials.get(el) ?? SURFACE_MATERIALS.ink,
   }));
 }

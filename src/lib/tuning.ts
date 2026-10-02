@@ -1100,6 +1100,16 @@ export const tuning: Record<string, Knob> = {
     step: 0.05,
     hint: "How unevenly a broken pane's pieces sit: 0 flush, 1 each piece up to 15% of the thickness proud or sunk (a step between two pieces up to 30%). Loose pieces near the strike move most; a laminated pane's interlayer holds its pieces nearly flush. Each step shows as the lamp's shadow line on the lower piece and a lit riser seen from the low side.",
   },
+  // Whether the page's copy is printed on the glass itself or stands off it (Ony, 2026-10-02).
+  typeOnGlass: {
+    label: "Type on the glass",
+    group: "Glass",
+    value: 1,
+    min: 0,
+    max: 1,
+    step: 1,
+    hint: "1: the copy is printed on the glass's near face -- one shadow, the lamp's through the glass onto the photograph. Rain on the polished (near) face then sits on the letters and magnifies them, showing the frosted photograph behind; rain on the etched face stays a sharp lens onto the photograph, with the letters flat in front of it (\"Rain lands on\"). 0: the copy floats off the glass by a share of the content depth, with its own shadow on the glass as well.",
+  },
   // How thick the site's glass is, CSS px: how deep its side faces are.
   glassThickness: {
     label: "Glass thickness",

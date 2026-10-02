@@ -12,6 +12,8 @@ export type PaneLook = {
   saturate: number;
   /** Unpremultiplied RGBA, 0-1. */
   fill: [number, number, number, number];
+  /** Its backdrop blur, CSS px: how far the frost spreads what is behind (0 for clear glass). */
+  blur: number;
 };
 
 const looks = new WeakMap<HTMLElement, PaneLook>();
@@ -23,6 +25,8 @@ export function paneLook(el: HTMLElement): PaneLook {
   const cs = getComputedStyle(el);
   const m = /saturate\(([\d.]+)(%?)\)/.exec(cs.backdropFilter || "");
   const saturate = m ? Number(m[1]) / (m[2] ? 100 : 1) : 1;
+  const b = /blur\(([\d.]+)px\)/.exec(cs.backdropFilter || "");
+  const blur = b ? Number(b[1]) : 0;
   let fill: [number, number, number, number] = [0, 0, 0, 0];
   if (probeCtx === undefined) {
     const probe = document.createElement("canvas");
@@ -37,7 +41,7 @@ export function paneLook(el: HTMLElement): PaneLook {
     // Unpremultiplied, as getImageData returns it.
     fill = [d[0]! / 255, d[1]! / 255, d[2]! / 255, d[3]! / 255];
   }
-  l = { saturate, fill };
+  l = { saturate, fill, blur };
   looks.set(el, l);
   return l;
 }

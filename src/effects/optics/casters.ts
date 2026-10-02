@@ -108,7 +108,8 @@ export function casterList(): Caster[] {
       face = bottom;
       top = bottom + (pane ? pane.causes.thickness : t("glassThickness"));
     }
-    const standoff = isPhoto ? 1 : s.standoff || CASTER_NEAR_STANDOFF;
+    // Type on the glass stands off it by 0 (scene standoffOf): its shadow is cast from the glass's own face.
+    const standoff = isPhoto ? 1 : (s.standoff ?? CASTER_NEAR_STANDOFF);
     out.push({
       el: s.el,
       material: s.material,
@@ -187,7 +188,16 @@ export function casterOpacity(el: Element, material: SurfaceMaterial): number {
   return 1;
 }
 
-type Word = { text: string; x: number; y: number; font: string; spacing: string; ascent: number };
+export type Word = {
+  text: string;
+  x: number;
+  y: number;
+  font: string;
+  spacing: string;
+  ascent: number;
+  /** Its colour, as the page shows it (for the type drawn into a texture; the shadow masks ignore it). */
+  colour: string;
+};
 
 const wordCache = new WeakMap<Element, { key: string; words: Word[] }>();
 
@@ -204,6 +214,11 @@ if (typeof document !== "undefined") {
   document.fonts?.addEventListener?.("loadingdone", () => {
     fontGeneration += 1;
   });
+}
+
+/** How many web fonts have finished loading: a key for anything laid out from the type. */
+export function fontStamp(): number {
+  return fontGeneration;
 }
 
 /** Where a block's last character sits: changes whenever its lines break differently. */
@@ -236,7 +251,10 @@ function hiddenByClip(node: Element, top: Element): boolean {
 }
 
 /** The words of a block of type, where each one sits (relative to the block), in its own font. */
-function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect; words: Word[] } {
+export function wordsOf(
+  el: HTMLElement,
+  ctx: CanvasRenderingContext2D,
+): { at: DOMRect; words: Word[] } {
   const at = el.getBoundingClientRect();
   const key =
     /*
@@ -286,6 +304,7 @@ function wordsOf(el: HTMLElement, ctx: CanvasRenderingContext2D): { at: DOMRect;
         font,
         spacing: cs.letterSpacing === "normal" ? "0px" : cs.letterSpacing,
         ascent,
+        colour: cs.color,
       });
     }
   }

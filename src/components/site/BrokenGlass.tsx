@@ -611,7 +611,7 @@ export function BrokenGlass({
           left: rect.left,
           top: rect.top,
           pane: geom,
-          look: pane ? paneLook(pane) : { saturate: 1, fill: [0, 0, 0, 0] },
+          look: pane ? paneLook(pane) : { saturate: 1, fill: [0, 0, 0, 0], blur: 0 },
           thickness: geom?.causes.thickness ?? THICKNESS,
           gap: geom?.causes.gap ?? 70,
           ior: geom?.causes.material.ior ?? N_GLASS,
