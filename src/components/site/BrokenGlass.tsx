@@ -9,6 +9,13 @@ import {
 import { photoBreak, placementFor, type Placement } from "@/effects/optics/crack-photo";
 import { loadCrackPhoto, type LoadedCrackPhoto } from "@/effects/optics/crack-photo-loader";
 import { crackPhotoFor } from "@/lib/crack-photos";
+import {
+  loadEntry,
+  pickEntry,
+  placeBreak,
+  type BreakEntry,
+  type LibraryIndex,
+} from "@/effects/optics/fracture-library";
 import { loadShard, shardOutline, shardsFor } from "@/lib/glass-shards";
 import { cursorLamp, onLightChange, pointLights } from "@/effects/light/lights";
 // Glass's index: a crack face seen through the pane lies at 1/n of its depth.
@@ -217,15 +224,41 @@ export function BrokenGlass({
     };
     type Break = {
       shards: Piece[];
-      cracks: Crack[];
+      cracks: (Crack & { t?: number[] })[];
       impact: Pt;
       crush: number;
       photo?: { loaded: LoadedCrackPhoto; placement: Placement };
+      /** A simulated break: when its last crack arrived, microseconds. */
+      duration?: number;
     };
     let broken: Break | null = null;
     let brokeFor = "";
     let photo: LoadedCrackPhoto | null = null;
     let disposed = false;
+    /*
+     * The simulated library (broken glass B1, ?try=breaklib;
+     * effects/optics/fracture-library): a real break of this glass's kind,
+     * placed at the strike. Fetched on the first strike; until it arrives
+     * the generated break stands in.
+     */
+    let entry: BreakEntry | null = null;
+    if (previewing("breaklib")) {
+      void fetch("/breaks/index.json")
+        .then((r) => (r.ok ? (r.json() as Promise<LibraryIndex>) : null))
+        .then((index) => {
+          const name = index ? pickEntry(index, kind, seed) : null;
+          return name ? loadEntry(name) : null;
+        })
+        .then((loaded) => {
+          if (disposed || !loaded) return;
+          entry = loaded;
+          brokeFor = "";
+          wake();
+        })
+        .catch(() => {});
+    }
+    /** The cracks run slowed: real cracks cross a pane in a few hundred microseconds. */
+    const SLOW_MOTION = 1500;
     /*
      * Ony's photographed pieces: every piece of this break wears a different
      * one, and the pieces knocked out fall as them (lib/glass-shards).
@@ -323,10 +356,12 @@ export function BrokenGlass({
       const h = rect.height;
       if (w < 2 || h < 2) return;
       const key = `${Math.round(w)}x${Math.round(h)}`;
-      const breakKey = `${key}|${photo ? "photo" : "made"}|${shardPhotos.length ? "glass" : ""}`;
+      const breakKey = `${key}|${entry ? "library" : photo ? "photo" : "made"}|${shardPhotos.length ? "glass" : ""}`;
       if (breakKey !== brokeFor) {
         const struck = { x: at.x * w, y: at.y * h };
-        if (photo) {
+        if (entry) {
+          broken = placeBreak(entry, { w, h, at: struck, energy, kind, seed });
+        } else if (photo) {
           // Turned a different way strike by strike, so one photograph never repeats exactly.
           const placement = placementFor(
             photo.map,
@@ -711,7 +746,10 @@ export function BrokenGlass({
         });
         ctx.globalCompositeOperation = "source-over";
       }
-      broken.cracks.forEach((c: Crack, ck) => {
+      // How far the simulated cracks have got, microseconds after the strike, slowed.
+      const arrivedUs = ((performance.now() - struckAt) * 1000) / SLOW_MOTION;
+      let arriving = false;
+      broken.cracks.forEach((c: Crack & { t?: number[] }, ck) => {
         if (c.kind === "crush" && crushed?.missing) return;
         let run = 0;
         for (let i = 0; i + 1 < c.pts.length; i++) {
@@ -719,6 +757,11 @@ export function BrokenGlass({
           const b = c.pts[i + 1]!;
           const len = Math.hypot(b.x - a.x, b.y - a.y);
           if (len < 0.05) continue;
+          // A simulated crack is drawn only as far as it has run.
+          if (c.t && c.t[i + 1] !== undefined && c.t[i + 1]! > arrivedUs) {
+            arriving = true;
+            break;
+          }
           const mx = (a.x + b.x) / 2;
           const my = (a.y + b.y) / 2;
           // Across the crack, in the pane's plane.
@@ -836,6 +879,7 @@ export function BrokenGlass({
        * pushed back and aside by the blow, turning, falling away from you
        * (a little smaller as it goes) and out of sight.
        */
+      if (arriving) wake();
       const t = (performance.now() - struckAt) / 1000;
       if (t * 1000 < FALL_MS && shardPhotos.length) {
         let k = 0;

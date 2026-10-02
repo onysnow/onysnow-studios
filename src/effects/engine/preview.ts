@@ -63,6 +63,8 @@ export const PREVIEWS = {
     "Two panes resting dry on each other (the Contact stack on Lab samples): the air film between them shows Newton's colours where both faces are polished, black where they touch (light engine step G)",
   broken:
     "Broken panes on Lab samples -- plain (annealed) and laminated -- cracks as mirrors that flash with the lamp, the view stepping at each crack",
+  breaklib:
+    "Broken glass B1: the break is a real one, simulated with physics offline (tools/fracture-sim) and placed at the strike, its cracks arriving in their simulated order, instead of the generated pattern",
   shardlight:
     "Item 10 step 3b, with ?try=broken: each piece of a broken pane mirrors the room at its own slope, per pixel in the glass shader -- a mirror turned by t turns the reflection by 2t, so the room's reflection breaks up piece by piece along the cracks; a hole reflects nothing",
   fireworks:

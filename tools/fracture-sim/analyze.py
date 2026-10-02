@@ -579,6 +579,115 @@ def run_sheet2(name, folder, refs, dest, series="Pressed in a frame, round tip")
     print("sheet", dest)
 
 
+# ---------------------------------------------------------------- the library entry
+
+
+def skeleton_polylines(sk):
+    """The thinned crack lines as polylines between junctions and ends (pixel coordinates)."""
+    h, w = sk.shape
+    nb = neighbours(sk)
+    steps8 = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    special = (sk & ((nb >= 3) | (nb == 1)))
+    jl, nj = ndi.label(sk & (nb >= 3), structure=np.ones((3, 3)))
+    node_of = {}
+    centres = {}
+    for j in range(1, nj + 1):
+        ys, xs = np.nonzero(jl == j)
+        centres[j] = (xs.mean(), ys.mean())
+        for y, x in zip(ys, xs):
+            node_of[(y, x)] = j
+    visited = np.zeros_like(sk, bool)
+    lines = []
+    starts = list(zip(*np.nonzero(special)))
+    for y0, x0 in starts:
+        for dy, dx in steps8:
+            y, x = y0 + dy, x0 + dx
+            if not (0 <= y < h and 0 <= x < w) or not sk[y, x] or special[y, x] or visited[y, x]:
+                continue
+            path = [(x0, y0)] if (y0, x0) not in node_of else [centres[node_of[(y0, x0)]]]
+            cy, cx = y, x
+            prev = (y0, x0)
+            end = None
+            while True:
+                visited[cy, cx] = True
+                path.append((cx, cy))
+                nxt = [(cy + a, cx + b) for a, b in steps8
+                       if 0 <= cy + a < h and 0 <= cx + b < w and sk[cy + a, cx + b] and (cy + a, cx + b) != prev]
+                nxt = [q for q in nxt if not visited[q] or special[q]]
+                ends = [q for q in nxt if special[q]]
+                if ends:
+                    end = ends[0]
+                    break
+                nxt = [q for q in nxt if not visited[q]]
+                if not nxt:
+                    break
+                prev = (cy, cx)
+                cy, cx = nxt[0]
+            if end is not None:
+                path.append(centres[node_of[end]] if end in node_of else (end[1], end[0]))
+            if len(path) >= 3:
+                lines.append(path)
+    return lines
+
+
+def run_library(name, dest):
+    """Write the break as a library entry: crack polylines in mm with arrival times, for the site."""
+    root = HERE / "out" / name
+    s = settings(root)
+    a = load(root)
+    res = 0.2
+    rasters = face_rasters(a, s, res)
+    band, sk = crack_lines(rasters["through"], res)
+    _, sk_struck = crack_lines(rasters["struck"], res)
+    _, sk_back = crack_lines(rasters["back"], res)
+    arr = arrival_raster(a, s, res)
+    size = pane_mm(s)
+    n = sk.shape[0]
+    lines = skeleton_polylines(sk)
+    struck_wide = binary_dilation(sk_struck, disk(3))
+    back_wide = binary_dilation(sk_back, disk(3))
+    cracks = []
+    for path in lines:
+        pts = []
+        ts = []
+        on_struck = on_back = 0
+        for x, y in path:
+            xi, yi = int(round(x)), int(round(y))
+            xi = min(max(xi, 0), n - 1)
+            yi = min(max(yi, 0), n - 1)
+            pts.append([round(x * res - size / 2, 2), round(size / 2 - y * res, 2)])
+            ts.append(round(float(arr[yi, xi]) * 1e6, 1))
+            on_struck += struck_wide[yi, xi]
+            on_back += back_wide[yi, xi]
+        # Thin the polyline: keep every 4th point plus the ends (0.8 mm steps).
+        keep = list(range(0, len(pts), 4))
+        if keep[-1] != len(pts) - 1:
+            keep.append(len(pts) - 1)
+        face = "both" if on_struck > 0.5 * len(path) and on_back > 0.5 * len(path) else ("struck" if on_struck >= on_back else "back")
+        cracks.append({"pts": [pts[k] for k in keep], "t": [ts[k] for k in keep], "face": face})
+    cracks.sort(key=lambda c: min(t for t in c["t"] if t > 0) if any(t > 0 for t in c["t"]) else 1e9)
+    entry = {
+        "format": "onysnow-break-1",
+        "source": name,
+        "pane_mm": [size, size],
+        "thickness_mm": s["t"] * 1000,
+        "impact_mm": [s["hit_x"] * 1000, s["hit_y"] * 1000],
+        "impactor": {"speed": s.get("speed"), "mass_kg": s.get("hammer_mass"), "radius_mm": (s.get("hammer_r") or 0) * 1000},
+        "support": s.get("support"),
+        "edge_mm": round(((s.get("frame_w") or 0) + (s.get("gasket_w") or 0)) * 1000, 2) if s.get("support") == "frame" else 0.0,
+        "crush_mm": float(np.hypot(*np.argwhere(rasters["through"] > 0.9).mean(0)[::-1] * 0)) if False else None,
+        "cracks": cracks,
+    }
+    # The crushed zone: the radius round the impact where the damage band is solid.
+    yy, xx = np.nonzero(rasters["through"] > 0.6)
+    if len(xx):
+        cx, cy = to_pixels(s["hit_x"], s["hit_y"], res, size)
+        r = np.hypot(xx - cx, yy - cy) * res
+        entry["crush_mm"] = float(np.percentile(r, 20)) if len(r) > 50 else 0.0
+    Path(dest).write_text(json.dumps(entry, separators=(",", ":")))
+    print("library entry", dest, len(cracks), "cracks,", sum(len(c["pts"]) for c in cracks), "points,", Path(dest).stat().st_size, "bytes")
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
     if cmd == "sim":
@@ -587,6 +696,8 @@ if __name__ == "__main__":
         run_nij(sys.argv[2])
     elif cmd == "sheet":
         run_sheet(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif cmd == "library":
+        run_library(sys.argv[2], sys.argv[3])
     elif cmd == "sheet2":
         # sheet2 <name> <nij dir> <out.jpg> [ref images...]
         run_sheet2(sys.argv[2], sys.argv[3], sys.argv[6:], sys.argv[4]) if len(sys.argv) > 6 else run_sheet2(sys.argv[2], sys.argv[3], [], sys.argv[4])

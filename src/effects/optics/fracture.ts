@@ -431,11 +431,34 @@ export function fracture(im: Impact): Fracture {
   const whole = (b: Break) =>
     Math.abs(b.faces.reduce((a, f) => a + polygonArea(f), 0) - im.w * im.h) < 1e-3 * im.w * im.h;
   for (let k = 1; k < 6 && !whole(br); k++) br = one(k);
+  return {
+    kind: im.kind,
+    impact: at,
+    shards: shardsFrom(im, at, br.faces, br.crush, seed),
+    cracks: br.cracks,
+    crush: br.crush,
+  };
+}
+
+/**
+ * The pieces a break's faces make, each with its tilt, slip and whether it
+ * is crushed or knocked out (shared by the generator and the simulated
+ * library, effects/optics/fracture-library).
+ */
+export function shardsFrom(
+  im: Impact,
+  at: Pt,
+  faces: readonly Pt[][],
+  crush: number,
+  seed: number,
+): Shard[] {
+  const E = Math.max(0, Math.min(1, im.energy));
+  const br = { crush };
   const diag = Math.hypot(im.w, im.h);
   // Laminated pieces are held by the interlayer: they barely move.
   const loose = im.kind === "laminated" ? 0.25 : 1;
   const rnd = stream(seed * 3.7 + 11);
-  const shards = br.faces.map((poly, k) => {
+  return faces.map((poly, k) => {
     const c = centroid(poly);
     const reach = Math.hypot(c.x - at.x, c.y - at.y) / diag;
     // Near the impact the pieces are knocked about most.
@@ -474,5 +497,4 @@ export function fracture(im: Impact): Fracture {
     }
     return shard;
   });
-  return { kind: im.kind, impact: at, shards, cracks: br.cracks, crush: br.crush };
 }
