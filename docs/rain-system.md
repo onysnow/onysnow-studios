@@ -161,6 +161,36 @@ field.
 - **Statistics check**: in steady light rain the sizes of runner "avalanches"
   should follow a power law (Plourde, Nori & Bretz 1993).
 
+### 3.5 Ony's notes from the references (2026-10-02), as work items
+
+Ony, on the W1/W2 renders against six reference photographs: "still lacking
+the kind of variety of shapes you'd see on a window"; "a lot of almost
+perfect ovals"; streams "never in a straight line", that "zig zag" where
+"surface tension pulls them one way or another"; "lines in the negative
+space"; "raindrops in sort of a dotted line ... when a stream runs down the
+glass and leaves that dotted trail behind it"; "weird shapes that aren't
+even circles at all"; "little streams have really long tails that can
+separate randomly"; "some spaces have a lot less raindrops while other areas
+are more concentrated. It depends on how heavy the rain is"; drops "blend
+into the background" too much; more light on the drops from the lamp?; and
+light from the drops "cast on the glass pane or even back out into other
+rain drops". Each becomes a physical behaviour, not noise:
+
+| Item | Physics | Where |
+|---|---|---|
+| No ovals; hanging shapes | a sessile drop on a vertical pane: round cap below ~1 mm; above that gravity sags it -- rounder, wider bottom at the advancing angle, narrower top at the receding angle (the two-circle profile above); big ones irregular from merging | W4, the bead outlines |
+| Merged blobs | two drops that touch coalesce into one with a waist that relaxes over ~100 ms; three or more leave a lobed outline until they relax | W4, the particle merge |
+| Meandering streams | a runner steers toward the drops it touches (each capture pulls its path sideways), so it zig-zags; it never runs straight | W3/W4, the runner's step |
+| Dotted trails | a runner's tail thins and breaks into beads (Rayleigh-Plateau pinch-off); the beads stay as a line of small drops the width of the trail | W3, the trail field + spawned beads |
+| Long tails that part | the same pinch-off further up: a tail detaches from its runner and is left as a short stationary rivulet | W3 |
+| Lines in the negative space | the clear lanes a runner wipes, which later drops avoid filling for a while (the film there is thinner) -- the trail field as it stands, kept longer | W3 |
+| Patchy density | a slow spatial density field (sheltered strips, the windward top) times rain strength; clusters and bare patches | W4, arrival |
+| Drops that stand out | a sharper picture inside the drop than the pane's frost shows (lens LOD below the frost's), a crisp rim at the contact line (TIR past 48 degrees), and a specular highlight of the lamp or sky | W1 fix, the compose pass |
+| Lamp on the drops | the lamp's glint on the near side and its bright focus inside; brighter the closer it is | W2 fix |
+| Light onto the pane and other drops | a drop's lens lands on the pane's own surface (film, fog, grime) and on neighbouring drops, not only on the print: the lens map sampled at the pane plane by the surface layers, and by the drops themselves | W2/W3 |
+| Copy on the glass (toggle) | type at standoff 0: one shadow (the lamp's, through the glass onto the print); the water layer over the letters, magnifying them -- the letters rasterised into what the drops look through | new, the compositor |
+| Speed | measured on Ony's machine with `?perf=1`, not estimated here | W5 |
+
 ---
 
 ## 4. Cost

@@ -879,6 +879,27 @@ export function BrokenGlass({
       broken.cracks.forEach((c: Crack & { t?: number[] }, ck) => {
         if (c.kind === "crush" && crushed?.missing) return;
         let run = 0;
+        // Each segment's normal, so a strip beside the crack can mitre its joins with its neighbours.
+        const norms: Pt[] = [];
+        for (let i = 0; i + 1 < c.pts.length; i++) {
+          const a = c.pts[i]!;
+          const b = c.pts[i + 1]!;
+          const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+          norms.push({ x: -(b.y - a.y) / len, y: (b.x - a.x) / len });
+        }
+        const joinDir = (i: number): Pt => {
+          // The mean of the two normals that meet at point i, scaled so the offset edge keeps its width.
+          const p = norms[i - 1];
+          const q = norms[i];
+          if (!p || !q) return (p ?? q)!;
+          const sx = p.x + q.x;
+          const sy = p.y + q.y;
+          const l = Math.hypot(sx, sy);
+          if (l < 0.3) return q;
+          // A sharp kink would need a long mitre; capped, so a strip never flares past 1.3 times its width.
+          const cosHalf = Math.max(l / 2, 0.77);
+          return { x: sx / l / cosHalf, y: sy / l / cosHalf };
+        };
         for (let i = 0; i + 1 < c.pts.length; i++) {
           const a = c.pts[i]!;
           const b = c.pts[i + 1]!;
@@ -956,11 +977,13 @@ export function BrokenGlass({
               if (width < 0.15) return;
               ctx.globalCompositeOperation = op;
               ctx.fillStyle = style;
+              const ja = joinDir(i);
+              const jb = joinDir(i + 1);
               ctx.beginPath();
               ctx.moveTo(a.x, a.y);
               ctx.lineTo(b.x, b.y);
-              ctx.lineTo(b.x + nx * side * width, b.y + ny * side * width);
-              ctx.lineTo(a.x + nx * side * width, a.y + ny * side * width);
+              ctx.lineTo(b.x + jb.x * side * width, b.y + jb.y * side * width);
+              ctx.lineTo(a.x + ja.x * side * width, a.y + ja.y * side * width);
               ctx.closePath();
               ctx.fill();
             };

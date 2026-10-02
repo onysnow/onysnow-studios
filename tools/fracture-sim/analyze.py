@@ -604,6 +604,7 @@ def run_sheet2(name, folder, refs, dest, series="Drop weight, round tip"):
         ("largest piece, share of pane", pct(stats["pieces"]["largest_share"]), pct(nij["largest_share"][0]) if nij["largest_share"] else "n/a"),
         ("T-junction share (real cracks stop against each other)", pct(stats["junctions"]["t_share"]), pct(nij["t_share"][0]) if nij["t_share"] else "n/a"),
         ("corners per piece (Voronoi tools give 6)", "n/a" if stats["junctions"]["corners_per_piece_mean"] is None else f"{stats['junctions']['corners_per_piece_mean']:.1f}", f"{nij['corners_per_piece'][0]:.1f}" if nij["corners_per_piece"] else "n/a"),
+        ("fragment size vs distance, exponent (Kadono & Arakawa)", "n/a" if stats.get("size_law", {}).get("exponent") is None else f"{stats['size_law']['exponent']:.1f} (r2 {stats['size_law']['r2']:.2f}, {stats['size_law']['n']} pieces)", f"{nij['size_exponent'][0]:.1f} ({nij['size_exponent'][1]:.1f}-{nij['size_exponent'][2]:.1f})" if nij.get("size_exponent") else "n/a"),
     ]
     for i, (a, b, cc) in enumerate(rows):
         f = bold if i == 0 else font
