@@ -209,7 +209,18 @@ const float LAMP_CORE = 400.0;
 /* How bright the dry frost glows straight under a lamp, against the lamp's colour (estimate, matched to the light layer's glow). */
 const float FROST_GLOW = 1.5;
 /* How much a lamp's pool lifts the photograph straight under it, against the lamp's colour (estimate, matched to the floor light). */
-const float POOL_GAIN = 1.5;
+/*
+ * Calibrated against a path-traced reference of this exact setup (Mitsuba 3,
+ * docs/research/water-drops.md 9.5c): through a drop the lamp lifts the
+ * photograph only to about a third of what it does to the frost round it.
+ */
+const float POOL_GAIN = 0.3;
+/*
+ * A sight line trapped in the glass meets the frost from inside, at grazing,
+ * where the etch scatters most: in the reference the ring this makes at 70-90%
+ * of a drop's radius is 1.5-2.2 times the frost beside it (2, calibrated).
+ */
+const float TRAPPED_GAIN = 2.0;
 /* The camera's bloom round a glint: how wide against the glint, and what share of its light (estimate). */
 const float BLOOM_WIDTH = 4.0;
 const float BLOOM_SHARE = 0.04;
@@ -412,8 +423,16 @@ vec4 shadeAt(vec2 local) {
     vec3 out3 = refract(tW, Nw, uIor);
     bool tir = dot(out3, out3) < 1e-6;
     // Water to air: Fresnel on the air side's angle (Schlick for the denser side); all past the critical angle.
+    /*
+     * Water to air from inside, the exact Fresnel equations (s and p
+     * averaged): Schlick is far off on the dense side, where the reflectance
+     * climbs from a few per cent to all of it over the last few degrees
+     * before the critical angle -- the band that makes a drop's ring.
+     */
     float cosT = tir ? 0.0 : max(-dot(out3, Nw), 0.0);
-    float Fin = tir ? 1.0 : f0 + (1.0 - f0) * pow(1.0 - cosT, 5.0);
+    float rs = (uIor * cosI - cosT) / max(uIor * cosI + cosT, 1e-4);
+    float rp = (cosI - uIor * cosT) / max(cosI + uIor * cosT, 1e-4);
+    float Fin = tir ? 1.0 : clamp(0.5 * (rs * rs + rp * rp), 0.0, 1.0);
 
     // Through: the scene from SCENE distance, less what the flat glass would do anyway.
     vec2 tanOut = tir ? vec2(0.0) : out3.xy / max(-out3.z, 0.05);
@@ -448,7 +467,7 @@ vec4 shadeAt(vec2 local) {
       float q = hz * hz / (dot(dl, dl) + hz * hz);
       frostLit += uLightColour[i] * FROST_GLOW * q * sqrt(q);
     }
-    vec3 back = frostLit;
+    vec3 back = frostLit * TRAPPED_GAIN;
     if (k2 < 1.0) {
       /*
        * Leaving the front face, glass to air: Fresnel rises to all of it as
@@ -495,7 +514,7 @@ vec4 shadeAt(vec2 local) {
         float bl = off / (wide * BLOOM_WIDTH);
         back += uLightColour[i] * core * BLOOM_SHARE * (size * size) / (wide * wide) * exp(-bl * bl);
       }
-      back = mix(back, frostLit, Fexit);
+      back = mix(back, frostLit * TRAPPED_GAIN, Fexit);
     }
     vec3 water = through * T * (1.0 - Fin) + back * Fin;
     /*

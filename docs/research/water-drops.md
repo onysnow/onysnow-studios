@@ -1316,6 +1316,39 @@ the pane's dark fill, since that fill stands in for the frost's haze, which
 the water clears. Before, the drops showed the photograph unlit and doubly
 darkened, so by a lamp each was a dark hole in a lit pane.
 
+### 9.5c Checked against a path-traced reference (2026-10-02)
+
+Ony: "Are you sure that's accurate lighting? It doesn't look right." The
+corrections in 9.5b were estimates. So the exact setup was path-traced with
+Mitsuba 3 (`water-reference/scene.py`, open source, physically based):
+a 4.5 mm pane, frosted back face (rough dielectric, Beckmann 0.25), 327
+drops on it (water n 1.333, contact angle 50 deg, contact radii 0.1-2.2 mm),
+the lamp the site's size (11.5 mm radius) 75 mm in front, the photograph
+either 15 mm behind (a print) or 3 m behind (the world), 768 samples a
+pixel. Measured across six drops (`measure.py`, linear radiance):
+
+- inside a drop: 0.1-0.5 of the frost beside it -- drops by a lamp ARE
+  darker than the frost (the photograph through them is barely lit);
+- a thin bright ring at 70-90% of the contact radius, 1.5-2.2 times the
+  frost: sight reflected by the steep part of the drop, trapped in the
+  glass, meeting the lit frost from inside;
+- a small glint near the centre, 2-4 times the frost;
+- lamp off: rings barely visible, the photograph through the drops.
+
+What changed to match: the water-to-air reflectance is now the exact
+Fresnel equations (Schlick is far off on the dense side, where the ring
+lives); trapped sight shows the frost at TRAPPED_GAIN 2; the lamp's pool
+through a drop cut from 1.5 to 0.3 (POOL_GAIN; 9.5b had it the wrong way).
+
+Two things the reference says about the rest of the site, for Ony to
+decide: (1) the frost round a lamp in the reference is a dim grey, while
+the site's light layer makes it glow near white -- the light layer is about
+ten times brighter than a lamp of this size would make it; (2) with the
+photograph 3 m away the frost blurs it to an even brown, but the site's
+frost shows the photograph recognisably, as the reference does with a print
+15 mm behind -- so the site already behaves as a print behind glass, while
+the drops (9.5) image a world 900 px away.
+
 No shadow is drawn: with the rain on the far face and the lamp in front,
 there is nothing behind a drop near enough to show one (the scene is metres
 away); the drop shows instead as clear glass in the lit frost.
