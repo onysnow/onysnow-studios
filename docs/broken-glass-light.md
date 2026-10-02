@@ -108,7 +108,16 @@ thickness along the light.
    TIR mirror -- dark-clear, flashing with the lamp and the room only where
    they line up -- tinted by the glass's own green. The white canvas strokes
    and the photographed crack layer go.
-4. **Cracks down the side faces** at their lean.
+4. ✅ (2026-10-02) **Cracks down the side faces** at their lean. A crack
+   that reaches the edge cuts the side face from the front arris to the
+   back one, along the line where its fracture face and the side cross
+   (`effects/optics/crack-side`, tested): straight across for a square
+   radial crack, slanting along the edge by the thickness times the tangent
+   of its lean for the concentric cracks and the cone's walls. It shows
+   only on the side faces you can see (edge-side `sideWidth`), projected
+   the same way, as the gap's dark line with the piped light leaving
+   through it beside it. Photographed breaks: where the photo's cracks
+   cross the border, taken as radial (the photo gives no lean).
 5. **The light under it**: crack lines in the floor light (dark line, bright
    seam, offset across the gap), each piece's patch shifted by its tilt.
 6. **Taking pieces out**: a list of missing pieces per break, the hammer's

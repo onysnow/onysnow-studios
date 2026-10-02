@@ -14,6 +14,7 @@ import { cursorLamp, onLightChange, pointLights } from "@/effects/light/lights";
 // Glass's index: a crack face seen through the pane lies at 1/n of its depth.
 import { N_GLASS, crackGlow, type CrackLightSource } from "@/effects/optics/crack-light";
 import { faceLean, faceNormal, faceRoom, type RoomSampler } from "@/effects/optics/crack-face";
+import { EDGES, edgeAt, sideTrace, type Edge } from "@/effects/optics/crack-side";
 import { decodeRadiance, kneeRadiance, ROOM_KNEE, roomUvDir } from "@/effects/optics/environment";
 import { roomLight } from "@/effects/light/lights";
 import { viewState } from "@/effects/scene/scene";
@@ -78,6 +79,51 @@ const FACE_TINT = [168, 228, 214] as const;
  */
 let roomPixels: { w: number; h: number; data: Uint8ClampedArray } | null = null;
 let roomLoading = "";
+/**
+ * Where a photographed break's crack mask crosses the pane's border: the
+ * middle of each run of crack along a strip two device pixels deep inside
+ * each edge, pane px.
+ */
+function borderCrossings(
+  mc: CanvasRenderingContext2D,
+  pw: number,
+  ph: number,
+  dpr: number,
+): { at: Pt; edge: Edge }[] {
+  const out: { at: Pt; edge: Edge }[] = [];
+  const scan = (edge: Edge, x: number, y: number, sw: number, sh: number, along: "x" | "y") => {
+    if (sw < 1 || sh < 1) return;
+    const a = mc.getImageData(x, y, sw, sh).data;
+    const n = along === "x" ? sw : sh;
+    let start = -1;
+    for (let i = 0; i <= n; i++) {
+      let hit = false;
+      if (i < n) {
+        const m = along === "x" ? sh : sw;
+        for (let j = 0; j < m && !hit; j++) {
+          const k = along === "x" ? (j * sw + i) * 4 : (i * sw + j) * 4;
+          hit = a[k + 3]! > 60;
+        }
+      }
+      if (hit && start < 0) start = i;
+      if (!hit && start >= 0) {
+        const mid = (start + i - 1) / 2 / dpr;
+        const at =
+          edge === "left" ? { x: 0, y: mid } :
+          edge === "right" ? { x: pw / dpr, y: mid } :
+          edge === "top" ? { x: mid, y: 0 } : { x: mid, y: ph / dpr };
+        out.push({ at, edge });
+        start = -1;
+      }
+    }
+  };
+  scan("top", 0, 0, pw, 2, "x");
+  scan("bottom", 0, ph - 2, pw, 2, "x");
+  scan("left", 0, 0, 2, ph, "y");
+  scan("right", pw - 2, 0, 2, ph, "y");
+  return out;
+}
+
 function roomSampler(onLoad: () => void): RoomSampler | null {
   const src = document.documentElement.getAttribute("data-room-hdr");
   if (src && roomLoading !== src) {
@@ -262,6 +308,9 @@ export function BrokenGlass({
     // The frosted photograph, cached: blurring is the costly part.
     const frost = document.createElement("canvas");
     let frostFor = "";
+    // Where a photographed break's cracks cross the pane's border (step 4), found once per placement.
+    let crossings: { at: Pt; edge: Edge }[] = [];
+    let crossFor = "";
 
     const draw = () => {
       frame = 0;
@@ -521,6 +570,43 @@ export function BrokenGlass({
       const depth = THICKNESS / N_GLASS;
       const roughReach = broken.crush * 4 + 10;
       const room = roomSampler(wake);
+      /*
+       * ---- Down the side faces (step 4) ----
+       *
+       * A crack that reaches the edge cuts the side face too, from the front
+       * arris to the back one, slanting along the edge by the thickness times
+       * the tangent of its lean (effects/optics/crack-side). On the side --
+       * the long path through the glass that shows its green -- the gap is a
+       * dark line, and the light piped along the pane, brightest there,
+       * leaves through it as a bright one beside it.
+       */
+      const drawSide = (at: Pt, edge: Edge, across: Pt, lean: number, rough: number) => {
+        const fn = faceNormal(across, lean);
+        const tr = sideTrace(at, edge, fn, THICKNESS, eye);
+        if (!tr || Math.hypot(tr.back.x - tr.front.x, tr.back.y - tr.front.y) < 0.4) return;
+        const { rgb: glow } = crackGlow(sources, at, fn, eye, rough);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = "rgb(10 16 16 / 0.6)";
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(tr.front.x, tr.front.y);
+        ctx.lineTo(tr.back.x, tr.back.y);
+        ctx.stroke();
+        const lit = additive([0.04, 0.06, 0.055], 1, glow, 1.6);
+        if (!lit) return;
+        // The bright line a hair along the edge, on the side the face leans to.
+        const out = EDGES[edge];
+        const ax = -out.y;
+        const ay = out.x;
+        const side = Math.sign(tr.shift ? (tr.back.x - tr.front.x) * ax + (tr.back.y - tr.front.y) * ay : 1) || 1;
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = lit;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(tr.front.x + ax * 0.8 * side, tr.front.y + ay * 0.8 * side);
+        ctx.lineTo(tr.back.x + ax * 0.8 * side, tr.back.y + ay * 0.8 * side);
+        ctx.stroke();
+      };
 
       if (broken.photo) {
         /*
@@ -575,6 +661,10 @@ export function BrokenGlass({
           placeMask(sc);
           sc.fillStyle = "rgb(10 16 16)";
           sc.fillRect(0, 0, w, h);
+          if (crossFor !== brokeFor) {
+            crossings = borderCrossings(sc, pw, ph, dpr);
+            crossFor = brokeFor;
+          }
           ctx.save();
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.globalAlpha = 0.42;
@@ -607,6 +697,13 @@ export function BrokenGlass({
           ctx.drawImage(maskLight, 0, 0);
           ctx.restore();
         }
+        // Its cracks down the sides: radial where they reach the edge, met square (the photo gives no lean).
+        crossings.forEach(({ at: q, edge }, k) => {
+          const o = EDGES[edge];
+          const rough = Math.exp(-Math.hypot(q.x - ix, q.y - iy) / roughReach);
+          drawSide(q, edge, { x: -o.y, y: o.x }, faceLean("radial", 400 + k, 0, rough), rough);
+        });
+        ctx.globalCompositeOperation = "source-over";
       }
       broken.cracks.forEach((c: Crack, ck) => {
         if (c.kind === "crush" && crushed?.missing) return;
@@ -697,6 +794,19 @@ export function BrokenGlass({
               ctx.stroke();
             }
           }
+        }
+        // Where it reaches the pane's edge, down the side face.
+        for (const end of [0, c.pts.length - 1]) {
+          const p0 = c.pts[end]!;
+          const edge = edgeAt(p0, w, h);
+          if (!edge) continue;
+          const p1 = c.pts[end === 0 ? 1 : end - 1];
+          if (!p1) continue;
+          const len = Math.hypot(p0.x - p1.x, p0.y - p1.y);
+          if (len < 0.05) continue;
+          const across = { x: -(p0.y - p1.y) / len, y: (p0.x - p1.x) / len };
+          const rough = c.kind === "crush" ? 1 : Math.exp(-Math.hypot(p0.x - ix, p0.y - iy) / roughReach);
+          drawSide(p0, edge, across, faceLean(c.kind, ck, end === 0 ? 0 : run, rough), rough);
         }
       });
       // A hole's rim: its faces seen whole, standing edge-on round it.
