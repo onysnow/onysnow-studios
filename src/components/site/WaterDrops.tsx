@@ -11,7 +11,9 @@ import {
 } from "@/effects/engine/gl";
 import { paneCanvas } from "@/effects/engine/compositor";
 import { glassGeometry } from "@/effects/scene/scene";
-import { pointLights, roomLight } from "@/effects/light/lights";
+import { pointLights, roomLight, strongestCharge } from "@/effects/light/lights";
+import { floorScale } from "@/effects/light/floor-scale";
+import { roomFillOverride } from "@/effects/light/room-fill";
 import { quality, surfaceScaleCap } from "@/effects/engine/quality";
 import { rainType } from "@/effects/water/rain-types";
 import { camera } from "@/effects/camera/camera";
@@ -22,6 +24,7 @@ import { onSpray, squeeze } from "@/effects/water/spray";
 import { rainVolume } from "@/effects/water/rain";
 import {
   COMPOSE_FRAGMENT,
+  MAX_WATER_EMITTERS,
   COMPOSE_VERTEX,
   DROPLET_HEIGHT_MAX,
   FADE_FRAGMENT,
@@ -41,15 +44,6 @@ import {
  * big", "like we're super zoomed in"; water-drops.md 9.5).
  */
 export const PX_PER_MM = 4;
-/**
- * How far behind the glass the scene a drop images is, CSS px. A drop is a
- * lens of a few millimetres' focal length; the photograph is the world
- * outside the window, metres away, so every drop holds it sharp, small and
- * upside down (Ony's reference photographs: the Golden Gate tower and the
- * sky inverted in each drop). 900 px puts about half the photograph inside
- * each drop (estimate, matched to those photographs).
- */
-const SCENE_DISTANCE = 900;
 /** Below this radius, device px, a drop is drawn at it and faded by its area: a sparkle, not a lens too small to draw. */
 const MIN_DRAWN_PX = 1.2;
 /** How tall a fresh rivulet stands, mm (estimate: a film a drop leaves is a few tenths of a millimetre at its crest). */
@@ -58,6 +52,13 @@ const RIVULET_MM = 0.18;
 const FOG_BUILD = 30;
 /** The glass's index (soda-lime, 1.52). */
 const GLASS_IOR = 1.52;
+/**
+ * A photograph's light (PhotoLights) seen through a drop, against the white
+ * the print clipped it to, at full strength (estimate: a lit sign or a street
+ * lamp in a night photograph is one to two orders of magnitude over that
+ * white; 12 keeps a light a quarter of a pixel across clipping to a sparkle).
+ */
+const EMIT_RADIANCE = 12;
 /** Below this, a landing drop is a droplet: drawn into the droplet map, not tracked (uL; about 0.5 mm across at 50 degrees). */
 const DROPLET_UL = 0.02;
 /** Droplets evaporate this fast, mm of height a second (estimate: a 0.1 mm droplet lasts about two minutes in a rainy room). */
@@ -131,7 +132,20 @@ export function WaterDrops() {
     const mapProgram = buildProgram(gl, MAP_VERTEX, MAP_FRAGMENT, "water map");
     const wipeProgram = buildProgram(gl, WIPE_VERTEX, WIPE_FRAGMENT, "water wipe");
     const fadeProgram = buildProgram(gl, COMPOSE_VERTEX, FADE_FRAGMENT, "water fade");
-    const composeProgram = buildProgram(gl, COMPOSE_VERTEX, COMPOSE_FRAGMENT, "water");
+    /*
+     * Explicit mip levels for the photograph seen through a drop (rain W1,
+     * the sharp lookup; water.glsl photoLod): the extension is on nearly
+     * every desktop and phone; without it the shader falls back to texture2D.
+     */
+    const lodExt = gl.getExtension("EXT_shader_texture_lod");
+    const composeProgram = buildProgram(
+      gl,
+      COMPOSE_VERTEX,
+      lodExt
+        ? `#extension GL_EXT_shader_texture_lod : enable\n#define HAS_TEXTURE_LOD 1\n${COMPOSE_FRAGMENT}`
+        : COMPOSE_FRAGMENT,
+      "water",
+    );
     if (!mapProgram || !wipeProgram || !fadeProgram || !composeProgram) return;
     const A = (p: WebGLProgram, n: string) => gl.getAttribLocation(p, n);
     const map = {
@@ -199,6 +213,16 @@ export function WaterDrops() {
       "uLightPos",
       "uLightColour",
       "uLightRadius",
+      "uLightFloor",
+      "uLightTint",
+      "uRoomFill",
+      "uBurning",
+      "uNear",
+      "uFrosted",
+      "uPhotoTexels",
+      "uEmitCount",
+      "uEmitPos",
+      "uEmitColour",
     ] as const;
     const u = Object.fromEntries(UNIFORMS.map((n) => [n, CU(n)])) as Record<
       (typeof UNIFORMS)[number],
@@ -288,6 +312,7 @@ export function WaterDrops() {
      */
     const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
     const photos = new Map<string, WebGLTexture | null>();
+    const texSize = new WeakMap<WebGLTexture, [number, number]>();
     const pow2 = (n: number) => 2 ** Math.round(Math.log2(Math.max(n, 1)));
     const photo = (src: string, fallback?: string): WebGLTexture | null => {
       if (photos.has(src)) return photos.get(src) ?? null;
@@ -311,6 +336,7 @@ export function WaterDrops() {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        if (tex) texSize.set(tex, [c.width, c.height]);
         photos.set(src, tex);
         task.wake();
       };
@@ -564,6 +590,10 @@ export function WaterDrops() {
     const lightPos = new Float32Array(MAX_WATER_LIGHTS * 3);
     const lightColour = new Float32Array(MAX_WATER_LIGHTS * 3);
     const lightRadius = new Float32Array(MAX_WATER_LIGHTS);
+    const lightFloor = new Float32Array(MAX_WATER_LIGHTS);
+    const lightTint = new Float32Array(MAX_WATER_LIGHTS * 3);
+    const emitPos = new Float32Array(MAX_WATER_EMITTERS * 3);
+    const emitColour = new Float32Array(MAX_WATER_EMITTERS * 3);
     let idleTimer = 0;
     const CORNERS = [
       [-1, -1],
@@ -947,13 +977,27 @@ export function WaterDrops() {
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.uniform1i(u.uPhoto!, 1);
       gl.uniform1f(u.uHasPhoto!, tex ? 1 : 0);
+      const size = tex ? texSize.get(tex) : undefined;
+      gl.uniform2f(u.uPhotoTexels!, size?.[0] ?? 1024, size?.[1] ?? 1024);
       gl.uniform4f(u.uImage!, pane.ix, pane.iy, pane.iw, pane.ih);
       gl.uniform3f(u.uImageFit!, pane.ia, pane.ifocus.x, pane.ifocus.y);
       gl.uniform4f(u.uPane!, pane.x, pane.y, pane.w, pane.h);
       gl.uniform1f(u.uScale!, k);
       gl.uniform1f(u.uPxPerMm!, PX_PER_MM);
       gl.uniform1f(u.uThickness!, pane.causes.thickness);
-      gl.uniform1f(u.uScene!, SCENE_DISTANCE);
+      /*
+       * How far behind the drops the photograph is: the pane's gap, the
+       * distance the glass's refraction, the floor light and the shadows
+       * all use (rain W1; it was a fixed 900 px "world outside" that nothing
+       * else agreed with). Rain on the near face of clear glass looks through
+       * the slab first, which brings the photograph nearer by its apparent
+       * depth, thickness / n.
+       */
+      const frosted = pane.causes.material.frost > 0;
+      const nearFace = !frosted && Math.round(t("rainFace")) === 1;
+      gl.uniform1f(u.uScene!, pane.causes.gap + (nearFace ? pane.causes.thickness / GLASS_IOR : 0));
+      gl.uniform1f(u.uNear!, nearFace ? 1 : 0);
+      gl.uniform1f(u.uFrosted!, frosted ? 1 : 0);
       gl.uniform1f(u.uRivulet!, RIVULET_MM);
       gl.uniform2f(u.uWetTexel!, 2 / st.w, 2 / st.h);
       gl.activeTexture(gl.TEXTURE6);
@@ -963,7 +1007,6 @@ export function WaterDrops() {
       gl.uniform1f(u.uFogSide!, Math.round(t("fogSide")));
       // Four samples a pixel where there is water, on machines that run the full tier.
       gl.uniform1f(u.uSamples!, quality() === "full" ? 4 : 1);
-      const frosted = pane.causes.material.frost > 0;
       // On clear glass the water is a lens whichever face it is on; on frosted glass, only on the etched face.
       gl.uniform1f(u.uClear!, !frosted || Math.round(t("rainFace")) === 0 ? 1 : 0);
       gl.uniform1f(u.uIor!, WATER.n);
@@ -994,9 +1037,49 @@ export function WaterDrops() {
         lightColour[n * 3 + 1] = l.colour[1] * strength;
         lightColour[n * 3 + 2] = l.colour[2] * strength;
         lightRadius[n] = l.radius;
+        /*
+         * The lamp on the print, as the floor light sends it (FloorLight):
+         * its charge eased, its power and height against the defaults
+         * (cursor lamp and physical lights only), and "Light through glass".
+         */
+        const lit = l.charge * l.charge * (3 - 2 * l.charge);
+        const scale = l.id === "cursor" || l.physicalFloor ? floorScale(l.gain, l.height) : 1;
+        lightFloor[n] = lit * scale * t("floorLight");
+        lightTint[n * 3] = l.colour[0];
+        lightTint[n * 3 + 1] = l.colour[1];
+        lightTint[n * 3 + 2] = l.colour[2];
         n++;
       }
       gl.uniform1i(u.uLightCount!, n);
+      gl.uniform1fv(u.uLightFloor!, lightFloor);
+      gl.uniform3fv(u.uLightTint!, lightTint);
+      gl.uniform1f(u.uRoomFill!, Math.min(t("roomFill"), roomFillOverride()));
+      gl.uniform1f(u.uBurning!, strongestCharge());
+      /*
+       * The photograph's own lights (PhotoLights: its brightest spots, as
+       * lights under the glass), carried through each drop's lens (rain W1).
+       * A print clips a lamp or a neon to white; it was brighter than that,
+       * by EMIT_RADIANCE at full strength (estimate: a lit sign or a street
+       * lamp in a night photograph is one to two orders of magnitude over
+       * the white it was clipped to), so in a drop it is still a sparkle.
+       */
+      let ne = 0;
+      for (const l of pointLights()) {
+        if (ne >= MAX_WATER_EMITTERS || !l.below || l.charge <= 0.002) continue;
+        if (l.x < pane.x - 400 || l.x > pane.x + pane.w + 400) continue;
+        if (l.y < pane.y - 400 || l.y > pane.y + pane.h + 400) continue;
+        emitPos[ne * 3] = l.x;
+        emitPos[ne * 3 + 1] = l.y;
+        emitPos[ne * 3 + 2] = Math.max(l.radius, 1);
+        const e = EMIT_RADIANCE * l.charge;
+        emitColour[ne * 3] = l.colour[0] * e;
+        emitColour[ne * 3 + 1] = l.colour[1] * e;
+        emitColour[ne * 3 + 2] = l.colour[2] * e;
+        ne++;
+      }
+      gl.uniform1i(u.uEmitCount!, ne);
+      gl.uniform3fv(u.uEmitPos!, emitPos);
+      gl.uniform3fv(u.uEmitColour!, emitColour);
       gl.uniform3fv(u.uLightPos!, lightPos);
       gl.uniform3fv(u.uLightColour!, lightColour);
       gl.uniform1fv(u.uLightRadius!, lightRadius);

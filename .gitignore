@@ -39,3 +39,7 @@ dist-ssr
 /playwright/.cache/
 /coverage/
 rig.mjs
+
+# Fracture simulation output (large; regenerate with tools/fracture-sim)
+tools/fracture-sim/out/
+tools/fracture-sim/__pycache__/

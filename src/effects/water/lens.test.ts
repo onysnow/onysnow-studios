@@ -25,6 +25,23 @@ describe("a drop as a lens (water-drops 3.1, 7.5 step 3)", () => {
     expect(seenAt(r, a, h0, n, gap) / r).toBeCloseTo(1 - gap / f, 2);
   });
 
+  it("a rain bead at the pane's gap shows the photograph upside down and a few times smaller (rain W1)", () => {
+    /*
+     * The engine's default gap, 70 CSS px at 4 px a mm: 17.5 mm. A bead 1 mm
+     * across its contact line at water's 50 degree rest angle. The shader's
+     * footprint, 1 + D (n - 1) h'', is this same scale at the centre.
+     */
+    const gap = 70 / 4;
+    const theta = (50 * Math.PI) / 180;
+    const bead = { a: 0.5, h0: 0.5 * Math.tan(theta / 2) };
+    const scale = seenAt(0.01, bead.a, bead.h0, n, gap) / 0.01;
+    expect(scale).toBeLessThan(-2);
+    expect(scale).toBeGreaterThan(-12);
+    // At the old fixed 900 px (225 mm) every bead shrank the picture about a hundred times.
+    const far = seenAt(0.01, bead.a, bead.h0, n, 900 / 4) / 0.01;
+    expect(Math.abs(far)).toBeGreaterThan(50);
+  });
+
   it("water's critical angle against air is 48.6 degrees", () => {
     expect(criticalAngle(1.333)).toBeCloseTo(48.6, 1);
   });
