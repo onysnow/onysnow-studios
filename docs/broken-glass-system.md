@@ -248,9 +248,14 @@ from cracks; 7–9 inside crack bands (5–20% of a broken pane). To be measured
 (the pass, on the shared context, drawn under the 2D strokes). The fold, the
 room out of the front face, and the trapped glow (room mean and lamps, rolled
 off, rippled by Wallner lines and hackle) are in; the Fresnel share and the
-exact band width too. Not yet: holes' rims, the broken mirror per piece in
-this pass (the shard map still does it), the thin-film colours, the laminated
-second ply, and the steps between pieces (drawn in 2D for now).
+exact band width too, and each crack's depth: a simulated break's cracks
+start on the back face and not all reach the front (Ony, 2026-10-02: "lots
+of the cracks don't go all the way thru" -- some really don't), so a
+one-face crack is met only in its part of the thickness (crack-field
+PART_DEPTH), drawn narrower by the ribbons, and makes no step. Not yet:
+holes' rims, the broken mirror per piece in this pass (the shard map still
+does it), the thin-film colours, the laminated second ply, and the steps
+between pieces (drawn in 2D for now: crack-step).
 
 ### 3.6 Render: light
 
