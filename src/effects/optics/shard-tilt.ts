@@ -7,7 +7,7 @@
  * dish whole -- the interlayer holds every piece where the bend left it -- so
  * its pieces slope down toward the strike by the dish's slope. Annealed
  * pieces sit loosely in the frame and each settles at its own angle, most
- * near the strike; tempered dice barely move. Modelled, not measured: a cone
+ * near the strike. Modelled, not measured: a cone
  * dent whose slope grows with the blow, 1 to 4 degrees, out to a radius that
  * grows with it too, and a random knock on top for loose pieces.
  *
@@ -23,7 +23,6 @@ const DEG = Math.PI / 180;
 /** The dent's slope, radians, and how far out it reaches (a share of the pane's diagonal). */
 export function dent(kind: GlassKind, energy: number): { slope: number; reach: number } {
   const E = Math.max(0, Math.min(1, energy));
-  if (kind === "tempered") return { slope: 0, reach: 0 };
   const slope = (1 + 3 * E) * DEG;
   // Laminated bends wide before it lets go; annealed breaks sooner.
   const reach = (kind === "laminated" ? 0.3 : 0.18) + 0.3 * E;
@@ -33,7 +32,7 @@ export function dent(kind: GlassKind, energy: number): { slope: number; reach: n
 /** The random knock's size for a piece `reach` (share of the diagonal) from the strike, radians. */
 export function knockSize(kind: GlassKind, energy: number, reach: number): number {
   const E = Math.max(0, Math.min(1, energy));
-  const loose = kind === "laminated" ? 0.25 : kind === "tempered" ? 0.4 : 1;
+  const loose = kind === "laminated" ? 0.25 : 1;
   return loose * (0.5 + 2.5 * E) * DEG * (0.25 + 0.75 * Math.exp(-reach * 4));
 }
 

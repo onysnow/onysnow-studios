@@ -11,7 +11,14 @@ import type { Photo } from "@/lib/content";
  * full-width rows of equal height, so the set reads as one fluid composition
  * rather than a column grid. Clicking any frame opens the lightbox.
  */
-export function JustifiedGallery({ images, spacing = 6 }: { images: Photo[]; spacing?: number }) {
+export function JustifiedGallery({
+  images,
+  spacing = 6,
+}: {
+  images: Photo[];
+  /** The gutter between photos, px: a number, or a function of the gallery's width. */
+  spacing?: number | ((containerWidth: number) => number);
+}) {
   const [index, setIndex] = useState(-1);
 
   const slides = useMemo(

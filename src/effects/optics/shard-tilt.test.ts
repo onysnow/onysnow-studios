@@ -10,7 +10,6 @@ describe("how far each piece of a broken pane is tilted", () => {
     expect(dent("laminated", 0.2).slope).toBeLessThan(dent("laminated", 0.9).slope);
     expect(dent("annealed", 0.7).slope / deg).toBeGreaterThan(2);
     expect(dent("annealed", 0.7).slope / deg).toBeLessThan(5);
-    expect(dent("tempered", 0.9).slope).toBe(0);
   });
 
   it("leans each piece in the dent back toward the strike", () => {

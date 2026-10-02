@@ -11,7 +11,7 @@ import {
 /*
  * Item 10: a pane breaks the way its glass does (claude/tools-research.md
  * §2): annealed into long radial shards with rings near the impact,
- * tempered into small even dice, laminated into a held spider web -- and
+ * laminated into a held spider web -- and
  * whatever the pattern, the shards are the whole pane, no more, no less.
  */
 
@@ -22,7 +22,7 @@ const areaOf = (kind: GlassKind) =>
 
 describe("a pane breaking", () => {
   it("cuts the whole pane into shards, nothing missing or doubled", () => {
-    for (const kind of ["annealed", "tempered", "laminated"] as const) {
+    for (const kind of ["annealed", "laminated"] as const) {
       expect(areaOf(kind) / (pane.w * pane.h)).toBeCloseTo(1, 2);
     }
   });
@@ -31,31 +31,6 @@ describe("a pane breaking", () => {
     expect(breakOf("annealed", 1).shards.length).toBeGreaterThan(
       breakOf("annealed", 0).shards.length,
     );
-  });
-
-  it("annealed breaks into long shards; tempered dices into small even ones", () => {
-    const annealed = breakOf("annealed");
-    const tempered = breakOf("tempered");
-    // Long and thin: perimeter squared over area (a square is 16).
-    const slender = (poly: Pt[]) => {
-      let p = 0;
-      for (let i = 0; i < poly.length; i++) {
-        const a = poly[i]!;
-        const b = poly[(i + 1) % poly.length]!;
-        p += Math.hypot(b.x - a.x, b.y - a.y);
-      }
-      return (p * p) / polygonArea(poly);
-    };
-    const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
-    expect(median(annealed.shards.map((s) => slender(s.poly)))).toBeGreaterThan(
-      median(tempered.shards.map((s) => slender(s.poly))) * 1.3,
-    );
-    const sizes = tempered.shards.map((s) => polygonArea(s.poly));
-    const mean = sizes.reduce((a, b) => a + b, 0) / sizes.length;
-    // About a centimetre on a side (38 px), and no piece far from the rest.
-    expect(Math.sqrt(mean)).toBeGreaterThan(25);
-    expect(Math.sqrt(mean)).toBeLessThan(50);
-    expect(Math.max(...sizes) / mean).toBeLessThan(3);
   });
 
   it("laminated is a spider web of many pieces, held nearly in place", () => {

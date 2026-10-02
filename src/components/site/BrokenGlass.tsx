@@ -109,9 +109,13 @@ function borderCrossings(
       if (!hit && start >= 0) {
         const mid = (start + i - 1) / 2 / dpr;
         const at =
-          edge === "left" ? { x: 0, y: mid } :
-          edge === "right" ? { x: pw / dpr, y: mid } :
-          edge === "top" ? { x: mid, y: 0 } : { x: mid, y: ph / dpr };
+          edge === "left"
+            ? { x: 0, y: mid }
+            : edge === "right"
+              ? { x: pw / dpr, y: mid }
+              : edge === "top"
+                ? { x: mid, y: 0 }
+                : { x: mid, y: ph / dpr };
         out.push({ at, edge });
         start = -1;
       }
@@ -171,9 +175,9 @@ type Props = {
  * A broken pane (item 10, ?try=broken on Lab samples), laid over the pane
  * it breaks. From the fracture research (claude/tools-research.md §2):
  *
- *   the pattern is the glass's (effects/optics/fracture): annealed into long
- *     radial shards with rings near the impact, tempered into dice,
- *     laminated into a spider web;
+ *   the pattern is the glass's (effects/optics/fracture): plain (annealed)
+ *     into long radial shards with rings near the impact, laminated into a
+ *     spider web;
  *   each shard has knocked a little out of the pane's plane, so what is seen
  *     through it -- the photograph behind, frosted as the pane frosts it --
  *     steps at every crack;
@@ -598,7 +602,9 @@ export function BrokenGlass({
         const out = EDGES[edge];
         const ax = -out.y;
         const ay = out.x;
-        const side = Math.sign(tr.shift ? (tr.back.x - tr.front.x) * ax + (tr.back.y - tr.front.y) * ay : 1) || 1;
+        const side =
+          Math.sign(tr.shift ? (tr.back.x - tr.front.x) * ax + (tr.back.y - tr.front.y) * ay : 1) ||
+          1;
         ctx.globalCompositeOperation = "lighter";
         ctx.strokeStyle = lit;
         ctx.lineWidth = 0.6;
@@ -805,7 +811,8 @@ export function BrokenGlass({
           const len = Math.hypot(p0.x - p1.x, p0.y - p1.y);
           if (len < 0.05) continue;
           const across = { x: -(p0.y - p1.y) / len, y: (p0.x - p1.x) / len };
-          const rough = c.kind === "crush" ? 1 : Math.exp(-Math.hypot(p0.x - ix, p0.y - iy) / roughReach);
+          const rough =
+            c.kind === "crush" ? 1 : Math.exp(-Math.hypot(p0.x - ix, p0.y - iy) / roughReach);
           drawSide(p0, edge, across, faceLean(c.kind, ck, end === 0 ? 0 : run, rough), rough);
         }
       });

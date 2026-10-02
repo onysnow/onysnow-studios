@@ -39,7 +39,6 @@ import type { CrackKind } from "./fracture";
 export const KIND_LEAN: Record<CrackKind, number> = {
   radial: 0.06,
   branch: 0.09,
-  dice: 0.12,
   ring: 0.5,
   crush: 1.05,
 };

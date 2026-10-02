@@ -9,6 +9,14 @@ import { photoUrl } from "@/lib/photo-url";
 
 type PortfolioSearch = { category?: string };
 
+/**
+ * The gutter between portfolio photos, px, by the gallery's width: 12 on a
+ * phone (matching the pane's side padding there), 16 on a tablet, 20 on a
+ * desktop. Was 6 everywhere; Ony asked for more space (2026-10-02).
+ */
+const portfolioGutter = (containerWidth: number) =>
+  containerWidth < 640 ? 12 : containerWidth < 1200 ? 16 : 20;
+
 export const Route = createFileRoute("/portfolio/")({
   validateSearch: (search: Record<string, unknown>): PortfolioSearch => {
     const raw = search["category"];
@@ -75,7 +83,7 @@ function Portfolio() {
         <section className="px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-screen-2xl">
             {catsPending || photosPending ? (
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 lg:gap-5">
                 {Array.from({ length: 12 }).map((_, i) => (
                   <Skeleton key={i} className="aspect-[3/2] w-full" />
                 ))}
@@ -87,7 +95,7 @@ function Portfolio() {
                   : "Photographs are coming soon."}
               </p>
             ) : (
-              <JustifiedGallery images={images} />
+              <JustifiedGallery images={images} spacing={portfolioGutter} />
             )}
           </div>
         </section>

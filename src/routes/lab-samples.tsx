@@ -220,22 +220,30 @@ function LabSamples() {
       ) : null}
 
       {/*
-       * Broken glass (item 10, ?try=broken): three panes, broken the way each
-       * kind of glass breaks (effects/optics/fracture).
+       * Broken glass (item 10, ?try=broken): two panes, plain and laminated,
+       * broken the way each kind of glass breaks (effects/optics/fracture).
+       * No tempered pane: Ony wants plain and laminated only (2026-10-02).
        */}
       {broken ? (
         <ParallaxScene image={photos.data?.[2] ?? photo} scrim="none" height="">
-          <div className="mx-auto grid max-w-5xl gap-6 px-6 py-20 sm:grid-cols-3" data-lab-broken>
+          <div className="mx-auto grid max-w-5xl gap-6 px-6 py-20 sm:grid-cols-2" data-lab-broken>
             {(
               [
-                ["annealed", "Annealed: long radial shards, rings near the impact."],
-                ["tempered", "Tempered: dices into small, blunt, even pieces."],
-                ["laminated", "Laminated: held by its interlayer, a spider web."],
+                [
+                  "annealed",
+                  "Plain",
+                  "Plain window glass: long radial shards, rings near the impact.",
+                ],
+                [
+                  "laminated",
+                  "Laminated",
+                  "Laminated: held by its plastic interlayer, a spider web.",
+                ],
               ] as const
-            ).map(([kind, text]) => (
+            ).map(([kind, label, text]) => (
               <Pane key={kind} className="relative h-64 !p-5">
                 <BrokenGlass kind={kind} />
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{kind}</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{text}</p>
               </Pane>
             ))}

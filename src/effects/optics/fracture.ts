@@ -9,9 +9,6 @@
  *     as they run and turning to meet the frame square; concentric cracks
  *     as short chords from one radial to the next, staggered, near the
  *     impact. A crack that meets another stops there.
- *   TEMPERED glass releases its locked-in stress all at once and dices into
- *     small, blunt, roughly equal cubes -- about a centimetre -- over the
- *     whole pane.
  *   LAMINATED glass is held together by its interlayer, so the pieces stay
  *     put and the cracks make a dense spider web: many radials, many rings of
  *     chords.
@@ -21,13 +18,16 @@
  * what is seen through it steps at every crack), and how far it is from the
  * impact. At a hard hit the smallest pieces by the impact fall out.
  *
+ * Tempered glass (which dices into small even cubes) is not modelled: Ony
+ * wants plain and laminated glass only (2026-10-02).
+ *
  * Pure and deterministic: the same impact gives the same break.
  */
 
 import { CrackNet } from "./crack-net";
 import { pieceTilt } from "./shard-tilt";
 
-export type GlassKind = "annealed" | "tempered" | "laminated";
+export type GlassKind = "annealed" | "laminated";
 
 export type Pt = { x: number; y: number };
 
@@ -49,10 +49,9 @@ export type Shard = {
 
 /**
  * One crack as it ran: radial (from the crushed spot), branch (forked off
- * another), ring (a concentric chord), crush (the crushed spot's rim) or
- * dice (a tempered cube's edge).
+ * another), ring (a concentric chord) or crush (the crushed spot's rim).
  */
-export type CrackKind = "radial" | "branch" | "ring" | "crush" | "dice";
+export type CrackKind = "radial" | "branch" | "ring" | "crush";
 
 export type Crack = {
   kind: CrackKind;
@@ -68,7 +67,7 @@ export type Fracture = {
   shards: Shard[];
   /** Every crack, once each. */
   cracks: Crack[];
-  /** The crushed spot's radius, px (0 for tempered). */
+  /** The crushed spot's radius, px. */
   crush: number;
 };
 
@@ -401,83 +400,6 @@ function webBreak(im: Impact, seed: number): Break {
   return { faces: net.faces(), cracks, crush };
 }
 
-/**
- * Tempered glass dicing: a Voronoi tiling of jittered points about a
- * centimetre apart (38 px at 96 dpi), each cell the region nearer its point
- * than any other -- the rectangle clipped by the half-planes to its
- * neighbours.
- */
-function diceBreak(im: Impact, seed: number): Pt[][] {
-  const { w, h } = im;
-  const pitch = 38 * (1.15 - 0.3 * im.energy);
-  const cols = Math.max(1, Math.round(w / pitch));
-  const rows = Math.max(1, Math.round(h / pitch));
-  const cw = w / cols;
-  const ch = h / rows;
-  const sites: Pt[] = [];
-  for (let j = 0; j < rows; j++) {
-    for (let i = 0; i < cols; i++) {
-      const k = j * cols + i;
-      sites.push({
-        x: (i + 0.15 + 0.7 * rand(seed, 300 + k * 2)) * cw,
-        y: (j + 0.15 + 0.7 * rand(seed, 301 + k * 2)) * ch,
-      });
-    }
-  }
-  const cells: Pt[][] = [];
-  for (let k = 0; k < sites.length; k++) {
-    const s = sites[k]!;
-    const ci = k % cols;
-    const cj = Math.floor(k / cols);
-    let poly: Pt[] = [
-      { x: 0, y: 0 },
-      { x: w, y: 0 },
-      { x: w, y: h },
-      { x: 0, y: h },
-    ];
-    // Neighbours within two cells are the only ones that can bound it.
-    for (let dj = -2; dj <= 2; dj++) {
-      for (let di = -2; di <= 2; di++) {
-        if (!di && !dj) continue;
-        const ni = ci + di;
-        const nj = cj + dj;
-        if (ni < 0 || nj < 0 || ni >= cols || nj >= rows) continue;
-        const o = sites[nj * cols + ni]!;
-        const mid = { x: (s.x + o.x) / 2, y: (s.y + o.y) / 2 };
-        poly = clipHalf(poly, mid, { x: o.x - s.x, y: o.y - s.y });
-        if (poly.length < 3) break;
-      }
-    }
-    if (poly.length >= 3) cells.push(poly);
-  }
-  return cells;
-}
-
-/** A tempered break's cracks: every cube edge inside the pane, once. */
-function diceCracks(cells: readonly Pt[][], w: number, h: number): Crack[] {
-  const seen = new Set<string>();
-  const out: Crack[] = [];
-  const key = (p: Pt) => `${Math.round(p.x * 4)},${Math.round(p.y * 4)}`;
-  const onBorder = (p: Pt, q: Pt) =>
-    (Math.abs(p.x) < 0.5 && Math.abs(q.x) < 0.5) ||
-    (Math.abs(p.y) < 0.5 && Math.abs(q.y) < 0.5) ||
-    (Math.abs(p.x - w) < 0.5 && Math.abs(q.x - w) < 0.5) ||
-    (Math.abs(p.y - h) < 0.5 && Math.abs(q.y - h) < 0.5);
-  for (const poly of cells) {
-    for (let i = 0; i < poly.length; i++) {
-      const a = poly[i]!;
-      const b = poly[(i + 1) % poly.length]!;
-      if (onBorder(a, b) || Math.hypot(b.x - a.x, b.y - a.y) < 0.5) continue;
-      const k1 = `${key(a)}|${key(b)}`;
-      const k2 = `${key(b)}|${key(a)}`;
-      if (seen.has(k1) || seen.has(k2)) continue;
-      seen.add(k1);
-      out.push({ kind: "dice", pts: [a, b], segs: [] });
-    }
-  }
-  return out;
-}
-
 function inside(poly: readonly Pt[], p: Pt): boolean {
   let hit = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -496,27 +418,22 @@ export function fracture(im: Impact): Fracture {
   const E = Math.max(0, Math.min(1, im.energy));
   let br: Break;
   let at = im.at;
-  if (im.kind === "tempered") {
-    const faces = diceBreak(im, seed);
-    br = { faces, cracks: diceCracks(faces, im.w, im.h), crush: 0 };
-  } else {
-    // The crushed spot stays inside the pane.
-    const c = crushRadius(E) * 1.3 + 2;
-    at = {
-      x: Math.max(c, Math.min(im.w - c, im.at.x)),
-      y: Math.max(c, Math.min(im.h - c, im.at.y)),
-    };
-    const one = (k: number) => webBreak({ ...im, at, energy: E }, seed + k * 101);
-    br = one(0);
-    // Should no crack have reached the frame (a web hanging free of it),
-    // the pieces would not tile the pane; break it again, another way.
-    const whole = (b: Break) =>
-      Math.abs(b.faces.reduce((a, f) => a + polygonArea(f), 0) - im.w * im.h) < 1e-3 * im.w * im.h;
-    for (let k = 1; k < 6 && !whole(br); k++) br = one(k);
-  }
+  // The crushed spot stays inside the pane.
+  const c = crushRadius(E) * 1.3 + 2;
+  at = {
+    x: Math.max(c, Math.min(im.w - c, im.at.x)),
+    y: Math.max(c, Math.min(im.h - c, im.at.y)),
+  };
+  const one = (k: number) => webBreak({ ...im, at, energy: E }, seed + k * 101);
+  br = one(0);
+  // Should no crack have reached the frame (a web hanging free of it),
+  // the pieces would not tile the pane; break it again, another way.
+  const whole = (b: Break) =>
+    Math.abs(b.faces.reduce((a, f) => a + polygonArea(f), 0) - im.w * im.h) < 1e-3 * im.w * im.h;
+  for (let k = 1; k < 6 && !whole(br); k++) br = one(k);
   const diag = Math.hypot(im.w, im.h);
   // Laminated pieces are held by the interlayer: they barely move.
-  const loose = im.kind === "laminated" ? 0.25 : im.kind === "tempered" ? 0.6 : 1;
+  const loose = im.kind === "laminated" ? 0.25 : 1;
   const rnd = stream(seed * 3.7 + 11);
   const shards = br.faces.map((poly, k) => {
     const c = centroid(poly);
@@ -544,7 +461,7 @@ export function fracture(im: Impact): Fracture {
       },
       reach,
     };
-    if (im.kind !== "tempered" && inside(poly, at)) shard.crushed = true;
+    if (inside(poly, at)) shard.crushed = true;
     /*
      * A hard blow knocks the smallest pieces by the impact out of an
      * annealed pane (laminated holds them): the crushed spot at the hardest,
