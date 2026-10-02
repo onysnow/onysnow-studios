@@ -105,7 +105,8 @@ export function placeBreak(entry: BreakEntry, im: Impact): LibraryFracture {
     }
     return { x: at.x + x * PX_PER_MM, y: at.y + y * PX_PER_MM };
   };
-  const edgeMm = 8;
+  // The frame-line crack runs along the clamp, just inside the gasket: within the entry's own edge band.
+  const edgeMm = (entry.edge_mm ?? 12) + 2;
   const alongEdge = (pts: [number, number][]) => {
     // A crack that runs along the entry's own frame line: every point near one edge, the same edge.
     const near = (p: [number, number]) => [
