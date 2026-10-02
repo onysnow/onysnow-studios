@@ -519,7 +519,7 @@ def run_sheet(name, folder, dest):
     print("sheet", dest)
 
 
-def run_sheet2(name, folder, refs, dest, series="Pressed in a frame, round tip"):
+def run_sheet2(name, folder, refs, dest, series="Drop weight, round tip"):
     """The B0 sheet: the simulated break beside real panes and reference photographs, with the numbers."""
     root = HERE / "out" / name
     stats = json.loads((root / "stats.json").read_text())
@@ -532,14 +532,14 @@ def run_sheet2(name, folder, refs, dest, series="Pressed in a frame, round tip")
         font = bold = ImageFont.load_default()
     big = 520
     small = 300
-    W = big * 2 + 40
+    W = max(big * 2 + 40, 10 + 5 * (small - 4) + 10)
     sheet = Image.new("RGB", (W, big + small + 330), "white")
     d = ImageDraw.Draw(sheet)
     d.text((10, 10), f"Simulated here (Peridynamics.jl, {name}): crack lines through the pane, and their order of arrival", font=bold, fill="black")
     sheet.paste(Image.open(root / "tracing-hi.png").convert("RGB").resize((big, big), Image.LANCZOS), (10, 36))
     sheet.paste(Image.open(root / "arrival.png").convert("RGB").resize((big, big), Image.LANCZOS), (big + 30, 36))
-    d.text((big + 30, big + 40), "yellow: first cracks; purple: last", font=font, fill="black")
-    y2 = big + 66
+    d.text((big + 30, big + 42), "yellow: first cracks; purple: last", font=font, fill="black")
+    y2 = big + 72
     d.text((10, y2), "Real: two of the NIJ panes (same series as the numbers) and reference photographs", font=bold, fill="black")
     files = sorted(Path(folder).glob("p-*.png"))
     idx = {"Drop weight, blunt tip": 0, "Drop weight, round tip": 1, "Drop weight, sharp tip": 2,
