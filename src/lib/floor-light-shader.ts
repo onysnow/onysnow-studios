@@ -144,6 +144,16 @@ uniform float uCasterStrength;
  * room, where the lamp's pool and its shadows are all there is.
  */
 uniform float uRoomFill;
+/*
+ * The drops' lens map (rain W2; effects/water/lens-map): what the water on
+ * the glass does to one lamp's light on the print, E = r + 8 g against the
+ * plain pane, 1 where no drop lies. Drawn by the water pass over the
+ * viewport; applied to that lamp's light alone.
+ */
+uniform sampler2D uLens;
+uniform float uHasLens;
+uniform vec2 uLensSize;       // the map's viewport, CSS px
+uniform int uLensLight;       // which light it was drawn for
 uniform float uFloorScale[MAX_LIGHTS]; // each light's brightness and distance against the defaults (P / H^2)
 
 ${EDGE_PROFILE_GLSL}
@@ -525,6 +535,11 @@ void main() {
     // Its power and its height: inverse square, against the defaults (FloorLight uFloorScale).
     lit *= uFloorScale[i];
     vec4 one = floorAt(at, lit, from, uLightPos[i].z, uLightRadius[i]);
+    if (uHasLens > 0.5 && i == uLensLight) {
+      // The water's lenses: a bead's near-black shadow, a flat drop's focused core.
+      vec4 l = texture2D(uLens, clamp(vec2(at.x / uLensSize.x, 1.0 - at.y / uLensSize.y), 0.0, 1.0));
+      one.rgb *= l.r + 8.0 * l.g;
+    }
     f += one;
     coloured += one.rgb * uLightColour[i];
   }

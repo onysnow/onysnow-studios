@@ -13,6 +13,7 @@ import { paneCanvas } from "@/effects/engine/compositor";
 import { glassGeometry } from "@/effects/scene/scene";
 import { pointLights, roomLight, strongestCharge } from "@/effects/light/lights";
 import { floorScale } from "@/effects/light/floor-scale";
+import { publishLensMap } from "@/effects/water/lens-map";
 import { roomFillOverride } from "@/effects/light/room-fill";
 import { quality, surfaceScaleCap } from "@/effects/engine/quality";
 import { rainType } from "@/effects/water/rain-types";
@@ -24,6 +25,12 @@ import { onSpray, squeeze } from "@/effects/water/spray";
 import { rainVolume } from "@/effects/water/rain";
 import {
   COMPOSE_FRAGMENT,
+  LENS_FRAGMENT,
+  LENS_LUT_PENUMBRAS,
+  LENS_LUT_RATIO_MAX,
+  LENS_LUT_RATIO_MIN,
+  LENS_RHO_MAX,
+  LENS_VERTEX,
   MAX_WATER_EMITTERS,
   COMPOSE_VERTEX,
   DROPLET_HEIGHT_MAX,
@@ -146,8 +153,16 @@ export function WaterDrops() {
         : COMPOSE_FRAGMENT,
       "water",
     );
-    if (!mapProgram || !wipeProgram || !fadeProgram || !composeProgram) return;
+    const lensProgram = buildProgram(gl, LENS_VERTEX, LENS_FRAGMENT, "water lens map");
+    if (!mapProgram || !wipeProgram || !fadeProgram || !composeProgram || !lensProgram) return;
     const A = (p: WebGLProgram, n: string) => gl.getAttribLocation(p, n);
+    const lens = {
+      pos: A(lensProgram, "aPos"),
+      local: A(lensProgram, "aLocal"),
+      lens: A(lensProgram, "aLens"),
+      viewport: gl.getUniformLocation(lensProgram, "uViewport"),
+      lut: gl.getUniformLocation(lensProgram, "uLut"),
+    };
     const map = {
       pos: A(mapProgram, "aPos"),
       local: A(mapProgram, "aLocal"),
@@ -270,6 +285,177 @@ export function WaterDrops() {
         return null;
       }
       return { tex, fbo };
+    };
+
+    /*
+     * The lens map (rain W2; effects/water/lens-map): what the drops do to
+     * the lamp's light on the print, drawn each frame the lamp is lit, for
+     * the floor light to read. Viewport-sized at CSS px; RGBA8.
+     */
+    let lensTarget: { tex: WebGLTexture | null; fbo: WebGLFramebuffer | null } | null = null;
+    let lensW = 0;
+    let lensH = 0;
+    let lensLut: WebGLTexture | null = null;
+    let lensLutRequested = false;
+    const requestLensLut = () => {
+      if (lensLutRequested) return;
+      lensLutRequested = true;
+      const img = new Image();
+      img.onload = () => {
+        lensLut = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, lensLut);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        task.wake();
+      };
+      img.src = "/water/drop-lens-lut.png";
+    };
+    const lensBuffer = gl.createBuffer();
+    // Development only: the lens map's state, for the rigs.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __lensState?: () => unknown }).__lensState = () => ({
+        lut: Boolean(lensLut),
+        requested: lensLutRequested,
+        frame: lensFrame,
+        size: [lensW, lensH],
+        sims: sims.size,
+      });
+    }
+    let lensData = new Float32Array(6 * 6 * 512);
+    let lensFrame = 0;
+    const ensureLens = (w: number, h: number) => {
+      if (lensTarget && w === lensW && h === lensH) return true;
+      if (lensTarget) {
+        gl.deleteTexture(lensTarget.tex);
+        gl.deleteFramebuffer(lensTarget.fbo);
+      }
+      lensW = w;
+      lensH = h;
+      lensTarget = makeTarget(w, h, gl.UNSIGNED_BYTE, gl.LINEAR);
+      return Boolean(lensTarget);
+    };
+    /*
+     * One sprite per drop for the lamp: centred where the lamp's ray through
+     * the drop lands on the print (a gap G behind the glass, the lamp H above
+     * it: offset (drop - lamp) G / H, the footprint magnified (H + G) / H),
+     * reading the lookup row for the gap over the drop's focal length
+     * R / (n - 1), R = (a^2 + h^2) / 2h, and the penumbra tile for the lamp's
+     * size on the print, G r / H, over the contact radius.
+     */
+    const drawLensMap = (
+      vw: number,
+      vh: number,
+      lamp: { id: string; x: number; y: number; height: number; radius: number },
+    ) => {
+      if (!lensLut) {
+        requestLensLut();
+        return;
+      }
+      if (!ensureLens(vw, vh) || !lensTarget) return;
+      // Panes and lights are in viewport CSS px already (scene.glassGeometry, lights).
+      const sx = 0;
+      const sy = 0;
+      const H = Math.max(lamp.height, 20);
+      let n = 0;
+      let count = 0;
+      for (const pane of glassGeometry()) {
+        if (pane.y + pane.h < 0 || pane.y > vh || !pane.src) continue;
+        const sim = sims.get(pane.el);
+        if (!sim) continue;
+        const frosted = pane.causes.material.frost > 0;
+        const nearFace = !frosted && Math.round(t("rainFace")) === 1;
+        // The print's distance behind the drop, CSS px (the slab lies between for drops on the near face).
+        const G = pane.causes.gap + (nearFace ? pane.causes.thickness / GLASS_IOR : 0);
+        if (G <= 0) continue;
+        const mag = (H + G) / H;
+        for (let i = 0; i < sim.count; i++) {
+          const a = sim.radius(i);
+          if (a < 0.08) continue;
+          const h0 = sim.capHeight(i);
+          const R = (a * a + h0 * h0) / Math.max(2 * h0, 1e-4);
+          const f = R / (WATER.n - 1);
+          const ratio = G / PX_PER_MM / f;
+          const row =
+            Math.log(Math.max(ratio, LENS_LUT_RATIO_MIN) / LENS_LUT_RATIO_MIN) /
+            Math.log(LENS_LUT_RATIO_MAX / LENS_LUT_RATIO_MIN);
+          const dx = pane.x + sim.x[i]! * PX_PER_MM;
+          const dy = pane.y + sim.y[i]! * PX_PER_MM;
+          const cx = dx + ((dx - lamp.x) * G) / H - sx;
+          const cy = dy + ((dy - lamp.y) * G) / H - sy;
+          const af = a * PX_PER_MM * mag;
+          const pen = (G * Math.max(lamp.radius, 1)) / H / af;
+          let tile = 0;
+          for (let k = 1; k < LENS_LUT_PENUMBRAS.length; k++) {
+            if (
+              Math.abs(Math.log((pen + 1e-3) / LENS_LUT_PENUMBRAS[k]!)) <
+              Math.abs(Math.log((pen + 1e-3) / LENS_LUT_PENUMBRAS[tile]!))
+            )
+              tile = k;
+          }
+          const ext = af * LENS_RHO_MAX;
+          if (cx + ext < 0 || cx - ext > vw || cy + ext < 0 || cy - ext > vh) continue;
+          if (n + 36 > lensData.length) {
+            const grown = new Float32Array(lensData.length * 2);
+            grown.set(lensData);
+            lensData = grown;
+          }
+          const corners = [-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1];
+          for (let c = 0; c < 6; c++) {
+            const ux = corners[c * 2]!;
+            const uy = corners[c * 2 + 1]!;
+            lensData[n++] = cx + ux * ext;
+            lensData[n++] = cy + uy * ext;
+            lensData[n++] = ux * LENS_RHO_MAX;
+            lensData[n++] = uy * LENS_RHO_MAX;
+            lensData[n++] = Math.min(Math.max(row, 0), 1);
+            lensData[n++] = tile;
+          }
+          count++;
+        }
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, lensTarget.fbo);
+      gl.viewport(0, 0, vw, vh);
+      gl.clearColor(1, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      if (count > 0) {
+        gl.useProgram(lensProgram);
+        gl.uniform2f(lens.viewport, vw, vh);
+        gl.activeTexture(gl.TEXTURE7);
+        gl.bindTexture(gl.TEXTURE_2D, lensLut);
+        gl.uniform1i(lens.lut, 7);
+        gl.bindBuffer(gl.ARRAY_BUFFER, lensBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, lensData.subarray(0, n), gl.DYNAMIC_DRAW);
+        const stride = 6 * 4;
+        gl.enableVertexAttribArray(lens.pos);
+        gl.vertexAttribPointer(lens.pos, 2, gl.FLOAT, false, stride, 0);
+        gl.enableVertexAttribArray(lens.local);
+        gl.vertexAttribPointer(lens.local, 2, gl.FLOAT, false, stride, 8);
+        gl.enableVertexAttribArray(lens.lens);
+        gl.vertexAttribPointer(lens.lens, 2, gl.FLOAT, false, stride, 16);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.drawArrays(gl.TRIANGLES, 0, count * 6);
+        gl.disable(gl.BLEND);
+        gl.disableVertexAttribArray(lens.pos);
+        gl.disableVertexAttribArray(lens.local);
+        gl.disableVertexAttribArray(lens.lens);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      lensFrame++;
+      publishLensMap({
+        texture: lensTarget.tex!,
+        scrollX: sx,
+        scrollY: sy,
+        width: vw,
+        height: vh,
+        lightId: lamp.id,
+        frame: lensFrame,
+      });
     };
 
     // The drops map: one, cleared and redrawn each frame, as large as the largest pane needs.
@@ -1147,6 +1333,19 @@ export function WaterDrops() {
           drawPane(pane, sim, st, dt);
         }
       }
+      /*
+       * The light through the drops onto the print (rain W2): for the
+       * cursor lamp while it burns, redrawn whenever the drops or the lamp
+       * moved. The floor light reads the map it publishes.
+       */
+      const lamp = pointLights().find((l) => l.id === "cursor" && !l.below && l.charge > 0.002);
+      if (lamp && sims.size > 0) {
+        const vwNow = document.documentElement.clientWidth || window.innerWidth;
+        drawLensMap(vwNow, vh, lamp);
+      } else if (lensFrame > 0) {
+        publishLensMap(null);
+        lensFrame = 0;
+      }
       if (!busy) {
         // Nothing runs: evaporation still goes on, slowly (water-drops 6.1: 4 Hz is plenty).
         window.clearTimeout(idleTimer);
@@ -1197,6 +1396,7 @@ export function WaterDrops() {
       stopSpray();
       task.stop();
       stopLoss();
+      publishLensMap(null);
       window.clearTimeout(idleTimer);
       window.removeEventListener("pointermove", wake);
       window.removeEventListener("scroll", wake);

@@ -30,6 +30,7 @@ import {
 import { t } from "@/lib/tuning";
 import { floorScale } from "@/effects/light/floor-scale";
 import { loadSurfaceLayer } from "@/effects/optics/surface-layers";
+import { lensMap } from "@/effects/water/lens-map";
 import { assetUrl, SITE_ASSETS } from "@/lib/site-assets";
 
 /**
@@ -156,6 +157,11 @@ export function FloorLight() {
     const floorScales = new Float32Array(MAX_LIGHTS);
     const uCasterStrength = U("uCasterStrength");
     const uRoomFill = U("uRoomFill");
+    const uLens = U("uLens");
+    const uHasLens = U("uHasLens");
+    const uLensSize = U("uLensSize");
+    const uLensLight = U("uLensLight");
+    gl.uniform1i(uLens, 6);
     // The caster layers: two RGB masks, a layer to a channel, each with its height, face and colour (effects/optics/casters).
     const uCasterCount = U("uCasterCount");
     const uCasterLayer = U("uCasterLayer");
@@ -441,6 +447,22 @@ export function FloorLight() {
         gl.uniform1f(uCasterStrength, t("castShadowStrength"));
       }
       gl.uniform1f(uRoomFill, Math.min(t("roomFill"), roomFillOverride()));
+      /*
+       * The drops' lens map (rain W2), for the light it was drawn for. The
+       * map is in the viewport the water saw; a scroll between the two
+       * passes is at most a frame old.
+       */
+      const lensNow = lensMap();
+      const lensIndex = lensNow ? floorLights.findIndex((l) => l.id === lensNow.lightId) : -1;
+      if (lensNow && lensIndex >= 0 && lensIndex < MAX_LIGHTS) {
+        gl.activeTexture(gl.TEXTURE6);
+        gl.bindTexture(gl.TEXTURE_2D, lensNow.texture);
+        gl.uniform1f(uHasLens, 1);
+        gl.uniform2f(uLensSize, lensNow.width, lensNow.height);
+        gl.uniform1i(uLensLight, lensIndex);
+      } else {
+        gl.uniform1f(uHasLens, 0);
+      }
       gl.uniform2fv(uMarks, marks);
       gl.uniform1f(uMarksProportional, previewing("marks") ? 1 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);

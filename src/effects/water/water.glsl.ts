@@ -171,6 +171,54 @@ attribute vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
 `;
 
+/*
+ * The lens map (rain W2, docs/rain-system.md 3.2; effects/water/lens-map):
+ * the pattern each drop's lens throws onto the print behind the glass, for
+ * the lamp, as a factor on the lamp's light there: E = r + 8 g, 1 where no
+ * drop lies. One sprite per drop, centred where the lamp's ray through the
+ * drop lands, as wide as the pattern (LENS_RHO_MAX contact radii), reading
+ * the traced profile in the lookup table (tools/water/drop_lens_lut.py: rows
+ * are the gap over the drop's focal length, tiles the lamp's penumbra).
+ */
+export const LENS_RHO_MAX = 4;
+export const LENS_LUT_ROWS = 48;
+export const LENS_LUT_TILES = 4;
+export const LENS_LUT_RATIO_MIN = 0.25;
+export const LENS_LUT_RATIO_MAX = 16;
+export const LENS_LUT_PENUMBRAS = [0, 0.5, 1, 2] as const;
+
+export const LENS_VERTEX = /* glsl */ `
+attribute vec2 aPos;      // viewport CSS px
+attribute vec2 aLocal;    // the sprite's own frame, in contact radii on the print
+attribute vec2 aLens;     // x: the lookup row, 0..1 (gap over focal length); y: the penumbra tile, 0..3
+uniform vec2 uViewport;   // CSS px
+varying vec2 vLocal;
+varying vec2 vLens;
+void main() {
+  vLocal = aLocal;
+  vLens = aLens;
+  gl_Position = vec4(aPos.x / uViewport.x * 2.0 - 1.0, 1.0 - aPos.y / uViewport.y * 2.0, 0.0, 1.0);
+}
+`;
+
+export const LENS_FRAGMENT = /* glsl */ `
+precision mediump float;
+varying vec2 vLocal;
+varying vec2 vLens;
+uniform sampler2D uLut;
+const float RHO_MAX = ${LENS_RHO_MAX.toFixed(1)};
+const float ROWS = ${LENS_LUT_ROWS.toFixed(1)};
+const float TILES = ${LENS_LUT_TILES.toFixed(1)};
+void main() {
+  float rho = length(vLocal);
+  float v = (vLens.y * ROWS + vLens.x * (ROWS - 1.0) + 0.5) / (ROWS * TILES);
+  vec4 l = texture2D(uLut, vec2(min(rho / RHO_MAX, 1.0), v));
+  // Past the pattern's reach the map must be exactly 1: the sprite fades out over its last half radius.
+  float alpha = 1.0 - smoothstep(RHO_MAX - 0.5, RHO_MAX, rho);
+  gl_FragColor = vec4(l.r, l.g, 0.0, alpha);
+}
+`;
+
 export const MAX_WATER_LIGHTS = 4;
 /** The photograph's own lights (PhotoLights) a drop can carry through its lens. */
 export const MAX_WATER_EMITTERS = 4;
