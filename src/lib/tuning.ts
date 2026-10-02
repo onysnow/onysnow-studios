@@ -1090,6 +1090,16 @@ export const tuning: Record<string, Knob> = {
     step: 0.05,
     hint: "How hard the glass bends the light and shadow you see through it, at its top and bottom edges.",
   },
+  // A broken pane's surface displacement: how far its pieces stand proud or sink (effects/optics/shard-tilt pieceLift).
+  pieceDisplacement: {
+    label: "Piece displacement",
+    group: "Glass",
+    value: 0.35,
+    min: 0,
+    max: 1,
+    step: 0.05,
+    hint: "How unevenly a broken pane's pieces sit: 0 flush, 1 each piece up to 15% of the thickness proud or sunk (a step between two pieces up to 30%). Loose pieces near the strike move most; a laminated pane's interlayer holds its pieces nearly flush. Each step shows as the lamp's shadow line on the lower piece and a lit riser seen from the low side.",
+  },
   // How thick the site's glass is, CSS px: how deep its side faces are.
   glassThickness: {
     label: "Glass thickness",

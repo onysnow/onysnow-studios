@@ -243,6 +243,15 @@ table of pieces (tilt, depth, loose or missing), the thin-film lookup, and the
 trapped-light map. Estimated cost: about 2 extra texture reads per pixel away
 from cracks; 7–9 inside crack bands (5–20% of a broken pane). To be measured.
 
+**Built (B2, 2026-10-02, `?try=breaklib`):** `effects/optics/crack-field`
+(the field and the segment table, RGBA8, tested) and `effects/optics/crack-view`
+(the pass, on the shared context, drawn under the 2D strokes). The fold, the
+room out of the front face, and the trapped glow (room mean and lamps, rolled
+off, rippled by Wallner lines and hackle) are in; the Fresnel share and the
+exact band width too. Not yet: holes' rims, the broken mirror per piece in
+this pass (the shard map still does it), the thin-film colours, the laminated
+second ply, and the steps between pieces (drawn in 2D for now).
+
 ### 3.6 Render: light
 
 - **Under the glass (floor light)**: each crack throws a fully dark band on the
@@ -417,6 +426,7 @@ never a cooked result. These are the causes the broken glass exposes:
 | Playback speed | how slow the cracks run (×1000 is the default; a preference, since no screen can show 1.5 km/s) | new |
 | Debris amount | strike energy and glass kind set it; the knob scales only the grit count for speed | new, in the tier table |
 | Room and lamps | the broken mirror and glints | yes (`room`, the lights) |
+| Piece displacement | how unevenly the pieces sit: proud or sunk by up to a third of the thickness (Ony, 2026-10-02: "different shards protruding or sinking more than the others. Nothing crazy, but it does happen"); each step shows as a shadow line from the lamp over the high side and a lit riser seen from the low side (`effects/optics/crack-step`, `shard-tilt pieceLift`) | built (`pieceDisplacement`, Glass group) |
 
 Not knobs: crack brightness, band width, glow strength, fringe colour. Each
 is set by the physics from the causes above.

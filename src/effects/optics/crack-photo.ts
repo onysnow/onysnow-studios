@@ -25,8 +25,15 @@
  * BrokenGlass) reads the photograph's pixels and draws.
  */
 
-import type { Crack, GlassKind, Pt, Shard } from "./fracture";
-import { pieceTilt } from "./shard-tilt";
+import {
+  DISPLACEMENT,
+  THICKNESS_PX,
+  type Crack,
+  type GlassKind,
+  type Pt,
+  type Shard,
+} from "./fracture";
+import { pieceLift, pieceTilt } from "./shard-tilt";
 
 /** A greyscale image, 0 to 1, row by row. */
 export type Grey = {
@@ -689,7 +696,10 @@ export function photoBreak(
   seed = 1,
   energy = 0.7,
   /** What glass it is and how hard it was struck, for how its pieces tilt (shard-tilt). */
-  tilt: { kind: GlassKind; energy: number } = { kind: "annealed", energy },
+  tilt: { kind: GlassKind; energy: number; displacement?: number; thickness?: number } = {
+    kind: "annealed",
+    energy,
+  },
 ): PhotoBreak {
   const { w, h, strike } = map;
   const shards: PhotoBreak["shards"] = [];
@@ -753,6 +763,16 @@ export function photoBreak(
       holes: onPane.slice(1),
       tiltX: t.tiltX,
       tiltY: t.tiltY,
+      lift: atEdge
+        ? 0
+        : pieceLift(
+            tilt.kind,
+            tilt.energy,
+            reach * 0.5,
+            tilt.displacement ?? DISPLACEMENT,
+            tilt.thickness ?? THICKNESS_PX,
+            rand(900 + k),
+          ),
       slip: { x: (rand(700 + k) - 0.5) * 1.6 * knock, y: (rand(800 + k) - 0.5) * 1.6 * knock },
       reach: reach * 0.5,
       crushed: label === regions.crushed,

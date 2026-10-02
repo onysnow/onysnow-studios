@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import {
   fracture,
+  inside,
   type Crack,
   type GlassKind,
   type Pt,
@@ -30,6 +31,8 @@ import { photoTextures } from "@/effects/engine/photo-texture";
 import { paneLook } from "@/effects/engine/pane-look";
 import { roomTexture } from "@/effects/engine/room-texture";
 import { crackView, type CrackView } from "@/effects/optics/crack-view";
+import { riserLit, riserSeen, stepAt, stepShadow } from "@/effects/optics/crack-step";
+import { onTuningApplied, t as knob } from "@/lib/tuning";
 import { camera } from "@/effects/camera/camera";
 import { previewing } from "@/effects/engine/preview";
 import { adoptLayer } from "@/effects/engine/compositor";
@@ -37,6 +40,8 @@ import { clearShardMap, paintShardMap, setShardMap } from "@/effects/optics/shar
 
 /** The frost the panes' backdrop is blurred by, px (styles.css .glass: blur(30px)). */
 const FROST_BLUR = 30;
+/** The room as a riser mirrors it with no lamp on it: a dim glass-grey (the room's mean, by eye). */
+const ROOM_RISER = [0.42, 0.5, 0.5] as const;
 /** How far past the pane the frosted copy reaches, px: room for the shards' slip. */
 const MARGIN = 24;
 /** The pane's thickness, px: a crack face is this tall. */
@@ -372,6 +377,28 @@ export function BrokenGlass({
     let crossings: { at: Pt; edge: Edge }[] = [];
     let crossFor = "";
 
+    /*
+     * Which piece lies either side of each crack segment, found once per
+     * break (point-in-polygon a hair across the line each way), for the
+     * steps the pieces' different heights make at the cracks (effects/optics/crack-step).
+     */
+    let sidesFor = "";
+    let sides = new Map<string, [number, number]>();
+    const liftsAt = (ck: number, i: number, mx: number, my: number, nx: number, ny: number) => {
+      const k = `${ck}:${i}`;
+      let v = sides.get(k);
+      if (!v) {
+        const find = (sx: number) => {
+          const q = { x: mx + nx * sx, y: my + ny * sx };
+          for (const sh of broken!.shards) if (!sh.missing && inside(sh.poly, q)) return sh.lift;
+          return 0;
+        };
+        v = [find(-1.5), find(1.5)];
+        sides.set(k, v);
+      }
+      return v;
+    };
+
     const draw = () => {
       frame = 0;
       const rect = canvas.getBoundingClientRect();
@@ -379,11 +406,17 @@ export function BrokenGlass({
       const h = rect.height;
       if (w < 2 || h < 2) return;
       const key = `${Math.round(w)}x${Math.round(h)}`;
-      const breakKey = `${key}|${entry ? "library" : photo ? "photo" : "made"}|${shardPhotos.length ? "glass" : ""}`;
+      const breakKey = `${key}|${entry ? "library" : photo ? "photo" : "made"}|${shardPhotos.length ? "glass" : ""}|d${knob("pieceDisplacement")}`;
       if (breakKey !== brokeFor) {
         const struck = { x: at.x * w, y: at.y * h };
+        // The pane's own causes for the pieces: how unevenly they may sit, as a share of its thickness.
+        const geomNow = pane ? glassGeometry().find((g) => g.el === pane) : undefined;
+        const causes = {
+          displacement: knob("pieceDisplacement"),
+          thickness: geomNow?.causes.thickness ?? THICKNESS,
+        };
         if (entry) {
-          broken = placeBreak(entry, { w, h, at: struck, energy, kind, seed });
+          broken = placeBreak(entry, { w, h, at: struck, energy, kind, seed, ...causes });
         } else if (photo) {
           // Turned a different way strike by strike, so one photograph never repeats exactly.
           const placement = placementFor(
@@ -398,7 +431,7 @@ export function BrokenGlass({
             placement,
             seed,
             kind === "annealed" ? energy : 0,
-            { kind, energy },
+            { kind, energy, ...causes },
           );
           const shards: Piece[] = [...pb.shards];
           /*
@@ -422,6 +455,7 @@ export function BrokenGlass({
                 })),
                 tiltX: 0,
                 tiltY: 0,
+                lift: 0,
                 slip: { x: 0, y: 0 },
                 reach: 0,
                 missing: true,
@@ -437,9 +471,13 @@ export function BrokenGlass({
             photo: { loaded: photo, placement },
           };
         } else {
-          broken = fracture({ w, h, at: struck, energy, kind, seed });
+          broken = fracture({ w, h, at: struck, energy, kind, seed, ...causes });
         }
         brokeFor = breakKey;
+        if (sidesFor !== breakKey) {
+          sides = new Map();
+          sidesFor = breakKey;
+        }
         /*
          * Step 3b (?try=shardlight): the pieces go to the glass shader, which
          * draws the room each one reflects at its own slope.
@@ -465,6 +503,12 @@ export function BrokenGlass({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
+      // Where the viewer is, in the pane's px: the parallax of the pieces' heights and the crack faces' slant.
+      const eye = {
+        x: document.documentElement.clientWidth / 2 + viewState.eyeX - rect.left,
+        y: document.documentElement.clientHeight / 2 + viewState.eyeY - rect.top,
+        z: camera.distance(document.documentElement.clientWidth),
+      };
       // ---- The stepped view: each shard shows the frosted photograph from where it now lies. ----
       const img = photoUnder(canvas, rect.left + w / 2, rect.top + h / 2);
       if (img && img.complete && img.naturalWidth > 0) {
@@ -520,8 +564,17 @@ export function BrokenGlass({
              * few dozen px), and slipped by its slip.
              */
             const gap = 70;
-            const dx = s.slip.x + Math.tan(s.tiltY) * gap;
-            const dy = s.slip.y + Math.tan(s.tiltX) * gap;
+            /*
+             * A piece standing proud is nearer the eye: in perspective it
+             * (and what it shows) sits further out from the point under the
+             * eye by its height times the sight line's slope. A few tenths
+             * of a px here; the step it makes at its cracks is drawn below.
+             */
+            const b = boxOf(s.poly);
+            const px = (s.lift * (b.cx - eye.x)) / Math.max(eye.z, 1);
+            const py = (s.lift * (b.cy - eye.y)) / Math.max(eye.z, 1);
+            const dx = s.slip.x + Math.tan(s.tiltY) * gap + px;
+            const dy = s.slip.y + Math.tan(s.tiltX) * gap + py;
             ctx.drawImage(frost, -MARGIN + dx, -MARGIN + dy, w + 2 * MARGIN, h + 2 * MARGIN);
             // The pane's own frosting over it, as the pane has.
             ctx.fillStyle = "rgb(255 255 255 / 0.06)";
@@ -670,11 +723,16 @@ export function BrokenGlass({
         charge: l.charge,
         aim: l.aim,
       }));
-      const eye = {
-        x: document.documentElement.clientWidth / 2 + viewState.eyeX - rect.left,
-        y: document.documentElement.clientHeight / 2 + viewState.eyeY - rect.top,
-        z: camera.distance(document.documentElement.clientWidth),
-      };
+      // The lights over the pane: only those can shadow a step or light its riser (a photograph's own glow is under the glass).
+      const overhead = pointLights()
+        .filter((l) => !l.below)
+        .map((l) => ({
+          at: { x: l.x - rect.left, y: l.y - rect.top, z: l.height },
+          colour: l.colour,
+          strength: l.gain / reference,
+          charge: l.charge,
+          radius: l.radius,
+        }));
       const depth = THICKNESS / N_GLASS;
       const roughReach = broken.crush * 4 + 10;
       const room = roomSampler(wake);
@@ -878,6 +936,78 @@ export function BrokenGlass({
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
           ctx.stroke();
+          /*
+           * The step where the two pieces sit at different heights
+           * (effects/optics/crack-step): the higher edge's shadow on the
+           * lower piece from each lamp over the high side, and the riser --
+           * a fracture face seen from the air -- where the eye is on the low
+           * side, mirroring the room and catching the lamps over that side.
+           */
+          const [liftMinus, liftPlus] = liftsAt(ck, i, mx, my, nx, ny);
+          const step = stepAt(liftMinus, liftPlus);
+          if (step) {
+            const n = { x: nx, y: ny };
+            const strip = (
+              side: number,
+              width: number,
+              style: string | CanvasGradient,
+              op: GlobalCompositeOperation,
+            ) => {
+              if (width < 0.15) return;
+              ctx.globalCompositeOperation = op;
+              ctx.fillStyle = style;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.lineTo(b.x + nx * side * width, b.y + ny * side * width);
+              ctx.lineTo(a.x + nx * side * width, a.y + ny * side * width);
+              ctx.closePath();
+              ctx.fill();
+            };
+            for (const l of overhead) {
+              const on = l.charge * l.strength;
+              if (on <= 0.01) continue;
+              const shadow = stepShadow(step, { x: mx, y: my }, n, l.at);
+              if (shadow < 0.15) continue;
+              /*
+               * The lamp's light through the glass is what the edge blocks:
+               * as dark as the shadow layer, with the penumbra the lamp's
+               * size gives it (its radius over its height, times the rise).
+               */
+              const pen = Math.min(
+                shadow,
+                (Math.abs(step.rise) * l.radius) / Math.max(l.at.z, 1) + 0.5,
+              );
+              const g = ctx.createLinearGradient(
+                mx,
+                my,
+                mx + nx * step.low * shadow,
+                my + ny * step.low * shadow,
+              );
+              const dark = `rgb(4 8 8 / ${Math.min(0.55, 0.45 * on).toFixed(3)})`;
+              g.addColorStop(0, dark);
+              g.addColorStop(Math.max(0, 1 - pen / shadow), dark);
+              g.addColorStop(1, "rgb(4 8 8 / 0)");
+              strip(step.low, shadow, g, "source-over");
+            }
+            const riser = riserSeen(step, { x: mx, y: my }, n, eye);
+            if (riser.width >= 0.15) {
+              // The room in the riser (a face in the air: 40-90% mirror at these angles), plus each lamp on it.
+              let rr = 0.6 * 0.55 * ROOM_RISER[0];
+              let rg = 0.6 * 0.55 * ROOM_RISER[1];
+              let rb = 0.6 * 0.55 * ROOM_RISER[2];
+              for (const l of overhead) {
+                const on = l.charge * l.strength * riserLit(step, { x: mx, y: my }, n, l.at);
+                if (on <= 0.01) continue;
+                rr += l.colour[0] * on * 0.8;
+                rg += l.colour[1] * on * 0.8;
+                rb += l.colour[2] * on * 0.8;
+              }
+              const lit = additive([rr, rg, rb], 1, [0, 0, 0], 0);
+              if (lit) strip(riser.side, riser.width, lit, "lighter");
+            }
+            ctx.globalCompositeOperation = "source-over";
+          }
           // The face: a ribbon from the crack to its far edge, glass-green, lit.
           ctx.globalCompositeOperation = "lighter";
           if (Math.abs(wide) > 0.6) {
@@ -1007,6 +1137,8 @@ export function BrokenGlass({
       if (!frame) frame = requestAnimationFrame(draw);
     };
     const stop = onLightChange(wake);
+    // A setting change (the pieces' displacement) re-lays the break.
+    const stopTuning = onTuningApplied(wake);
     const observer = new ResizeObserver(wake);
     observer.observe(canvas);
     window.addEventListener("scroll", wake, { passive: true });
@@ -1022,6 +1154,7 @@ export function BrokenGlass({
       cancelAnimationFrame(frame);
       window.clearTimeout(late);
       stop();
+      stopTuning();
       observer.disconnect();
       window.removeEventListener("scroll", wake);
     };

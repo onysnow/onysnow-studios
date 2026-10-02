@@ -25,7 +25,7 @@
  */
 
 import { CrackNet } from "./crack-net";
-import { pieceTilt } from "./shard-tilt";
+import { pieceLift, pieceTilt } from "./shard-tilt";
 
 export type GlassKind = "annealed" | "laminated";
 
@@ -39,6 +39,8 @@ export type Shard = {
   tiltY: number;
   /** How far it has slipped in the pane's plane, px. */
   slip: Pt;
+  /** How far it stands proud of the pane (+, toward the viewer) or sinks, px (effects/optics/shard-tilt pieceLift). */
+  lift: number;
   /** Its centre's distance from the impact, over the pane's diagonal. */
   reach: number;
   /** The crushed spot at the impact: pulverised, white. */
@@ -81,7 +83,15 @@ export type Impact = {
   energy: number;
   kind: GlassKind;
   seed?: number;
+  /** The pane's surface displacement setting, 0 flush to 1 (default DISPLACEMENT). */
+  displacement?: number;
+  /** The pane's thickness, px (default THICKNESS_PX): what the displacement is a share of. */
+  thickness?: number;
 };
+
+/** The default surface displacement and thickness, for a strike that names neither. */
+export const DISPLACEMENT = 0.35;
+export const THICKNESS_PX = 18;
 
 type Break = { faces: Pt[][]; cracks: Crack[]; crush: number };
 
@@ -400,7 +410,8 @@ function webBreak(im: Impact, seed: number): Break {
   return { faces: net.faces(), cracks, crush };
 }
 
-function inside(poly: readonly Pt[], p: Pt): boolean {
+/** Whether `p` lies inside the polygon (even-odd). */
+export function inside(poly: readonly Pt[], p: Pt): boolean {
   let hit = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i]!;
@@ -482,6 +493,14 @@ export function shardsFrom(
         x: (rand(seed, 700 + k) - 0.5) * 1.6 * knock,
         y: (rand(seed, 800 + k) - 0.5) * 1.6 * knock,
       },
+      lift: pieceLift(
+        im.kind,
+        E,
+        reach,
+        im.displacement ?? DISPLACEMENT,
+        im.thickness ?? THICKNESS_PX,
+        rand(seed, 900 + k),
+      ),
       reach,
     };
     if (inside(poly, at)) shard.crushed = true;

@@ -62,3 +62,33 @@ export function pieceTilt(
   const sy = -s * uy + Math.tan((r2 - 0.5) * 2 * knock);
   return { tiltX: Math.atan(sy), tiltY: Math.atan(sx) };
 }
+
+/**
+ * How far a piece stands proud of the pane or sinks into it, px (+ toward
+ * the viewer): the surface displacement (Ony, 2026-10-02: "different shards
+ * protruding or sinking more than the others. Nothing crazy, but it does
+ * happen"). Loose annealed pieces settle at their own heights, most near
+ * the strike where they were knocked hardest; the interlayer holds
+ * laminated pieces nearly flush. `displacement` is the pane's setting, 0
+ * (flush) to 1 (each piece up to LIFT_SHARE of the thickness, so a step
+ * between two pieces up to twice that); `thickness` px; `r` a repeatable
+ * number in [0, 1).
+ */
+export const LIFT_SHARE = 0.15;
+
+export function pieceLift(
+  kind: GlassKind,
+  energy: number,
+  reach: number,
+  displacement: number,
+  thickness: number,
+  r: number,
+): number {
+  const E = Math.max(0, Math.min(1, energy));
+  const d = Math.max(0, Math.min(1, displacement));
+  const loose = kind === "laminated" ? 0.15 : 1;
+  const most = d * LIFT_SHARE * thickness * loose * (0.4 + 0.6 * E);
+  // A hard tail: most pieces move a little, a few a lot.
+  const u = r * 2 - 1;
+  return most * Math.sign(u) * Math.pow(Math.abs(u), 1.6) * (0.3 + 0.7 * Math.exp(-reach * 4));
+}

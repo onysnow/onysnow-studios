@@ -235,6 +235,39 @@ def rings(ink, centre):
     return out
 
 
+def size_law(lab, centre):
+    """
+    Kadono & Arakawa (high-speed photography of impacted glass plates; cited by
+    Mick West, "Shattering Reality", 2007): fragment size grows as a power of
+    the distance from the impact. Here: the exponent of a fit of each piece's
+    area (mm^2) against its centroid's distance (mm), over pieces of at least
+    6 px, and how well it holds (r^2). Real impact breaks give an exponent
+    well above 0 (pieces grow outward); a Voronoi-style break gives ~0.
+    """
+    cx, cy = centre
+    ks = np.unique(lab)
+    ks = ks[ks > 0]
+    dist, area = [], []
+    for k in ks:
+        ys, xs = np.nonzero(lab == k)
+        if len(xs) < 6:
+            continue
+        d = math.hypot(xs.mean() - cx, ys.mean() - cy) * MM_PER_PX
+        if d < 1:
+            continue
+        dist.append(d)
+        area.append(len(xs) * MM_PER_PX**2)
+    if len(dist) < 4:
+        return {"exponent": None, "r2": None, "n": len(dist)}
+    x = np.log(np.array(dist))
+    y = np.log(np.array(area))
+    a, b = np.polyfit(x, y, 1)
+    pred = a * x + b
+    ss = float(np.sum((y - y.mean()) ** 2)) or 1e-9
+    r2 = 1 - float(np.sum((y - pred) ** 2)) / ss
+    return {"exponent": float(a), "r2": float(r2), "n": len(dist)}
+
+
 def measure(ink, centre):
     lab, p = pieces(ink)
     return {
@@ -242,6 +275,7 @@ def measure(ink, centre):
         "pieces": p,
         "junctions": junctions(ink, lab),
         "tangential_share": rings(ink, centre),
+        "size_law": size_law(lab, centre),
     }
 
 
@@ -466,6 +500,7 @@ def run_nij(folder):
             "aspect_median": med(lambda m: m["pieces"]["aspect_median"]),
             "t_share": med(lambda m: m["junctions"]["t_share"]),
             "corners_per_piece": med(lambda m: m["junctions"]["corners_per_piece_mean"]),
+            "size_exponent": med(lambda m: m["size_law"]["exponent"]),
         }
     (HERE / "nij-stats.json").write_text(json.dumps(out, indent=1))
     print(json.dumps(out, indent=1))
