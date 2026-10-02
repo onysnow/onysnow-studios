@@ -219,6 +219,60 @@ void main() {
 }
 `;
 
+/*
+ * The rivulets' focus lines (rain W2): the film a runner leaves stands as a
+ * low ridge of water, a cylinder lens across its width. Light through it
+ * is gathered toward a line a little past the ridge and taken from the
+ * ridge's flanks: a bright line with dark edges that wanders with the
+ * trail. Drawn into the lens map over each pane before the drops' sprites:
+ * each point of the print gathers from the glass point whose ray from the
+ * lamp lands on it, and the light there is spread or gathered by the
+ * ridge's curvature, E = 1 / |det(I + D (n - 1) H)|, H the height's second
+ * differences (a thin lens; D the print's distance). Pure water, no colour.
+ */
+export const RIVULET_LENS_VERTEX = /* glsl */ `
+attribute vec2 aPos;      // the pane's corners, viewport CSS px
+attribute vec2 aUv;
+uniform vec2 uViewport;
+varying vec2 vUv;
+void main() {
+  vUv = aUv;
+  gl_Position = vec4(aPos.x / uViewport.x * 2.0 - 1.0, 1.0 - aPos.y / uViewport.y * 2.0, 0.0, 1.0);
+}
+`;
+
+export const RIVULET_LENS_FRAGMENT = /* glsl */ `
+precision highp float;
+varying vec2 vUv;
+uniform sampler2D uWet;       // the pane's wet map, R wetness
+uniform vec2 uWetTexel;       // one texel, uv
+uniform float uRivulet;       // a fresh rivulet's height, mm
+uniform float uMmPerTexel;    // mm per wet-map texel
+uniform float uBend;          // D (n - 1), mm: the print's distance times the water's bending
+float ridge(vec2 uv) { return uRivulet * smoothstep(0.1, 1.0, texture2D(uWet, uv).r); }
+void main() {
+  // The quad is the pane as the lamp projects it onto the print, so the interpolated uv IS the glass point whose ray lands here.
+  vec2 q = vUv;
+  vec2 tx = vec2(uWetTexel.x, 0.0);
+  vec2 ty = vec2(0.0, uWetTexel.y);
+  float h0 = ridge(q);
+  float wet = texture2D(uWet, q).r;
+  if (wet < 0.08) discard;
+  float d2 = uMmPerTexel * uMmPerTexel;
+  float hxx = (ridge(q + tx) - 2.0 * h0 + ridge(q - tx)) / d2;
+  float hyy = (ridge(q + ty) - 2.0 * h0 + ridge(q - ty)) / d2;
+  float hxy = (ridge(q + tx + ty) - ridge(q + tx - ty) - ridge(q - tx + ty) + ridge(q - tx - ty)) / (4.0 * d2);
+  float a = 1.0 + uBend * hxx;
+  float b = uBend * hxy;
+  float c = 1.0 + uBend * hyy;
+  float det = abs(a * c - b * b);
+  // Past the focus the light crosses and spreads again: the same thin-lens factor, never a singular line (a lamp has size).
+  float E = 1.0 / max(det, 0.12);
+  float alpha = smoothstep(0.08, 0.3, wet);
+  gl_FragColor = vec4(min(E, 1.0), clamp((E - 1.0) / 8.0, 0.0, 1.0), 0.0, alpha);
+}
+`;
+
 export const MAX_WATER_LIGHTS = 4;
 /** The photograph's own lights (PhotoLights) a drop can carry through its lens. */
 export const MAX_WATER_EMITTERS = 4;

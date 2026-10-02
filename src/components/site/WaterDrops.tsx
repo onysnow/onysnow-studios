@@ -32,6 +32,8 @@ import {
   LENS_LUT_RATIO_MIN,
   LENS_RHO_MAX,
   LENS_VERTEX,
+  RIVULET_LENS_FRAGMENT,
+  RIVULET_LENS_VERTEX,
   MAX_WATER_EMITTERS,
   COMPOSE_VERTEX,
   DROPLET_HEIGHT_MAX,
@@ -155,8 +157,33 @@ export function WaterDrops() {
       "water",
     );
     const lensProgram = buildProgram(gl, LENS_VERTEX, LENS_FRAGMENT, "water lens map");
-    if (!mapProgram || !wipeProgram || !fadeProgram || !composeProgram || !lensProgram) return;
+    const rivuletProgram = buildProgram(
+      gl,
+      RIVULET_LENS_VERTEX,
+      RIVULET_LENS_FRAGMENT,
+      "water rivulet lens",
+    );
+    if (
+      !mapProgram ||
+      !wipeProgram ||
+      !fadeProgram ||
+      !composeProgram ||
+      !lensProgram ||
+      !rivuletProgram
+    )
+      return;
     const A = (p: WebGLProgram, n: string) => gl.getAttribLocation(p, n);
+    const riv = {
+      pos: A(rivuletProgram, "aPos"),
+      uv: A(rivuletProgram, "aUv"),
+      viewport: gl.getUniformLocation(rivuletProgram, "uViewport"),
+      wet: gl.getUniformLocation(rivuletProgram, "uWet"),
+      wetTexel: gl.getUniformLocation(rivuletProgram, "uWetTexel"),
+      rivulet: gl.getUniformLocation(rivuletProgram, "uRivulet"),
+      mmPerTexel: gl.getUniformLocation(rivuletProgram, "uMmPerTexel"),
+      bend: gl.getUniformLocation(rivuletProgram, "uBend"),
+    };
+    const rivuletQuad = gl.createBuffer();
     const lens = {
       pos: A(lensProgram, "aPos"),
       local: A(lensProgram, "aLocal"),
@@ -426,6 +453,71 @@ export function WaterDrops() {
       gl.viewport(0, 0, vw, vh);
       gl.clearColor(1, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
+      // The rivulets' focus lines first; the drops' sprites lie over them.
+      gl.useProgram(rivuletProgram);
+      gl.uniform2f(riv.viewport, vw, vh);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      for (const pane of glassGeometry()) {
+        if (pane.y + pane.h < 0 || pane.y > vh || !pane.src) continue;
+        const st = states.get(pane.el);
+        if (!st?.wet) continue;
+        const frosted = pane.causes.material.frost > 0;
+        const nearFace = !frosted && Math.round(t("rainFace")) === 1;
+        const G = pane.causes.gap + (nearFace ? pane.causes.thickness / GLASS_IOR : 0);
+        if (G <= 0) continue;
+        const m = 1 + G / H;
+        // The pane as the lamp projects it onto the print.
+        const px = (q: number) => q * m - (lamp.x * G) / H;
+        const py = (q: number) => q * m - (lamp.y * G) / H;
+        const x0 = px(pane.x);
+        const x1 = px(pane.x + pane.w);
+        const y0 = py(pane.y);
+        const y1 = py(pane.y + pane.h);
+        const quad = new Float32Array([
+          x0,
+          y0,
+          0,
+          0,
+          x1,
+          y0,
+          1,
+          0,
+          x1,
+          y1,
+          1,
+          1,
+          x0,
+          y0,
+          0,
+          0,
+          x1,
+          y1,
+          1,
+          1,
+          x0,
+          y1,
+          0,
+          1,
+        ]);
+        gl.bindBuffer(gl.ARRAY_BUFFER, rivuletQuad);
+        gl.bufferData(gl.ARRAY_BUFFER, quad, gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(riv.pos);
+        gl.vertexAttribPointer(riv.pos, 2, gl.FLOAT, false, 16, 0);
+        gl.enableVertexAttribArray(riv.uv);
+        gl.vertexAttribPointer(riv.uv, 2, gl.FLOAT, false, 16, 8);
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, st.wet);
+        gl.uniform1i(riv.wet, 5);
+        gl.uniform2f(riv.wetTexel, 2 / st.w, 2 / st.h);
+        gl.uniform1f(riv.rivulet, RIVULET_MM);
+        gl.uniform1f(riv.mmPerTexel, 2 / (st.w / pane.w) / PX_PER_MM);
+        gl.uniform1f(riv.bend, (G / PX_PER_MM) * (WATER.n - 1));
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.disableVertexAttribArray(riv.pos);
+        gl.disableVertexAttribArray(riv.uv);
+      }
+      gl.disable(gl.BLEND);
       if (count > 0) {
         gl.useProgram(lensProgram);
         gl.uniform2f(lens.viewport, vw, vh);
