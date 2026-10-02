@@ -143,6 +143,7 @@ export function WaterDrops() {
       size: gl.getUniformLocation(mapProgram, "uMapSize"),
       scale: gl.getUniformLocation(mapProgram, "uHeightScale"),
       pxPerMm: gl.getUniformLocation(mapProgram, "uPxPerMm"),
+      slopeOut: gl.getUniformLocation(mapProgram, "uSlopeOut"),
     };
     const wipe = {
       pos: A(wipeProgram, "aPos"),
@@ -644,8 +645,10 @@ export function WaterDrops() {
       h: number,
       heightScale: number,
       pxPerMm: number,
+      slopeOut = 0,
     ) => {
       gl.useProgram(mapProgram);
+      gl.uniform1f(map.slopeOut, slopeOut);
       gl.uniform2f(map.size, w, h);
       gl.uniform1f(map.scale, heightScale);
       gl.uniform1f(map.pxPerMm, pxPerMm);
@@ -916,6 +919,7 @@ export function WaterDrops() {
           st.h,
           dropsType === gl.UNSIGNED_BYTE ? 1 / HEIGHT_MAX : 1,
           pxMm,
+          1,
         );
         gl.disable(gl.BLEND);
       }

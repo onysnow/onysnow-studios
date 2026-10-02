@@ -84,6 +84,7 @@ varying vec3 vShape;
 varying float vCoverScale;
 uniform float uHeightScale;  // 1 / full scale, mm
 uniform float uPxPerMm;      // map px per mm
+uniform float uSlopeOut;     // 1: the drops map (liquid in g, the surface's slope in b); 0: the droplets map
 ${SHAPE_GLSL}
 void main() {
   float a = vDrop.x;
@@ -102,6 +103,21 @@ void main() {
   h = max(h, 0.0) * (1.0 + vShape.z * clamp(vLocal.y, -1.0, 1.0));
   float blood = abs(vDrop.w - 1.0) < 0.5 ? cover : 0.0;
   float slime = abs(vDrop.w - 2.0) < 0.5 ? cover : 0.0;
+  if (uSlopeOut > 0.5) {
+    /*
+     * The surface's slope, exact (water-drops 9.5c): tan of its tilt,
+     * r / sqrt(R^2 - r^2), reaching the contact angle at the edge. The
+     * compose step's finite difference over the map's pixels cannot: across
+     * a drop of a millimetre (8 map px at 2x) it averages the steep last
+     * tenth of the radius with the flat glass outside and tops out near 38
+     * deg (31 at 1x), short of the 41-50 deg where water-to-air reflection
+     * climbs to total -- so no drop had the bright ring a lit one has. The
+     * liquid moves to g (0 water, 0.5 blood, 1 slime) to make room.
+     */
+    float tanT = r / max(sqrt(max(R * R - r * r, 0.0)), 1e-4) * (1.0 + vShape.z * clamp(vLocal.y, -1.0, 1.0));
+    gl_FragColor = vec4(h * uHeightScale, 0.5 * clamp(vDrop.w, 0.0, 2.0) * cover, min(tanT, 3.9) * 0.25 * cover, cover);
+    return;
+  }
   gl_FragColor = vec4(h * uHeightScale, blood, slime, cover);
 }
 `;
@@ -365,9 +381,18 @@ vec4 shadeAt(vec2 local) {
   vec2 ty = vec2(0.0, uDropsTexel.y);
   vec2 sx = vec2(uDropletsTexel.x, 0.0);
   vec2 sy = vec2(0.0, uDropletsTexel.y);
-  vec2 grad = vec2(
-    dropsH(uvD + tx) - dropsH(uvD - tx) + dropletsH(uvP + sx) - dropletsH(uvP - sx),
-    dropsH(uvD + ty) - dropsH(uvD - ty) + dropletsH(uvP + sy) - dropletsH(uvP - sy)
+  vec2 gradD = vec2(dropsH(uvD + tx) - dropsH(uvD - tx), dropsH(uvD + ty) - dropsH(uvD - ty)) / (2.0 * mmPerTexel);
+  /*
+   * The drops' slope: its direction from the map, its steepness exact from
+   * the map's b (see the map: the finite difference flattens the rim). The
+   * ratio to the cover keeps the rim's steepness right to the contact line
+   * as the map is filtered.
+   */
+  float gD = length(gradD);
+  if (gD > 1e-5 && d.a > 0.02) gradD *= min(4.0 * d.b / d.a, 3.0) / gD;
+  vec2 grad = gradD + vec2(
+    dropletsH(uvP + sx) - dropletsH(uvP - sx),
+    dropletsH(uvP + sy) - dropletsH(uvP - sy)
   ) / (2.0 * mmPerTexel);
   // The rivulet's slope, over its own (half-size) map's texel.
   vec2 wx = vec2(uWetTexel.x, 0.0);
@@ -379,9 +404,12 @@ vec4 shadeAt(vec2 local) {
   vec3 V = normalize(vec3(page, h * uPxPerMm) - eye); // from the eye, into the glass (z down)
   float f0 = pow((uIor - 1.0) / (uIor + 1.0), 2.0);
 
-  // Blood and slime take light out on the way through (Beer-Lambert).
-  float bloodFrac = clamp((d.g + s.g) / max(d.a + s.a, 1e-3), 0.0, 1.0);
-  float slimeFrac = clamp((d.b + s.b) / max(d.a + s.a, 1e-3), 0.0, 1.0);
+  // Blood and slime take light out on the way through (Beer-Lambert). The drops map holds the liquid as 0 / 0.5 / 1 in g.
+  float dLiq = d.g / max(d.a, 1e-3);
+  float dBlood = clamp(1.0 - abs(dLiq - 0.5) * 2.0, 0.0, 1.0);
+  float dSlime = clamp(2.0 * dLiq - 1.0, 0.0, 1.0);
+  float bloodFrac = clamp((dBlood * d.a + s.g) / max(d.a + s.a, 1e-3), 0.0, 1.0);
+  float slimeFrac = clamp((dSlime * d.a + s.b) / max(d.a + s.a, 1e-3), 0.0, 1.0);
   vec3 T = exp(-(uSigmaBlood * bloodFrac + uSigmaSlime * slimeFrac) * h);
 
   // The scene's own mean colour (the photograph's smallest level), to balance the room panorama to it.

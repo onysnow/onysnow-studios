@@ -1340,6 +1340,22 @@ Fresnel equations (Schlick is far off on the dense side, where the ring
 lives); trapped sight shows the frost at TRAPPED_GAIN 2; the lamp's pool
 through a drop cut from 1.5 to 0.3 (POOL_GAIN; 9.5b had it the wrong way).
 
+Then the ring itself was missing, and the cause was not the lighting but the
+slope: the compose step took each drop's slope by a finite difference over
+the drops map's pixels, and across a drop a millimetre wide (8 map pixels at
+2x) that averages the steep last tenth of the radius with the flat glass
+outside -- the tilt it found topped out near 38 deg at the rim (31 at 1x)
+where the true cap reaches its 50 deg contact angle. The band where
+water-to-air reflection climbs to total is 41-49 deg, so no drop ever
+reached it. The map now writes each drop's exact slope (tan of the tilt,
+r / sqrt(R^2 - r^2), with the sag) into its b channel, the liquid moving to
+g; the compose step keeps the slope's direction from the map and takes its
+steepness from b. Drops by the lamp now have the bright rim; it is brightest
+on their lower side, because a drop on an upright pane sags -- steeper below
+(advancing, about 60 deg), shallower above (receding, about 40 deg, short of
+the band) -- which is what a real window shows; the reference's drops are
+symmetric caps.
+
 Two things the reference says about the rest of the site, for Ony to
 decide: (1) the frost round a lamp in the reference is a dim grey, while
 the site's light layer makes it glow near white -- the light layer is about
