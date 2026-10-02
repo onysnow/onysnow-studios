@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { JustifiedGallery } from "@/components/site/JustifiedGallery";
 import { PortfolioFilterBar } from "@/components/site/PortfolioFilterBar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { GlassSection } from "@/components/site/GlassSection";
 import { categoriesQuery, galleryPhotosQuery } from "@/lib/content";
 import { photoUrl } from "@/lib/photo-url";
 
@@ -69,25 +70,28 @@ function Portfolio() {
 
       <PortfolioFilterBar categories={cats} active={active?.slug} />
 
-      <section className="px-2 pb-24 pt-2 sm:px-3 lg:px-4">
-        <div className="mx-auto max-w-screen-2xl">
-          {catsPending || photosPending ? (
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
-              {Array.from({ length: 12 }).map((_, i) => (
-                <Skeleton key={i} className="aspect-[3/2] w-full" />
-              ))}
-            </div>
-          ) : images.length === 0 ? (
-            <p className="py-24 text-center text-sm text-muted-foreground">
-              {active
-                ? `Photographs for ${active.name} are coming soon.`
-                : "Photographs are coming soon."}
-            </p>
-          ) : (
-            <JustifiedGallery images={images} />
-          )}
-        </div>
-      </section>
+      {/* One long pane of glass, the photographs lying on it (see the layout). */}
+      <GlassSection overlap={false} className="mt-2 mb-24">
+        <section className="px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto max-w-screen-2xl">
+            {catsPending || photosPending ? (
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <Skeleton key={i} className="aspect-[3/2] w-full" />
+                ))}
+              </div>
+            ) : images.length === 0 ? (
+              <p className="py-24 text-center text-sm text-muted-foreground">
+                {active
+                  ? `Photographs for ${active.name} are coming soon.`
+                  : "Photographs are coming soon."}
+              </p>
+            ) : (
+              <JustifiedGallery images={images} />
+            )}
+          </div>
+        </section>
+      </GlassSection>
     </>
   );
 }
