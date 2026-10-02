@@ -8,7 +8,7 @@
  *     0: x0, y0   (pane px, 16 bits each, 1/16 px steps: v = round(x * 16))
  *     1: x1, y1
  *     2: lean (radians, signed, 16 bits: v = lean * 8192 + 32768), roughness (0-255), kind
- *     3: arrival (microseconds, 16 bits), spare
+ *     3: arrival (microseconds, 16 bits), face (0 through the pane, 1 the struck face only, 2 the back only)
  *
  *   the FIELD, one texel per pane device pixel: the nearest segment's index
  *     (RG, 16 bits, 65535 for none) and the second nearest (BA), among the
@@ -39,17 +39,29 @@ export type Segment = {
   kind: Crack["kind"];
   /** When it cracked, microseconds. */
   arrival: number;
+  /**
+   * How deep it goes: through the pane, or from one face part way in (a
+   * simulated break's cracks start on the back face and not all of them
+   * reach the front; Ony, 2026-10-02: "lots of the cracks don't go all the
+   * way thru" -- some really don't).
+   */
+  face: CrackFace;
 };
+
+export type CrackFace = "both" | "struck" | "back";
+const FACE_CODE: Record<CrackFace, number> = { both: 0, struck: 1, back: 2 };
+/** How far into the pane a crack that shows on one face only reaches, as a share of the thickness. */
+export const PART_DEPTH = 0.55;
 
 const KIND_CODE: Record<Crack["kind"], number> = { radial: 0, branch: 1, ring: 2, crush: 3 };
 
 /** The break's cracks as straight segments with their face leans. */
 export function segmentsOf(
-  fr: Pick<Fracture, "impact"> & { cracks: (Crack & { t?: number[] })[] },
+  fr: Pick<Fracture, "impact"> & { cracks: (Crack & { t?: number[]; face?: CrackFace })[] },
   roughReach: number,
 ): Segment[] {
   const out: Segment[] = [];
-  fr.cracks.forEach((c: Crack & { t?: number[] }, ck) => {
+  fr.cracks.forEach((c: Crack & { t?: number[]; face?: CrackFace }, ck) => {
     // The crushed zone is pulverised glass, not faces: BrokenGlass draws it (B4), not this pass.
     if (c.kind === "crush") return;
     let run = 0;
@@ -71,6 +83,7 @@ export function segmentsOf(
         rough,
         kind: c.kind,
         arrival: c.t?.[i + 1] ?? 0,
+        face: c.face ?? "both",
       });
       run += len;
     }
@@ -99,7 +112,7 @@ export function bakeTable(segs: readonly Segment[]): { data: Uint8Array; rows: n
     data[t + 10] = Math.round(Math.max(0, Math.min(1, s.rough)) * 255);
     data[t + 11] = KIND_CODE[s.kind];
     put16(data, t + 12, s.arrival);
-    data[t + 14] = 0;
+    data[t + 14] = FACE_CODE[s.face];
     data[t + 15] = 255;
   });
   return { data, rows };

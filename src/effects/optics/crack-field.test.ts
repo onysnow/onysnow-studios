@@ -15,8 +15,28 @@ const read16 = (d: Uint8Array, at: number) => (d[at]! << 8) | d[at + 1]!;
 
 describe("the crack field (broken glass B2)", () => {
   const segs: Segment[] = [
-    { x0: 10, y0: 10, x1: 90, y1: 10, lean: 0.1, rough: 0.2, kind: "radial", arrival: 120 },
-    { x0: 50, y0: 10, x1: 50, y1: 60, lean: -0.3, rough: 1, kind: "ring", arrival: 400 },
+    {
+      x0: 10,
+      y0: 10,
+      x1: 90,
+      y1: 10,
+      lean: 0.1,
+      rough: 0.2,
+      kind: "radial",
+      arrival: 120,
+      face: "both",
+    },
+    {
+      x0: 50,
+      y0: 10,
+      x1: 50,
+      y1: 60,
+      lean: -0.3,
+      rough: 1,
+      kind: "ring",
+      arrival: 400,
+      face: "back",
+    },
   ];
 
   it("packs each segment's ends, lean, roughness, kind and arrival to be read back", () => {
@@ -28,6 +48,7 @@ describe("the crack field (broken glass B2)", () => {
     expect(read16(data, t + 6) / 16).toBe(60);
     expect((read16(data, t + 8) - 32768) / 8192).toBeCloseTo(-0.3, 3);
     expect(data[t + 10]).toBe(255);
+    expect(data[t + 14]).toBe(2); // on the back face only
     expect(data[t + 11]).toBe(2);
     expect(read16(data, t + 12)).toBe(400);
   });

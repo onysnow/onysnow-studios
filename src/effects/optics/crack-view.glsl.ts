@@ -22,7 +22,7 @@
  * straight view everywhere else.
  */
 
-import { SEG_TEXELS, TABLE_WIDTH } from "./crack-field";
+import { PART_DEPTH, SEG_TEXELS, TABLE_WIDTH } from "./crack-field";
 import { ENVIRONMENT_GLSL } from "./environment.glsl";
 
 export const CRACK_VIEW_VERTEX = /* glsl */ `
@@ -65,6 +65,8 @@ ${ENVIRONMENT_GLSL}
 const float TABLE_W = ${TABLE_WIDTH.toFixed(1)};
 const float SEG_TEXELS = ${SEG_TEXELS.toFixed(1)};
 const float NONE = 65535.0;
+/* A crack on one face only reaches this share of the thickness in. */
+const float PART_DEPTH = ${PART_DEPTH.toFixed(2)};
 /* How bright the light piped along the pane glows out of a crack face straight under a lamp (estimate, matched to the glass light layer). */
 const float TRAPPED_GLOW = 0.8;
 const float PIPED_REACH = 780.0;
@@ -176,7 +178,11 @@ void main() {
     float denom = tan(lean) - tanG * c;
     if (abs(denom) < 1e-4) continue;
     float z = d / denom;
-    if (z <= 0.0 || z >= uThickness || z >= bestZ) continue;
+    // How deep this crack goes: through, or from the struck (near) face or the back face part way.
+    float faceCode = t3.b * 255.0;
+    float z0 = faceCode > 1.5 ? uThickness * (1.0 - PART_DEPTH) : 0.0;
+    float z1 = faceCode > 0.5 && faceCode < 1.5 ? uThickness * PART_DEPTH : uThickness;
+    if (z <= z0 || z >= z1 || z >= bestZ) continue;
     // The face's normal (z down into the glass) and what the ray does at it.
     vec3 nf = normalize(vec3(n, -tan(lean)));
     float cosI = abs(dot(r, nf));

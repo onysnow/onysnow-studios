@@ -32,6 +32,7 @@ import { paneLook } from "@/effects/engine/pane-look";
 import { roomTexture } from "@/effects/engine/room-texture";
 import { crackView, type CrackView } from "@/effects/optics/crack-view";
 import { riserLit, riserSeen, stepAt, stepShadow } from "@/effects/optics/crack-step";
+import { PART_DEPTH } from "@/effects/optics/crack-field";
 import { onTuningApplied, t as knob } from "@/lib/tuning";
 import { camera } from "@/effects/camera/camera";
 import { previewing } from "@/effects/engine/preview";
@@ -387,6 +388,9 @@ export function BrokenGlass({
     const liftsAt = (ck: number, i: number, mx: number, my: number, nx: number, ny: number) => {
       const k = `${ck}:${i}`;
       let v = sides.get(k);
+      // A crack that does not go through the pane leaves the two sides one piece: no step.
+      const face = (broken!.cracks[ck] as { face?: string } | undefined)?.face;
+      if (face && face !== "both") return [0, 0] as [number, number];
       if (!v) {
         const find = (sx: number) => {
           const q = { x: mx + nx * sx, y: my + ny * sx };
@@ -927,7 +931,14 @@ export function BrokenGlass({
            * the lean plus the slant. That is the ribbon's width and side.
            */
           const slant = ((mx - eye.x) * nx + (my - eye.y) * ny) / Math.max(eye.z, 1);
-          const wide = depth * (Math.tan(lean) + 0.5 * slant);
+          /*
+           * A crack on one face only (a simulated break's, effects/optics/crack-field
+           * PART_DEPTH) runs part way into the pane: a narrower face, and from
+           * the back a fainter line, seen through the glass.
+           */
+          const crackFace = (c as { face?: string }).face ?? "both";
+          const partial = crackFace === "both" ? 1 : PART_DEPTH;
+          const wide = depth * partial * (Math.tan(lean) + 0.5 * slant);
           const ox = nx * wide;
           const oy = ny * wide;
 
@@ -951,7 +962,7 @@ export function BrokenGlass({
           ];
           // The air gap: light from behind it is turned away, a hairline of shade.
           ctx.globalCompositeOperation = "source-over";
-          ctx.strokeStyle = `rgb(10 16 16 / ${(0.34 + 0.16 * rough).toFixed(3)})`;
+          ctx.strokeStyle = `rgb(10 16 16 / ${((0.34 + 0.16 * rough) * (crackFace === "back" ? 0.6 : 1)).toFixed(3)})`;
           ctx.lineWidth = 0.8;
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
