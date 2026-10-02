@@ -228,8 +228,8 @@ the CSS and liquid looks are settled.
 
 ## 7. Live audit of every control (2026-10-02)
 
-Every one of the 125 controls was set to its lowest and then its highest
-value on the live home page (the lamp held and charged over a glass band;
+Every one of the 125 settings in the registry was set to its lowest and then
+its highest value on the live home page (the lamp held and charged over a glass band;
 the black light's controls with the black light in hand, the laser's with
 the laser), each time photographed and compared pixel by pixel. Rain
 controls were tested separately this week.
@@ -238,8 +238,14 @@ controls were tested separately this week.
 amount, reach, core) and "Photo paper" (5: gloss, core, sheen, reach, room
 reflection). Both drive CSS layers that were switched off at your request
 (the "flashlight that would not go away"); the floor light and the glass
-light layer draw that light physically now. Recommendation: remove the
-eight controls from the menu.
+light layer draw that light physically now.
+
+**Correction (2026-10-02).** These eight are not in the menu. They are among
+the 31 locked results (RESULTS in `lib/tuning.ts`, locked in 099403d), which
+the Lab never shows; the sweep above went through the whole registry, locked
+values included. The menu itself has 94 controls, and none of them is dead:
+the others listed below work, but only in a certain state. Ony approved
+removing the eight; there was nothing in the menu to remove.
 
 **Work only in a certain state -- the redesign shows them only there.**
 - Liquid mode only: the 21 liquid-glass controls.
