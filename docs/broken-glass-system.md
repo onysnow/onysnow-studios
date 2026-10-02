@@ -355,3 +355,103 @@ you before the next.
 - Several strikes on one pane (later cracks stop at earlier ones, which the
   forensic rule already describes).
 - Running the simulation at click time on a server, if ever needed.
+
+---
+
+## 9. Fit with the engine as built (checked 2026-10-02)
+
+Ony asked whether the design fits the existing architecture and reuses what
+is built. It does; this is the module-by-module account.
+
+| Existing piece | What it does today | In the new system |
+|---|---|---|
+| `effects/optics/fracture.ts` (`Fracture`, `Shard`, `Crack`, `Impact`) | the break's data shape | **kept as the interface**. The library returns the same `Fracture`, with new optional fields per crack (lean, arrival time, ply, texture zone) and per piece (depth, loose). The generator stays as the fallback only. |
+| `effects/optics/crack-net.ts` | the planar graph of cracks and the faces it cuts | **reused** to turn library crack lines into pieces. |
+| `effects/optics/shard-map.ts` + the per-piece mirror in the glass shader (`shardlight`) | each piece reflects the room at its own tilt | **reused**; tilts now come from the simulation instead of the hand-made dish (`shard-tilt.ts` becomes the fallback). |
+| `effects/optics/crack-side.ts` + `drawSide` in `BrokenGlass.tsx` | cracks crossing the side faces at their lean | **reused** as is; fed the simulated lean. |
+| `effects/optics/crack-light.ts`, `crack-face.ts` | the crack-as-mirror flash and the face lean table | **reused** inside the new per-pixel pass (same critical-angle maths); `KIND_LEAN` becomes the fallback when a library crack carries its own lean. |
+| branch `wip/crack-shadow-step5` (`crack-shadow.ts`, casters `face`/`mask`) | dark and bright bands under each crack in the floor light | **merged back**: it is exactly §3.6's floor pass. |
+| `effects/optics/casters.ts`, `shape-casters.ts`, `shadow.glsl.ts` | shadows of things on the glass in the floor light | **reused** for fallen pieces and grit (each a caster with a mask). |
+| `effects/light/lights.ts` (the light list), `FloorLight.tsx`, `GlassLight.tsx` | lamps, the photographs' lights, the floor pass, the glass light layer | **reused unchanged**: every lamp already lights the glass; the trapped-light map is one more input to `GlassLight`. |
+| `effects/optics/edge-side.ts`, `edge-profile.ts` | the pane's side faces and arris | **reused** for hole rims and chips (a fracture face is a side face with a rough profile). |
+| `effects/optics/environment.ts`, `reflection.ts`, `coating.ts`, `dispersion.ts` | the room, Fresnel, thin films, colour fringes | **reused**: the thin-film LUT comes from `coating.ts`'s maths; fringes from `dispersion.ts`. |
+| `effects/engine/compositor.ts` (`PANE_LAYERS`) | layer order per pane | **unchanged**: the crack view draws in `pane:broken`, the crack shadows in `pane:under`, trapped light in `pane:surface`. |
+| `effects/engine/quality.ts` | full / lite / minimal | **used** for the tiers in §10. |
+| `lib/crack-photos.ts`, `crack-photo.ts` | Ony's photographed breaks as patterns | **kept** as a second pattern source alongside the library (same `Fracture` out). |
+
+New modules (all under `effects/optics/` unless said):
+
+- `fracture-library.ts`: load, pick, place, mirror and scale a stored break → `Fracture`. Pure; tested with a fixture break.
+- `crack-field.ts`: bake the crack field, piece field and segment table textures from a `Fracture`. Pure data in, typed arrays out; the GL upload is a thin adapter.
+- `crack-view.glsl.ts`: the per-pixel crack-face pass (§3.5) as a GLSL chunk, like the existing `*.glsl.ts` files.
+- `debris.ts` + `debris.glsl.ts`: the four debris classes as particles with their own lighting, and the fallen pieces.
+- `tools/fracture-sim/`: the offline simulate / extract / check tools (B0, built).
+
+## 10. Quality tiers (web speed)
+
+The engine's three tiers (`quality.ts`), and what each drops. Costs are the
+estimates of §3.5 and §4; the build measures each and writes the numbers here.
+
+| Tier | Pane view | Light | Debris | Animation |
+|---|---|---|---|---|
+| full | exact per-pixel crack faces, thin-film colours, glints, laminated parallax | crack shadow bands, trapped light per piece, debris shadows | all four classes, fallen pieces lit and shadowed | cracks in arrival order, pieces falling |
+| lite | crack faces without thin-film colour or glint detail (2 texture reads fewer) | crack shadow bands only | chunks and needles; grit as a baked texture | same |
+| minimal | crack bands and holes from the baked field, no per-pixel intersection | none | baked texture | the break appears in three steps |
+
+Budget: a broken pane at full must stay inside the engine's existing frame
+budget on a desktop (the compositor already measures passes with
+`perf.ts`); the pass steps down a tier on its own when `perf.ts` reports slow
+frames, as the water layer does today.
+
+## 11. Knobs (visual preferences, as causes)
+
+The site's rule (tuning.ts, "RESULTS are locked"): a control is a cause,
+never a cooked result. These are the causes the broken glass exposes:
+
+| Knob | Cause | Already exists? |
+|---|---|---|
+| Glass kind: plain / laminated | which library | new (per pane, `data-glass`) |
+| Glass thickness | band widths, side faces, debris size | yes (`glassThickness`) |
+| Glass height (gap) | where crack shadows fall | yes (`floorGap`) |
+| Strike energy | how long the hammer is held (exists); picks the library's energy class, how much falls out | yes (the Hammer) |
+| Playback speed | how slow the cracks run (×1000 is the default; a preference, since no screen can show 1.5 km/s) | new |
+| Debris amount | strike energy and glass kind set it; the knob scales only the grit count for speed | new, in the tier table |
+| Room and lamps | the broken mirror and glints | yes (`room`, the lights) |
+
+Not knobs: crack brightness, band width, glow strength, fringe colour. Each
+is set by the physics from the causes above.
+
+## 12. Components for the library (later)
+
+Each of these is self-contained, pure where it can be, with its own tests,
+and no dependency on the site's React tree, so it can move to the component
+library later without surgery:
+
+- **FractureLibrary** (data + placement): `pick(kind, energy, position)` → `Fracture`.
+- **CrackField baker**: `Fracture` → typed arrays for the textures.
+- **CrackView** GLSL chunk + its uniform layout (a function of the baked fields and the pane causes).
+- **CrackShadowBands** (from the parked branch): `crackBands(...)` → quads for any floor-light caster.
+- **CrackSide**: already a pure module.
+- **Debris**: particle set + GLSL; independent of the pane.
+- **BrokenGlass** React wrapper: thin; wires the above to a pane element.
+- **fracture-sim** tools: standalone.
+
+## 13. Double-check: does this reach AAA photoreal?
+
+What the best work does, and where this design stands:
+
+| What film and AAA games do | Here |
+|---|---|
+| Crack patterns from simulation or from scanned real breaks, never from Voronoi | simulated with a validated method, checked against 60 real panes' statistics and 203 photographs |
+| Cracks as geometry inside the glass, lit by ray tracing | per-pixel ray intersection with each crack face inside the slab, with exact Fresnel and total internal reflection; checked against Mitsuba path tracing |
+| Each fragment reflects at its own orientation | per-piece mirror (built); tilts from the simulation |
+| Debris with its own materials | four classes, each with its own optics, shadows on the photograph |
+| Light transport through the broken slab | trapped light per piece with crack leakage (0.425 per crossing), crack shadow bands in the floor light |
+| Laminated glass as two cracked plies | two crack layers with parallax, PVB invisible |
+
+Known gaps, and what closes them: (1) crack face roughness (mist, hackle)
+is a rule from fractography, not simulated: the Mitsuba comparison decides
+whether a rougher face model is needed; (2) sub-millimetre detail is drawn
+by rule; a 0.5 mm library later if it shows; (3) light bouncing *between*
+pieces (second-order) is not modelled; it matters only in the crushed zone,
+which is drawn as a white sparkling disc from measurements.

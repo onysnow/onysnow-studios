@@ -208,3 +208,79 @@ field.
 - A full thin-film water simulation on the GPU if the fields look too simple.
 - Double glazing (two panes, rain outside, fog between).
 - Coatings: water-repellent (round fast beads) and self-cleaning (sheets).
+
+---
+
+## 9. Fit with the engine as built (checked 2026-10-02)
+
+| Existing piece | What it does today | In the new system |
+|---|---|---|
+| `effects/water/sim.ts` (`DropSim`), `liquids.ts`, `rain-types.ts`, `rain.ts`, `spray.ts` | drops landing, growing, merging, Furmidge sliding, pinning, evaporation; blood and slime; rain regimes | **kept as the bead system**. The fields (§3.3) read its drops; its sliding threshold already is the measured one. |
+| `WaterDrops.tsx`: the drops map, droplet map, wet map, wipe pass, fade pass | per-pane GPU maps of water height and wetness | **kept and extended**: the wet map becomes the film field, a fog map exists already; the velocity field is the one new map. |
+| `effects/water/water.glsl.ts` (compose pass) + `lens.ts` (its JS twin, tested) | the view through each drop | **kept**; W1 corrects it (one picture distance, sharp lookup, lights through the lens, no dye) rather than replacing it. |
+| `effects/light/lights.ts`, `PhotoLights.tsx`, `photo-emitters.ts` | lamps and the photographs' own lights | **reused**: the water reads both; W1 carries the photographs' lights through each lens. |
+| `FloorLight.tsx`, `casters.ts`, `shape-casters.ts` | light and shadows on the photograph under the glass | **reused** for W2: each drop's shadow and focused core is a caster with a precomputed profile; rivulets add to the existing caustic term. |
+| `GlassLight.tsx` | the frost's glow and the pane's reflection | **reused**: a wet spot subtracts the frost's scatter where the film map says the etch is filled. |
+| `effects/materials/pane-causes.ts` | frost, gap, thickness per pane | **used**: the water takes the pane's gap and frost from here (W1), so rain works on clear and frosted glass by the same physics. |
+| `effects/engine/compositor.ts` | `pane:water` last | **unchanged**. |
+| `effects/engine/quality.ts`, `perf.ts` | tiers and pass timing | **used** for §10. |
+| `effects/light/camera-match.ts` | the photographs' highlight shoulder and grain | **reused** for glints and sparkles. |
+
+New: `effects/water/fields.ts` + `fields.glsl.ts` (film, velocity, fog ping-pong
+updates), `drop-caustic.ts` (the offline-traced shadow profiles as a LUT) and
+its sprite pass, `fog.ts` (Beysens growth laws, pure, tested).
+
+## 10. Quality tiers (web speed)
+
+| Tier | View | Light through water | Fields | Beads |
+|---|---|---|---|---|
+| full | 4 samples a pixel, sharp lookup, lights through lenses, exact Fresnel rims | per-drop shadow sprites per lamp, rivulet focus lines, read-back glow | film, velocity, fog at half resolution | the full count |
+| lite | 1 sample a pixel, same optics | shadows for the largest drops only | film and fog; no velocity field | two thirds |
+| minimal | 1 sample, no room reflection in drops | none | film only, no fog dynamics (a static fog texture) | half, no droplet map |
+
+The water pass already steps down on slow frames (`perf.ts`); the fields are
+updated every other frame on lite.
+
+## 11. Knobs (visual preferences, as causes)
+
+| Knob | Cause | Exists? |
+|---|---|---|
+| Rain type and strength | drop sizes and arrival rate | yes |
+| Frost | clear or frosted glass; the water clears the etch where it lies | yes (`glassBlur` → pane causes) |
+| Rain lands on | near or far face | yes (`rainFace`) |
+| Glass height | the picture's distance behind the drops (lens scale, shadow spread) | yes (`floorGap`) |
+| Glass thickness | the slab the sight crosses | yes |
+| Condensation amount and side | fog | yes |
+| Wind | pushes runners, splashes | new |
+| Glass cleanliness | contact angles (clean 20–40°, dirty 50–70°), so bead shape and when they run | new (a cause; replaces any "drop roundness" result) |
+| Drying time | film and fog clearing (room humidity) | new |
+| Playback speed | real time by default; slow motion as a preference | new |
+| Bead count cap | speed only | tier table |
+
+Not knobs: drop brightness, rim strength, sparkle size, fog whiteness. All
+follow from the causes above and the optics.
+
+## 12. Components for the library (later)
+
+- **DropSim** (exists): pure particle physics, tested.
+- **WaterFields**: GPU film / velocity / fog updates as a self-contained pass with its own GLSL; input the drops map, output three maps.
+- **WaterView** GLSL chunk + uniform layout; `lens.ts` is its tested JS twin.
+- **DropCaustic**: the offline tracer (`calc/drop_caustic.py`), the LUT, and the sprite pass for any floor-light caster.
+- **Fog**: pure growth laws.
+- **WaterDrops** React wrapper: thin wiring to a pane.
+
+## 13. Double-check: does this reach AAA photoreal?
+
+| What the best work does | Here |
+|---|---|
+| Drops as true lenses of the scene behind, upside down and sharp (offline renders; the best car games) | exact per-pixel refraction through cap-shaped drops at the real distance, sharp lookup, with the scene's lights at their brightness |
+| Fresnel and total internal reflection rims from the physics | exact Fresnel both ways; TIR only where the slope passes 48.6°, as measured drops show |
+| Trails, film and merging as living state (ToyShop, Driveclub) | particle beads plus film, velocity and fog fields |
+| Light through water onto what is behind (caustics) | per-drop shadow + focused core profiles from a ray tracer, rivulet focus lines, film caustic networks, read back so drops glow |
+| Condensation that reacts | Beysens growth laws, sweeping, re-fogging, wipes |
+| Calibrated, not eyeballed | Mitsuba 3 renders of the same setup (done for the rim; repeated at each step) and the 96 photographs by category |
+
+Known gaps: (1) wind-blown spray as a volumetric effect is out of scope (drops
+and splashes only); (2) water sheets over the whole pane (a downpour) are the
+film field at full coverage, not a free-surface fluid solve: §8 lists the
+upgrade if it is wanted.
