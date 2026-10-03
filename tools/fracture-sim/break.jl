@@ -36,6 +36,11 @@ const DEFAULTS = Dict{String,Any}(
     # "sphere": the impactor as a body in contact; "pulse": its contact force as a
     # Hertz-shaped pressure on the struck face, a half sine in time
     "impactor" => "sphere", "pulse_peak" => 5000.0, "pulse_time" => 150e-6, "pulse_r" => 0.0015,
+    # "prestress": the pane starts bent, as a pane pressed slowly to failure is -- the
+    # centre deflection in metres of a clamped plate's cos^2 bowl (0: flat). The bending
+    # strain is already in it (Kirchhoff: in-plane -z grad w), so the cracks run on the
+    # energy the press stored, not on a blow. The impactor can then be "none".
+    "prestress" => 0.0,
     # contact: the penalty (Peridynamics.jl's default, 1e12, is ten times too soft
     # for a kilogram at 5 m/s: the impactor ploughed through the pane unslowed)
     "penalty" => 1e14,
@@ -97,7 +102,35 @@ function main(args)
         no_failure!(pane, :gasket)
     end
 
-    if s["impactor"] == "pulse"
+    if s["prestress"] > 0
+        w0 = s["prestress"]
+        sx = s["lx"] / 2 - s["frame_w"]
+        sy = s["ly"] / 2 - s["frame_w"]
+        bowl(x, y) = (abs(x) < sx && abs(y) < sy) ? w0 * cos(pi * x / (2sx))^2 * cos(pi * y / (2sy))^2 : 0.0
+        dwdx(x, y) = (abs(x) < sx && abs(y) < sy) ?
+            -w0 * (pi / sx) * cos(pi * x / (2sx)) * sin(pi * x / (2sx)) * cos(pi * y / (2sy))^2 : 0.0
+        dwdy(x, y) = (abs(x) < sx && abs(y) < sy) ?
+            -w0 * (pi / sy) * cos(pi * y / (2sy)) * sin(pi * y / (2sy)) * cos(pi * x / (2sx))^2 : 0.0
+        # Pressed from the struck face (z = +t/2) toward -z: the far face is in tension.
+        for (dim, f) in ((0x01, p -> p[1] + p[3] * dwdx(p[1], p[2])),
+                         (0x02, p -> p[2] + p[3] * dwdy(p[1], p[2])),
+                         (0x03, p -> p[3] - bowl(p[1], p[2])))
+            push!(pane.posdep_single_dim_ics,
+                  Peridynamics.PosDepSingleDimIC(f, :position, :all_points, dim))
+        end
+        for (dim, f) in ((0x01, p -> p[3] * dwdx(p[1], p[2])),
+                         (0x02, p -> p[3] * dwdy(p[1], p[2])),
+                         (0x03, p -> -bowl(p[1], p[2])))
+            push!(pane.posdep_single_dim_ics,
+                  Peridynamics.PosDepSingleDimIC(f, :displacement, :all_points, dim))
+        end
+    end
+
+    if s["impactor"] == "none"
+        vv = VelocityVerlet(time=s["time"])
+        job = Job(pane, vv; path=root, freq=s["freq"], fields=(:displacement, :damage))
+        bpos = zeros(3, 0)
+    elseif s["impactor"] == "pulse"
         # The blow as the force the impactor's tip puts on the struck face: a
         # Hertz pressure, p(r) ~ sqrt(1 - r^2/a^2), over the contact circle on the
         # top layer of points, rising and falling as a half sine over pulse_time.
