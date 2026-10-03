@@ -975,6 +975,15 @@ export const tuning: Record<string, Knob> = {
     step: 0.05,
     hint: "How hard the chosen rain type falls, times its usual rate (0: none; ?try=drops). Drops bead where they land, merge, and run once they are heavy enough to overcome the glass's grip (about 9 uL for water on a window).",
   },
+  dropSceneDepth: {
+    label: "Scene depth in drops",
+    group: "Water",
+    value: 20,
+    min: 1,
+    max: 80,
+    step: 1,
+    hint: "How far behind the glass the scene each drop images is, times the print's gap (?try=drops). 1: the photograph is a print just behind the glass, so a drop magnifies the patch under it and looks like a flat window. Higher: the photograph is the world outside, metres away, as in a real rainy window -- each drop shrinks and turns over a wide view of it, with its lights and darks, so it reads as a round lens. Only the drops' optics use it; the shadows and the floor light keep the print where it is.",
+  },
   rainFace: {
     label: "Rain lands on",
     group: "Water",

@@ -1254,7 +1254,10 @@ export function WaterDrops() {
        */
       const frosted = pane.causes.material.frost > 0;
       const nearFace = !frosted && Math.round(t("rainFace")) === 1;
-      gl.uniform1f(u.uScene!, pane.causes.gap + (nearFace ? pane.causes.thickness / GLASS_IOR : 0));
+      gl.uniform1f(
+        u.uScene!,
+        pane.causes.gap * t("dropSceneDepth") + (nearFace ? pane.causes.thickness / GLASS_IOR : 0),
+      );
       gl.uniform1f(u.uNear!, nearFace ? 1 : 0);
       gl.uniform1f(u.uFrosted!, frosted ? 1 : 0);
       gl.uniform1f(u.uRivulet!, RIVULET_MM);
