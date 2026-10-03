@@ -431,12 +431,12 @@ export class DropSim {
   /** What runner i leaves behind it. */
   trailMode(i: number): TrailMode {
     const h = hash01(this.serial[i]!, 777);
-    return h < TRAIL_LINE_SHARE
-      ? "line"
-      : h < TRAIL_LINE_SHARE + TRAIL_DOTTED_SHARE
-        ? "dotted"
-        : "none";
+    return h < this.lineShare ? "line" : h < this.lineShare + this.dottedShare ? "dotted" : "none";
   }
+
+  /** The shares of runners that leave a clear line and a dotted trail (the rest leave next to nothing). */
+  lineShare = TRAIL_LINE_SHARE;
+  dottedShare = TRAIL_DOTTED_SHARE;
 
   /** How far the glass's grip is eased by a gust now, 0-GUST_DROP. */
   gust = 0;

@@ -149,6 +149,13 @@ function rainOnNearFace(frosted: boolean): boolean {
   return face === 0 && t("typeOnGlass") > 0.5;
 }
 
+/** The Lab's trail mix: of the runners, the share that leave a clear line, and of the rest the share that leave a dotted trail. */
+function setTrailShares(sim: DropSim) {
+  const line = Math.max(0, Math.min(1, t("trailLines")));
+  sim.lineShare = line;
+  sim.dottedShare = (1 - line) * Math.max(0, Math.min(1, t("trailDots")));
+}
+
 /** How far back the runners' tracks from before you arrived are kept, s (they dry at FILM_DRY). */
 const TRACK_MEMORY = 45;
 /** How long it has rained before you arrive, s (the drops already on the glass). */
@@ -971,6 +978,7 @@ export function WaterDrops() {
           Math.round(rain * areaCm2 * 60 * Math.max(type.droplets, 12) * t("dropletScale")),
         );
         sim.wind = type.wind;
+        setTrailShares(sim);
         if (sim.count === 0 && rain > 0) {
           /*
            * The runners of the last TRACK_MEMORY seconds leave their tracks,
@@ -1685,6 +1693,7 @@ export function WaterDrops() {
           land(sim, st, rainVolume(random(), random(), type.median));
         }
         sim.wind = type.wind;
+        setTrailShares(sim);
         // Drizzle between the drops.
         const dz = expected * type.droplets * t("dropletScale");
         let nz = Math.floor(dz);
