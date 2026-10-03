@@ -189,6 +189,21 @@ Each break must pass before it goes in the library:
 - **Light**: Mitsuba 3 renders of a cracked slab at the site's camera and
   lamp, compared with the site.
 
+**Built (B0–B1, 2026-10-02/03, `tools/fracture-sim`, `public/breaks`):** 14
+plain breaks at 1 mm points -- ten 100 mm panes (hammer at 6.5–16 m/s, a stone,
+and two pressed) and four full-size 203 mm panes, all framed, each measured as
+the NIJ panes were (crossings, pieces, junctions, corners, the fragment-size
+law). What the pressed panes taught: the simulated glass fails at about a fifth
+of real glass's strain (the horizon sets the critical stretch), so a pane
+pressed to failure stores a 27th of the real energy and webs sparsely. A
+point-load pre-bend puts the missing energy in and gives a dense centre web
+with radials to the corners (plain-203-pressed-c); bent further the pane dices
+into diagonal ladders, like tempered glass. A press driven at a fixed speed
+(`impactor=ram`) grows the web generation by generation on a 100 mm pane
+(plain-100-pressed-k) but at full size the long hinged pieces follow the ram
+without cracking again. The NIJ pressed density (178 pieces) at full size is
+still to find; a shallow bowl under the point-load bend is the next try.
+
 ### 3.4 Place and animate (browser, `effects/optics/fracture-library.ts`)
 
 - Returns the same `Fracture` type the current code uses, plus per-crack lean,
