@@ -987,7 +987,7 @@ export const tuning: Record<string, Knob> = {
   rainBeading: {
     label: "Beading",
     group: "Water",
-    value: 50,
+    value: 70,
     min: 30,
     max: 120,
     step: 5,

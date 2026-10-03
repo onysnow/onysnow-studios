@@ -61,9 +61,12 @@ import {
  * is measured in. 4: the largest drop that can still cling (4.4 mm, where
  * water starts to run) is about 18 px, most drops 4-10 px -- a rainy window
  * at arm's length, not a macro shot (Ony, 2026-10-01: the drops were "too
- * big", "like we're super zoomed in"; water-drops.md 9.5).
+ * big", "like we're super zoomed in"; water-drops.md 9.5). 5 since
+ * 2026-10-03: the drops a quarter bigger beside the words printed on the
+ * glass, so the ones on a letter visibly magnify it (Ony chose "both,
+ * moderately": this, with Beading at 70).
  */
-export const PX_PER_MM = 4;
+export const PX_PER_MM = 5;
 /** Below this radius, device px, a drop is drawn at it and faded by its area: a sparkle, not a lens too small to draw. */
 const MIN_DRAWN_PX = 1.2;
 /** How tall a fresh rivulet stands, mm (estimate: a film a drop leaves is a few tenths of a millimetre at its crest). */
