@@ -104,7 +104,8 @@ type PaneState = {
   fogClock: number;
   pending: Droplet[];
   fresh: boolean;
-  prev: Map<number, [number, number]>;
+  /** Each drop's place last frame, map px, and how far it has run, mm. */
+  prev: Map<number, [number, number, number]>;
   dryClock: number;
   wetClock: number;
 };
@@ -119,6 +120,8 @@ function shapeOf(a: number, speed: number): [number, number, number] {
   return [irregular, 0.28 * Math.min(1, bond) + 0.2 * run, 0.12 * Math.min(1, bond)];
 }
 
+/** A stream reaches its full width over this many of its drop's radii of run. */
+const TRAIL_TAPER = 6;
 /** How long it has rained before you arrive, s (the drops already on the glass). */
 const PRE_RAIN = 150;
 /** Floats a vertex in the drops' quads. */
@@ -816,20 +819,25 @@ export function WaterDrops() {
     const land = (sim: DropSim, st: PaneState, volume: number) => {
       const [x, y] = spot(sim);
       if (volume >= DROPLET_UL) sim.addVolume(x, y, volume, WATER.id);
-      else
+      else {
+        const a = radiusFor(volume, REST_ANGLE);
         st.pending.push({
-          x,
-          y,
-          a: radiusFor(volume, REST_ANGLE),
+          x: Math.min(sim.width - a, Math.max(a, x)),
+          y: Math.min(sim.height - a, Math.max(a, y)),
+          a,
           liquid: WATER.id,
           seed: random() * 1000,
         });
+      }
     };
     /** Drizzle and splash: tiny droplets anywhere on the pane, radius log-normal round 0.17 mm (water-drops 9.1: 2-4 px across in the 1280 px reference frames). */
     const drizzle = (sim: DropSim, st: PaneState, n: number) => {
       for (let q = 0; q < n; q++) {
         const a = Math.min(0.45, 0.17 * Math.exp(0.45 * gauss()));
-        const [x, y] = spot(sim);
+        const [sx, sy] = spot(sim);
+        // Wholly on the glass: a droplet cannot hang past the pane's edge.
+        const x = Math.min(sim.width - a, Math.max(a, sx));
+        const y = Math.min(sim.height - a, Math.max(a, sy));
         /*
          * A droplet landing on the wet film a runner left joins the film: the
          * lanes the streams wiped stay clear for a while, the lines in the
@@ -1235,16 +1243,25 @@ export function WaterDrops() {
           const y = sim.y[i]! * pxMm;
           const r = sim.radius(i) * pxMm;
           const p = st.prev.get(id);
-          const [x0, y0] = p ?? [x, y];
+          const [x0, y0, run0] = p ?? [x, y, 0];
           caps.push(x0, y0, x, y, r * 1.05);
-          if (p && Math.hypot(x - x0, y - y0) > 0.3)
+          const step = Math.hypot(x - x0, y - y0);
+          const run = run0 + step / pxMm;
+          if (p && step > 0.3) {
             /*
              * The film is narrower than the drop that laid it (its receding
              * edge, water-drops 2.5: a rivulet is narrower than its drop) and
-             * thin at its edges.
+             * thin at its edges. It starts as a thread where the drop let go
+             * and widens over the first few radii of its run (Ony,
+             * 2026-10-03: the streams had "a loop at the top" -- the track's
+             * round end, full width, read as the stream turning back).
              */
-            wets.push(x0 / 2, y0 / 2, x / 2, y / 2, (r * 0.45) / 2);
-          st.prev.set(id, [x, y]);
+            const a = sim.radius(i);
+            const grown = Math.min(1, run / (TRAIL_TAPER * a));
+            const taper = grown * grown * (3 - 2 * grown);
+            wets.push(x0 / 2, y0 / 2, x / 2, y / 2, (r * 0.45 * Math.max(taper, 0.05)) / 2);
+          }
+          st.prev.set(id, [x, y, run]);
         }
         for (const id of st.prev.keys()) if (!seen.has(id)) st.prev.delete(id);
         gl.enable(gl.BLEND);

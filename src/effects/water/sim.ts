@@ -272,6 +272,13 @@ export class DropSim {
     const i = this.count++;
     this.x[i] = x;
     this.y[i] = y;
+    this.vol[i] = volume;
+    this.liquid[i] = liquid;
+    this.partN[i] = 1;
+    this.partX[i * MAX_PARTS] = 0;
+    this.partY[i * MAX_PARTS] = 0;
+    this.partF[i * MAX_PARTS] = 1;
+    this.keepOn(i);
     this.vx[i] = 0;
     this.vy[i] = 0;
     this.vol[i] = volume;
@@ -604,6 +611,7 @@ export class DropSim {
       const dy = this.vy[i]! * dt;
       this.x[i] = x + dx;
       this.y[i] = y + dy;
+      this.keepOn(i);
       // The film it leaves where it was (Kaneda 1993: water remains behind the flow).
       this.wet(x, y - a * 0.5);
       this.run[i] = this.run[i]! + Math.hypot(dx, dy);
@@ -612,7 +620,8 @@ export class DropSim {
     // Gone: evaporated, or run off the bottom.
     for (let i = this.count - 1; i >= 0; i--) {
       const v = this.vol[i]!;
-      if (!(v >= V_MIN) || this.y[i]! - this.radius(i) > this.height) this.remove(i);
+      // A runner whose front reaches the bottom edge drains off round it.
+      if (!(v >= V_MIN) || this.y[i]! + this.radius(i) > this.height) this.remove(i);
     }
     if (this.mergeAll()) moving = true;
     return moving;
@@ -778,6 +787,28 @@ export class DropSim {
         spread = Math.max(spread, Math.hypot(this.partX[o + k]!, this.partY[o + k]!));
       if (spread < 0.05 * a) this.partsOf(i, [[this.x[i]!, this.y[i]!, this.vol[i]!]]);
     }
+  }
+
+  /**
+   * Keep drop i wholly on the glass (Ony, 2026-10-03: "the rain gets cut at
+   * the edges. That's not how rain would react to an edge"): a drop cannot
+   * hang past the pane's edge, its contact line stops there, so one that
+   * lands or slides against a side or the top sits against it.
+   */
+  private keepOn(i: number) {
+    const a = this.radius(i);
+    let lo = a;
+    let hi = this.width - a;
+    // Its lobes reach further than its own radius.
+    const o = i * MAX_PARTS;
+    for (let k = 0; k < this.partN[i]!; k++) {
+      const pa = capOf(this.vol[i]! * this.partF[o + k]!, restAngle(this.liquidOf(i))).a;
+      lo = Math.max(lo, pa - this.partX[o + k]!);
+      hi = Math.min(hi, this.width - pa - this.partX[o + k]!);
+    }
+    if (lo <= hi) this.x[i] = Math.min(hi, Math.max(lo, this.x[i]!));
+    else this.x[i] = this.width / 2;
+    if (this.y[i]! < a) this.y[i] = a;
   }
 
   /** Drop i's parts, page mm and uL. */
