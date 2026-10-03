@@ -36,6 +36,13 @@ const DEFAULTS = Dict{String,Any}(
     # "sphere": the impactor as a body in contact; "pulse": its contact force as a
     # Hertz-shaped pressure on the struck face, a half sine in time
     "impactor" => "sphere", "pulse_peak" => 5000.0, "pulse_time" => 150e-6, "pulse_r" => 0.0015,
+    # "ram": a press. The glass under the ram's flat tip (a plug ram_r wide, the whole
+    # thickness, unbreakable: it is in compression) is driven down at ram_speed, reached
+    # over ram_ramp seconds -- displacement control, as a press is. The pane cracks at
+    # its first flaw and the ram keeps pushing the hinged pieces, which bend on the frame
+    # and break again, so the web grows outward with the travel, generation by generation,
+    # whatever the glass's strength: the strength only sets the force and how soon.
+    "ram_speed" => 1.0, "ram_r" => 0.005, "ram_ramp" => 1e-4,
     # "prestress": the pane starts bent, as a pane pressed slowly to failure is -- the
     # centre deflection in metres of a clamped plate's cos^2 bowl (0: flat). The bending
     # strain is already in it (Kirchhoff: in-plane -z grad w), so the cracks run on the
@@ -46,6 +53,10 @@ const DEFAULTS = Dict{String,Any}(
     # under a central point load, the ram: the curvature crowds round the centre, a star
     # and rings there, hogging at the clamp).
     "prestress_shape" => "point",
+    # A bowl added under the point shape, metres: the whole pane strained a little short
+    # of cracking, so the radials that run out of the centre's web find energy in the field
+    # and branch there instead of running clean to the frame. 0: the point shape alone.
+    "prestress_bowl" => 0.0,
     # contact: the penalty (Peridynamics.jl's default, 1e12, is ten times too soft
     # for a kilogram at 5 m/s: the impactor ploughed through the pane unslowed)
     "penalty" => 1e14,
@@ -111,6 +122,14 @@ function main(args)
         w0 = s["prestress"]
         sx = s["lx"] / 2 - s["frame_w"]
         sy = s["ly"] / 2 - s["frame_w"]
+        # The clamped plate's cos^2 dish of centre depth w: w(x, y) and its slopes.
+        dish = w -> (
+            (x, y) -> (abs(x) < sx && abs(y) < sy) ? w * cos(pi * x / (2sx))^2 * cos(pi * y / (2sy))^2 : 0.0,
+            (x, y) -> (abs(x) < sx && abs(y) < sy) ?
+                -w * (pi / sx) * cos(pi * x / (2sx)) * sin(pi * x / (2sx)) * cos(pi * y / (2sy))^2 : 0.0,
+            (x, y) -> (abs(x) < sx && abs(y) < sy) ?
+                -w * (pi / sy) * cos(pi * y / (2sy)) * sin(pi * y / (2sy)) * cos(pi * x / (2sx))^2 : 0.0,
+        )
         local bowl, dwdx, dwdy
         if s["prestress_shape"] == "point"
             # Clamped circular plate, central point load: w = w0 (1 - q^2 + 2 q^2 ln q), q = r/R
@@ -130,11 +149,14 @@ function main(args)
             dwdx = (x, y) -> (r = hypot(x, y); r > 1e-9 ? dwr(r) * x / r : 0.0)
             dwdy = (x, y) -> (r = hypot(x, y); r > 1e-9 ? dwr(r) * y / r : 0.0)
         else
-            bowl = (x, y) -> (abs(x) < sx && abs(y) < sy) ? w0 * cos(pi * x / (2sx))^2 * cos(pi * y / (2sy))^2 : 0.0
-            dwdx = (x, y) -> (abs(x) < sx && abs(y) < sy) ?
-                -w0 * (pi / sx) * cos(pi * x / (2sx)) * sin(pi * x / (2sx)) * cos(pi * y / (2sy))^2 : 0.0
-            dwdy = (x, y) -> (abs(x) < sx && abs(y) < sy) ?
-                -w0 * (pi / sy) * cos(pi * y / (2sy)) * sin(pi * y / (2sy)) * cos(pi * x / (2sx))^2 : 0.0
+            bowl, dwdx, dwdy = dish(w0)
+        end
+        if s["prestress_bowl"] > 0
+            bw, bdx, bdy = dish(s["prestress_bowl"])
+            pw, pdx, pdy = bowl, dwdx, dwdy
+            bowl = (x, y) -> pw(x, y) + bw(x, y)
+            dwdx = (x, y) -> pdx(x, y) + bdx(x, y)
+            dwdy = (x, y) -> pdy(x, y) + bdy(x, y)
         end
         # Pressed from the struck face (z = +t/2) toward -z: the far face is in tension.
         for (dim, f) in ((0x01, p -> p[1] + p[3] * dwdx(p[1], p[2])),
@@ -170,6 +192,17 @@ function main(args)
         forcedensity_bc!((p, t) -> t < τ ? -bpeak * sin(pi * t / τ) *
                          sqrt(max(1 - ((p[1] - hx)^2 + (p[2] - hy)^2) / a^2, 0.0)) : 0.0,
                          pane, :tip, :z)
+        vv = VelocityVerlet(time=s["time"])
+        job = Job(pane, vv; path=root, freq=s["freq"], fields=(:displacement, :damage))
+        bpos = zeros(3, 0)
+    elseif s["impactor"] == "ram"
+        a = s["ram_r"]
+        hx, hy = s["hit_x"], s["hit_y"]
+        point_set!(p -> (p[1] - hx)^2 + (p[2] - hy)^2 < a^2, pane, :plug)
+        no_failure!(pane, :plug)
+        v = s["ram_speed"]
+        tr = s["ram_ramp"]
+        velocity_bc!(t -> -v * min(t / tr, 1.0), pane, :plug, :z)
         vv = VelocityVerlet(time=s["time"])
         job = Job(pane, vv; path=root, freq=s["freq"], fields=(:displacement, :damage))
         bpos = zeros(3, 0)

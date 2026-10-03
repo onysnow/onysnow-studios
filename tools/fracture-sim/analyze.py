@@ -714,12 +714,17 @@ def run_library(name, dest):
         "crush_mm": float(np.hypot(*np.argwhere(rasters["through"] > 0.9).mean(0)[::-1] * 0)) if False else None,
         "cracks": cracks,
     }
-    # The crushed zone: the radius round the impact where the damage band is solid.
-    yy, xx = np.nonzero(rasters["through"] > 0.6)
-    if len(xx):
-        cx, cy = to_pixels(s["hit_x"], s["hit_y"], res, size)
-        r = np.hypot(xx - cx, yy - cy) * res
-        entry["crush_mm"] = float(np.percentile(r, 20)) if len(r) > 50 else 0.0
+    if s.get("impactor") == "ram":
+        # A press: the glass under the ram's tip is the crushed zone, and there is no blow.
+        entry["impactor"] = {"ram_speed": s.get("ram_speed"), "radius_mm": (s.get("ram_r") or 0) * 1000}
+        entry["crush_mm"] = (s.get("ram_r") or 0) * 1000
+    else:
+        # The crushed zone: the radius round the impact where the damage band is solid.
+        yy, xx = np.nonzero(rasters["through"] > 0.6)
+        if len(xx):
+            cx, cy = to_pixels(s["hit_x"], s["hit_y"], res, size)
+            r = np.hypot(xx - cx, yy - cy) * res
+            entry["crush_mm"] = float(np.percentile(r, 20)) if len(r) > 50 else 0.0
     Path(dest).write_text(json.dumps(entry, separators=(",", ":")))
     print("library entry", dest, len(cracks), "cracks,", sum(len(c["pts"]) for c in cracks), "points,", Path(dest).stat().st_size, "bytes")
 
