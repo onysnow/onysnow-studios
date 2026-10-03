@@ -272,7 +272,30 @@ uniform vec2 uWetTexel;       // one texel, uv
 uniform float uRivulet;       // a fresh rivulet's height, mm
 uniform float uMmPerTexel;    // mm per wet-map texel
 uniform float uBend;          // D (n - 1), mm: the print's distance times the water's bending
-float ridge(vec2 uv) { return uRivulet * smoothstep(0.1, 1.0, texture2D(uWet, uv).r); }
+/*
+ * A drying thread of water breaks up (Rayleigh-Plateau: a thread pinches
+ * into beads about 4.5 widths apart, Ony 2026-10-03: tails that "separate
+ * randomly"): fresh, the wet track is a continuous line; as it thins, it
+ * parts into a string of beads, then only the beads are left. A fixed
+ * pattern of pinch points along the glass (cells THREAD_MM across), the
+ * thinner the film the more of them opened.
+ */
+float threadHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float threadNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(threadHash(i), threadHash(i + vec2(1.0, 0.0)), f.x),
+             mix(threadHash(i + vec2(0.0, 1.0)), threadHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float threadH(float wet, vec2 uv, vec2 texel) {
+  // Pinch points about 1.2 mm apart along the run, at this map's own scale.
+  vec2 cell = uv / (texel * 6.0);
+  float n = threadNoise(vec2(cell.x * 0.35, cell.y));
+  float held = smoothstep(0.25 - 0.9 * (wet - 0.25), 0.55 - 0.9 * (wet - 0.25), n);
+  return smoothstep(0.1, 1.0, wet) * mix(0.15, 1.0, held);
+}
+float ridge(vec2 uv) { return uRivulet * threadH(texture2D(uWet, uv).r, uv, uWetTexel); }
 void main() {
   // The quad is the pane as the lamp projects it onto the print, so the interpolated uv IS the glass point whose ray lands here.
   vec2 q = vUv;
@@ -558,7 +581,30 @@ float waterH(vec2 local) {
 }
 
 // A rivulet: the film a runner leaves, standing as a low ridge of water as tall as it is fresh.
-float rivuletH(vec2 uv) { return uRivulet * smoothstep(0.1, 1.0, texture2D(uWet, uv).r); }
+/*
+ * A drying thread of water breaks up (Rayleigh-Plateau: a thread pinches
+ * into beads about 4.5 widths apart, Ony 2026-10-03: tails that "separate
+ * randomly"): fresh, the wet track is a continuous line; as it thins, it
+ * parts into a string of beads, then only the beads are left. A fixed
+ * pattern of pinch points along the glass (cells THREAD_MM across), the
+ * thinner the film the more of them opened.
+ */
+float threadHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float threadNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(threadHash(i), threadHash(i + vec2(1.0, 0.0)), f.x),
+             mix(threadHash(i + vec2(0.0, 1.0)), threadHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float threadH(float wet, vec2 uv, vec2 texel) {
+  // Pinch points about 1.2 mm apart along the run, at this map's own scale.
+  vec2 cell = uv / (texel * 6.0);
+  float n = threadNoise(vec2(cell.x * 0.35, cell.y));
+  float held = smoothstep(0.25 - 0.9 * (wet - 0.25), 0.55 - 0.9 * (wet - 0.25), n);
+  return smoothstep(0.1, 1.0, wet) * mix(0.15, 1.0, held);
+}
+float rivuletH(vec2 uv) { return uRivulet * threadH(texture2D(uWet, uv).r, uv, uWetTexel); }
 
 // Cheap value noise, for the fog's uneven density and its grain.
 float hash12(vec2 p) {
@@ -614,7 +660,7 @@ vec4 shadeAt(vec2 local) {
   // A droplet that has evaporated to nothing leaves its coverage behind: the height decides.
   float coverS = clamp(s.a, 0.0, 1.0) * smoothstep(0.0, 2.0 / 255.0, s.r);
   // A fresh rivulet is water standing on the glass, a lens of its own: it bends the scene as it wanders.
-  float coverW = smoothstep(0.2, 0.55, wet);
+  float coverW = smoothstep(0.2, 0.55, wet) * smoothstep(0.05, 0.2, threadH(wet, uvP, uWetTexel));
   float cover = max(max(coverD, coverS), coverW);
   // A film clears the etch as far as it is thick: fully only where it is fresh, fading as it dries.
   float film = smoothstep(0.1, 1.0, wet) * 0.85 * uClear;

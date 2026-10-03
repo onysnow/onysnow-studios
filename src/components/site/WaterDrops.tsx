@@ -70,7 +70,7 @@ export const PX_PER_MM = 5;
 /** Below this radius, device px, a drop is drawn at it and faded by its area: a sparkle, not a lens too small to draw. */
 const MIN_DRAWN_PX = 1.2;
 /** How tall a fresh rivulet stands, mm (estimate: a film a drop leaves is a few tenths of a millimetre at its crest). */
-const RIVULET_MM = 0.18;
+const RIVULET_MM = 0.28;
 /** How long steam takes to fog the glass fully, s (estimate: a bathroom mirror fogs in well under a minute). */
 const FOG_BUILD = 30;
 /** The glass's index (soda-lime, 1.52). */
@@ -105,6 +105,8 @@ type PaneState = {
   fogFbo: WebGLFramebuffer | null;
   fogClock: number;
   pending: Droplet[];
+  /** The tracks the runners left in the rain before you arrived, to wet into the map on the first draw: [intensity, capsules in wet-map px]. */
+  oldTracks: [number, number[]][];
   fresh: boolean;
   /** Each drop's place last frame, map px, and how far it has run, mm. */
   prev: Map<number, [number, number, number]>;
@@ -123,7 +125,12 @@ function shapeOf(a: number, speed: number): [number, number, number] {
    */
   const irregular = 0.03 + 0.11 * Math.min(1, a / 2.2);
   const run = Math.min(1, speed / 20);
-  return [irregular, 0.28 * Math.min(1, bond) + 0.2 * run, 0.12 * Math.min(1, bond)];
+  /*
+   * Gravity hangs a big drop: a narrow top and a heavy, flat-bottomed belly
+   * (the reference photographs' "D" shapes); a runner draws out to a point
+   * at the top, the tail it is pulling (Ony, 2026-10-03: "long tailed drips").
+   */
+  return [irregular, 0.4 * Math.min(1, bond) + 0.45 * run, 0.18 * Math.min(1, bond)];
 }
 
 /** A stream reaches its full width over this many of its drop's radii of run. */
@@ -142,6 +149,8 @@ function rainOnNearFace(frosted: boolean): boolean {
   return face === 0 && t("typeOnGlass") > 0.5;
 }
 
+/** How far back the runners' tracks from before you arrived are kept, s (they dry at FILM_DRY). */
+const TRACK_MEMORY = 45;
 /** How long it has rained before you arrive, s (the drops already on the glass). */
 const PRE_RAIN = 150;
 /** Floats a vertex in the drops' quads. */
@@ -928,6 +937,7 @@ export function WaterDrops() {
           fogFbo: fg?.fbo ?? null,
           fogClock: 0,
           pending: [],
+          oldTracks: [],
           fresh: true,
           prev: new Map(),
           dryClock: 0,
@@ -962,13 +972,45 @@ export function WaterDrops() {
         );
         sim.wind = type.wind;
         if (sim.count === 0 && rain > 0) {
+          /*
+           * The runners of the last TRACK_MEMORY seconds leave their tracks,
+           * as they do once you are watching: the glass you arrive at already
+           * has lines, dotted trails and clear lanes on it, drying.
+           */
+          const half = (k * PX_PER_MM) / 2; // wet-map px per mm
+          const was = new Map<number, [number, number]>();
+          const buckets = new Map<string, number[]>();
           for (let s = 0; s < PRE_RAIN * 30; s++) {
             const expected = (rain * areaCm2) / 30;
             let n = Math.floor(expected);
             if (random() < expected - n) n++;
             for (let q = 0; q < n; q++) land(sim, st, rainVolume(random(), random(), type.median));
             sim.fastForward(1 / 30);
+            const age = PRE_RAIN - (s + 1) / 30;
+            if (age > TRACK_MEMORY) continue;
+            for (let i = 0; i < sim.count; i++) {
+              const id = sim.serial[i]!;
+              const p = was.get(id);
+              was.set(id, [sim.x[i]!, sim.y[i]!]);
+              if (!p || Math.hypot(sim.x[i]! - p[0], sim.y[i]! - p[1]) < 0.05) continue;
+              const mode = sim.trailMode(i);
+              const strength = mode === "line" ? 0.8 : mode === "dotted" ? 0.35 : 0.12;
+              const share = mode === "line" ? 0.55 : mode === "dotted" ? 0.3 : 0.22;
+              const level = Math.round(strength * Math.exp(-FILM_DRY * age) * 20) / 20;
+              if (level < 0.05) continue;
+              const key = level.toFixed(2);
+              const list = buckets.get(key) ?? [];
+              list.push(
+                p[0] * half,
+                p[1] * half,
+                sim.x[i]! * half,
+                sim.y[i]! * half,
+                sim.radius(i) * share * half,
+              );
+              buckets.set(key, list);
+            }
           }
+          for (const [key, caps] of buckets) st.oldTracks.push([Number(key), caps]);
         }
       }
       return st;
@@ -1269,6 +1311,8 @@ export function WaterDrops() {
         // 2. Every drop swallows the droplets under it; a running one sweeps its path.
         const caps: number[] = [];
         const wets: number[] = [];
+        const wetLines: number[] = [];
+        const wetFaint: number[] = [];
         const seen = new Set<number>();
         for (let i = 0; i < sim.count; i++) {
           const id = sim.serial[i]!;
@@ -1293,7 +1337,26 @@ export function WaterDrops() {
             const a = sim.radius(i);
             const grown = Math.min(1, run / (TRAIL_TAPER * a));
             const taper = grown * grown * (3 - 2 * grown);
-            wets.push(x0 / 2, y0 / 2, x / 2, y / 2, (r * 0.45 * Math.max(taper, 0.05)) / 2);
+            /*
+             * What it leaves depends on the runner (DropSim trailMode): a
+             * clear line of water (a full film, standing as a rivulet and
+             * slow to dry), a thin damp thread that its beads break from, or
+             * next to nothing.
+             */
+            const mode = sim.trailMode(i);
+            const share = mode === "line" ? 0.55 : mode === "dotted" ? 0.3 : 0.22;
+            // A stream is never even: it swells where it pools and thins between (by its own run).
+            const swell = 0.7 + 0.6 * hash01(id, Math.floor(run / 1.5));
+            const capsule = [
+              x0 / 2,
+              y0 / 2,
+              x / 2,
+              y / 2,
+              (r * share * swell * Math.max(taper, 0.05)) / 2,
+            ];
+            if (mode === "line") wetLines.push(...capsule);
+            else if (mode === "dotted") wets.push(...capsule);
+            else wetFaint.push(...capsule);
           }
           st.prev.set(id, [x, y, run]);
         }
@@ -1316,7 +1379,12 @@ export function WaterDrops() {
           gl.viewport(0, 0, Math.round(st.w / 2), Math.round(st.h / 2));
           gl.enable(gl.BLEND);
           gl.blendFunc(gl.ONE, gl.ONE);
+          for (const [level, caps] of st.oldTracks)
+            drawWipes(caps, Math.round(st.w / 2), Math.round(st.h / 2), [level, 0, 0, level], 0.65);
+          st.oldTracks.length = 0;
           drawWipes(wets, Math.round(st.w / 2), Math.round(st.h / 2), [0.35, 0, 0, 0.35], 0.7);
+          drawWipes(wetLines, Math.round(st.w / 2), Math.round(st.h / 2), [0.8, 0, 0, 0.8], 0.6);
+          drawWipes(wetFaint, Math.round(st.w / 2), Math.round(st.h / 2), [0.12, 0, 0, 0.12], 0.8);
           gl.disable(gl.BLEND);
           st.wetClock += dt;
           if (st.wetClock * FILM_DRY >= 3 / 255) {

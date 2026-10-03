@@ -63,6 +63,31 @@ export const TRAIL_EVERY: readonly [number, number] = [1.4, 3.6];
 export const TRAIL_SIZE: readonly [number, number] = [0.14, 0.26];
 /** The share of runners that leave a sparse trail instead (every TRAIL_SPARSE x farther, bigger beads). */
 export const TRAIL_SPARSE_SHARE = 0.35;
+/**
+ * What a runner leaves behind it (Ony, 2026-10-03: "water lines / no water
+ * lines ... a trail that sometimes are a clear line or a line dotted with
+ * little rain drops"). How much water a runner sheds into its track depends
+ * on how the glass under it wets: on a cleaner strip the thread holds and
+ * stays a continuous line; on a dirtier one it breaks into beads; on a
+ * water-repellent patch it leaves almost nothing. Per runner, by these
+ * shares (estimate, from the reference photographs): LINE, DOTTED, the rest
+ * nothing.
+ */
+export const TRAIL_LINE_SHARE = 0.4;
+export const TRAIL_DOTTED_SHARE = 0.35;
+export type TrailMode = "line" | "dotted" | "none";
+/**
+ * Stick-slip (Ony: drips that "start dripping, stop and can start again").
+ * The glass's grip varies over a couple of millimetres (PIN_FINE either
+ * way) so a runner near its threshold stalls on a sticky spot; a gust, or
+ * the patter of other drops landing, shakes the glass and frees it for a
+ * moment: every GUST_EVERY seconds on average the grip drops by GUST_DROP
+ * for GUST_LENGTH seconds (estimates).
+ */
+export const PIN_FINE = 0.3;
+export const GUST_EVERY = 5;
+export const GUST_DROP = 0.18;
+export const GUST_LENGTH = 0.6;
 export const TRAIL_SPARSE = 3;
 /** The film grid's cell, mm, and how fast a film dries, 1/s (estimate: about 20 s). */
 export const FILM_CELL = 2;
@@ -79,7 +104,7 @@ export const MIST_DRY = 1 / 30;
 /** The pinning field's cell, mm, and how far it moves the hysteresis either way (estimate). */
 export const PIN_CELL = 6;
 /** How strongly a drop is steered sideways by the field's gradient, mm (estimate). */
-export const MEANDER = 8;
+export const MEANDER = 4;
 /**
  * The glass's fine dirt, mm, and how hard it steers (estimate). Ony
  * (2026-10-02): streams are "never in a straight line"; they "zig zag as
@@ -89,10 +114,12 @@ export const MEANDER = 8;
  * it bends toward any drop just ahead of it (CAPTURE_REACH), which its
  * front touches and pulls it into before it merges.
  */
-export const FINE_CELL = 2.2;
-export const MEANDER_FINE = 1.4;
+export const FINE_CELL = 1.6;
+export const MEANDER_FINE = 0.9;
 /** How far ahead and to the side a runner feels a drop, in its radii plus mm. */
 export const CAPTURE_REACH = 2.5;
+/** How quickly a runner's front turns aside, s (estimate). */
+export const SIDE_TAU = 0.02;
 export const CAPTURE_PULL = 0.9;
 /** How long a merged drop takes to pull round again, s (estimate: pinned contact lines creep; the reference photographs show merged drops still lumpy minutes after -- most dry before they round up). */
 export const SKEW_RELAX = 300;
@@ -377,7 +404,9 @@ export class DropSim {
     let v = this.holdBelow[id];
     if (v === undefined) {
       const l = LIQUIDS[id] ?? LIQUIDS[0]!;
-      v = slideThreshold(l, Math.max(0.05, (1 - this.pinning) * 0.5)) * 0.98;
+      const fine = PIN_FINE * (this.pinning / 0.35);
+      v =
+        slideThreshold(l, Math.max(0.05, (1 - this.pinning - fine) * 0.5 * (1 - GUST_DROP))) * 0.98;
       this.holdBelow[id] = v;
     }
     return v;
@@ -390,8 +419,28 @@ export class DropSim {
 
   /** The pinning field at a point: the hysteresis's multiplier there, lowered where the glass is wet. */
   pinAt(x: number, y: number): number {
-    return (1 + this.pinning * this.fieldAt(x, y)) * (1 - 0.5 * this.filmAt(x, y));
+    // In step with the coarse dirt: clean, uniform glass (pinning 0) has neither.
+    const fine = PIN_FINE * (this.pinning / 0.35) * this.fineAt(x * 1.31 + 17.3, y * 1.27 + 5.1);
+    return (
+      (1 + this.pinning * this.fieldAt(x, y) + fine) *
+      (1 - 0.5 * this.filmAt(x, y)) *
+      (1 - this.gust)
+    );
   }
+
+  /** What runner i leaves behind it. */
+  trailMode(i: number): TrailMode {
+    const h = hash01(this.serial[i]!, 777);
+    return h < TRAIL_LINE_SHARE
+      ? "line"
+      : h < TRAIL_LINE_SHARE + TRAIL_DOTTED_SHARE
+        ? "dotted"
+        : "none";
+  }
+
+  /** How far the glass's grip is eased by a gust now, 0-GUST_DROP. */
+  gust = 0;
+  private clock = 0;
 
   /** The field's slope across the pane at a point, per mm. */
   private pinSlopeX(x: number, y: number): number {
@@ -575,6 +624,16 @@ export class DropSim {
 
   private substep(dt: number): boolean {
     let moving = false;
+    // Gusts: one at a random moment in each GUST_EVERY-second slot, of a random strength.
+    this.clock += dt;
+    const slot = Math.floor(this.clock / GUST_EVERY);
+    const at = slot * GUST_EVERY + hash01(this.seed * 131 + 7, slot) * (GUST_EVERY - GUST_LENGTH);
+    this.gust =
+      this.clock >= at && this.clock < at + GUST_LENGTH
+        ? GUST_DROP *
+          Math.min(1, this.pinning / 0.35) *
+          (0.4 + 0.6 * hash01(this.seed * 131 + 9, slot))
+        : 0;
     // The film dries.
     const dry = Math.exp(-FILM_DRY * dt);
     for (let i = 0; i < this.film.length; i++) this.film[i] = this.film[i]! * dry;
@@ -611,9 +670,16 @@ export class DropSim {
       // Down, steered sideways toward the cleaner glass (the field's slope), its fine dirt, and the drops just ahead.
       let side = -MEANDER * this.pinSlopeX(x, y) + MEANDER_FINE * this.fineSlopeX(x, y + a);
       if (u > 0) side += this.pullToward(i, a);
-      side = Math.max(-0.8, Math.min(0.8, side));
+      side = Math.max(-0.5, Math.min(0.5, side));
       this.vy[i] = this.vy[i]! + (u - this.vy[i]!) * ease;
-      this.vx[i] = this.vx[i]! + (u * (side + this.wind) - this.vx[i]!) * ease;
+      /*
+       * Sideways, the front answers each speck at once (the contact line
+       * moves, not the whole drop's momentum): a short lag, so a stream
+       * wiggles on the scale of the dirt instead of drifting in a straight
+       * slant (Ony, 2026-10-03: streams like rods).
+       */
+      const easeSide = 1 - Math.exp(-dt / SIDE_TAU);
+      this.vx[i] = this.vx[i]! + (u * (side + this.wind) - this.vx[i]!) * easeSide;
       this.creep(i, relax);
       if (this.vy[i]! < 1e-3 && u === 0) {
         this.vy[i] = 0;
@@ -632,7 +698,7 @@ export class DropSim {
       // The film it leaves where it was (Kaneda 1993: water remains behind the flow).
       this.wet(x, y - a * 0.5);
       this.run[i] = this.run[i]! + Math.hypot(dx, dy);
-      if (this.trails && l.trails) this.shedTrail(i, a);
+      if (this.trails && l.trails && this.trailMode(i) === "dotted") this.shedTrail(i, a);
     }
     // Gone: evaporated, or run off the bottom.
     for (let i = this.count - 1; i >= 0; i--) {
