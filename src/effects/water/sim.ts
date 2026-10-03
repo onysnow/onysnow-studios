@@ -99,7 +99,9 @@ export const SKEW_RELAX = 300;
  * kept as up to this many parts, each a cap at its own place with its share
  * of the volume; past it, the two closest parts are joined.
  */
-export const MAX_PARTS = 5;
+export const MAX_PARTS = 7;
+/** Drops landing at least this big (uL) splash into an uneven footprint. */
+export const SPLASH_MIN = 0.15;
 
 /** A spherical cap's contact radius and height from its volume and contact angle (water-drops 2.1). */
 const halfTan = new Map<number, number>();
@@ -310,7 +312,9 @@ export class DropSim {
         return i;
       }
     }
-    return this.add(x, y, volume, liquid);
+    const j = this.add(x, y, volume, liquid);
+    if (j >= 0) this.splash(j);
+    return j;
   }
 
   /**
@@ -809,6 +813,42 @@ export class DropSim {
     if (lo <= hi) this.x[i] = Math.min(hi, Math.max(lo, this.x[i]!));
     else this.x[i] = this.width / 2;
     if (this.y[i]! < a) this.y[i] = a;
+  }
+
+  /**
+   * A drop landing does not settle round: it spreads on impact and pulls
+   * back, and its contact line catches on the glass's specks as it does, so
+   * it rests in an uneven footprint (Ony, 2026-10-03: "keep adding more
+   * misshapen raindrops"). Two to four lobes round its centre, most of the
+   * water in one.
+   */
+  private splash(i: number) {
+    const v = this.vol[i]!;
+    if (v < SPLASH_MIN) return;
+    const s = this.serial[i]!;
+    const lobes = 1 + Math.floor(hash01(s, 501) * 3.2);
+    const a = this.radius(i);
+    const list: [number, number, number][] = [];
+    let left = v;
+    for (let k = 0; k < lobes; k++) {
+      const ang = hash01(s, 510 + k) * Math.PI * 2;
+      const d = a * (0.35 + 0.45 * hash01(s, 520 + k));
+      const share = left * (0.15 + 0.3 * hash01(s, 530 + k));
+      list.push([this.x[i]! + Math.cos(ang) * d, this.y[i]! + Math.sin(ang) * d, share]);
+      left -= share;
+    }
+    list.push([this.x[i]!, this.y[i]!, left]);
+    // The centre of the water, kept.
+    let cx = 0;
+    let cy = 0;
+    for (const p of list) {
+      cx += p[0] * p[2];
+      cy += p[1] * p[2];
+    }
+    this.x[i] = cx / v;
+    this.y[i] = cy / v;
+    this.partsOf(i, list);
+    this.keepOn(i);
   }
 
   /** Drop i's parts, page mm and uL. */

@@ -375,6 +375,10 @@ const float FROST_GLOW = 1.5;
  * of a drop's radius is 1.5-2.2 times the frost beside it (2, calibrated).
  */
 const float TRAPPED_GAIN = 2.0;
+/* How far the etch spreads the light it passes on, rad inside the glass (estimate: an acid-etched face's haze lobe). */
+const float ETCH_LOBE = 0.18;
+/* What the etch still sends sideways, against straight ahead (estimate): seen through a drop's rim, the frost is this dim -- the drop's dark edge. */
+const float ETCH_DIFFUSE = 0.3;
 /* The camera's bloom round a glint: how wide against the glint, and what share of its light (estimate). */
 const float BLOOM_WIDTH = 4.0;
 const float BLOOM_SHARE = 0.04;
@@ -439,6 +443,24 @@ vec3 frostedAt(vec2 page) {
   vec3 c = photoLod(clamp(coverUv(page, uImage, uImageFit), 0.0, 1.0), uFrostLod);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = clamp(mix(vec3(l), c, uSaturate), 0.0, 1.0);
+  return mix(c, uFill.rgb, uFill.a);
+}
+
+/*
+ * The frosted far face as the pane around a drop shows it: the photograph at
+ * the frost's blur, lit as the floor light lit it this frame (its own output,
+ * as a clear spot reads it), saturated and veiled by the fill. Without the
+ * floor's light every drop on the near face was a darker patch of the pane.
+ */
+vec3 frostedLit(vec2 page) {
+  if (uHasPhoto < 0.5) return uRoom;
+  vec3 c = photoLod(clamp(coverUv(page, uImage, uImageFit), 0.0, 1.0), uFrostLod);
+  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = clamp(mix(vec3(l), c, uSaturate), 0.0, 1.0);
+  if (uHasFloorMap > 0.5) {
+    vec4 f = texture2D(uFloorMap, clamp(vec2(page.x / uFloorSize.x, 1.0 - page.y / uFloorSize.y), 0.0, 1.0));
+    c = c * (1.0 - f.a) + f.rgb * f.a;
+  }
   return mix(c, uFill.rgb, uFill.a);
 }
 
@@ -904,26 +926,36 @@ vec4 shadeAt(vec2 local) {
       spec += uLightColour[i] * disc * core * (size * size) / (wide * wide);
     }
     vec3 add = (room + spec) * F;
-    if (uHasType > 0.5 && cover > 0.001) {
-      /*
-       * With the copy printed on this face, a drop is a lens over it: the
-       * letters under it bent and enlarged (the sight refracted into the
-       * water and carried down the drop's height to the glass), and behind
-       * them the frosted far face a thickness further, as the pane shows it.
-       */
-      vec3 tW = refract(V, N, 1.0 / uIor);
-      vec2 base = page + (h * uPxPerMm) * tW.xy / max(-tW.z, 0.05);
-      vec2 kT = uIor * tW.xy;
-      float kk = dot(kT, kT);
-      vec2 far = base + uThickness * kT / sqrt(max(uGlassIor * uGlassIor - kk, 0.1));
-      vec3 seen = overType(frostedAt(far), typeAt(base));
-      col = seen * (1.0 - F) + add;
-      alpha = cover;
-    } else {
-      float peak = max(add.r, max(add.g, add.b));
-      col = peak > 1e-4 ? add / peak : vec3(0.0);
-      alpha = min(peak, 1.0) * cover;
+    /*
+     * The drop is a lens over the glass it sits on (Ony, 2026-10-03: the
+     * words "flat on the glass", the rain on them, distorting and magnifying
+     * them): the sight refracted into the water and carried down the drop's
+     * height lands on the near face -- the copy printed there, bent and
+     * enlarged -- and goes on through the slab to the frosted far face, lit
+     * as the pane around it is (the lamps' glow on the etch). The etch sends
+     * its light on mostly straight ahead, so the sight bent sideways near
+     * the rim sees it dimmer: a drop is darker toward its edge.
+     */
+    vec3 tW = refract(V, N, 1.0 / uIor);
+    vec2 base = page + (h * uPxPerMm) * tW.xy / max(-tW.z, 0.05);
+    vec2 kT = uIor * tW.xy;
+    float kk = dot(kT, kT);
+    vec2 far = base + uThickness * kT / sqrt(max(uGlassIor * uGlassIor - kk, 0.1));
+    vec3 frostLitHere = vec3(0.0);
+    for (int i = 0; i < ${MAX_WATER_LIGHTS}; i++) {
+      if (i >= uLightCount) break;
+      vec2 dl = far - uLightPos[i].xy;
+      float hz = max(uLightPos[i].z, 1.0);
+      float q = hz * hz / (dot(dl, dl) + hz * hz);
+      frostLitHere += uLightColour[i] * FROST_GLOW * q * sqrt(q) * 0.35;
     }
+    // The sight's tilt inside the glass against the straight-through view's: the etch's forward lobe.
+    vec2 kFlat = V.xy / max(length(V), 1e-4);
+    float tilt = length(kT - kFlat) / uGlassIor;
+    float lobe = exp(-(tilt * tilt) / (ETCH_LOBE * ETCH_LOBE));
+    vec3 seen = overType((frostedLit(far) + frostLitHere) * mix(ETCH_DIFFUSE, 1.0, lobe), typeAt(base));
+    col = seen * (1.0 - F) + add;
+    alpha = cover;
   }
   /*
    * A highlight brighter than the screen goes to white, as a sensor's

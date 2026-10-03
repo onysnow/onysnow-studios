@@ -23,7 +23,7 @@ import { floorMap } from "@/effects/light/floor-map";
 import { photoTextures } from "@/effects/engine/photo-texture";
 import { paneLook } from "@/effects/engine/pane-look";
 import { roomTexture } from "@/effects/engine/room-texture";
-import { paintTypeLayer } from "@/effects/engine/type-layer";
+import { paintTypeLayer, typeLayerVersion } from "@/effects/engine/type-layer";
 import { fontStamp } from "@/effects/optics/casters";
 import { roomFillOverride } from "@/effects/light/room-fill";
 import { quality, surfaceScaleCap } from "@/effects/engine/quality";
@@ -114,14 +114,32 @@ type PaneState = {
 function shapeOf(a: number, speed: number): [number, number, number] {
   // The Bond number: gravity against surface tension over the drop's size.
   const bond = Math.min(1.2, (RHO * 9.81 * (a / 1000) ** 2) / GAMMA);
-  // Slightly imperfect: 2% for a droplet, 6% for the largest clinging drop (Ony: "slightly imperfect, not super imperfect").
-  const irregular = 0.02 + 0.04 * Math.min(1, a / 2.2);
+  /*
+   * The contact line catches on specks of dirt: a droplet is nearly round, a
+   * big clinging drop clearly uneven (Ony, 2026-10-03: "keep adding more
+   * misshapen raindrops"; it was 2-6%).
+   */
+  const irregular = 0.03 + 0.11 * Math.min(1, a / 2.2);
   const run = Math.min(1, speed / 20);
   return [irregular, 0.28 * Math.min(1, bond) + 0.2 * run, 0.12 * Math.min(1, bond)];
 }
 
 /** A stream reaches its full width over this many of its drop's radii of run. */
 const TRAIL_TAPER = 6;
+/**
+ * Whether the rain is on the face toward you. Clear glass: as "Rain lands on"
+ * says. Frosted glass with the copy printed on it (Ony, 2026-10-03: the
+ * words "flat on the glass", the rain on them, magnifying them): the etched
+ * face is the outer face, the one the copy is printed on and the rain falls
+ * on -- each drop fills the etch under it, a clear lens over the letters and
+ * onto the scene behind. Without the copy, the etch is on the back.
+ */
+function rainOnNearFace(frosted: boolean): boolean {
+  const face = Math.round(t("rainFace"));
+  if (!frosted) return face === 1;
+  return face === 0 && t("typeOnGlass") > 0.5;
+}
+
 /** How long it has rained before you arrive, s (the drops already on the glass). */
 const PRE_RAIN = 150;
 /** Floats a vertex in the drops' quads. */
@@ -129,7 +147,7 @@ const VERT = 21;
 const NO_OUTLINE = new Float32Array(8);
 const OUTLINE_SAMPLES = 48;
 /** How much of each outline harmonic, 1-4, a merged drop keeps. */
-const OUTLINE_DAMP = [1, 0.85, 0.6, 0.35] as const;
+const OUTLINE_DAMP = [1, 0.92, 0.72, 0.5] as const;
 
 /**
  * The outline of a drop made of parts (DropSim): from its centre, the far
@@ -488,7 +506,7 @@ export function WaterDrops() {
         const sim = sims.get(pane.el);
         if (!sim) continue;
         const frosted = pane.causes.material.frost > 0;
-        const nearFace = !frosted && Math.round(t("rainFace")) === 1;
+        const nearFace = rainOnNearFace(frosted);
         // The print's distance behind the drop, CSS px (the slab lies between for drops on the near face).
         const G = pane.causes.gap + (nearFace ? pane.causes.thickness / GLASS_IOR : 0);
         if (G <= 0) continue;
@@ -552,7 +570,7 @@ export function WaterDrops() {
         const st = states.get(pane.el);
         if (!st?.wet) continue;
         const frosted = pane.causes.material.frost > 0;
-        const nearFace = !frosted && Math.round(t("rainFace")) === 1;
+        const nearFace = rainOnNearFace(frosted);
         const G = pane.causes.gap + (nearFace ? pane.causes.thickness / GLASS_IOR : 0);
         if (G <= 0) continue;
         const m = 1 + G / H;
@@ -704,7 +722,8 @@ export function WaterDrops() {
         typeCanvas.toDataURL();
     }
     const types = new Map<HTMLElement, { tex: WebGLTexture | null; key: string; has: boolean }>();
-    const typeFor = (pane: GlassRect, scale: number) => {
+    /** The key the pane's copy texture is painted under: when it changes, the texture is stale. */
+    const typeKey = (pane: GlassRect, scale: number) => {
       const on = t("typeOnGlass") > 0.5;
       /*
        * The words and where their blocks sit are part of the key: an animated
@@ -722,9 +741,22 @@ export function WaterDrops() {
           text = (text * 31 + Math.round((r.top - pane.y) * 4) + Math.round(r.height * 4) * 7) | 0;
         }
       }
-      const key = on
-        ? `${geometryStamp()}|${fontStamp()}|${Math.round(pane.w)}x${Math.round(pane.h)}|${scale}|${text}`
+      return on
+        ? `${geometryStamp()}|${fontStamp()}|${Math.round(pane.w)}x${Math.round(pane.h)}|${scale}|${text}|${typeLayerVersion}`
         : "off";
+    };
+    /*
+     * Whether the pane's copy has changed since its texture was painted -- an
+     * animated heading settling, an icon loading -- so the water is drawn
+     * again even when nothing on the glass moved (Ony's ghost rows: the
+     * heading's scrambling stand-in letters stayed in the texture, shown
+     * wherever there was water, once the rain stopped redrawing).
+     */
+    const typeStale = (pane: GlassRect, scale: number) =>
+      (types.get(pane.el)?.key ?? "") !== typeKey(pane, scale);
+    const typeFor = (pane: GlassRect, scale: number) => {
+      const on = t("typeOnGlass") > 0.5;
+      const key = typeKey(pane, scale);
       let entry = types.get(pane.el);
       if (entry && entry.key === key) return entry;
       if (!entry) {
@@ -1424,7 +1456,7 @@ export function WaterDrops() {
        * depth, thickness / n.
        */
       const frosted = pane.causes.material.frost > 0;
-      const nearFace = !frosted && Math.round(t("rainFace")) === 1;
+      const nearFace = rainOnNearFace(frosted);
       gl.uniform1f(
         u.uScene!,
         pane.causes.gap * t("dropSceneDepth") + (nearFace ? pane.causes.thickness / GLASS_IOR : 0),
@@ -1588,7 +1620,14 @@ export function WaterDrops() {
         if (nz) drizzle(sim, st, nz);
         const moved = sim.step(dt) || spawn > 0 || st.pending.length > 0 || fogging;
         if (moved) busy = true;
-        if (moved || lightsMoved || faceChanged || st.fresh || !layers.has(pane.el)) {
+        if (
+          moved ||
+          lightsMoved ||
+          faceChanged ||
+          st.fresh ||
+          !layers.has(pane.el) ||
+          typeStale(pane, st.w / pane.w)
+        ) {
           st.fresh = false;
           drawPane(pane, sim, st, dt);
         }

@@ -991,8 +991,8 @@ export const tuning: Record<string, Knob> = {
     min: 0,
     max: 1,
     step: 1,
-    options: ["The etched face (wet glass goes clear)", "The polished face (reflections only)"],
-    hint: "Which face of the frosted glass the rain is on (?try=drops). Etched: the water fills the etch and that spot goes clear, so every drop is a lens onto the sharp photograph and every wet track a clear streak, as frosted glass does in the rain. Polished: the drop sits on smooth glass over the frost and shows only what it reflects.",
+    options: ["The etched face (wet glass goes clear)", "The polished face (over the frost)"],
+    hint: "Which face of the frosted glass the rain is on (?try=drops). Etched: the water fills the etch and that spot goes clear, so every drop is a lens onto the sharp photograph and every wet track a clear streak, as frosted glass does in the rain. With the copy on the glass the etched face is the outer one, where the words and buttons are printed: every drop sits on them, magnifies and bends them, and clears the etch under it (Ony, 2026-10-03). Polished: the drop sits on smooth glass over the frost.",
   },
   dropletScale: {
     label: "Droplets",
