@@ -47,13 +47,19 @@ attribute vec2 aLocal;    // the drop's own frame: x across, y down the glass, 1
 attribute vec4 aDrop;     // contact radius mm, cap height mm, seed, liquid id
 attribute vec3 aShape;    // irregularity, pear taper, sag
 attribute vec2 aExtra;    // x: how much of the drawn drop is really there (a sparkle smaller than it is drawn); y: unused
+attribute vec4 aOutA;     // a merged drop's outline: harmonics 1 and 2 (cos, sin), against its mean radius
+attribute vec4 aOutB;     // harmonics 3 and 4
 uniform vec2 uMapSize;    // map px
 varying vec2 vLocal;
 varying vec4 vDrop;
 varying vec3 vShape;
 varying float vCoverScale;
+varying vec4 vOutA;
+varying vec4 vOutB;
 void main() {
   vLocal = aLocal;
+  vOutA = aOutA;
+  vOutB = aOutB;
   vDrop = aDrop;
   vShape = aShape;
   vCoverScale = aExtra.x;
@@ -64,6 +70,22 @@ void main() {
 
 /** The contact line and the cap, shared by the map and the wipe. */
 const SHAPE_GLSL = /* glsl */ `
+varying vec4 vOutA;
+varying vec4 vOutB;
+/*
+ * A merged drop's outline (DropSim parts): the union of its lobes' contact
+ * circles as a radius round the drop, kept to its first four harmonics. The
+ * truncation is surface tension's own smoothing -- the necks between lobes
+ * fill, the cusps round -- so the drop is one liquid surface over a peanut,
+ * a clover or a lumpy blob, not circles laid over each other.
+ */
+float outline(float ang) {
+  return 1.0
+    + vOutA.x * cos(ang) + vOutA.y * sin(ang)
+    + vOutA.z * cos(2.0 * ang) + vOutA.w * sin(2.0 * ang)
+    + vOutB.x * cos(3.0 * ang) + vOutB.y * sin(3.0 * ang)
+    + vOutB.z * cos(4.0 * ang) + vOutB.w * sin(4.0 * ang);
+}
 // How far out this point is, 1 on the contact line.
 float contactRho(vec2 p, vec3 shape, float seed) {
   // The pear: narrower toward the top (y < 0), as gravity holds the advancing edge below.
@@ -73,7 +95,8 @@ float contactRho(vec2 p, vec3 shape, float seed) {
   float s1 = fract(seed * 0.6180339) * 6.2831853;
   float s2 = fract(seed * 0.7548777) * 6.2831853;
   float s3 = fract(seed * 0.5698403) * 6.2831853;
-  float rc = 1.0 + shape.x * (0.55 * cos(2.0 * ang + s1) + 0.3 * cos(3.0 * ang + s2) + 0.15 * cos(4.0 * ang + s3));
+  float rc = (1.0 + shape.x * (0.55 * cos(2.0 * ang + s1) + 0.3 * cos(3.0 * ang + s2) + 0.15 * cos(4.0 * ang + s3)))
+    * max(outline(atan(p.y, p.x)), 0.2);
   return length(q) / rc;
 }
 `;

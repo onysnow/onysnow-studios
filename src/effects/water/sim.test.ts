@@ -3,6 +3,7 @@ import { BLOOD, WATER } from "./liquids";
 import {
   capOf,
   DropSim,
+  MAX_PARTS,
   restAngle,
   retention,
   slideSpeed,
@@ -185,19 +186,56 @@ describe("DropSim (water-drops 7.5 step 1)", () => {
     expect(sim.count).toBeGreaterThan(0);
   });
 
-  it("leaves a merged drop stretched along the line between the two (water-drops 9.5), relaxing slowly", () => {
+  it("keeps two resting drops that merge as two lobes, where each was, creeping together slowly (Ony: shapes that aren't circles)", () => {
     const sim = new DropSim({ width: 60, height: 60, seed: 4, pinning: 0, evaporate: false });
     const v = 2;
     const a = sim.radius(sim.add(30, 30, v));
     sim.add(30 + a * 1.9, 30, v);
     sim.step(1 / 120);
     expect(sim.count).toBe(1);
-    expect(Math.abs(sim.skewX[0]!)).toBeGreaterThan(0.5);
-    expect(Math.abs(sim.skewY[0]!)).toBeLessThan(1e-6);
-    const s0 = Math.abs(sim.skewX[0]!);
-    sim.step(0.25);
-    sim.step(0.25);
-    expect(Math.abs(sim.skewX[0]!)).toBeLessThan(s0);
-    expect(Math.abs(sim.skewX[0]!)).toBeGreaterThan(s0 * 0.95);
+    const parts = sim.parts(0);
+    expect(parts.length).toBe(2);
+    expect(Math.abs(parts[0]![0] - parts[1]![0])).toBeCloseTo(a * 1.9, 3);
+    expect(parts[0]![2] + parts[1]![2]).toBeCloseTo(2 * v, 9);
+    const gap = Math.abs(parts[0]![0] - parts[1]![0]);
+    sim.step(0.5);
+    const later = sim.parts(0);
+    const gap2 = Math.abs(later[0]![0] - later[1]![0]);
+    expect(gap2).toBeLessThan(gap);
+    expect(gap2).toBeGreaterThan(gap * 0.97);
+  });
+
+  it("never keeps more than MAX_PARTS lobes, and a runner pulls round", () => {
+    const sim = new DropSim({ width: 80, height: 80, seed: 5, pinning: 0, evaporate: false });
+    const v = 0.6;
+    const a = sim.radius(sim.add(40, 40, v));
+    for (let k = 0; k < 8; k++) {
+      const ang = (k / 8) * Math.PI * 2;
+      sim.add(40 + Math.cos(ang) * a * 1.9, 40 + Math.sin(ang) * a * 1.9, v);
+    }
+    sim.step(1 / 120);
+    expect(sim.count).toBe(1);
+    expect(sim.parts(0).length).toBeLessThanOrEqual(MAX_PARTS);
+    expect(sim.parts(0).length).toBeGreaterThan(2);
+    const total = sim.parts(0).reduce((q, p) => q + p[2], 0);
+    expect(total).toBeCloseTo(9 * v, 9);
+  });
+
+  it("leaves a dotted trail of small beads behind a runner, and the runner does not run straight", () => {
+    const sim = new DropSim({ width: 60, height: 200, seed: 9, pinning: 0.35, evaporate: false });
+    sim.add(30, 10, 40);
+    const xs: number[] = [];
+    for (let k = 0; k < 600 && sim.count > 0; k++) {
+      sim.step(1 / 60);
+      let big = 0;
+      for (let i = 1; i < sim.count; i++) if (sim.vol[i]! > sim.vol[big]!) big = i;
+      xs.push(sim.x[big]!);
+    }
+    expect(sim.count).toBeGreaterThan(8);
+    for (let i = 0; i < sim.count; i++) {
+      if (sim.vol[i]! > 10) continue;
+      expect(sim.vol[i]!).toBeLessThan(40 * 0.3 ** 3);
+    }
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(1);
   });
 });

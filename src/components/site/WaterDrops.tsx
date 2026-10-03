@@ -30,7 +30,7 @@ import { quality, surfaceScaleCap } from "@/effects/engine/quality";
 import { rainType } from "@/effects/water/rain-types";
 import { camera } from "@/effects/camera/camera";
 import { t } from "@/lib/tuning";
-import { DropSim, FILM_DRY } from "@/effects/water/sim";
+import { capOf, DropSim, FILM_DRY, hash01, restAngle } from "@/effects/water/sim";
 import { BLOOD, LIQUIDS, SLIME, WATER } from "@/effects/water/liquids";
 import { onSpray, squeeze } from "@/effects/water/spray";
 import { rainVolume } from "@/effects/water/rain";
@@ -117,6 +117,77 @@ function shapeOf(a: number, speed: number): [number, number, number] {
   const irregular = 0.02 + 0.04 * Math.min(1, a / 2.2);
   const run = Math.min(1, speed / 20);
   return [irregular, 0.28 * Math.min(1, bond) + 0.2 * run, 0.12 * Math.min(1, bond)];
+}
+
+/** How long it has rained before you arrive, s (the drops already on the glass). */
+const PRE_RAIN = 150;
+/** Floats a vertex in the drops' quads. */
+const VERT = 21;
+const NO_OUTLINE = new Float32Array(8);
+const OUTLINE_SAMPLES = 48;
+/** How much of each outline harmonic, 1-4, a merged drop keeps. */
+const OUTLINE_DAMP = [1, 0.85, 0.6, 0.35] as const;
+
+/**
+ * The outline of a drop made of parts (DropSim): from its centre, the far
+ * edge of the union of the parts' contact circles at each angle, as its mean
+ * radius r0 and harmonics 1-4 against it (cos, sin), with the union's area.
+ */
+function outlineOf(
+  cx: number,
+  cy: number,
+  parts: readonly (readonly [number, number, number])[],
+  theta: number,
+): { r0: number; area: number; coeffs: Float32Array } {
+  const circles = parts.map(([x, y, v]) => [x - cx, y - cy, capOf(v, theta).a] as const);
+  const r = new Float64Array(OUTLINE_SAMPLES);
+  let r0 = 0;
+  let area = 0;
+  for (let j = 0; j < OUTLINE_SAMPLES; j++) {
+    const ang = (j / OUTLINE_SAMPLES) * Math.PI * 2;
+    const ux = Math.cos(ang);
+    const uy = Math.sin(ang);
+    let far = 0;
+    for (const [px, py, pa] of circles) {
+      // The ray from the centre leaves this circle at t = b + sqrt(b^2 - c).
+      const b = px * ux + py * uy;
+      const c = px * px + py * py - pa * pa;
+      const disc = b * b - c;
+      if (disc < 0) continue;
+      far = Math.max(far, b + Math.sqrt(disc));
+    }
+    r[j] = far;
+    r0 += far / OUTLINE_SAMPLES;
+    area += (0.5 * far * far * Math.PI * 2) / OUTLINE_SAMPLES;
+  }
+  const coeffs = new Float32Array(8);
+  if (r0 <= 0) return { r0: capOf(1e-3, theta).a, area: 1e-6, coeffs };
+  for (let n = 1; n <= 4; n++) {
+    let c = 0;
+    let s = 0;
+    for (let j = 0; j < OUTLINE_SAMPLES; j++) {
+      const ang = (j / OUTLINE_SAMPLES) * Math.PI * 2;
+      c += r[j]! * Math.cos(n * ang);
+      s += r[j]! * Math.sin(n * ang);
+    }
+    // Surface tension evens the finer wiggles out faster: the necks fill, no bow ties (estimate).
+    const damp = OUTLINE_DAMP[n - 1]!;
+    coeffs[(n - 1) * 2] = ((2 * c) / OUTLINE_SAMPLES / r0) * damp;
+    coeffs[(n - 1) * 2 + 1] = ((2 * s) / OUTLINE_SAMPLES / r0) * damp;
+  }
+  return { r0, area, coeffs };
+}
+
+/** The height of a cap of `volume` uL over a footprint of `area` mm^2: V = (pi / 6) h (3 A / pi + h^2), solved by Newton. */
+function capHeightFor(volume: number, area: number): number {
+  const a2 = area / Math.PI;
+  let h = (2 * volume) / Math.max(area, 1e-6);
+  for (let k = 0; k < 6; k++) {
+    const f = (Math.PI / 6) * h * (3 * a2 + h * h) - volume;
+    const d = (Math.PI / 6) * (3 * a2 + 3 * h * h);
+    h -= f / d;
+  }
+  return Math.max(h, 0);
 }
 
 /** A cap's contact radius for its volume (uL = mm^3) at contact angle theta: V = (pi / 6) h (3 a^2 + h^2), h = a tan(theta / 2). */
@@ -207,6 +278,8 @@ export function WaterDrops() {
       drop: A(mapProgram, "aDrop"),
       shape: A(mapProgram, "aShape"),
       extra: A(mapProgram, "aExtra"),
+      outA: A(mapProgram, "aOutA"),
+      outB: A(mapProgram, "aOutB"),
       size: gl.getUniformLocation(mapProgram, "uMapSize"),
       scale: gl.getUniformLocation(mapProgram, "uHeightScale"),
       pxPerMm: gl.getUniformLocation(mapProgram, "uPxPerMm"),
@@ -694,8 +767,54 @@ export function WaterDrops() {
     const dpr = () =>
       Math.max(Math.min(2, Math.max(1, window.devicePixelRatio || 1)), surfaceScaleCap());
 
+    /*
+     * Where rain lands on a pane is not even (Ony, 2026-10-02: "sometimes
+     * spaces have a lot less raindrops while other areas are more
+     * concentrated. It depends on how heavy the rain is"). Gusts and the
+     * eaves and frame shelter some of the glass, so drops arrive in drifts:
+     * a slow field over the pane (cells PATCH_MM and a finer third of it)
+     * sets how likely a drop is to land at a point. Light rain is patchy,
+     * a downpour covers the glass almost evenly.
+     */
+    const PATCH_MM = 30;
+    const patchAt = (sim: DropSim, x: number, y: number) => {
+      const octave = (cell: number, salt: number) => {
+        const gx = x / cell;
+        const gy = y / cell;
+        const i = Math.floor(gx);
+        const j = Math.floor(gy);
+        const fx = gx - i;
+        const fy = gy - j;
+        const sx = fx * fx * (3 - 2 * fx);
+        const sy = fy * fy * (3 - 2 * fy);
+        const v = (p: number, q: number) => hash01(sim.seed * 31337 + salt + p * 8191, q);
+        return (
+          (v(i, j) * (1 - sx) + v(i + 1, j) * sx) * (1 - sy) +
+          (v(i, j + 1) * (1 - sx) + v(i + 1, j + 1) * sx) * sy
+        );
+      };
+      return 0.7 * octave(PATCH_MM, 11) + 0.3 * octave(PATCH_MM / 3, 29);
+    };
+    /** A point on the pane where rain lands, drawn from the drift field. */
+    const spot = (sim: DropSim): [number, number] => {
+      const heavy = Math.min(1, (rainType(t("rainType")).rate * t("rainStrength")) / 0.3);
+      const contrast = 0.9 - 0.6 * heavy;
+      let x = 0;
+      let y = 0;
+      for (let tries = 0; tries < 12; tries++) {
+        x = random() * sim.width;
+        y = random() * sim.height;
+        // Smoothstepped so the drifts have edges, not a gentle ramp.
+        const p = patchAt(sim, x, y);
+        const e = p * p * (3 - 2 * p);
+        if (random() < 1 - contrast * (1 - e)) break;
+      }
+      return [x, y];
+    };
+
     /** A rain drop landing: a drop the sim tracks if it is big enough, and its splash of droplets. */
-    const land = (sim: DropSim, st: PaneState, x: number, y: number, volume: number) => {
+    const land = (sim: DropSim, st: PaneState, volume: number) => {
+      const [x, y] = spot(sim);
       if (volume >= DROPLET_UL) sim.addVolume(x, y, volume, WATER.id);
       else
         st.pending.push({
@@ -710,9 +829,17 @@ export function WaterDrops() {
     const drizzle = (sim: DropSim, st: PaneState, n: number) => {
       for (let q = 0; q < n; q++) {
         const a = Math.min(0.45, 0.17 * Math.exp(0.45 * gauss()));
+        const [x, y] = spot(sim);
+        /*
+         * A droplet landing on the wet film a runner left joins the film: the
+         * lanes the streams wiped stay clear for a while, the lines in the
+         * negative space (Ony, 2026-10-02).
+         */
+        const film = sim.filmAt(x, y);
+        if (film > 0.1 && random() < film) continue;
         st.pending.push({
-          x: random() * sim.width,
-          y: random() * sim.height,
+          x,
+          y,
           a,
           liquid: WATER.id,
           seed: random() * 1000,
@@ -776,7 +903,12 @@ export function WaterDrops() {
         }
         /*
          * It has been raining a while when you arrive: a minute of drizzle
-         * already on the glass, and the sim run on from forty seconds of rain.
+         * already on the glass, and the sim run on from PRE_RAIN seconds of
+         * rain -- long enough for the drops to meet and merge into the lumpy
+         * shapes a window has after a few minutes (Ony, 2026-10-02: "a lot
+         * of almost perfect ovals"; forty seconds left nearly every drop
+         * still a lone round bead). Coarse steps, so it costs what the forty
+         * did.
          */
         const type = rainType(t("rainType"));
         const rain = type.before * t("rainStrength");
@@ -788,19 +920,12 @@ export function WaterDrops() {
         );
         sim.wind = type.wind;
         if (sim.count === 0 && rain > 0) {
-          for (let s = 0; s < 40 * 30; s++) {
+          for (let s = 0; s < PRE_RAIN * 30; s++) {
             const expected = (rain * areaCm2) / 30;
             let n = Math.floor(expected);
             if (random() < expected - n) n++;
-            for (let q = 0; q < n; q++)
-              land(
-                sim,
-                st,
-                random() * sim.width,
-                random() * sim.height,
-                rainVolume(random(), random(), type.median),
-              );
-            sim.step(1 / 30);
+            for (let q = 0; q < n; q++) land(sim, st, rainVolume(random(), random(), type.median));
+            sim.fastForward(1 / 30);
           }
         }
       }
@@ -863,7 +988,7 @@ export function WaterDrops() {
       [-1, 1],
     ] as const;
 
-    /** Write one drop's quad: centre (map px), radius (map px), stretch, and its attributes. 13 floats a vertex. */
+    /** Write one drop's quad: centre (map px), radius (map px), stretch, and its attributes. VERT floats a vertex. */
     const pushDrop = (
       k: number,
       cx: number,
@@ -877,6 +1002,7 @@ export function WaterDrops() {
       shape: readonly [number, number, number],
       skewX = 0,
       skewY = 0,
+      out: ArrayLike<number> = NO_OUTLINE,
     ) => {
       /*
        * Too small to draw as a lens (under MIN_DRAWN_PX): drawn at that size,
@@ -889,9 +1015,11 @@ export function WaterDrops() {
         a *= MIN_DRAWN_PX / rPx;
         rPx = MIN_DRAWN_PX;
       }
-      // The pear and the irregularity reach past the circle: x to 1 + taper, y a little.
-      const ex = 1.15 + shape[1];
-      const ey = 1.15;
+      // The pear and the irregularity reach past the circle: x to 1 + taper, y a little; a merged drop's lobes further.
+      let reach = 1;
+      for (let n = 0; n < 8; n++) reach += Math.abs(out[n]!);
+      const ex = (1.15 + shape[1]) * reach;
+      const ey = 1.15 * reach;
       const sx = 1 / Math.sqrt(stretch);
       /*
        * What a merge left (DropSim skew): stretched along that axis by 1 + s,
@@ -924,6 +1052,7 @@ export function WaterDrops() {
         verts[k++] = shape[2];
         verts[k++] = coverScale;
         verts[k++] = 0;
+        for (let n = 0; n < 8; n++) verts[k++] = out[n]!;
       }
       return k;
     };
@@ -942,8 +1071,8 @@ export function WaterDrops() {
       gl.uniform1f(map.scale, heightScale);
       gl.uniform1f(map.pxPerMm, pxPerMm);
       gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, verts.subarray(0, count * 13), gl.DYNAMIC_DRAW);
-      const S = 52;
+      gl.bufferData(gl.ARRAY_BUFFER, verts.subarray(0, count * VERT), gl.DYNAMIC_DRAW);
+      const S = VERT * 4;
       gl.enableVertexAttribArray(map.pos);
       gl.vertexAttribPointer(map.pos, 2, gl.FLOAT, false, S, 0);
       gl.enableVertexAttribArray(map.local);
@@ -954,11 +1083,17 @@ export function WaterDrops() {
       gl.vertexAttribPointer(map.shape, 3, gl.FLOAT, false, S, 32);
       gl.enableVertexAttribArray(map.extra);
       gl.vertexAttribPointer(map.extra, 2, gl.FLOAT, false, S, 44);
+      gl.enableVertexAttribArray(map.outA);
+      gl.vertexAttribPointer(map.outA, 4, gl.FLOAT, false, S, 52);
+      gl.enableVertexAttribArray(map.outB);
+      gl.vertexAttribPointer(map.outB, 4, gl.FLOAT, false, S, 68);
       gl.drawArrays(gl.TRIANGLES, 0, count);
       gl.disableVertexAttribArray(map.local);
       gl.disableVertexAttribArray(map.drop);
       gl.disableVertexAttribArray(map.shape);
       gl.disableVertexAttribArray(map.extra);
+      gl.disableVertexAttribArray(map.outA);
+      gl.disableVertexAttribArray(map.outB);
     };
 
     /** Capsules from each drop's last place to its place now, into a map (7 floats a vertex... 5 used). */
@@ -1064,7 +1199,7 @@ export function WaterDrops() {
           let done = 0;
           while (done < st.pending.length) {
             const batch = Math.min(4000, st.pending.length - done);
-            grow(batch * 6 * 13);
+            grow(batch * 6 * VERT);
             let v = 0;
             for (let q = 0; q < batch; q++) {
               const d = st.pending[done + q]!;
@@ -1178,13 +1313,30 @@ export function WaterDrops() {
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       if (sim.count) {
-        grow(sim.count * 6 * 13);
+        grow(sim.count * 6 * VERT);
         let v = 0;
+        let quads = 0;
         for (let i = 0; i < sim.count; i++) {
-          const a = sim.radius(i);
           const speed = Math.hypot(sim.vx[i]!, sim.vy[i]!);
           // Stretched along its run as it speeds up (raindrop-fx raindrop.ts L82-L85).
           const stretch = 1 + 0.35 * (2 / Math.PI) * Math.atan(0.05 * speed);
+          const theta = restAngle(sim.liquidOf(i));
+          const parts = sim.parts(i);
+          let a = sim.radius(i);
+          let h0 = sim.capHeight(i);
+          let out: ArrayLike<number> = NO_OUTLINE;
+          if (parts.length > 1) {
+            /*
+             * A merged drop (DropSim parts: each lobe's footprint pinned where
+             * it was): one sprite over the union of its lobes' contact circles,
+             * that outline as harmonics round the drop's centre, and the cap
+             * height that holds its volume over that footprint.
+             */
+            const o = outlineOf(sim.x[i]!, sim.y[i]!, parts, theta);
+            a = o.r0;
+            h0 = capHeightFor(sim.vol[i]!, o.area);
+            out = o.coeffs;
+          }
           v = pushDrop(
             v,
             sim.x[i]! * pxMm,
@@ -1192,18 +1344,20 @@ export function WaterDrops() {
             a * pxMm,
             stretch,
             a,
-            sim.capHeight(i),
+            h0,
             (sim.serial[i]! * 0.618034) % 997,
             sim.liquid[i]!,
             shapeOf(a, speed),
-            sim.skewX[i]!,
-            sim.skewY[i]!,
+            0,
+            0,
+            out,
           );
+          quads++;
         }
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE);
         drawDrops(
-          sim.count * 6,
+          quads * 6,
           st.w,
           st.h,
           dropsType === gl.UNSIGNED_BYTE ? 1 / HEIGHT_MAX : 1,
@@ -1407,13 +1561,7 @@ export function WaterDrops() {
         let spawn = Math.floor(expected);
         if (random() < expected - spawn) spawn++;
         for (let q = 0; q < spawn; q++) {
-          land(
-            sim,
-            st,
-            random() * sim.width,
-            random() * sim.height,
-            rainVolume(random(), random(), type.median),
-          );
+          land(sim, st, rainVolume(random(), random(), type.median));
         }
         sim.wind = type.wind;
         // Drizzle between the drops.
