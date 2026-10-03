@@ -984,6 +984,15 @@ export const tuning: Record<string, Knob> = {
     step: 1,
     hint: "How far behind the glass the scene each drop images is, times the print's gap (?try=drops). 1: the photograph is a print just behind the glass, so a drop magnifies the patch under it and looks like a flat window. Higher: the photograph is the world outside, metres away, as in a real rainy window -- each drop shrinks and turns over a wide view of it, with its lights and darks, so it reads as a round lens. Only the drops' optics use it; the shadows and the floor light keep the print where it is.",
   },
+  rainBeading: {
+    label: "Beading",
+    group: "Water",
+    value: 50,
+    min: 30,
+    max: 120,
+    step: 5,
+    hint: "How strongly the glass beads the rain: water's resting contact angle, degrees (?try=drops). Clean glass 30-50, a weathered window 60-90, a rain-repellent coating over 100. A taller bead is a stronger lens -- what is under it (the words printed on the glass, the scene behind) is magnified by about 10% at 50 and by a third at 90 -- and it holds on harder before it runs (Ony, 2026-10-03: the drops on the words must magnify them).",
+  },
   rainFace: {
     label: "Rain lands on",
     group: "Water",

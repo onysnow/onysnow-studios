@@ -46,6 +46,26 @@ export const WATER: Liquid = {
   evaporation: 0.004,
 };
 
+/** Bumped whenever a liquid's angles change, so cached cap sizes are recomputed. */
+export let liquidsVersion = 0;
+
+/**
+ * How strongly the glass beads rain (Ony, 2026-10-03: the drops on the
+ * words must magnify them clearly): water's resting contact angle on this
+ * glass, degrees, with the 20-degree hysteresis of a real window kept. Clean
+ * glass sits near 30-50, a weathered window 60-90, a rain-repellent coating
+ * over 100. A taller bead is a stronger lens: at 50 a drop magnifies what is
+ * under it by about 10%, at 90 by about a third.
+ */
+export function setWaterBeading(restDeg: number): void {
+  const r = Math.max(20, Math.min(130, restDeg));
+  const w = WATER as { thetaA: number; thetaR: number };
+  if (Math.abs(w.thetaA - (r + 10)) < 1e-6 && Math.abs(w.thetaR - (r - 10)) < 1e-6) return;
+  w.thetaA = r + 10;
+  w.thetaR = r - 10;
+  liquidsVersion++;
+}
+
 export const BLOOD: Liquid = {
   id: 1,
   name: "blood",

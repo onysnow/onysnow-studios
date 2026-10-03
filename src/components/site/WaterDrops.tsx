@@ -31,7 +31,7 @@ import { rainType } from "@/effects/water/rain-types";
 import { camera } from "@/effects/camera/camera";
 import { t } from "@/lib/tuning";
 import { capOf, DropSim, FILM_DRY, hash01, restAngle } from "@/effects/water/sim";
-import { BLOOD, LIQUIDS, SLIME, WATER } from "@/effects/water/liquids";
+import { BLOOD, LIQUIDS, SLIME, setWaterBeading, WATER } from "@/effects/water/liquids";
 import { onSpray, squeeze } from "@/effects/water/spray";
 import { rainVolume } from "@/effects/water/rain";
 import {
@@ -83,8 +83,7 @@ const EMIT_RADIANCE = 12;
 const DROPLET_UL = 0.02;
 /** Droplets evaporate this fast, mm of height a second (estimate: a 0.1 mm droplet lasts about two minutes in a rainy room). */
 const DROPLET_DRY = 0.0008;
-/** The droplets' and drops' resting contact angle on window glass, degrees (water-drops 2.2: 60 advancing, 40 receding). */
-const REST_ANGLE = 50;
+
 /** Water's surface tension N/m and density kg/m^3, for the Bond number that sets how much gravity pulls a drop into a pear. */
 const GAMMA = 0.072;
 const RHO = 1000;
@@ -218,7 +217,7 @@ function radiusFor(volume: number, thetaDeg: number): number {
 }
 
 /** A droplet's cap height for its contact radius at the resting angle: h = a tan(theta / 2). */
-const capH = (a: number) => a * Math.tan(((REST_ANGLE / 2) * Math.PI) / 180);
+const capH = (a: number) => a * Math.tan(((restAngle(WATER) / 2) * Math.PI) / 180);
 
 /**
  * Water drops on the glass (task 77, ?try=drops), rebuilt for photorealism
@@ -852,7 +851,7 @@ export function WaterDrops() {
       const [x, y] = spot(sim);
       if (volume >= DROPLET_UL) sim.addVolume(x, y, volume, WATER.id);
       else {
-        const a = radiusFor(volume, REST_ANGLE);
+        const a = radiusFor(volume, restAngle(WATER));
         st.pending.push({
           x: Math.min(sim.width - a, Math.max(a, x)),
           y: Math.min(sim.height - a, Math.max(a, y)),
@@ -1584,6 +1583,8 @@ export function WaterDrops() {
     let lastClear = "";
     const task = addTask("water", ORDER.passes, (_now, dtMs) => {
       const dt = Math.min(dtMs / 1000, 0.25);
+      // How strongly the glass beads the rain: the drops' contact angle ("Beading").
+      setWaterBeading(t("rainBeading"));
       const vh = document.documentElement.clientHeight || window.innerHeight;
       // Rain: drops per second per square centimetre of glass, the rain type's times "Rain".
       const type = rainType(t("rainType"));

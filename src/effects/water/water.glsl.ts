@@ -833,7 +833,28 @@ vec4 shadeAt(vec2 local) {
     float footprint = pagePerPixel * spread;
     vec3 through = lost ? trapped : seenThroughWater(seenPage, lodLens, footprint);
     // On the near face the copy lies under the drop, bent and enlarged by it; on the far face it is in front, flat.
-    if (uNear > 0.5) through = overType(through, typeAt(baseLand));
+    if (uNear > 0.5) {
+      /*
+       * The letters under a drop, lit through it (Ony, 2026-10-03: "the rain
+       * drops are not on the letters"). The room's light reaches the print
+       * through the drop too, and the drop bends it inward: the print under
+       * its middle gets more than the glass round it and the print under
+       * its rim less -- the bright, enlarged middle and the dark ring a drop
+       * makes on anything printed under it. The light that enters over an
+       * area of the drop lands on an area det(J) times it, J the map from
+       * the drop's surface to the glass (the same map the sight follows,
+       * base = page + k h grad h, k = 1 - 1/n for near-normal light), so
+       * the print is lit 1 / det(J) times as brightly.
+       */
+      float kk2 = 1.0 - 1.0 / uIor;
+      float jxx = 1.0 + kk2 * (grad.x * grad.x + h * hxx);
+      float jyy = 1.0 + kk2 * (grad.y * grad.y + h * hyy);
+      float jxy = kk2 * grad.x * grad.y;
+      float lit = clamp(1.0 / max(abs(jxx * jyy - jxy * jxy), 1e-3), 0.25, 2.2);
+      vec4 ty = typeAt(baseLand);
+      ty.rgb *= lit;
+      through = overType(through, ty);
+    }
 
     // Back toward you: the room and each lamp, along the reflected sight.
     vec3 back = trapped;

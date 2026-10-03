@@ -32,7 +32,14 @@
  * right and y down the pane (gravity is +y), in millimetres.
  */
 
-import { FRICTION_BETA, FURMIDGE_K, GRAVITY, LIQUIDS, type Liquid } from "./liquids";
+import {
+  FRICTION_BETA,
+  FURMIDGE_K,
+  GRAVITY,
+  LIQUIDS,
+  type Liquid,
+  liquidsVersion,
+} from "./liquids";
 
 /** The smallest drop kept; below it, gone (evaporated, or too small to see). */
 export const V_MIN = 0.01;
@@ -340,6 +347,11 @@ export class DropSim {
 
   /** Contact radius, mm. */
   radius(i: number): number {
+    if (this.cachedFor !== liquidsVersion) {
+      this.radK.length = 0;
+      this.holdBelow.length = 0;
+      this.cachedFor = liquidsVersion;
+    }
     const id = this.liquid[i]!;
     let k = this.radK[id];
     if (k === undefined) {
@@ -354,10 +366,11 @@ export class DropSim {
   private readonly radK: number[] = [];
   private readonly holdBelow: number[] = [];
   private holdPinning = NaN;
+  private cachedFor = -1;
 
   /** Below this volume a resting drop of liquid `id` stays put wherever it is (the least pinned, wettest glass). */
   private heldBelow(id: number): number {
-    if (this.holdPinning !== this.pinning) {
+    if (this.holdPinning !== this.pinning || this.cachedFor !== liquidsVersion) {
       this.holdBelow.length = 0;
       this.holdPinning = this.pinning;
     }
