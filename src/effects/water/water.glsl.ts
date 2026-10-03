@@ -418,6 +418,21 @@ vec4 typeAt(vec2 page) {
 // A colour with the type laid over it (premultiplied type).
 vec3 overType(vec3 c, vec4 ty) { return c * (1.0 - ty.a) + ty.rgb; }
 
+/*
+ * The copy printed on the near face, when the rain (and its condensation)
+ * is on the far face: in front of all of it, seen flat. The water layer lies
+ * above the page's own copy, so whatever it draws -- a drop, a wet track,
+ * the fog -- must carry the letters on top, or they vanish under it (Ony,
+ * 2026-10-03: the words "completely disappear and can only be seen if a
+ * raindrop is on it"). Rain on the near face sits on the letters instead.
+ */
+vec4 copyInFront(vec4 c, vec2 page) {
+  if (uHasType < 0.5 || uNear > 0.5 || uClear < 0.5) return c;
+  vec4 ty = typeAt(page);
+  float a = c.a + ty.a * (1.0 - c.a);
+  return vec4(overType(c.rgb * c.a, ty) / max(a, 1e-4), a);
+}
+
 // The photograph as the frosted far face shows it: blurred to the frost, saturated, veiled by the fill.
 vec3 frostedAt(vec2 page) {
   if (uHasPhoto < 0.5) return uRoom;
@@ -595,7 +610,7 @@ vec4 shadeAt(vec2 local) {
 
   if (cover <= 0.0 && film <= 0.0) {
     if (fogA <= 0.0) return vec4(0.0);
-    return vec4(fogColour(pageHere), fogA);
+    return copyInFront(vec4(fogColour(pageHere), fogA), pageHere);
   }
 
   // The water's height and slope here, mm and mm per mm: both maps, by central differences over one texel.
@@ -860,12 +875,6 @@ vec4 shadeAt(vec2 local) {
     if (uNear > 0.5) wetGlass = overType(wetGlass, typeAt(page));
     col = mix(wetGlass, water, cover);
     alpha = max(cover, film);
-    if (uNear < 0.5) {
-      // The copy in front of a far-face drop: seen flat, over everything.
-      vec4 ty = typeAt(page);
-      col = overType(col * alpha, ty) / max(alpha + ty.a * (1.0 - alpha), 1e-4);
-      alpha = alpha + ty.a * (1.0 - alpha);
-    }
   } else {
     /*
      * ---- A drop on the near (polished) face ----
@@ -942,7 +951,7 @@ vec4 shadeAt(vec2 local) {
       alpha = a;
     }
   }
-  return vec4(col, alpha);
+  return copyInFront(vec4(col, alpha), pageHere);
 }
 
 /*
