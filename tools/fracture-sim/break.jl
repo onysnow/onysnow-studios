@@ -41,6 +41,11 @@ const DEFAULTS = Dict{String,Any}(
     # strain is already in it (Kirchhoff: in-plane -z grad w), so the cracks run on the
     # energy the press stored, not on a blow. The impactor can then be "none".
     "prestress" => 0.0,
+    # The bent shape: "bowl" (a clamped plate's cos^2 dish: the strain spread over the pane,
+    # which shatters it evenly like tempered glass) or "point" (a clamped circular plate
+    # under a central point load, the ram: the curvature crowds round the centre, a star
+    # and rings there, hogging at the clamp).
+    "prestress_shape" => "point",
     # contact: the penalty (Peridynamics.jl's default, 1e12, is ten times too soft
     # for a kilogram at 5 m/s: the impactor ploughed through the pane unslowed)
     "penalty" => 1e14,
@@ -106,11 +111,31 @@ function main(args)
         w0 = s["prestress"]
         sx = s["lx"] / 2 - s["frame_w"]
         sy = s["ly"] / 2 - s["frame_w"]
-        bowl(x, y) = (abs(x) < sx && abs(y) < sy) ? w0 * cos(pi * x / (2sx))^2 * cos(pi * y / (2sy))^2 : 0.0
-        dwdx(x, y) = (abs(x) < sx && abs(y) < sy) ?
-            -w0 * (pi / sx) * cos(pi * x / (2sx)) * sin(pi * x / (2sx)) * cos(pi * y / (2sy))^2 : 0.0
-        dwdy(x, y) = (abs(x) < sx && abs(y) < sy) ?
-            -w0 * (pi / sy) * cos(pi * y / (2sy)) * sin(pi * y / (2sy)) * cos(pi * x / (2sx))^2 : 0.0
+        local bowl, dwdx, dwdy
+        if s["prestress_shape"] == "point"
+            # Clamped circular plate, central point load: w = w0 (1 - q^2 + 2 q^2 ln q), q = r/R
+            # (w(R) = 0, w'(R) = 0); dw/dr = w0 (4 r / R^2) ln q. Flat at r < r0 (the ram's tip).
+            R = min(sx, sy)
+            r0 = max(s["pulse_r"], 0.5dx)
+            function wr(r)
+                r >= R && return 0.0
+                q = max(r, r0) / R
+                return w0 * (1 - q^2 + 2 * q^2 * log(q))
+            end
+            function dwr(r)
+                (r >= R || r < r0) && return 0.0
+                return w0 * (4r / R^2) * log(r / R)
+            end
+            bowl = (x, y) -> wr(hypot(x, y))
+            dwdx = (x, y) -> (r = hypot(x, y); r > 1e-9 ? dwr(r) * x / r : 0.0)
+            dwdy = (x, y) -> (r = hypot(x, y); r > 1e-9 ? dwr(r) * y / r : 0.0)
+        else
+            bowl = (x, y) -> (abs(x) < sx && abs(y) < sy) ? w0 * cos(pi * x / (2sx))^2 * cos(pi * y / (2sy))^2 : 0.0
+            dwdx = (x, y) -> (abs(x) < sx && abs(y) < sy) ?
+                -w0 * (pi / sx) * cos(pi * x / (2sx)) * sin(pi * x / (2sx)) * cos(pi * y / (2sy))^2 : 0.0
+            dwdy = (x, y) -> (abs(x) < sx && abs(y) < sy) ?
+                -w0 * (pi / sy) * cos(pi * y / (2sy)) * sin(pi * y / (2sy)) * cos(pi * x / (2sx))^2 : 0.0
+        end
         # Pressed from the struck face (z = +t/2) toward -z: the far face is in tension.
         for (dim, f) in ((0x01, p -> p[1] + p[3] * dwdx(p[1], p[2])),
                          (0x02, p -> p[2] + p[3] * dwdy(p[1], p[2])),
